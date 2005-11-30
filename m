@@ -1,70 +1,95 @@
-From: "#ZHOU BIN#" <ZHOU0022@ntu.edu.sg>
-Date: Tue, 29 Nov 2005 07:21:18 +0000
-Subject: A doubt on the behavior of a TFRC receiver in the code
-Message-Id: <A975FFC51622704CBEAB749E263D179901554035@mail01.student.main.ntu.edu.sg>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Wed, 30 Nov 2005 04:15:54 +0000
+Subject: [PATCH 2/2] [IPV6]: Generalise __tcp_v6_hash, renaming it to __inet6_hash
+Message-Id: <39e6f6c70511292015y181806f0u5f54369f399fa176@mail.gmail.com>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="----=_Part_6383_28945227.1133324154454"
 List-Id: <dccp.vger.kernel.org>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi all,
+------=_Part_6383_28945227.1133324154454
+Content-Type: text/plain; charset=ISO-8859-1
+Content-Transfer-Encoding: quoted-printable
+Content-Disposition: inline
 
-I met some problems when studying the following section of source code, which is about the behavior of a TFRC receiver:
+Hi David,
 
-static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
-{	
-	.
-993	ins = dccp_rx_hist_add_packet(ccid3_rx_hist, &hcrx->ccid3hcrx_hist,
-				      &hcrx->ccid3hcrx_li_hist, packet);
-	if (DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK)
-		return;
-999	switch (hcrx->ccid3hcrx_state) {
-	case TFRC_RSTATE_NO_DATA:
-		.
-		return;
-1008	case TFRC_RSTATE_DATA:
-		hcrx->ccid3hcrx_bytes_recv += skb->len -
-					      dccp_hdr(skb)->dccph_doff * 4;
-1011		if (ins != 0)
-1012			break;
-		dccp_timestamp(sk, &now);
-		if (timeval_delta(&now, &hcrx->ccid3hcrx_tstamp_last_ack) >		    hcrx->ccid3hcrx_rtt) {
-			hcrx->ccid3hcrx_tstamp_last_ack = now;
-			ccid3_hc_rx_send_feedback(sk);
-		}
-		return;
-	default:
-		.
-		return;
-	}
-	/* Dealing with packet loss */
-	.
-1032	ccid3_hc_rx_detect_loss(sk);
-	p_prev = hcrx->ccid3hcrx_p;
-	/* Calculate loss event rate */
-	if (!list_empty(&hcrx->ccid3hcrx_li_hist))
-		/* Scaling up by 1000000 as fixed decimal */
-		hcrx->ccid3hcrx_p = 1000000 / dccp_li_hist_calc_i_mean(&hcrx->ccid3hcrx_li_hist);
-	if (hcrx->ccid3hcrx_p > p_prev) {
-		ccid3_hc_rx_send_feedback(sk);
-		return;
-	}
-}
+       Please consider pulling from:
 
-According to RFC 3448 section 6.1,
+master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.16.git
 
-"When a data packet is received, the receiver performs the following steps:
-   1) Add the packet to the packet history.
-   2) Let the previous value of p be p_prev.  Calculate the new value of p as described in Section 5.
-   3) If p > p_prev, cause the feedback timer to expire, and perform the actions described in Section 6.2
-      If p <= p_prev no action need be performed."
+Best Regards,
 
-To my way of thinking, the step 1 is done in line 993. However, the step 2 and 3 have no chance to be done in most cases: in the switch process starting from line 999, the only possibility to jump out to the "p" calculation (line 1032) is the variable "ins" is not be 0 (line 1011 and 1012). But ins=1 only happens when unordered packet is received. This is quite different from what RFC says. 
+- Arnaldo
 
-What's wrong in my analysis?
+------=_Part_6383_28945227.1133324154454
+Content-Type: text/x-patch; name="2.patch"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="2.patch"
 
-Thank you.
-
-Regards,
-Zhou Bin
+dHJlZSA3ZmQ4MzEzZGUzNzQwYWVhMjZhOGQyNGE1NTE0ZmQ3NTg0NWNhZWFmCnBhcmVudCA1YjI1
+YTJmM2E4MzFiMzFmNDEyY2Y3YjRmYjI5ZjExMjMyZjQ2OTk4CmF1dGhvciBBcm5hbGRvIENhcnZh
+bGhvIGRlIE1lbG8gPGFjbWVAbWFuZHJpdmEuY29tPiAxMTMzMzIzMTI2IC0wMjAwCmNvbW1pdHRl
+ciBBcm5hbGRvIENhcnZhbGhvIGRlIE1lbG8gPGFjbWVAbWFuZHJpdmEuY29tPiAxMTMzMzIzMTI2
+IC0wMjAwCgpbSVBWNl06IEdlbmVyYWxpc2UgX190Y3BfdjZfaGFzaCwgcmVuYW1pbmcgaXQgdG8g
+X19pbmV0Nl9oYXNoCgpTaWduZWQtb2ZmLWJ5OiBBcm5hbGRvIENhcnZhbGhvIGRlIE1lbG8gPGFj
+bWVAbWFuZHJpdmEuY29tPgoKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0t
+LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgogaW5jbHVkZS9uZXQvaW5l
+dDZfaGFzaHRhYmxlcy5oIHwgICAyNiArKysrKysrKysrKysrKysrKysrKysrKysrKwogbmV0L2lw
+djYvdGNwX2lwdjYuYyAgICAgICAgICAgIHwgICAzNCArKysrLS0tLS0tLS0tLS0tLS0tLS0tLS0t
+LS0tLS0tLS0tCiAyIGZpbGVzIGNoYW5nZWQsIDMwIGluc2VydGlvbnMoKyksIDMwIGRlbGV0aW9u
+cygtKQoKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0t
+LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgpkaWZmIC0tZ2l0IGEvaW5jbHVkZS9uZXQvaW5l
+dDZfaGFzaHRhYmxlcy5oIGIvaW5jbHVkZS9uZXQvaW5ldDZfaGFzaHRhYmxlcy5oCmluZGV4IDVh
+MmJlZWQuLmE0YTIwNGYgMTAwNjQ0Ci0tLSBhL2luY2x1ZGUvbmV0L2luZXQ2X2hhc2h0YWJsZXMu
+aAorKysgYi9pbmNsdWRlL25ldC9pbmV0Nl9oYXNodGFibGVzLmgKQEAgLTQ4LDYgKzQ4LDMyIEBA
+IHN0YXRpYyBpbmxpbmUgaW50IGluZXQ2X3NrX2VoYXNoZm4oY29uc3QKIAlyZXR1cm4gaW5ldDZf
+ZWhhc2hmbihsYWRkciwgbHBvcnQsIGZhZGRyLCBmcG9ydCk7CiB9CiAKK3N0YXRpYyBpbmxpbmUg
+dm9pZCBfX2luZXQ2X2hhc2goc3RydWN0IGluZXRfaGFzaGluZm8gKmhhc2hpbmZvLAorCQkJCXN0
+cnVjdCBzb2NrICpzaykKK3sKKwlzdHJ1Y3QgaGxpc3RfaGVhZCAqbGlzdDsKKwlyd2xvY2tfdCAq
+bG9jazsKKworCUJVR19UUkFQKHNrX3VuaGFzaGVkKHNrKSk7CisKKwlpZiAoc2stPnNrX3N0YXRl
+ID09IFRDUF9MSVNURU4pIHsKKwkJbGlzdCA9ICZoYXNoaW5mby0+bGlzdGVuaW5nX2hhc2hbaW5l
+dF9za19saXN0ZW5faGFzaGZuKHNrKV07CisJCWxvY2sgPSAmaGFzaGluZm8tPmxoYXNoX2xvY2s7
+CisJCWluZXRfbGlzdGVuX3dsb2NrKGhhc2hpbmZvKTsKKwl9IGVsc2UgeworCQl1bnNpZ25lZCBp
+bnQgaGFzaDsKKwkJc2stPnNrX2hhc2ggPSBoYXNoID0gaW5ldDZfc2tfZWhhc2hmbihzayk7CisJ
+CWhhc2ggJj0gKGhhc2hpbmZvLT5laGFzaF9zaXplIC0gMSk7CisJCWxpc3QgPSAmaGFzaGluZm8t
+PmVoYXNoW2hhc2hdLmNoYWluOworCQlsb2NrID0gJmhhc2hpbmZvLT5laGFzaFtoYXNoXS5sb2Nr
+OworCQl3cml0ZV9sb2NrKGxvY2spOworCX0KKworCV9fc2tfYWRkX25vZGUoc2ssIGxpc3QpOwor
+CXNvY2tfcHJvdF9pbmNfdXNlKHNrLT5za19wcm90KTsKKwl3cml0ZV91bmxvY2sobG9jayk7Cit9
+CisKIC8qCiAgKiBTb2NrZXRzIGluIFRDUF9DTE9TRSBzdGF0ZSBhcmUgX2Fsd2F5c18gdGFrZW4g
+b3V0IG9mIHRoZSBoYXNoLCBzbwogICogd2UgbmVlZCBub3QgY2hlY2sgaXQgZm9yIFRDUCBsb29r
+dXBzIGFueW1vcmUsIHRoYW5rcyBBbGV4ZXkuIC1EYXZlTQpkaWZmIC0tZ2l0IGEvbmV0L2lwdjYv
+dGNwX2lwdjYuYyBiL25ldC9pcHY2L3RjcF9pcHY2LmMKaW5kZXggYTNmMTQxMi4uMWEyMGI5MyAx
+MDA2NDQKLS0tIGEvbmV0L2lwdjYvdGNwX2lwdjYuYworKysgYi9uZXQvaXB2Ni90Y3BfaXB2Ni5j
+CkBAIC0xMDMsMzIgKzEwMyw2IEBAIHN0YXRpYyBpbnQgdGNwX3Y2X2dldF9wb3J0KHN0cnVjdCBz
+b2NrICoKIAkJCQkgaW5ldDZfY3NrX2JpbmRfY29uZmxpY3QpOwogfQogCi1zdGF0aWMgX19pbmxp
+bmVfXyB2b2lkIF9fdGNwX3Y2X2hhc2goc3RydWN0IHNvY2sgKnNrKQotewotCXN0cnVjdCBobGlz
+dF9oZWFkICpsaXN0OwotCXJ3bG9ja190ICpsb2NrOwotCi0JQlVHX1RSQVAoc2tfdW5oYXNoZWQo
+c2spKTsKLQotCWlmIChzay0+c2tfc3RhdGUgPT0gVENQX0xJU1RFTikgewotCQlsaXN0ID0gJnRj
+cF9oYXNoaW5mby5saXN0ZW5pbmdfaGFzaFtpbmV0X3NrX2xpc3Rlbl9oYXNoZm4oc2spXTsKLQkJ
+bG9jayA9ICZ0Y3BfaGFzaGluZm8ubGhhc2hfbG9jazsKLQkJaW5ldF9saXN0ZW5fd2xvY2soJnRj
+cF9oYXNoaW5mbyk7Ci0JfSBlbHNlIHsKLQkJdW5zaWduZWQgaW50IGhhc2g7Ci0JCXNrLT5za19o
+YXNoID0gaGFzaCA9IGluZXQ2X3NrX2VoYXNoZm4oc2spOwotCQloYXNoICY9ICh0Y3BfaGFzaGlu
+Zm8uZWhhc2hfc2l6ZSAtIDEpOwotCQlsaXN0ID0gJnRjcF9oYXNoaW5mby5laGFzaFtoYXNoXS5j
+aGFpbjsKLQkJbG9jayA9ICZ0Y3BfaGFzaGluZm8uZWhhc2hbaGFzaF0ubG9jazsKLQkJd3JpdGVf
+bG9jayhsb2NrKTsKLQl9Ci0KLQlfX3NrX2FkZF9ub2RlKHNrLCBsaXN0KTsKLQlzb2NrX3Byb3Rf
+aW5jX3VzZShzay0+c2tfcHJvdCk7Ci0Jd3JpdGVfdW5sb2NrKGxvY2spOwotfQotCi0KIHN0YXRp
+YyB2b2lkIHRjcF92Nl9oYXNoKHN0cnVjdCBzb2NrICpzaykKIHsKIAlpZiAoc2stPnNrX3N0YXRl
+ICE9IFRDUF9DTE9TRSkgewpAQCAtMTM5LDcgKzExMyw3IEBAIHN0YXRpYyB2b2lkIHRjcF92Nl9o
+YXNoKHN0cnVjdCBzb2NrICpzaykKIAkJCXJldHVybjsKIAkJfQogCQlsb2NhbF9iaF9kaXNhYmxl
+KCk7Ci0JCV9fdGNwX3Y2X2hhc2goc2spOworCQlfX2luZXQ2X2hhc2goJnRjcF9oYXNoaW5mbywg
+c2spOwogCQlsb2NhbF9iaF9lbmFibGUoKTsKIAl9CiB9CkBAIC0zNzQsNyArMzQ4LDcgQEAgb2s6
+CiAgCQlpbmV0X2JpbmRfaGFzaChzaywgdGIsIHBvcnQpOwogCQlpZiAoc2tfdW5oYXNoZWQoc2sp
+KSB7CiAgCQkJaW5ldF9zayhzayktPnNwb3J0ID0gaHRvbnMocG9ydCk7Ci0gCQkJX190Y3BfdjZf
+aGFzaChzayk7CisgCQkJX19pbmV0Nl9oYXNoKCZ0Y3BfaGFzaGluZm8sIHNrKTsKICAJCX0KICAJ
+CXNwaW5fdW5sb2NrKCZoZWFkLT5sb2NrKTsKIApAQCAtMzkyLDcgKzM2Niw3IEBAIG9rOgogCXNw
+aW5fbG9ja19iaCgmaGVhZC0+bG9jayk7CiAKIAlpZiAoc2tfaGVhZCgmdGItPm93bmVycykgPT0g
+c2sgJiYgIXNrLT5za19iaW5kX25vZGUubmV4dCkgewotCQlfX3RjcF92Nl9oYXNoKHNrKTsKKwkJ
+X19pbmV0Nl9oYXNoKCZ0Y3BfaGFzaGluZm8sIHNrKTsKIAkJc3Bpbl91bmxvY2tfYmgoJmhlYWQt
+PmxvY2spOwogCQlyZXR1cm4gMDsKIAl9IGVsc2UgewpAQCAtMTI5Niw3ICsxMjcwLDcgQEAgc3Rh
+dGljIHN0cnVjdCBzb2NrICogdGNwX3Y2X3N5bl9yZWN2X3NvYwogCiAJbmV3aW5ldC0+ZGFkZHIg
+PSBuZXdpbmV0LT5zYWRkciA9IG5ld2luZXQtPnJjdl9zYWRkciA9IExPT1BCQUNLNF9JUFY2Owog
+Ci0JX190Y3BfdjZfaGFzaChuZXdzayk7CisJX19pbmV0Nl9oYXNoKCZ0Y3BfaGFzaGluZm8sIG5l
+d3NrKTsKIAlpbmV0X2luaGVyaXRfcG9ydCgmdGNwX2hhc2hpbmZvLCBzaywgbmV3c2spOwogCiAJ
+cmV0dXJuIG5ld3NrOwo=
+------=_Part_6383_28945227.1133324154454--
