@@ -1,20 +1,20 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 10 Dec 2005 19:28:18 +0000
-Subject: [PATCH 3/6][IPV6]: Export some symbols for DCCPv6
-Message-Id: <39e6f6c70512101128k30af1c14he3b72fcfc4c60447@mail.gmail.com>
+Date: Fri, 02 Dec 2005 01:12:38 +0000
+Subject: [PATCH 5/6][ICSK]: Move v4_addr2sockaddr from TCP to icsk
+Message-Id: <39e6f6c70512011712p7c4db686ob904556cac128456@mail.gmail.com>
 MIME-Version: 1
-Content-Type: multipart/mixed; boundary="----=_Part_22591_2200513.1134242898629"
+Content-Type: multipart/mixed; boundary="----=_Part_37574_30047521.1133485958406"
 List-Id: <dccp.vger.kernel.org>
 To: dccp@vger.kernel.org
 
-------=_Part_22591_2200513.1134242898629
+------=_Part_37574_30047521.1133485958406
 Content-Type: text/plain; charset=ISO-8859-1
 Content-Transfer-Encoding: quoted-printable
 Content-Disposition: inline
 
 Hi David,
 
-    Please consider pulling from:
+     Please consider pulling from:
 
 master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.16.git
 
@@ -22,90 +22,91 @@ Best Regards,
 
 - Arnaldo
 
-------=_Part_22591_2200513.1134242898629
-Content-Type: text/x-patch; name=3.patch; charset=us-ascii
+------=_Part_37574_30047521.1133485958406
+Content-Type: text/x-patch; name=5.patch; charset=us-ascii
 Content-Transfer-Encoding: 7bit
-Content-Disposition: attachment; filename="3.patch"
+Content-Disposition: attachment; filename="5.patch"
 
-tree cf4a4fc231acd6967b29a1a6002719ea36288063
-parent 997f378c6a3d3b034717ad814da0517ab58c457e
-author Arnaldo Carvalho de Melo <acme@mandriva.com> 1134240390 -0200
-committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1134240390 -0200
+tree 3f70eeccfa29ead14246583618a038d29c579a60
+parent f52bb940239fc4078639e598da06c42f0c9add16
+author Arnaldo Carvalho de Melo <acme@mandriva.com> 1133483850 -0200
+committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1133483850 -0200
 
-[IPV6]: Export some symbols for DCCPv6
+[ICSK]: Move v4_addr2sockaddr from TCP to icsk
+
+Renaming it to inet_csk_addr2sockaddr.
 
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
 ------------------------------------------------------------------------------
 
- af_inet6.c      |    2 ++
- exthdrs.c       |    4 ++++
- ip6_flowlabel.c |    2 ++
- ip6_output.c    |    2 ++
- 4 files changed, 10 insertions(+)
+ include/net/inet_connection_sock.h |    2 ++
+ net/ipv4/inet_connection_sock.c    |   12 ++++++++++++
+ net/ipv4/tcp_ipv4.c                |   12 +-----------
+ 3 files changed, 15 insertions(+), 11 deletions(-)
 
 ------------------------------------------------------------------------------
 
-diff --git a/net/ipv6/af_inet6.c b/net/ipv6/af_inet6.c
-index fd040e9..23675ef 100644
---- a/net/ipv6/af_inet6.c
-+++ b/net/ipv6/af_inet6.c
-@@ -389,6 +389,8 @@ int inet6_destroy_sock(struct sock *sk)
- 	return 0;
+diff --git a/include/net/inet_connection_sock.h b/include/net/inet_connection_sock.h
+index 9e20d20..e50e2b8 100644
+--- a/include/net/inet_connection_sock.h
++++ b/include/net/inet_connection_sock.h
+@@ -303,4 +303,6 @@ static inline unsigned int inet_csk_list
+ extern int  inet_csk_listen_start(struct sock *sk, const int nr_table_entries);
+ extern void inet_csk_listen_stop(struct sock *sk);
+ 
++extern void inet_csk_addr2sockaddr(struct sock *sk, struct sockaddr *uaddr);
++
+ #endif /* _INET_CONNECTION_SOCK_H */
+diff --git a/net/ipv4/inet_connection_sock.c b/net/ipv4/inet_connection_sock.c
+index e2bf508..ae20281 100644
+--- a/net/ipv4/inet_connection_sock.c
++++ b/net/ipv4/inet_connection_sock.c
+@@ -636,3 +636,15 @@ void inet_csk_listen_stop(struct sock *s
  }
  
-+EXPORT_SYMBOL_GPL(inet6_destroy_sock);
+ EXPORT_SYMBOL_GPL(inet_csk_listen_stop);
 +
- /*
-  *	This does both peername and sockname.
-  */
-diff --git a/net/ipv6/exthdrs.c b/net/ipv6/exthdrs.c
-index be6faf3..113374d 100644
---- a/net/ipv6/exthdrs.c
-+++ b/net/ipv6/exthdrs.c
-@@ -413,6 +413,8 @@ ipv6_invert_rthdr(struct sock *sk, struc
- 	return opt;
++void inet_csk_addr2sockaddr(struct sock *sk, struct sockaddr *uaddr)
++{
++	struct sockaddr_in *sin = (struct sockaddr_in *)uaddr;
++	const struct inet_sock *inet = inet_sk(sk);
++
++	sin->sin_family		= AF_INET;
++	sin->sin_addr.s_addr	= inet->daddr;
++	sin->sin_port		= inet->dport;
++}
++
++EXPORT_SYMBOL_GPL(inet_csk_addr2sockaddr);
+diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
+index 704cf21..0b5ab04 100644
+--- a/net/ipv4/tcp_ipv4.c
++++ b/net/ipv4/tcp_ipv4.c
+@@ -1314,16 +1314,6 @@ do_time_wait:
+ 	goto discard_it;
  }
  
-+EXPORT_SYMBOL_GPL(ipv6_invert_rthdr);
-+
- /**********************************
-   Hop-by-hop options.
-  **********************************/
-@@ -579,6 +581,8 @@ ipv6_dup_options(struct sock *sk, struct
- 	return opt2;
- }
+-static void v4_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)
+-{
+-	struct sockaddr_in *sin = (struct sockaddr_in *) uaddr;
+-	struct inet_sock *inet = inet_sk(sk);
+-
+-	sin->sin_family		= AF_INET;
+-	sin->sin_addr.s_addr	= inet->daddr;
+-	sin->sin_port		= inet->dport;
+-}
+-
+ /* VJ's idea. Save last timestamp seen from this destination
+  * and hold it at least for normal timewait interval to use for duplicate
+  * segment detection in subsequent connections, before they enter synchronized
+@@ -1392,7 +1382,7 @@ struct inet_connection_sock_af_ops ipv4_
+ 	.net_header_len	=	sizeof(struct iphdr),
+ 	.setsockopt	=	ip_setsockopt,
+ 	.getsockopt	=	ip_getsockopt,
+-	.addr2sockaddr	=	v4_addr2sockaddr,
++	.addr2sockaddr	=	inet_csk_addr2sockaddr,
+ 	.sockaddr_len	=	sizeof(struct sockaddr_in),
+ };
  
-+EXPORT_SYMBOL_GPL(ipv6_dup_options);
-+
- static int ipv6_renew_option(void *ohdr,
- 			     struct ipv6_opt_hdr __user *newopt, int newoptlen,
- 			     int inherit,
-diff --git a/net/ipv6/ip6_flowlabel.c b/net/ipv6/ip6_flowlabel.c
-index 1cf0276..89d12b4 100644
---- a/net/ipv6/ip6_flowlabel.c
-+++ b/net/ipv6/ip6_flowlabel.c
-@@ -200,6 +200,8 @@ struct ip6_flowlabel * fl6_sock_lookup(s
- 	return NULL;
- }
- 
-+EXPORT_SYMBOL_GPL(fl6_sock_lookup);
-+
- void fl6_free_socklist(struct sock *sk)
- {
- 	struct ipv6_pinfo *np = inet6_sk(sk);
-diff --git a/net/ipv6/ip6_output.c b/net/ipv6/ip6_output.c
-index 8523c76..b4c4beb 100644
---- a/net/ipv6/ip6_output.c
-+++ b/net/ipv6/ip6_output.c
-@@ -775,6 +775,8 @@ out_err_release:
- 	return err;
- }
- 
-+EXPORT_SYMBOL_GPL(ip6_dst_lookup);
-+
- static inline int ip6_ufo_append_data(struct sock *sk,
- 			int getfrag(void *from, char *to, int offset, int len,
- 			int odd, struct sk_buff *skb),
 
-------=_Part_22591_2200513.1134242898629--
+------=_Part_37574_30047521.1133485958406--
