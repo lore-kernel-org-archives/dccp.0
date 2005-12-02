@@ -1,20 +1,20 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Mon, 12 Dec 2005 01:18:57 +0000
-Subject: [PATCH 5/5][TCPv6]: Fix skb leak
-Message-Id: <39e6f6c70512111718w18e9704ekf04a33bf32058861@mail.gmail.com>
+Date: Fri, 02 Dec 2005 01:06:39 +0000
+Subject: [PATCH 1/6][ICSK]: make inet_csk_reqsk_queue_hash_add timeout arg unsigned long
+Message-Id: <39e6f6c70512011706k17f9465cyb07fdb99cc5e2353@mail.gmail.com>
 MIME-Version: 1
-Content-Type: multipart/mixed; boundary="----=_Part_3217_12016568.1134350337026"
+Content-Type: multipart/mixed; boundary="----=_Part_37486_25677917.1133485599678"
 List-Id: <dccp.vger.kernel.org>
 To: dccp@vger.kernel.org
 
-------=_Part_3217_12016568.1134350337026
+------=_Part_37486_25677917.1133485599678
 Content-Type: text/plain; charset=ISO-8859-1
 Content-Transfer-Encoding: quoted-printable
 Content-Disposition: inline
 
 Hi David,
 
-  Please consider pulling from:
+     Please consider pulling from:
 
 master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.16.git
 
@@ -22,68 +22,40 @@ Best Regards,
 
 - Arnaldo
 
-------=_Part_3217_12016568.1134350337026
-Content-Type: text/x-patch; name=5.patch; charset=us-ascii
-Content-Transfer-Encoding: 7bit
-Content-Disposition: attachment; filename="5.patch"
+------=_Part_37486_25677917.1133485599678
+Content-Type: text/x-patch; name="1.patch"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="1.patch"
 
-tree 402c2b51d32d31f999fed91365c509d1fbd355c7
-parent 9b0c0171dae84125f43b6ca80f9108768863df97
-author Arnaldo Carvalho de Melo <acme@mandriva.com> 1134349890 -0200
-committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1134349890 -0200
-
-[TCPv6]: Fix skb leak
-
-Spotted by Francois Romieu, thanks! The DCCP case was fixed as
-well in another patch.
-
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
-
-------------------------------------------------------------------------------
-
- tcp_ipv6.c |   19 +++++++++----------
- 1 file changed, 9 insertions(+), 10 deletions(-)
-
-------------------------------------------------------------------------------
-
-diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
-index 7a077de..514b57b 100644
---- a/net/ipv6/tcp_ipv6.c
-+++ b/net/ipv6/tcp_ipv6.c
-@@ -779,13 +779,12 @@ static void tcp_v6_send_reset(struct sk_
- 	/* sk = NULL, but it is safe for now. RST socket required. */
- 	if (!ip6_dst_lookup(NULL, &buff->dst, &fl)) {
- 
--		if ((xfrm_lookup(&buff->dst, &fl, NULL, 0)) < 0)
-+		if (xfrm_lookup(&buff->dst, &fl, NULL, 0) >= 0) {
-+			ip6_xmit(NULL, buff, &fl, NULL, 0);
-+			TCP_INC_STATS_BH(TCP_MIB_OUTSEGS);
-+			TCP_INC_STATS_BH(TCP_MIB_OUTRSTS);
- 			return;
--
--		ip6_xmit(NULL, buff, &fl, NULL, 0);
--		TCP_INC_STATS_BH(TCP_MIB_OUTSEGS);
--		TCP_INC_STATS_BH(TCP_MIB_OUTRSTS);
--		return;
-+		}
- 	}
- 
- 	kfree_skb(buff);
-@@ -844,11 +843,11 @@ static void tcp_v6_send_ack(struct sk_bu
- 	fl.fl_ip_sport = t1->source;
- 
- 	if (!ip6_dst_lookup(NULL, &buff->dst, &fl)) {
--		if ((xfrm_lookup(&buff->dst, &fl, NULL, 0)) < 0)
-+		if (xfrm_lookup(&buff->dst, &fl, NULL, 0) >= 0) {
-+			ip6_xmit(NULL, buff, &fl, NULL, 0);
-+			TCP_INC_STATS_BH(TCP_MIB_OUTSEGS);
- 			return;
--		ip6_xmit(NULL, buff, &fl, NULL, 0);
--		TCP_INC_STATS_BH(TCP_MIB_OUTSEGS);
--		return;
-+		}
- 	}
- 
- 	kfree_skb(buff);
-
-------=_Part_3217_12016568.1134350337026--
+dHJlZSBlOTQxYzFjOGIyNmVlYmI0OWY5NGNhZmMyOTJlMmUyOGZlYTRkMDA4CnBhcmVudCBlODJl
+N2RhOWIyYmI4ZWUzNWQ2YzhiM2U3NDg0YTFlMGM1NDIxYzQ2CmF1dGhvciBBcm5hbGRvIENhcnZh
+bGhvIGRlIE1lbG8gPGFjbWVAbWFuZHJpdmEuY29tPiAxMTMzMzk1MDY5IC0wMjAwCmNvbW1pdHRl
+ciBBcm5hbGRvIENhcnZhbGhvIGRlIE1lbG8gPGFjbWVAbWFuZHJpdmEuY29tPiAxMTMzMzk1MDY5
+IC0wMjAwCgpbSUNTS106IG1ha2UgaW5ldF9jc2tfcmVxc2tfcXVldWVfaGFzaF9hZGQgdGltZW91
+dCBhcmcgdW5zaWduZWQgbG9uZwoKU2lnbmVkLW9mZi1ieTogQXJuYWxkbyBDYXJ2YWxobyBkZSBN
+ZWxvIDxhY21lQG1hbmRyaXZhLmNvbT4KCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0t
+LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQoKIGluY2x1ZGUv
+bmV0L2luZXRfY29ubmVjdGlvbl9zb2NrLmggfCAgICAyICstCiBuZXQvaXB2NC9pbmV0X2Nvbm5l
+Y3Rpb25fc29jay5jICAgIHwgICAgMiArLQogMiBmaWxlcyBjaGFuZ2VkLCAyIGluc2VydGlvbnMo
+KyksIDIgZGVsZXRpb25zKC0pCgotLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0t
+LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KCmRpZmYgLS1naXQgYS9p
+bmNsdWRlL25ldC9pbmV0X2Nvbm5lY3Rpb25fc29jay5oIGIvaW5jbHVkZS9uZXQvaW5ldF9jb25u
+ZWN0aW9uX3NvY2suaAppbmRleCBlZGM2OGU4Li5jY2M4MWExIDEwMDY0NAotLS0gYS9pbmNsdWRl
+L25ldC9pbmV0X2Nvbm5lY3Rpb25fc29jay5oCisrKyBiL2luY2x1ZGUvbmV0L2luZXRfY29ubmVj
+dGlvbl9zb2NrLmgKQEAgLTIxMSw3ICsyMTEsNyBAQCBzdGF0aWMgaW5saW5lIHZvaWQgaW5ldF9j
+c2tfcmVxc2tfcXVldWVfCiAKIGV4dGVybiB2b2lkIGluZXRfY3NrX3JlcXNrX3F1ZXVlX2hhc2hf
+YWRkKHN0cnVjdCBzb2NrICpzaywKIAkJCQkJICBzdHJ1Y3QgcmVxdWVzdF9zb2NrICpyZXEsCi0J
+CQkJCSAgY29uc3QgdW5zaWduZWQgdGltZW91dCk7CisJCQkJCSAgdW5zaWduZWQgbG9uZyB0aW1l
+b3V0KTsKIAogc3RhdGljIGlubGluZSB2b2lkIGluZXRfY3NrX3JlcXNrX3F1ZXVlX3JlbW92ZWQo
+c3RydWN0IHNvY2sgKnNrLAogCQkJCQkJc3RydWN0IHJlcXVlc3Rfc29jayAqcmVxKQpkaWZmIC0t
+Z2l0IGEvbmV0L2lwdjQvaW5ldF9jb25uZWN0aW9uX3NvY2suYyBiL25ldC9pcHY0L2luZXRfY29u
+bmVjdGlvbl9zb2NrLmMKaW5kZXggZjA1YjZlNy4uZTJiZjUwOCAxMDA2NDQKLS0tIGEvbmV0L2lw
+djQvaW5ldF9jb25uZWN0aW9uX3NvY2suYworKysgYi9uZXQvaXB2NC9pbmV0X2Nvbm5lY3Rpb25f
+c29jay5jCkBAIC0zODUsNyArMzg1LDcgQEAgc3RydWN0IHJlcXVlc3Rfc29jayAqaW5ldF9jc2tf
+c2VhcmNoX3JlcQogRVhQT1JUX1NZTUJPTF9HUEwoaW5ldF9jc2tfc2VhcmNoX3JlcSk7CiAKIHZv
+aWQgaW5ldF9jc2tfcmVxc2tfcXVldWVfaGFzaF9hZGQoc3RydWN0IHNvY2sgKnNrLCBzdHJ1Y3Qg
+cmVxdWVzdF9zb2NrICpyZXEsCi0JCQkJICAgY29uc3QgdW5zaWduZWQgdGltZW91dCkKKwkJCQkg
+ICB1bnNpZ25lZCBsb25nIHRpbWVvdXQpCiB7CiAJc3RydWN0IGluZXRfY29ubmVjdGlvbl9zb2Nr
+ICppY3NrID0gaW5ldF9jc2soc2spOwogCXN0cnVjdCBsaXN0ZW5fc29jayAqbG9wdCA9IGljc2st
+Pmljc2tfYWNjZXB0X3F1ZXVlLmxpc3Rlbl9vcHQ7Cg==
+------=_Part_37486_25677917.1133485599678--
