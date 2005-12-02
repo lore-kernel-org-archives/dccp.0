@@ -1,20 +1,20 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sun, 11 Dec 2005 13:57:08 +0000
-Subject: [PATCH 3/4][TWSK]: Introduce struct timewait_sock_ops
-Message-Id: <39e6f6c70512110557oea9e566u7d1b7e4fda9ab9d2@mail.gmail.com>
+Date: Fri, 02 Dec 2005 01:10:38 +0000
+Subject: [PATCH 2/6][IPV6]: Generalise tcp_v6_search_req & tcp_v6_synq_add
+Message-Id: <39e6f6c70512011710s7735f071h6120f3f68a66fb7e@mail.gmail.com>
 MIME-Version: 1
-Content-Type: multipart/mixed; boundary="----=_Part_29639_8226470.1134309428764"
+Content-Type: multipart/mixed; boundary="----=_Part_37526_5983957.1133485838174"
 List-Id: <dccp.vger.kernel.org>
 To: dccp@vger.kernel.org
 
-------=_Part_29639_8226470.1134309428764
+------=_Part_37526_5983957.1133485838174
 Content-Type: text/plain; charset=ISO-8859-1
 Content-Transfer-Encoding: quoted-printable
 Content-Disposition: inline
 
 Hi David,
 
-   Please consider pulling from:
+     Please consider pulling from:
 
 master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.16.git
 
@@ -22,442 +22,324 @@ Best Regards,
 
 - Arnaldo
 
-------=_Part_29639_8226470.1134309428764
-Content-Type: text/x-patch; name=3.patch; charset=us-ascii
+------=_Part_37526_5983957.1133485838174
+Content-Type: text/x-patch; name=2.patch; charset=us-ascii
 Content-Transfer-Encoding: 7bit
-Content-Disposition: attachment; filename="3.patch"
+Content-Disposition: attachment; filename="2.patch"
 
-tree a2bd0ce30e3dd56e9605fe508af4dc18eac9445f
-parent 384beca5393a67bab83c2825fe354791b6a27052
-author Arnaldo Carvalho de Melo <acme@mandriva.com> 1134307585 -0200
-committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1134307585 -0200
+tree a2ad2e96371e91a977875fbda686a242ce41072e
+parent a94cc4a7611fe08452945b4c74258ef2c3c8bee9
+author Arnaldo Carvalho de Melo <acme@mandriva.com> 1133468875 -0200
+committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1133468875 -0200
 
-[TWSK]: Introduce struct timewait_sock_ops
+[IPV6]: Generalise tcp_v6_search_req & tcp_v6_synq_add
 
-So that we can share several timewait sockets related functions and make the
-timewait mini sockets infrastructure closer to the request mini sockets one.
-
-Next changesets will take advantage of this, moving more code out of TCP and
-DCCP v4 and v6 to common infrastructure.
+More work is needed tho to introduce inet6_request_sock from
+tcp6_request_sock, in the same layout considerations as ipv6_pinfo in
+inet_sock, next changeset will do that.
 
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
 ------------------------------------------------------------------------------
 
- include/linux/ipv6.h             |    3 +
- include/net/inet_timewait_sock.h |    3 +
- include/net/sock.h               |    4 +-
- include/net/tcp.h                |    3 +
- include/net/timewait_sock.h      |   31 +++++++++++++++++
- net/core/sock.c                  |   21 ++++++-----
- net/dccp/ipv4.c                  |    9 ++++
- net/dccp/ipv6.c                  |    6 ++-
- net/ipv4/inet_timewait_sock.c    |    5 +-
- net/ipv4/tcp_ipv4.c              |   71 +++++++++++++++++++++++----------------
- net/ipv6/tcp_ipv6.c              |   25 ++++---------
- 11 files changed, 118 insertions(+), 63 deletions(-)
+ include/net/inet6_connection_sock.h |   31 +++++++++++
+ include/net/request_sock.h          |    2 
+ net/ipv6/Makefile                   |    3 -
+ net/ipv6/inet6_connection_sock.c    |   96 ++++++++++++++++++++++++++++++++++++
+ net/ipv6/tcp_ipv6.c                 |   78 ++---------------------------
+ 5 files changed, 137 insertions(+), 73 deletions(-)
 
 ------------------------------------------------------------------------------
 
-diff --git a/include/linux/ipv6.h b/include/linux/ipv6.h
-index 7d39085..a0d0489 100644
---- a/include/linux/ipv6.h
-+++ b/include/linux/ipv6.h
-@@ -360,7 +360,8 @@ struct tcp6_timewait_sock {
- 
- static inline u16 inet6_tw_offset(const struct proto *prot)
- {
--	return prot->twsk_obj_size - sizeof(struct inet6_timewait_sock);
-+	return prot->twsk_prot->twsk_obj_size -
-+			sizeof(struct inet6_timewait_sock);
- }
- 
- static inline struct inet6_timewait_sock *inet6_twsk(const struct sock *sk)
-diff --git a/include/net/inet_timewait_sock.h b/include/net/inet_timewait_sock.h
-index ca240f8..e396a65 100644
---- a/include/net/inet_timewait_sock.h
-+++ b/include/net/inet_timewait_sock.h
-@@ -26,6 +26,7 @@
- 
- #include <net/sock.h>
- #include <net/tcp_states.h>
-+#include <net/timewait_sock.h>
- 
- #include <asm/atomic.h>
- 
-@@ -200,7 +201,7 @@ static inline void inet_twsk_put(struct 
- 		printk(KERN_DEBUG "%s timewait_sock %p released\n",
- 		       tw->tw_prot->name, tw);
- #endif
--		kmem_cache_free(tw->tw_prot->twsk_slab, tw);
-+		kmem_cache_free(tw->tw_prot->twsk_prot->twsk_slab, tw);
- 		module_put(owner);
- 	}
- }
-diff --git a/include/net/sock.h b/include/net/sock.h
-index 6036340..d7910e7 100644
---- a/include/net/sock.h
-+++ b/include/net/sock.h
-@@ -493,6 +493,7 @@ extern void sk_stream_kill_queues(struct
- extern int sk_wait_data(struct sock *sk, long *timeo);
- 
- struct request_sock_ops;
-+struct timewait_sock_ops;
- 
- /* Networking protocol blocks we attach to sockets.
-  * socket layer -> transport layer interface
-@@ -557,11 +558,10 @@ struct proto {
- 	kmem_cache_t		*slab;
- 	unsigned int		obj_size;
- 
--	kmem_cache_t		*twsk_slab;
--	unsigned int		twsk_obj_size;
- 	atomic_t		*orphan_count;
- 
- 	struct request_sock_ops	*rsk_prot;
-+	struct timewait_sock_ops *twsk_prot;
- 
- 	struct module		*owner;
- 
-diff --git a/include/net/tcp.h b/include/net/tcp.h
-index 83b117a..176221c 100644
---- a/include/net/tcp.h
-+++ b/include/net/tcp.h
-@@ -287,6 +287,9 @@ extern int			tcp_rcv_established(struct 
- 
- extern void			tcp_rcv_space_adjust(struct sock *sk);
- 
-+extern int			tcp_twsk_unique(struct sock *sk,
-+						struct sock *sktw, void *twp);
-+
- static inline void tcp_dec_quickack_mode(struct sock *sk,
- 					 const unsigned int pkts)
- {
-diff --git a/include/net/timewait_sock.h b/include/net/timewait_sock.h
+diff --git a/include/net/inet6_connection_sock.h b/include/net/inet6_connection_sock.h
 new file mode 100644
-index 0000000..2544281
+index 0000000..aa30ebd
 --- /dev/null
-+++ b/include/net/timewait_sock.h
++++ b/include/net/inet6_connection_sock.h
 @@ -0,0 +1,31 @@
 +/*
-+ * NET		Generic infrastructure for Network protocols.
++ * NET		Generic infrastructure for INET6 connection oriented protocols.
 + *
-+ * Authors:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
++ * Authors:	Many people, see the TCPv6 sources
++ *
++ * 		From code originally in TCPv6
 + *
 + *		This program is free software; you can redistribute it and/or
 + *		modify it under the terms of the GNU General Public License
 + *		as published by the Free Software Foundation; either version
 + *		2 of the License, or (at your option) any later version.
 + */
-+#ifndef _TIMEWAIT_SOCK_H
-+#define _TIMEWAIT_SOCK_H
++#ifndef _INET6_CONNECTION_SOCK_H
++#define _INET6_CONNECTION_SOCK_H
 +
-+#include <linux/slab.h>
++#include <linux/types.h>
++
++struct sock;
++struct request_sock;
++
++extern struct request_sock *inet6_csk_search_req(const struct sock *sk,
++						 struct request_sock ***prevp,
++						 const __u16 rport,
++						 const struct in6_addr *raddr,
++						 const struct in6_addr *laddr,
++						 const int iif);
++
++extern void inet6_csk_reqsk_queue_hash_add(struct sock *sk,
++					   struct request_sock *req,
++					   const unsigned long timeout);
++#endif /* _INET6_CONNECTION_SOCK_H */
+diff --git a/include/net/request_sock.h b/include/net/request_sock.h
+index b52cc52..11641c9 100644
+--- a/include/net/request_sock.h
++++ b/include/net/request_sock.h
+@@ -244,7 +244,7 @@ static inline int reqsk_queue_is_full(co
+ 
+ static inline void reqsk_queue_hash_req(struct request_sock_queue *queue,
+ 					u32 hash, struct request_sock *req,
+-					unsigned timeout)
++					unsigned long timeout)
+ {
+ 	struct listen_sock *lopt = queue->listen_opt;
+ 
+diff --git a/net/ipv6/Makefile b/net/ipv6/Makefile
+index 6460eec..9601fd7 100644
+--- a/net/ipv6/Makefile
++++ b/net/ipv6/Makefile
+@@ -8,7 +8,8 @@ ipv6-objs :=	af_inet6.o anycast.o ip6_ou
+ 		route.o ip6_fib.o ipv6_sockglue.o ndisc.o udp.o raw.o \
+ 		protocol.o icmp.o mcast.o reassembly.o tcp_ipv6.o \
+ 		exthdrs.o sysctl_net_ipv6.o datagram.o proc.o \
+-		ip6_flowlabel.o ipv6_syms.o netfilter.o
++		ip6_flowlabel.o ipv6_syms.o netfilter.o \
++		inet6_connection_sock.o
+ 
+ ipv6-$(CONFIG_XFRM) += xfrm6_policy.o xfrm6_state.o xfrm6_input.o \
+ 	xfrm6_output.o
+diff --git a/net/ipv6/inet6_connection_sock.c b/net/ipv6/inet6_connection_sock.c
+new file mode 100644
+index 0000000..04ff443
+--- /dev/null
++++ b/net/ipv6/inet6_connection_sock.c
+@@ -0,0 +1,96 @@
++/*
++ * INET        An implementation of the TCP/IP protocol suite for the LINUX
++ *             operating system.  INET is implemented using the  BSD Socket
++ *             interface as the means of communication with the user level.
++ *
++ *             Support for INET6 connection oriented protocols.
++ *
++ * Authors:    See the TCPv6 sources
++ *
++ *             This program is free software; you can redistribute it and/or
++ *             modify it under the terms of the GNU General Public License
++ *             as published by the Free Software Foundation; either version
++ *             2 of the License, or(at your option) any later version.
++ */
++
++#include <linux/config.h>
++#include <linux/module.h>
++#include <linux/in6.h>
++#include <linux/ipv6.h>
++#include <linux/jhash.h>
++
++#include <net/addrconf.h>
++#include <net/inet_connection_sock.h>
 +#include <net/sock.h>
 +
-+struct timewait_sock_ops {
-+	kmem_cache_t	*twsk_slab;
-+	unsigned int	twsk_obj_size;
-+	int		(*twsk_unique)(struct sock *sk,
-+				       struct sock *sktw, void *twp);
-+};
-+
-+static inline int twsk_unique(struct sock *sk, struct sock *sktw, void *twp)
++/*
++ * request_sock (formerly open request) hash tables.
++ */
++static u32 inet6_synq_hash(const struct in6_addr *raddr, const u16 rport,
++			   const u32 rnd, const u16 synq_hsize)
 +{
-+	if (sk->sk_prot->twsk_prot->twsk_unique != NULL)
-+		return sk->sk_prot->twsk_prot->twsk_unique(sk, sktw, twp);
-+	return 0;
++	u32 a = raddr->s6_addr32[0];
++	u32 b = raddr->s6_addr32[1];
++	u32 c = raddr->s6_addr32[2];
++
++	a += JHASH_GOLDEN_RATIO;
++	b += JHASH_GOLDEN_RATIO;
++	c += rnd;
++	__jhash_mix(a, b, c);
++
++	a += raddr->s6_addr32[3];
++	b += (u32)rport;
++	__jhash_mix(a, b, c);
++
++	return c & (synq_hsize - 1);
 +}
 +
-+#endif /* _TIMEWAIT_SOCK_H */
-diff --git a/net/core/sock.c b/net/core/sock.c
-index 13cc3be..6465b0e 100644
---- a/net/core/sock.c
-+++ b/net/core/sock.c
-@@ -1488,7 +1488,7 @@ int proto_register(struct proto *prot, i
- 			}
- 		}
- 
--		if (prot->twsk_obj_size) {
-+		if (prot->twsk_prot != NULL) {
- 			static const char mask[] = "tw_sock_%s";
- 
- 			timewait_sock_slab_name = kmalloc(strlen(prot->name) + sizeof(mask) - 1, GFP_KERNEL);
-@@ -1497,11 +1497,12 @@ int proto_register(struct proto *prot, i
- 				goto out_free_request_sock_slab;
- 
- 			sprintf(timewait_sock_slab_name, mask, prot->name);
--			prot->twsk_slab = kmem_cache_create(timewait_sock_slab_name,
--							    prot->twsk_obj_size,
--							    0, SLAB_HWCACHE_ALIGN,
--							    NULL, NULL);
--			if (prot->twsk_slab == NULL)
-+			prot->twsk_prot->twsk_slab =
-+				kmem_cache_create(timewait_sock_slab_name,
-+						  prot->twsk_prot->twsk_obj_size,
-+						  0, SLAB_HWCACHE_ALIGN,
-+						  NULL, NULL);
-+			if (prot->twsk_prot->twsk_slab == NULL)
- 				goto out_free_timewait_sock_slab_name;
- 		}
- 	}
-@@ -1548,12 +1549,12 @@ void proto_unregister(struct proto *prot
- 		prot->rsk_prot->slab = NULL;
- 	}
- 
--	if (prot->twsk_slab != NULL) {
--		const char *name = kmem_cache_name(prot->twsk_slab);
-+	if (prot->twsk_prot != NULL && prot->twsk_prot->twsk_slab != NULL) {
-+		const char *name = kmem_cache_name(prot->twsk_prot->twsk_slab);
- 
--		kmem_cache_destroy(prot->twsk_slab);
-+		kmem_cache_destroy(prot->twsk_prot->twsk_slab);
- 		kfree(name);
--		prot->twsk_slab = NULL;
-+		prot->twsk_prot->twsk_slab = NULL;
- 	}
- }
- 
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index acdd96c..f8c6a15 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -20,6 +20,7 @@
- #include <net/icmp.h>
- #include <net/inet_hashtables.h>
- #include <net/sock.h>
-+#include <net/timewait_sock.h>
- #include <net/tcp_states.h>
- #include <net/xfrm.h>
- 
-@@ -1309,6 +1310,10 @@ static struct request_sock_ops dccp_requ
- 	.send_reset	= dccp_v4_ctl_send_reset,
- };
- 
-+static struct timewait_sock_ops dccp_timewait_sock_ops = {
-+	.twsk_obj_size	= sizeof(struct inet_timewait_sock),
-+};
-+
- struct proto dccp_prot = {
- 	.name			= "DCCP",
- 	.owner			= THIS_MODULE,
-@@ -1332,5 +1337,7 @@ struct proto dccp_prot = {
- 	.max_header		= MAX_DCCP_HEADER,
- 	.obj_size		= sizeof(struct dccp_sock),
- 	.rsk_prot		= &dccp_request_sock_ops,
--	.twsk_obj_size		= sizeof(struct inet_timewait_sock),
-+	.twsk_prot		= &dccp_timewait_sock_ops,
- };
-+
-+EXPORT_SYMBOL_GPL(dccp_prot);
-diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
-index 23058dc..34e7f64 100644
---- a/net/dccp/ipv6.c
-+++ b/net/dccp/ipv6.c
-@@ -652,6 +652,10 @@ static struct request_sock_ops dccp6_req
- 	.send_reset	= dccp_v6_ctl_send_reset,
- };
- 
-+static struct timewait_sock_ops dccp6_timewait_sock_ops = {
-+	.twsk_obj_size	= sizeof(struct dccp6_timewait_sock),
-+};
-+
- static void dccp_v6_send_check(struct sock *sk, int len, struct sk_buff *skb)
- {
- 	struct ipv6_pinfo *np = inet6_sk(sk);
-@@ -1361,7 +1365,7 @@ static struct proto dccp_v6_prot = {
- 	.max_header		= MAX_DCCP_HEADER,
- 	.obj_size		= sizeof(struct dccp6_sock),
- 	.rsk_prot		= &dccp6_request_sock_ops,
--	.twsk_obj_size		= sizeof(struct dccp6_timewait_sock),
-+	.twsk_prot		= &dccp6_timewait_sock_ops,
- };
- 
- static struct inet6_protocol dccp_v6_protocol = {
-diff --git a/net/ipv4/inet_timewait_sock.c b/net/ipv4/inet_timewait_sock.c
-index a010e9a..417f126 100644
---- a/net/ipv4/inet_timewait_sock.c
-+++ b/net/ipv4/inet_timewait_sock.c
-@@ -90,8 +90,9 @@ EXPORT_SYMBOL_GPL(__inet_twsk_hashdance)
- 
- struct inet_timewait_sock *inet_twsk_alloc(const struct sock *sk, const int state)
- {
--	struct inet_timewait_sock *tw = kmem_cache_alloc(sk->sk_prot_creator->twsk_slab,
--							 SLAB_ATOMIC);
-+	struct inet_timewait_sock *tw =
-+		kmem_cache_alloc(sk->sk_prot_creator->twsk_prot->twsk_slab,
-+				 SLAB_ATOMIC);
- 	if (tw != NULL) {
- 		const struct inet_sock *inet = inet_sk(sk);
- 
-diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
-index 0b5ab04..6728772 100644
---- a/net/ipv4/tcp_ipv4.c
-+++ b/net/ipv4/tcp_ipv4.c
-@@ -69,6 +69,7 @@
- #include <net/transp_v6.h>
- #include <net/ipv6.h>
- #include <net/inet_common.h>
-+#include <net/timewait_sock.h>
- #include <net/xfrm.h>
- 
- #include <linux/inet.h>
-@@ -118,6 +119,39 @@ static inline __u32 tcp_v4_init_sequence
- 					  skb->h.th->source);
- }
- 
-+int tcp_twsk_unique(struct sock *sk, struct sock *sktw, void *twp)
++struct request_sock *inet6_csk_search_req(const struct sock *sk,
++					  struct request_sock ***prevp,
++					  const __u16 rport,
++					  const struct in6_addr *raddr,
++					  const struct in6_addr *laddr,
++					  const int iif)
 +{
-+	const struct tcp_timewait_sock *tcptw = tcp_twsk(sktw);
-+	struct tcp_sock *tp = tcp_sk(sk);
++	const struct inet_connection_sock *icsk = inet_csk(sk);
++	struct listen_sock *lopt = icsk->icsk_accept_queue.listen_opt;
++	struct request_sock *req, **prev;
 +
-+	/* With PAWS, it is safe from the viewpoint
-+	   of data integrity. Even without PAWS it is safe provided sequence
-+	   spaces do not overlap i.e. at data rates <= 80Mbit/sec.
++	for (prev = &lopt->syn_table[inet6_synq_hash(raddr, rport,
++						     lopt->hash_rnd,
++						     lopt->nr_table_entries)];
++	     (req = *prev) != NULL;
++	     prev = &req->dl_next) {
++		const struct tcp6_request_sock *treq = tcp6_rsk(req);
 +
-+	   Actually, the idea is close to VJ's one, only timestamp cache is
-+	   held not per host, but per port pair and TW bucket is used as state
-+	   holder.
-+
-+	   If TW bucket has been already destroyed we fall back to VJ's scheme
-+	   and use initial timestamp retrieved from peer table.
-+	 */
-+	if (tcptw->tw_ts_recent_stamp &&
-+	    (twp == NULL || (sysctl_tcp_tw_reuse &&
-+			     xtime.tv_sec - tcptw->tw_ts_recent_stamp > 1))) {
-+		tp->write_seq = tcptw->tw_snd_nxt + 65535 + 2;
-+		if (tp->write_seq == 0)
-+			tp->write_seq = 1;
-+		tp->rx_opt.ts_recent	   = tcptw->tw_ts_recent;
-+		tp->rx_opt.ts_recent_stamp = tcptw->tw_ts_recent_stamp;
-+		sock_hold(sktw);
-+		return 1;
++		if (inet_rsk(req)->rmt_port == rport &&
++		    req->rsk_ops->family == AF_INET6 &&
++		    ipv6_addr_equal(&treq->rmt_addr, raddr) &&
++		    ipv6_addr_equal(&treq->loc_addr, laddr) &&
++		    (!treq->iif || treq->iif == iif)) {
++			BUG_TRAP(req->sk == NULL);
++			*prevp = prev;
++			return req;
++		}
 +	}
 +
-+	return 0;
++	return NULL;
 +}
 +
-+EXPORT_SYMBOL_GPL(tcp_twsk_unique);
++EXPORT_SYMBOL_GPL(inet6_csk_search_req);
 +
- /* called with local bh disabled */
- static int __tcp_v4_check_established(struct sock *sk, __u16 lport,
- 				      struct inet_timewait_sock **twp)
-@@ -142,35 +176,9 @@ static int __tcp_v4_check_established(st
- 		tw = inet_twsk(sk2);
- 
- 		if (INET_TW_MATCH(sk2, hash, acookie, saddr, daddr, ports, dif)) {
--			const struct tcp_timewait_sock *tcptw = tcp_twsk(sk2);
--			struct tcp_sock *tp = tcp_sk(sk);
--
--			/* With PAWS, it is safe from the viewpoint
--			   of data integrity. Even without PAWS it
--			   is safe provided sequence spaces do not
--			   overlap i.e. at data rates <= 80Mbit/sec.
--
--			   Actually, the idea is close to VJ's one,
--			   only timestamp cache is held not per host,
--			   but per port pair and TW bucket is used
--			   as state holder.
--
--			   If TW bucket has been already destroyed we
--			   fall back to VJ's scheme and use initial
--			   timestamp retrieved from peer table.
--			 */
--			if (tcptw->tw_ts_recent_stamp &&
--			    (!twp || (sysctl_tcp_tw_reuse &&
--				      xtime.tv_sec -
--				      tcptw->tw_ts_recent_stamp > 1))) {
--				tp->write_seq = tcptw->tw_snd_nxt + 65535 + 2;
--				if (tp->write_seq == 0)
--					tp->write_seq = 1;
--				tp->rx_opt.ts_recent	   = tcptw->tw_ts_recent;
--				tp->rx_opt.ts_recent_stamp = tcptw->tw_ts_recent_stamp;
--				sock_hold(sk2);
-+			if (twsk_unique(sk, sk2, twp))
- 				goto unique;
--			} else
-+			else
- 				goto not_unique;
- 		}
- 	}
-@@ -869,6 +877,11 @@ struct request_sock_ops tcp_request_sock
- 	.send_reset	=	tcp_v4_send_reset,
- };
- 
-+static struct timewait_sock_ops tcp_timewait_sock_ops = {
-+	.twsk_obj_size	= sizeof(struct tcp_timewait_sock),
-+	.twsk_unique	= tcp_twsk_unique,
-+};
++void inet6_csk_reqsk_queue_hash_add(struct sock *sk,
++				    struct request_sock *req,
++				    const unsigned long timeout)
++{
++	struct inet_connection_sock *icsk = inet_csk(sk);
++	struct listen_sock *lopt = icsk->icsk_accept_queue.listen_opt;
++	const u32 h = inet6_synq_hash(&tcp6_rsk(req)->rmt_addr,
++				      inet_rsk(req)->rmt_port,
++				      lopt->hash_rnd, lopt->nr_table_entries);
 +
- int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
- {
- 	struct inet_request_sock *ireq;
-@@ -1979,7 +1992,7 @@ struct proto tcp_prot = {
- 	.sysctl_rmem		= sysctl_tcp_rmem,
- 	.max_header		= MAX_TCP_HEADER,
- 	.obj_size		= sizeof(struct tcp_sock),
--	.twsk_obj_size		= sizeof(struct tcp_timewait_sock),
-+	.twsk_prot		= &tcp_timewait_sock_ops,
- 	.rsk_prot		= &tcp_request_sock_ops,
- };
- 
++	reqsk_queue_hash_req(&icsk->icsk_accept_queue, h, req, timeout);
++	inet_csk_reqsk_queue_added(sk, timeout);
++}
++
++EXPORT_SYMBOL_GPL(inet6_csk_reqsk_queue_hash_add);
 diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
-index 4c4983c..7a077de 100644
+index 1a20b93..3fc9448 100644
 --- a/net/ipv6/tcp_ipv6.c
 +++ b/net/ipv6/tcp_ipv6.c
-@@ -60,6 +60,7 @@
+@@ -48,6 +48,7 @@
+ #include <net/tcp.h>
+ #include <net/ndisc.h>
+ #include <net/inet6_hashtables.h>
++#include <net/inet6_connection_sock.h>
+ #include <net/ipv6.h>
+ #include <net/transp_v6.h>
  #include <net/addrconf.h>
- #include <net/snmp.h>
- #include <net/dsfield.h>
-+#include <net/timewait_sock.h>
- 
- #include <asm/uaccess.h>
- 
-@@ -147,22 +148,9 @@ static int __tcp_v6_check_established(st
- 		   ipv6_addr_equal(&tw6->tw_v6_daddr, saddr)	&&
- 		   ipv6_addr_equal(&tw6->tw_v6_rcv_saddr, daddr)	&&
- 		   sk2->sk_bound_dev_if == sk->sk_bound_dev_if) {
--			const struct tcp_timewait_sock *tcptw = tcp_twsk(sk2);
--			struct tcp_sock *tp = tcp_sk(sk);
--
--			if (tcptw->tw_ts_recent_stamp &&
--			    (!twp ||
--			     (sysctl_tcp_tw_reuse &&
--			      xtime.tv_sec - tcptw->tw_ts_recent_stamp > 1))) {
--				/* See comment in tcp_ipv4.c */
--				tp->write_seq = tcptw->tw_snd_nxt + 65535 + 2;
--				if (!tp->write_seq)
--					tp->write_seq = 1;
--				tp->rx_opt.ts_recent	   = tcptw->tw_ts_recent;
--				tp->rx_opt.ts_recent_stamp = tcptw->tw_ts_recent_stamp;
--				sock_hold(sk2);
-+			if (twsk_unique(sk, sk2, twp))
- 				goto unique;
--			} else
-+			else
- 				goto not_unique;
- 		}
+@@ -118,60 +119,6 @@ static void tcp_v6_hash(struct sock *sk)
  	}
-@@ -711,6 +699,11 @@ static struct request_sock_ops tcp6_requ
- 	.send_reset	=	tcp_v6_send_reset
- };
+ }
  
-+static struct timewait_sock_ops tcp6_timewait_sock_ops = {
-+	.twsk_obj_size	= sizeof(struct tcp6_timewait_sock),
-+	.twsk_unique	= tcp_twsk_unique,
-+};
-+
- static void tcp_v6_send_check(struct sock *sk, int len, struct sk_buff *skb)
- {
- 	struct ipv6_pinfo *np = inet6_sk(sk);
-@@ -1753,7 +1746,7 @@ struct proto tcpv6_prot = {
- 	.sysctl_rmem		= sysctl_tcp_rmem,
- 	.max_header		= MAX_TCP_HEADER,
- 	.obj_size		= sizeof(struct tcp6_sock),
--	.twsk_obj_size		= sizeof(struct tcp6_timewait_sock),
-+	.twsk_prot		= &tcp6_timewait_sock_ops,
- 	.rsk_prot		= &tcp6_request_sock_ops,
- };
+-/*
+- * Open request hash tables.
+- */
+-
+-static u32 tcp_v6_synq_hash(const struct in6_addr *raddr, const u16 rport, const u32 rnd)
+-{
+-	u32 a, b, c;
+-
+-	a = raddr->s6_addr32[0];
+-	b = raddr->s6_addr32[1];
+-	c = raddr->s6_addr32[2];
+-
+-	a += JHASH_GOLDEN_RATIO;
+-	b += JHASH_GOLDEN_RATIO;
+-	c += rnd;
+-	__jhash_mix(a, b, c);
+-
+-	a += raddr->s6_addr32[3];
+-	b += (u32) rport;
+-	__jhash_mix(a, b, c);
+-
+-	return c & (TCP_SYNQ_HSIZE - 1);
+-}
+-
+-static struct request_sock *tcp_v6_search_req(const struct sock *sk,
+-					      struct request_sock ***prevp,
+-					      __u16 rport,
+-					      struct in6_addr *raddr,
+-					      struct in6_addr *laddr,
+-					      int iif)
+-{
+-	const struct inet_connection_sock *icsk = inet_csk(sk);
+-	struct listen_sock *lopt = icsk->icsk_accept_queue.listen_opt;
+-	struct request_sock *req, **prev;  
+-
+-	for (prev = &lopt->syn_table[tcp_v6_synq_hash(raddr, rport, lopt->hash_rnd)];
+-	     (req = *prev) != NULL;
+-	     prev = &req->dl_next) {
+-		const struct tcp6_request_sock *treq = tcp6_rsk(req);
+-
+-		if (inet_rsk(req)->rmt_port == rport &&
+-		    req->rsk_ops->family == AF_INET6 &&
+-		    ipv6_addr_equal(&treq->rmt_addr, raddr) &&
+-		    ipv6_addr_equal(&treq->loc_addr, laddr) &&
+-		    (!treq->iif || treq->iif == iif)) {
+-			BUG_TRAP(req->sk == NULL);
+-			*prevp = prev;
+-			return req;
+-		}
+-	}
+-
+-	return NULL;
+-}
+-
+ static __inline__ u16 tcp_v6_check(struct tcphdr *th, int len,
+ 				   struct in6_addr *saddr, 
+ 				   struct in6_addr *daddr, 
+@@ -662,8 +609,8 @@ static void tcp_v6_err(struct sk_buff *s
+ 		if (sock_owned_by_user(sk))
+ 			goto out;
  
+-		req = tcp_v6_search_req(sk, &prev, th->dest, &hdr->daddr,
+-					&hdr->saddr, inet6_iif(skb));
++		req = inet6_csk_search_req(sk, &prev, th->dest, &hdr->daddr,
++					   &hdr->saddr, inet6_iif(skb));
+ 		if (!req)
+ 			goto out;
+ 
+@@ -979,8 +926,9 @@ static struct sock *tcp_v6_hnd_req(struc
+ 	struct sock *nsk;
+ 
+ 	/* Find possible connection requests. */
+-	req = tcp_v6_search_req(sk, &prev, th->source, &skb->nh.ipv6h->saddr,
+-				&skb->nh.ipv6h->daddr, inet6_iif(skb));
++	req = inet6_csk_search_req(sk, &prev, th->source,
++				   &skb->nh.ipv6h->saddr,
++				   &skb->nh.ipv6h->daddr, inet6_iif(skb));
+ 	if (req)
+ 		return tcp_check_req(sk, skb, req, prev);
+ 
+@@ -1004,17 +952,6 @@ static struct sock *tcp_v6_hnd_req(struc
+ 	return sk;
+ }
+ 
+-static void tcp_v6_synq_add(struct sock *sk, struct request_sock *req)
+-{
+-	struct inet_connection_sock *icsk = inet_csk(sk);
+-	struct listen_sock *lopt = icsk->icsk_accept_queue.listen_opt;
+-	const u32 h = tcp_v6_synq_hash(&tcp6_rsk(req)->rmt_addr, inet_rsk(req)->rmt_port, lopt->hash_rnd);
+-
+-	reqsk_queue_hash_req(&icsk->icsk_accept_queue, h, req, TCP_TIMEOUT_INIT);
+-	inet_csk_reqsk_queue_added(sk, TCP_TIMEOUT_INIT);
+-}
+-
+-
+ /* FIXME: this is substantially similar to the ipv4 code.
+  * Can some kind of merge be done? -- erics
+  */
+@@ -1084,8 +1021,7 @@ static int tcp_v6_conn_request(struct so
+ 	if (tcp_v6_send_synack(sk, req, NULL))
+ 		goto drop;
+ 
+-	tcp_v6_synq_add(sk, req);
+-
++	inet6_csk_reqsk_queue_hash_add(sk, req, TCP_TIMEOUT_INIT);
+ 	return 0;
+ 
+ drop:
 
-------=_Part_29639_8226470.1134309428764--
+------=_Part_37526_5983957.1133485838174--
