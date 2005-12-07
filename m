@@ -1,32 +1,39 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Tue, 13 Dec 2005 13:07:21 +0000
-Subject: Re: [PATCH 3/3] DCCP: fix connect() race condition upon short connections
-Message-Id: <39e6f6c70512130507t5069e6cs38f5e85cac73f2f4@mail.gmail.com>
+From: Ian McDonald <imcdnzl@gmail.com>
+Date: Wed, 07 Dec 2005 23:03:04 +0000
+Subject: Re: [dccp] API for DCCP
+Message-Id: <cbec11ac0512071503v4b9263f5s62ae65406ae3fa98@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20051213093402.GC8532@tribal.sorbonet.org>
-In-Reply-To: <20051213093402.GC8532@tribal.sorbonet.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/13/05, Andrea Bittau <a.bittau@cs.ucl.ac.uk> wrote:
-> The connect system call will initiate a connection, poll whether the connection
-> has occured and right before returning, it will check whether the connection was
-> shut-down.  In such cases, it will return -1.  If a connection is really short,
-> it is possible that the connection occurs and terminates before connect()
-> returns.  Upon checking that the connection is closed, connect() will
-> incorrectly return -1 when the transfer did occur.
->
-> I was able to reproduce this race condition consistently by having a server send
-> 3 packets upon connection and disconnect right after.  I believe this issue
-> might exist in TCP too although mitigated by the higher number of CLOSE states.
->
-> I believe there is a better solution than the one I proposed [simplest I could
-> think of].
+On 12/8/05, Leandro Melo de Sales <leandroal@gmail.com> wrote:
+> Ian... I got some client/server codes but I don't know if it is from
+> you. I'm working on the Java binding as I already told you. Do you can
+> send me your client/server codes?
 
-Yes, I believe we should take a look at one that doesn't involves
-tasklets, will try to come up with something today, but anyway, thanks
-for pointing out the issue (again)!
+I have posted my very simple code linked from here:
+http://linux-net.osdl.org/index.php/DCCP#TODO_.26_testing
 
-- Arnaldo
+This is actually the first client/server code I have written myself
+from scratch so please forgive it if it is not great!
+
+>
+> Ian, let me ask you something: do you know if there is any
+> implementation of DCCP-Thin inside Symbian OS? I ready something about
+> this but nothing of implementation. On monday and yesterday I was
+> enrolled in a course about Symbian programming using C++ from Nokia
+> Treinee Program. I talked with them about the DCCP implementation
+> inside Symbian and they are interesting on it. Let talk more about
+> this if you want too.
+
+No idea.
+
+Ian
+--
+Ian McDonald
+http://wand.net.nz/~iam4
+WAND Network Research Group
+University of Waikato
+New Zealand
