@@ -1,23 +1,54 @@
-From: "David S. Miller" <davem@davemloft.net>
-Date: Thu, 22 Dec 2005 03:02:50 +0000
-Subject: Re: [PATCH] DCCP: Typo
-Message-Id: <20051221.190250.43274172.davem@davemloft.net>
+From: Ian McDonald <imcdnzl@gmail.com>
+Date: Fri, 09 Dec 2005 02:47:49 +0000
+Subject: Re: dccp socket sometimes not destroyed upon close
+Message-Id: <cbec11ac0512081847s7856344ayd46be225d2f903a2@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <cbec11ac0512201507p168d332bl8e23a2ade30935d0@mail.gmail.com>
-In-Reply-To: <cbec11ac0512201507p168d332bl8e23a2ade30935d0@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Ian McDonald <imcdnzl@gmail.com>
-Date: Wed, 21 Dec 2005 12:07:30 +1300
+On 11/19/05, Andrea Bittau <a.bittau@cs.ucl.ac.uk> wrote:
+> When a socket is closed, inet_csk_destroy_sock should be called [currently done
+> by dccp_close()].  This will exit the ccids and bump down the module use count
+> [so that you can unload the module].
+>
+> dccp_close() will try to close the socket.  If it remains in state DCCP_CLOSING,
+> it will setup a timer for re-transmitting the "close-req" packet.  In this case,
+> inet_csk_destroy_sock() will not be called [it is only called if state is
+> DCCP_CLOSED].  If the socket is closed successfully after the re-transmission,
+> inet_csk_destroy_sock() will never be called.
+>
+>
+> My way of fixing it is adding at the end of dccp_rcv_close() something like:
+>         if (atomic_read(sk->sk_prot->orphan_count) &&
+>             dccp_sk(sk)->dccps_hc_rx_ccid)
+>                 inet_csk_destroy_sock(sk);
+>
+> Adding dccp_done() might work.  I noticed some calls to dccp_done() when
+> re-transmits fail.  Thus, if the other host totally dies, the socket should be
+> destroyed [i hope] and this bug shouldn't exist.
+>
+>
+> The main reason why I am posting this is that I wanted to know the correct fix.
+> I am interested in it primarily for being able to unload the module.
 
-> Please apply to net-2.6 for 2.6.15 tree.
-> 
-> I hope to actually change this behaviour shortly but this will help
-> anybody grepping code at present.
-> 
-> Signed-off-by: Ian McDonald <imcdnzl@gmail.com>
+Andrea - agree with you that it needs fixing. I've got the same
+problem at the moment - annoying to reboot to unload module...
 
-Applied, thanks Ian.
+When I look at section 8.3/8.4 of the spec for DCCP I think we need a
+bit of a rewrite on the closing code - which is backed up by Arnaldo's
+comments. At present we are too TCP like and DCCP has quite a
+different way for closing compared to TCP.
+
+I just started looking at how this could be fixed but my head hurts
+quickly when trying to work it out. Also I'm not entirely sure that
+dccp_done is safe as it doesn't lock the socket at all...
+
+Ian
+--
+Ian McDonald
+http://wand.net.nz/~iam4
+WAND Network Research Group
+University of Waikato
+New Zealand
