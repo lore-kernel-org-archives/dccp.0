@@ -1,7 +1,7 @@
-From: Ian McDonald <imcdnzl@gmail.com>
-Date: Thu, 08 Dec 2005 20:33:26 +0000
-Subject: Re: A doubt on the behavior of a TFRC receiver in the code
-Message-Id: <cbec11ac0512081233l130e7dbjbcf319f61d364943@mail.gmail.com>
+From: "#ZHOU BIN#" <ZHOU0022@ntu.edu.sg>
+Date: Fri, 09 Dec 2005 11:36:36 +0000
+Subject: RE: A doubt on the behavior of a TFRC receiver in the code
+Message-Id: <A975FFC51622704CBEAB749E263D179901554038@mail01.student.main.ntu.edu.sg>
 List-Id: <dccp.vger.kernel.org>
 References: <A975FFC51622704CBEAB749E263D179901554035@mail01.student.main.ntu.edu.sg>
 In-Reply-To: <A975FFC51622704CBEAB749E263D179901554035@mail01.student.main.ntu.edu.sg>
@@ -9,6 +9,21 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
+
+Hi Ian McDonald,
+
+The result is p is always be 0, and the TFRC formula will never be used to determine the sending rate at the sender side. Actually the sending rate will be stable at last due to other constraints.
+
+Regards,
+Zhou Bin 
+
+-----Original Message-----
+From: Ian McDonald [mailto:imcdnzl@gmail.com]
+Sent: Friday, December 09, 2005 4:33 AM
+To: #ZHOU BIN#
+Cc: dccp@vger.kernel.org
+Subject: Re: A doubt on the behavior of a TFRC receiver in the code
+
 
 On 11/29/05, #ZHOU BIN# <ZHOU0022@ntu.edu.sg> wrote:
 > Hi all,
