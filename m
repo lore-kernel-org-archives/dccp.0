@@ -1,168 +1,482 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Fri, 02 Dec 2005 01:11:13 +0000
-Subject: [PATCH 3/6][IPV6]: Introduce inet6_rsk()
-Message-Id: <39e6f6c70512011711u5f005a81h4f92a1485585900e@mail.gmail.com>
+Date: Sat, 10 Dec 2005 19:27:21 +0000
+Subject: [PATCH 1/6][IPV6]: Generalise some functions
+Message-Id: <39e6f6c70512101127m1c0f29f4n62c0086d4aa9e0b6@mail.gmail.com>
 MIME-Version: 1
-Content-Type: multipart/mixed; boundary="----=_Part_37530_27429701.1133485873563"
+Content-Type: multipart/mixed; boundary="----=_Part_22555_15782914.1134242841408"
 List-Id: <dccp.vger.kernel.org>
 To: dccp@vger.kernel.org
 
-------=_Part_37530_27429701.1133485873563
+------=_Part_22555_15782914.1134242841408
 Content-Type: text/plain; charset=ISO-8859-1
 Content-Transfer-Encoding: quoted-printable
 Content-Disposition: inline
 
 Hi David,
 
-     Please consider pulling from:
+    Please consider pulling from:
 
 master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.16.git
+
+Later today I'll try and continue sending the rest of the changesets
+finishing this phase, getting my initial DCCPv6 implementation in the tree.
 
 Best Regards,
 
 - Arnaldo
 
-------=_Part_37530_27429701.1133485873563
-Content-Type: text/x-patch; name="3.patch"
-Content-Transfer-Encoding: base64
-Content-Disposition: attachment; filename="3.patch"
+------=_Part_22555_15782914.1134242841408
+Content-Type: text/x-patch; name=1.patch; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="1.patch"
 
-dHJlZSBkYTY3YzZlNTI2YTRkMWZkZWFkNTE4MGE4Y2E3MmE3YWY2ZDUxZjdiCnBhcmVudCAzYTY3
-NjBjNmM0NGUzMTVhYjIzOGRjOWU0NjhlNDlhOGM0ZDVhMWE5CmF1dGhvciBBcm5hbGRvIENhcnZh
-bGhvIGRlIE1lbG8gPGFjbWVAbWFuZHJpdmEuY29tPiAxMTMzNDc5NDQ0IC0wMjAwCmNvbW1pdHRl
-ciBBcm5hbGRvIENhcnZhbGhvIGRlIE1lbG8gPGFjbWVAbWFuZHJpdmEuY29tPiAxMTMzNDc5NDQ0
-IC0wMjAwCgpbSVBWNl06IEludHJvZHVjZSBpbmV0Nl9yc2soKQoKQW5kIGluZXQ2X3Jza19vZmZz
-ZXQgaW4gaW5ldF9yZXF1ZXN0X3NvY2ssIGZvciB0aGUgc2FtZSByZWFzb25zIGFzIGluZXRfc29j
-aydzCnBpbmZvNiBtZW1iZXIuCgpTaWduZWQtb2ZmLWJ5OiBBcm5hbGRvIENhcnZhbGhvIGRlIE1l
-bG8gPGFjbWVAbWFuZHJpdmEuY29tPgoKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0t
-LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgogaW5jbHVkZS9s
-aW51eC9pcC5oICAgICAgICAgICAgICAgfCAgICA0ICsrKysKIGluY2x1ZGUvbGludXgvaXB2Ni5o
-ICAgICAgICAgICAgIHwgICAzOSArKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKystLS0t
-LS0KIG5ldC9pcHY0L2luZXRfZGlhZy5jICAgICAgICAgICAgIHwgICAgOCArKysrLS0tLQogbmV0
-L2lwdjYvaW5ldDZfY29ubmVjdGlvbl9zb2NrLmMgfCAgICA0ICsrLS0KIG5ldC9pcHY2L3RjcF9p
-cHY2LmMgICAgICAgICAgICAgIHwgICAxOSArKysrKysrKystLS0tLS0tLS0tCiA1IGZpbGVzIGNo
-YW5nZWQsIDUyIGluc2VydGlvbnMoKyksIDIyIGRlbGV0aW9ucygtKQoKLS0tLS0tLS0tLS0tLS0t
-LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0t
-LS0tLS0tCgpkaWZmIC0tZ2l0IGEvaW5jbHVkZS9saW51eC9pcC5oIGIvaW5jbHVkZS9saW51eC9p
-cC5oCmluZGV4IDMzZThhMTkuLjVhNTYwZGEgMTAwNjQ0Ci0tLSBhL2luY2x1ZGUvbGludXgvaXAu
-aAorKysgYi9pbmNsdWRlL2xpbnV4L2lwLmgKQEAgLTExMCw2ICsxMTAsMTAgQEAgc3RydWN0IGlw
-X29wdGlvbnMgewogCiBzdHJ1Y3QgaW5ldF9yZXF1ZXN0X3NvY2sgewogCXN0cnVjdCByZXF1ZXN0
-X3NvY2sJcmVxOworI2lmIGRlZmluZWQoQ09ORklHX0lQVjYpIHx8IGRlZmluZWQoQ09ORklHX0lQ
-VjZfTU9EVUxFKQorCXUxNgkJCWluZXQ2X3Jza19vZmZzZXQ7CisJLyogMiBieXRlcyBob2xlLCB0
-cnkgdG8gcGFjayAqLworI2VuZGlmCiAJdTMyCQkJbG9jX2FkZHI7CiAJdTMyCQkJcm10X2FkZHI7
-CiAJdTE2CQkJcm10X3BvcnQ7CmRpZmYgLS1naXQgYS9pbmNsdWRlL2xpbnV4L2lwdjYuaCBiL2lu
-Y2x1ZGUvbGludXgvaXB2Ni5oCmluZGV4IGUwYjkyMjcuLjdkM2U4NmQgMTAwNjQ0Ci0tLSBhL2lu
-Y2x1ZGUvbGludXgvaXB2Ni5oCisrKyBiL2luY2x1ZGUvbGludXgvaXB2Ni5oCkBAIC0xOTksMTgg
-KzE5OSwxNyBAQCBzdGF0aWMgaW5saW5lIGludCBpbmV0Nl9paWYoY29uc3Qgc3RydWN0CiAJcmV0
-dXJuIElQNkNCKHNrYiktPmlpZjsKIH0KIAotc3RydWN0IHRjcDZfcmVxdWVzdF9zb2NrIHsKLQlz
-dHJ1Y3QgdGNwX3JlcXVlc3Rfc29jawlyZXE7CitzdHJ1Y3QgaW5ldDZfcmVxdWVzdF9zb2NrIHsK
-IAlzdHJ1Y3QgaW42X2FkZHIJCWxvY19hZGRyOwogCXN0cnVjdCBpbjZfYWRkcgkJcm10X2FkZHI7
-CiAJc3RydWN0IHNrX2J1ZmYJCSpwa3RvcHRzOwogCWludAkJCWlpZjsKIH07CiAKLXN0YXRpYyBp
-bmxpbmUgc3RydWN0IHRjcDZfcmVxdWVzdF9zb2NrICp0Y3A2X3Jzayhjb25zdCBzdHJ1Y3QgcmVx
-dWVzdF9zb2NrICpzaykKLXsKLQlyZXR1cm4gKHN0cnVjdCB0Y3A2X3JlcXVlc3Rfc29jayAqKXNr
-OwotfQorc3RydWN0IHRjcDZfcmVxdWVzdF9zb2NrIHsKKwlzdHJ1Y3QgdGNwX3JlcXVlc3Rfc29j
-awkgIHRjcDZyc2tfdGNwOworCXN0cnVjdCBpbmV0Nl9yZXF1ZXN0X3NvY2sgdGNwNnJza19pbmV0
-NjsKK307CiAKIC8qKgogICogc3RydWN0IGlwdjZfcGluZm8gLSBpcHY2IHByaXZhdGUgYXJlYQpA
-QCAtMzA0LDYgKzMwMywyOCBAQCBzdGF0aWMgaW5saW5lIHN0cnVjdCBpcHY2X3BpbmZvICogaW5l
-dDZfCiAJcmV0dXJuIGluZXRfc2soX19zayktPnBpbmV0NjsKIH0KIAorc3RhdGljIGlubGluZSBz
-dHJ1Y3QgaW5ldDZfcmVxdWVzdF9zb2NrICoKKwkJCWluZXQ2X3Jzayhjb25zdCBzdHJ1Y3QgcmVx
-dWVzdF9zb2NrICpyc2spCit7CisJcmV0dXJuIChzdHJ1Y3QgaW5ldDZfcmVxdWVzdF9zb2NrICop
-KCgodTggKilyc2spICsKKwkJCQkJICAgICBpbmV0X3Jzayhyc2spLT5pbmV0Nl9yc2tfb2Zmc2V0
-KTsKK30KKworc3RhdGljIGlubGluZSB1MzIgaW5ldDZfcnNrX29mZnNldChzdHJ1Y3QgcmVxdWVz
-dF9zb2NrICpyc2spCit7CisJcmV0dXJuIHJzay0+cnNrX29wcy0+b2JqX3NpemUgLSBzaXplb2Yo
-c3RydWN0IGluZXQ2X3JlcXVlc3Rfc29jayk7Cit9CisKK3N0YXRpYyBpbmxpbmUgc3RydWN0IHJl
-cXVlc3Rfc29jayAqaW5ldDZfcmVxc2tfYWxsb2Moc3RydWN0IHJlcXVlc3Rfc29ja19vcHMgKm9w
-cykKK3sKKwlzdHJ1Y3QgcmVxdWVzdF9zb2NrICpyZXEgPSByZXFza19hbGxvYyhvcHMpOworCisJ
-aWYgKHJlcSAhPSBOVUxMKQorCQlpbmV0X3JzayhyZXEpLT5pbmV0Nl9yc2tfb2Zmc2V0ID0gaW5l
-dDZfcnNrX29mZnNldChyZXEpOworCisJcmV0dXJuIHJlcTsKK30KKwogc3RhdGljIGlubGluZSBz
-dHJ1Y3QgcmF3Nl9zb2NrICpyYXc2X3NrKGNvbnN0IHN0cnVjdCBzb2NrICpzaykKIHsKIAlyZXR1
-cm4gKHN0cnVjdCByYXc2X3NvY2sgKilzazsKQEAgLTM2MSw2ICszODIsMTIgQEAgc3RhdGljIGlu
-bGluZSBzdHJ1Y3QgaXB2Nl9waW5mbyAqIGluZXQ2XwogCXJldHVybiBOVUxMOwogfQogCitzdGF0
-aWMgaW5saW5lIHN0cnVjdCBpbmV0Nl9yZXF1ZXN0X3NvY2sgKgorCQkJaW5ldDZfcnNrKGNvbnN0
-IHN0cnVjdCByZXF1ZXN0X3NvY2sgKnJzaykKK3sKKwlyZXR1cm4gTlVMTDsKK30KKwogc3RhdGlj
-IGlubGluZSBzdHJ1Y3QgcmF3Nl9zb2NrICpyYXc2X3NrKGNvbnN0IHN0cnVjdCBzb2NrICpzaykK
-IHsKIAlyZXR1cm4gTlVMTDsKZGlmZiAtLWdpdCBhL25ldC9pcHY0L2luZXRfZGlhZy5jIGIvbmV0
-L2lwdjQvaW5ldF9kaWFnLmMKaW5kZXggMzkwNjFlZC4uM2NlNzNiMSAxMDA2NDQKLS0tIGEvbmV0
-L2lwdjQvaW5ldF9kaWFnLmMKKysrIGIvbmV0L2lwdjQvaW5ldF9kaWFnLmMKQEAgLTQ4OSw5ICs0
-ODksOSBAQCBzdGF0aWMgaW50IGluZXRfZGlhZ19maWxsX3JlcShzdHJ1Y3Qgc2tfCiAjaWYgZGVm
-aW5lZChDT05GSUdfSVBWNikgfHwgZGVmaW5lZCAoQ09ORklHX0lQVjZfTU9EVUxFKQogCWlmIChy
-LT5pZGlhZ19mYW1pbHkgPT0gQUZfSU5FVDYpIHsKIAkJaXB2Nl9hZGRyX2NvcHkoKHN0cnVjdCBp
-bjZfYWRkciAqKXItPmlkLmlkaWFnX3NyYywKLQkJCSAgICAgICAmdGNwNl9yc2socmVxKS0+bG9j
-X2FkZHIpOworCQkJICAgICAgICZpbmV0Nl9yc2socmVxKS0+bG9jX2FkZHIpOwogCQlpcHY2X2Fk
-ZHJfY29weSgoc3RydWN0IGluNl9hZGRyICopci0+aWQuaWRpYWdfZHN0LAotCQkJICAgICAgICZ0
-Y3A2X3JzayhyZXEpLT5ybXRfYWRkcik7CisJCQkgICAgICAgJmluZXQ2X3JzayhyZXEpLT5ybXRf
-YWRkcik7CiAJfQogI2VuZGlmCiAJbmxoLT5ubG1zZ19sZW4gPSBza2ItPnRhaWwgLSBiOwpAQCAt
-NTUzLDEzICs1NTMsMTMgQEAgc3RhdGljIGludCBpbmV0X2RpYWdfZHVtcF9yZXFzKHN0cnVjdCBz
-awogCQkJCWVudHJ5LnNhZGRyID0KICNpZiBkZWZpbmVkKENPTkZJR19JUFY2KSB8fCBkZWZpbmVk
-IChDT05GSUdfSVBWNl9NT0RVTEUpCiAJCQkJCShlbnRyeS5mYW1pbHkgPT0gQUZfSU5FVDYpID8K
-LQkJCQkJdGNwNl9yc2socmVxKS0+bG9jX2FkZHIuczZfYWRkcjMyIDoKKwkJCQkJaW5ldDZfcnNr
-KHJlcSktPmxvY19hZGRyLnM2X2FkZHIzMiA6CiAjZW5kaWYKIAkJCQkJJmlyZXEtPmxvY19hZGRy
-OwogCQkJCWVudHJ5LmRhZGRyID0gCiAjaWYgZGVmaW5lZChDT05GSUdfSVBWNikgfHwgZGVmaW5l
-ZCAoQ09ORklHX0lQVjZfTU9EVUxFKQogCQkJCQkoZW50cnkuZmFtaWx5ID09IEFGX0lORVQ2KSA/
-Ci0JCQkJCXRjcDZfcnNrKHJlcSktPnJtdF9hZGRyLnM2X2FkZHIzMiA6CisJCQkJCWluZXQ2X3Jz
-ayhyZXEpLT5ybXRfYWRkci5zNl9hZGRyMzIgOgogI2VuZGlmCiAJCQkJCSZpcmVxLT5ybXRfYWRk
-cjsKIAkJCQllbnRyeS5kcG9ydCA9IG50b2hzKGlyZXEtPnJtdF9wb3J0KTsKZGlmZiAtLWdpdCBh
-L25ldC9pcHY2L2luZXQ2X2Nvbm5lY3Rpb25fc29jay5jIGIvbmV0L2lwdjYvaW5ldDZfY29ubmVj
-dGlvbl9zb2NrLmMKaW5kZXggMDRmZjQ0My4uZmU4NzRlZSAxMDA2NDQKLS0tIGEvbmV0L2lwdjYv
-aW5ldDZfY29ubmVjdGlvbl9zb2NrLmMKKysrIGIvbmV0L2lwdjYvaW5ldDZfY29ubmVjdGlvbl9z
-b2NrLmMKQEAgLTYxLDcgKzYxLDcgQEAgc3RydWN0IHJlcXVlc3Rfc29jayAqaW5ldDZfY3NrX3Nl
-YXJjaF9yZQogCQkJCQkJICAgICBsb3B0LT5ucl90YWJsZV9lbnRyaWVzKV07CiAJICAgICAocmVx
-ID0gKnByZXYpICE9IE5VTEw7CiAJICAgICBwcmV2ID0gJnJlcS0+ZGxfbmV4dCkgewotCQljb25z
-dCBzdHJ1Y3QgdGNwNl9yZXF1ZXN0X3NvY2sgKnRyZXEgPSB0Y3A2X3JzayhyZXEpOworCQljb25z
-dCBzdHJ1Y3QgaW5ldDZfcmVxdWVzdF9zb2NrICp0cmVxID0gaW5ldDZfcnNrKHJlcSk7CiAKIAkJ
-aWYgKGluZXRfcnNrKHJlcSktPnJtdF9wb3J0ID09IHJwb3J0ICYmCiAJCSAgICByZXEtPnJza19v
-cHMtPmZhbWlseSA9PSBBRl9JTkVUNiAmJgpAQCAtODUsNyArODUsNyBAQCB2b2lkIGluZXQ2X2Nz
-a19yZXFza19xdWV1ZV9oYXNoX2FkZChzdHJ1CiB7CiAJc3RydWN0IGluZXRfY29ubmVjdGlvbl9z
-b2NrICppY3NrID0gaW5ldF9jc2soc2spOwogCXN0cnVjdCBsaXN0ZW5fc29jayAqbG9wdCA9IGlj
-c2stPmljc2tfYWNjZXB0X3F1ZXVlLmxpc3Rlbl9vcHQ7Ci0JY29uc3QgdTMyIGggPSBpbmV0Nl9z
-eW5xX2hhc2goJnRjcDZfcnNrKHJlcSktPnJtdF9hZGRyLAorCWNvbnN0IHUzMiBoID0gaW5ldDZf
-c3lucV9oYXNoKCZpbmV0Nl9yc2socmVxKS0+cm10X2FkZHIsCiAJCQkJICAgICAgaW5ldF9yc2so
-cmVxKS0+cm10X3BvcnQsCiAJCQkJICAgICAgbG9wdC0+aGFzaF9ybmQsIGxvcHQtPm5yX3RhYmxl
-X2VudHJpZXMpOwogCmRpZmYgLS1naXQgYS9uZXQvaXB2Ni90Y3BfaXB2Ni5jIGIvbmV0L2lwdjYv
-dGNwX2lwdjYuYwppbmRleCAzZmM5NDQ4Li4yYWIxYzkxIDEwMDY0NAotLS0gYS9uZXQvaXB2Ni90
-Y3BfaXB2Ni5jCisrKyBiL25ldC9pcHY2L3RjcF9pcHY2LmMKQEAgLTY1Niw3ICs2NTYsNyBAQCBv
-dXQ6CiBzdGF0aWMgaW50IHRjcF92Nl9zZW5kX3N5bmFjayhzdHJ1Y3Qgc29jayAqc2ssIHN0cnVj
-dCByZXF1ZXN0X3NvY2sgKnJlcSwKIAkJCSAgICAgIHN0cnVjdCBkc3RfZW50cnkgKmRzdCkKIHsK
-LQlzdHJ1Y3QgdGNwNl9yZXF1ZXN0X3NvY2sgKnRyZXEgPSB0Y3A2X3JzayhyZXEpOworCXN0cnVj
-dCBpbmV0Nl9yZXF1ZXN0X3NvY2sgKnRyZXEgPSBpbmV0Nl9yc2socmVxKTsKIAlzdHJ1Y3QgaXB2
-Nl9waW5mbyAqbnAgPSBpbmV0Nl9zayhzayk7CiAJc3RydWN0IHNrX2J1ZmYgKiBza2I7CiAJc3Ry
-dWN0IGlwdjZfdHhvcHRpb25zICpvcHQgPSBOVUxMOwpAQCAtNzIyLDggKzcyMiw4IEBAIGRvbmU6
-CiAKIHN0YXRpYyB2b2lkIHRjcF92Nl9yZXFza19kZXN0cnVjdG9yKHN0cnVjdCByZXF1ZXN0X3Nv
-Y2sgKnJlcSkKIHsKLQlpZiAodGNwNl9yc2socmVxKS0+cGt0b3B0cykKLQkJa2ZyZWVfc2tiKHRj
-cDZfcnNrKHJlcSktPnBrdG9wdHMpOworCWlmIChpbmV0Nl9yc2socmVxKS0+cGt0b3B0cykKKwkJ
-a2ZyZWVfc2tiKGluZXQ2X3JzayhyZXEpLT5wa3RvcHRzKTsKIH0KIAogc3RhdGljIHN0cnVjdCBy
-ZXF1ZXN0X3NvY2tfb3BzIHRjcDZfcmVxdWVzdF9zb2NrX29wcyA9IHsKQEAgLTk1Nyw3ICs5NTcs
-NyBAQCBzdGF0aWMgc3RydWN0IHNvY2sgKnRjcF92Nl9obmRfcmVxKHN0cnVjCiAgKi8KIHN0YXRp
-YyBpbnQgdGNwX3Y2X2Nvbm5fcmVxdWVzdChzdHJ1Y3Qgc29jayAqc2ssIHN0cnVjdCBza19idWZm
-ICpza2IpCiB7Ci0Jc3RydWN0IHRjcDZfcmVxdWVzdF9zb2NrICp0cmVxOworCXN0cnVjdCBpbmV0
-Nl9yZXF1ZXN0X3NvY2sgKnRyZXE7CiAJc3RydWN0IGlwdjZfcGluZm8gKm5wID0gaW5ldDZfc2so
-c2spOwogCXN0cnVjdCB0Y3Bfb3B0aW9uc19yZWNlaXZlZCB0bXBfb3B0OwogCXN0cnVjdCB0Y3Bf
-c29jayAqdHAgPSB0Y3Bfc2soc2spOwpAQCAtOTgyLDcgKzk4Miw3IEBAIHN0YXRpYyBpbnQgdGNw
-X3Y2X2Nvbm5fcmVxdWVzdChzdHJ1Y3Qgc28KIAlpZiAoc2tfYWNjZXB0cV9pc19mdWxsKHNrKSAm
-JiBpbmV0X2Nza19yZXFza19xdWV1ZV95b3VuZyhzaykgPiAxKQogCQlnb3RvIGRyb3A7CiAKLQly
-ZXEgPSByZXFza19hbGxvYygmdGNwNl9yZXF1ZXN0X3NvY2tfb3BzKTsKKwlyZXEgPSBpbmV0Nl9y
-ZXFza19hbGxvYygmdGNwNl9yZXF1ZXN0X3NvY2tfb3BzKTsKIAlpZiAocmVxID09IE5VTEwpCiAJ
-CWdvdG8gZHJvcDsKIApAQCAtOTk1LDcgKzk5NSw3IEBAIHN0YXRpYyBpbnQgdGNwX3Y2X2Nvbm5f
-cmVxdWVzdChzdHJ1Y3Qgc28KIAl0bXBfb3B0LnRzdGFtcF9vayA9IHRtcF9vcHQuc2F3X3RzdGFt
-cDsKIAl0Y3Bfb3BlbnJlcV9pbml0KHJlcSwgJnRtcF9vcHQsIHNrYik7CiAKLQl0cmVxID0gdGNw
-Nl9yc2socmVxKTsKKwl0cmVxID0gaW5ldDZfcnNrKHJlcSk7CiAJaXB2Nl9hZGRyX2NvcHkoJnRy
-ZXEtPnJtdF9hZGRyLCAmc2tiLT5uaC5pcHY2aC0+c2FkZHIpOwogCWlwdjZfYWRkcl9jb3B5KCZ0
-cmVxLT5sb2NfYWRkciwgJnNrYi0+bmguaXB2NmgtPmRhZGRyKTsKIAlUQ1BfRUNOX2NyZWF0ZV9y
-ZXF1ZXN0KHJlcSwgc2tiLT5oLnRoKTsKQEAgLTEwMzYsNyArMTAzNiw3IEBAIHN0YXRpYyBzdHJ1
-Y3Qgc29jayAqIHRjcF92Nl9zeW5fcmVjdl9zb2MKIAkJCQkJICBzdHJ1Y3QgcmVxdWVzdF9zb2Nr
-ICpyZXEsCiAJCQkJCSAgc3RydWN0IGRzdF9lbnRyeSAqZHN0KQogewotCXN0cnVjdCB0Y3A2X3Jl
-cXVlc3Rfc29jayAqdHJlcSA9IHRjcDZfcnNrKHJlcSk7CisJc3RydWN0IGluZXQ2X3JlcXVlc3Rf
-c29jayAqdHJlcSA9IGluZXQ2X3JzayhyZXEpOwogCXN0cnVjdCBpcHY2X3BpbmZvICpuZXducCwg
-Km5wID0gaW5ldDZfc2soc2spOwogCXN0cnVjdCB0Y3A2X3NvY2sgKm5ld3RjcDZzazsKIAlzdHJ1
-Y3QgaW5ldF9zb2NrICpuZXdpbmV0OwpAQCAtMTcyNCwxNCArMTcyNCwxMyBAQCBzdGF0aWMgaW50
-IHRjcF92Nl9kZXN0cm95X3NvY2soc3RydWN0IHNvCiBzdGF0aWMgdm9pZCBnZXRfb3BlbnJlcTYo
-c3RydWN0IHNlcV9maWxlICpzZXEsIAogCQkJIHN0cnVjdCBzb2NrICpzaywgc3RydWN0IHJlcXVl
-c3Rfc29jayAqcmVxLCBpbnQgaSwgaW50IHVpZCkKIHsKLQlzdHJ1Y3QgaW42X2FkZHIgKmRlc3Qs
-ICpzcmM7CiAJaW50IHR0ZCA9IHJlcS0+ZXhwaXJlcyAtIGppZmZpZXM7CisJc3RydWN0IGluNl9h
-ZGRyICpzcmMgPSAmaW5ldDZfcnNrKHJlcSktPmxvY19hZGRyOworCXN0cnVjdCBpbjZfYWRkciAq
-ZGVzdCA9ICZpbmV0Nl9yc2socmVxKS0+cm10X2FkZHI7CiAKIAlpZiAodHRkIDwgMCkKIAkJdHRk
-ID0gMDsKIAotCXNyYyA9ICZ0Y3A2X3JzayhyZXEpLT5sb2NfYWRkcjsKLQlkZXN0ID0gJnRjcDZf
-cnNrKHJlcSktPnJtdF9hZGRyOwogCXNlcV9wcmludGYoc2VxLAogCQkgICAiJTRkOiAlMDhYJTA4
-WCUwOFglMDhYOiUwNFggJTA4WCUwOFglMDhYJTA4WDolMDRYICIKIAkJICAgIiUwMlggJTA4WDol
-MDhYICUwMlg6JTA4bFggJTA4WCAlNWQgJThkICVkICVkICVwXG4iLAo=
-------=_Part_37530_27429701.1133485873563--
+tree b0c2bc5b39feb3c74900f31e394915945931564f
+parent b2bd594ae1ae20d0163870a965a0ef7526b072c4
+author Arnaldo Carvalho de Melo <acme@mandriva.com> 1134227699 -0200
+committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1134227699 -0200
+
+[IPV6]: Generalise some functions
+
+Using sk->sk_protocol instead of IPPROTO_TCP.
+
+Will be used by DCCPv6 in the next changesets.
+
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+
+------------------------------------------------------------------------------
+
+ include/linux/ipv6.h                |    2 
+ include/net/inet6_connection_sock.h |   13 ++-
+ net/ipv6/af_inet6.c                 |   52 ++++++++++++
+ net/ipv6/inet6_connection_sock.c    |  103 ++++++++++++++++++++++++
+ net/ipv6/tcp_ipv6.c                 |  153 ------------------------------------
+ 5 files changed, 173 insertions(+), 150 deletions(-)
+
+------------------------------------------------------------------------------
+
+diff --git a/include/linux/ipv6.h b/include/linux/ipv6.h
+index 7d3e86d..69a0dec 100644
+--- a/include/linux/ipv6.h
++++ b/include/linux/ipv6.h
+@@ -297,6 +297,8 @@ struct tcp6_sock {
+ 	struct ipv6_pinfo inet6;
+ };
+ 
++extern int inet6_sk_rebuild_header(struct sock *sk);
++
+ #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+ static inline struct ipv6_pinfo * inet6_sk(const struct sock *__sk)
+ {
+diff --git a/include/net/inet6_connection_sock.h b/include/net/inet6_connection_sock.h
+index aa30ebd..b33b438 100644
+--- a/include/net/inet6_connection_sock.h
++++ b/include/net/inet6_connection_sock.h
+@@ -15,8 +15,15 @@
+ 
+ #include <linux/types.h>
+ 
+-struct sock;
++struct in6_addr;
++struct inet_bind_bucket;
+ struct request_sock;
++struct sk_buff;
++struct sock;
++struct sockaddr;
++
++extern int inet6_csk_bind_conflict(const struct sock *sk,
++				   const struct inet_bind_bucket *tb);
+ 
+ extern struct request_sock *inet6_csk_search_req(const struct sock *sk,
+ 						 struct request_sock ***prevp,
+@@ -28,4 +35,8 @@ extern struct request_sock *inet6_csk_se
+ extern void inet6_csk_reqsk_queue_hash_add(struct sock *sk,
+ 					   struct request_sock *req,
+ 					   const unsigned long timeout);
++
++extern void inet6_csk_addr2sockaddr(struct sock *sk, struct sockaddr *uaddr);
++
++extern int inet6_csk_xmit(struct sk_buff *skb, int ipfragok);
+ #endif /* _INET6_CONNECTION_SOCK_H */
+diff --git a/net/ipv6/af_inet6.c b/net/ipv6/af_inet6.c
+index d954638..fd040e9 100644
+--- a/net/ipv6/af_inet6.c
++++ b/net/ipv6/af_inet6.c
+@@ -609,6 +609,58 @@ inet6_unregister_protosw(struct inet_pro
+ 	}
+ }
+ 
++int inet6_sk_rebuild_header(struct sock *sk)
++{
++	int err;
++	struct dst_entry *dst;
++	struct ipv6_pinfo *np = inet6_sk(sk);
++
++	dst = __sk_dst_check(sk, np->dst_cookie);
++
++	if (dst == NULL) {
++		struct inet_sock *inet = inet_sk(sk);
++		struct in6_addr *final_p = NULL, final;
++		struct flowi fl;
++
++		memset(&fl, 0, sizeof(fl));
++		fl.proto = sk->sk_protocol;
++		ipv6_addr_copy(&fl.fl6_dst, &np->daddr);
++		ipv6_addr_copy(&fl.fl6_src, &np->saddr);
++		fl.fl6_flowlabel = np->flow_label;
++		fl.oif = sk->sk_bound_dev_if;
++		fl.fl_ip_dport = inet->dport;
++		fl.fl_ip_sport = inet->sport;
++
++		if (np->opt && np->opt->srcrt) {
++			struct rt0_hdr *rt0 = (struct rt0_hdr *) np->opt->srcrt;
++			ipv6_addr_copy(&final, &fl.fl6_dst);
++			ipv6_addr_copy(&fl.fl6_dst, rt0->addr);
++			final_p = &final;
++		}
++
++		err = ip6_dst_lookup(sk, &dst, &fl);
++		if (err) {
++			sk->sk_route_caps = 0;
++			return err;
++		}
++		if (final_p)
++			ipv6_addr_copy(&fl.fl6_dst, final_p);
++
++		if ((err = xfrm_lookup(&dst, &fl, sk, 0)) < 0) {
++			sk->sk_err_soft = -err;
++			return err;
++		}
++
++		ip6_dst_store(sk, dst, NULL);
++		sk->sk_route_caps = dst->dev->features &
++			~(NETIF_F_IP_CSUM | NETIF_F_TSO);
++	}
++
++	return 0;
++}
++
++EXPORT_SYMBOL_GPL(inet6_sk_rebuild_header);
++
+ int
+ snmp6_mib_init(void *ptr[2], size_t mibsize, size_t mibalign)
+ {
+diff --git a/net/ipv6/inet6_connection_sock.c b/net/ipv6/inet6_connection_sock.c
+index fe874ee..792f90f 100644
+--- a/net/ipv6/inet6_connection_sock.c
++++ b/net/ipv6/inet6_connection_sock.c
+@@ -21,8 +21,34 @@
+ 
+ #include <net/addrconf.h>
+ #include <net/inet_connection_sock.h>
++#include <net/inet_ecn.h>
++#include <net/inet_hashtables.h>
++#include <net/ip6_route.h>
+ #include <net/sock.h>
+ 
++int inet6_csk_bind_conflict(const struct sock *sk,
++			    const struct inet_bind_bucket *tb)
++{
++	const struct sock *sk2;
++	const struct hlist_node *node;
++
++	/* We must walk the whole port owner list in this case. -DaveM */
++	sk_for_each_bound(sk2, node, &tb->owners) {
++		if (sk != sk2 &&
++		    (!sk->sk_bound_dev_if ||
++		     !sk2->sk_bound_dev_if ||
++		     sk->sk_bound_dev_if == sk2->sk_bound_dev_if) &&
++		    (!sk->sk_reuse || !sk2->sk_reuse ||
++		     sk2->sk_state == TCP_LISTEN) &&
++		     ipv6_rcv_saddr_equal(sk, sk2))
++			break;
++	}
++
++	return node != NULL;
++}
++
++EXPORT_SYMBOL_GPL(inet6_csk_bind_conflict);
++
+ /*
+  * request_sock (formerly open request) hash tables.
+  */
+@@ -94,3 +120,80 @@ void inet6_csk_reqsk_queue_hash_add(stru
+ }
+ 
+ EXPORT_SYMBOL_GPL(inet6_csk_reqsk_queue_hash_add);
++
++void inet6_csk_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)
++{
++	struct ipv6_pinfo *np = inet6_sk(sk);
++	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *) uaddr;
++
++	sin6->sin6_family = AF_INET6;
++	ipv6_addr_copy(&sin6->sin6_addr, &np->daddr);
++	sin6->sin6_port	= inet_sk(sk)->dport;
++	/* We do not store received flowlabel for TCP */
++	sin6->sin6_flowinfo = 0;
++	sin6->sin6_scope_id = 0;
++	if (sk->sk_bound_dev_if &&
++	    ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_LINKLOCAL)
++		sin6->sin6_scope_id = sk->sk_bound_dev_if;
++}
++
++EXPORT_SYMBOL_GPL(inet6_csk_addr2sockaddr);
++
++int inet6_csk_xmit(struct sk_buff *skb, int ipfragok)
++{
++	struct sock *sk = skb->sk;
++	struct inet_sock *inet = inet_sk(sk);
++	struct ipv6_pinfo *np = inet6_sk(sk);
++	struct flowi fl;
++	struct dst_entry *dst;
++	struct in6_addr *final_p = NULL, final;
++
++	memset(&fl, 0, sizeof(fl));
++	fl.proto = sk->sk_protocol;
++	ipv6_addr_copy(&fl.fl6_dst, &np->daddr);
++	ipv6_addr_copy(&fl.fl6_src, &np->saddr);
++	fl.fl6_flowlabel = np->flow_label;
++	IP6_ECN_flow_xmit(sk, fl.fl6_flowlabel);
++	fl.oif = sk->sk_bound_dev_if;
++	fl.fl_ip_sport = inet->sport;
++	fl.fl_ip_dport = inet->dport;
++
++	if (np->opt && np->opt->srcrt) {
++		struct rt0_hdr *rt0 = (struct rt0_hdr *)np->opt->srcrt;
++		ipv6_addr_copy(&final, &fl.fl6_dst);
++		ipv6_addr_copy(&fl.fl6_dst, rt0->addr);
++		final_p = &final;
++	}
++
++	dst = __sk_dst_check(sk, np->dst_cookie);
++
++	if (dst == NULL) {
++		int err = ip6_dst_lookup(sk, &dst, &fl);
++
++		if (err) {
++			sk->sk_err_soft = -err;
++			return err;
++		}
++
++		if (final_p)
++			ipv6_addr_copy(&fl.fl6_dst, final_p);
++
++		if ((err = xfrm_lookup(&dst, &fl, sk, 0)) < 0) {
++			sk->sk_route_caps = 0;
++			return err;
++		}
++
++		ip6_dst_store(sk, dst, NULL);
++		sk->sk_route_caps = dst->dev->features &
++			~(NETIF_F_IP_CSUM | NETIF_F_TSO);
++	}
++
++	skb->dst = dst_clone(dst);
++
++	/* Restore final destination back after routing done */
++	ipv6_addr_copy(&fl.fl6_dst, &np->daddr);
++
++	return ip6_xmit(sk, skb, &fl, np->opt, 0);
++}
++
++EXPORT_SYMBOL_GPL(inet6_csk_xmit);
+diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
+index e6919bf..2783956 100644
+--- a/net/ipv6/tcp_ipv6.c
++++ b/net/ipv6/tcp_ipv6.c
+@@ -72,32 +72,10 @@ static void	tcp_v6_send_check(struct soc
+ 				  struct sk_buff *skb);
+ 
+ static int	tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb);
+-static int	tcp_v6_xmit(struct sk_buff *skb, int ipfragok);
+ 
+ static struct inet_connection_sock_af_ops ipv6_mapped;
+ static struct inet_connection_sock_af_ops ipv6_specific;
+ 
+-int inet6_csk_bind_conflict(const struct sock *sk,
+-			    const struct inet_bind_bucket *tb)
+-{
+-	const struct sock *sk2;
+-	const struct hlist_node *node;
+-
+-	/* We must walk the whole port owner list in this case. -DaveM */
+-	sk_for_each_bound(sk2, node, &tb->owners) {
+-		if (sk != sk2 &&
+-		    (!sk->sk_bound_dev_if ||
+-		     !sk2->sk_bound_dev_if ||
+-		     sk->sk_bound_dev_if == sk2->sk_bound_dev_if) &&
+-		    (!sk->sk_reuse || !sk2->sk_reuse ||
+-		     sk2->sk_state == TCP_LISTEN) &&
+-		     ipv6_rcv_saddr_equal(sk, sk2))
+-			break;
+-	}
+-
+-	return node != NULL;
+-}
+-
+ static int tcp_v6_get_port(struct sock *sk, unsigned short snum)
+ {
+ 	return inet_csk_get_port(&tcp_hashinfo, sk, snum,
+@@ -1501,129 +1479,6 @@ do_time_wait:
+ 	goto discard_it;
+ }
+ 
+-static int tcp_v6_rebuild_header(struct sock *sk)
+-{
+-	int err;
+-	struct dst_entry *dst;
+-	struct ipv6_pinfo *np = inet6_sk(sk);
+-
+-	dst = __sk_dst_check(sk, np->dst_cookie);
+-
+-	if (dst == NULL) {
+-		struct inet_sock *inet = inet_sk(sk);
+-		struct in6_addr *final_p = NULL, final;
+-		struct flowi fl;
+-
+-		memset(&fl, 0, sizeof(fl));
+-		fl.proto = IPPROTO_TCP;
+-		ipv6_addr_copy(&fl.fl6_dst, &np->daddr);
+-		ipv6_addr_copy(&fl.fl6_src, &np->saddr);
+-		fl.fl6_flowlabel = np->flow_label;
+-		fl.oif = sk->sk_bound_dev_if;
+-		fl.fl_ip_dport = inet->dport;
+-		fl.fl_ip_sport = inet->sport;
+-
+-		if (np->opt && np->opt->srcrt) {
+-			struct rt0_hdr *rt0 = (struct rt0_hdr *) np->opt->srcrt;
+-			ipv6_addr_copy(&final, &fl.fl6_dst);
+-			ipv6_addr_copy(&fl.fl6_dst, rt0->addr);
+-			final_p = &final;
+-		}
+-
+-		err = ip6_dst_lookup(sk, &dst, &fl);
+-		if (err) {
+-			sk->sk_route_caps = 0;
+-			return err;
+-		}
+-		if (final_p)
+-			ipv6_addr_copy(&fl.fl6_dst, final_p);
+-
+-		if ((err = xfrm_lookup(&dst, &fl, sk, 0)) < 0) {
+-			sk->sk_err_soft = -err;
+-			return err;
+-		}
+-
+-		ip6_dst_store(sk, dst, NULL);
+-		sk->sk_route_caps = dst->dev->features &
+-			~(NETIF_F_IP_CSUM | NETIF_F_TSO);
+-	}
+-
+-	return 0;
+-}
+-
+-static int tcp_v6_xmit(struct sk_buff *skb, int ipfragok)
+-{
+-	struct sock *sk = skb->sk;
+-	struct inet_sock *inet = inet_sk(sk);
+-	struct ipv6_pinfo *np = inet6_sk(sk);
+-	struct flowi fl;
+-	struct dst_entry *dst;
+-	struct in6_addr *final_p = NULL, final;
+-
+-	memset(&fl, 0, sizeof(fl));
+-	fl.proto = IPPROTO_TCP;
+-	ipv6_addr_copy(&fl.fl6_dst, &np->daddr);
+-	ipv6_addr_copy(&fl.fl6_src, &np->saddr);
+-	fl.fl6_flowlabel = np->flow_label;
+-	IP6_ECN_flow_xmit(sk, fl.fl6_flowlabel);
+-	fl.oif = sk->sk_bound_dev_if;
+-	fl.fl_ip_sport = inet->sport;
+-	fl.fl_ip_dport = inet->dport;
+-
+-	if (np->opt && np->opt->srcrt) {
+-		struct rt0_hdr *rt0 = (struct rt0_hdr *) np->opt->srcrt;
+-		ipv6_addr_copy(&final, &fl.fl6_dst);
+-		ipv6_addr_copy(&fl.fl6_dst, rt0->addr);
+-		final_p = &final;
+-	}
+-
+-	dst = __sk_dst_check(sk, np->dst_cookie);
+-
+-	if (dst == NULL) {
+-		int err = ip6_dst_lookup(sk, &dst, &fl);
+-
+-		if (err) {
+-			sk->sk_err_soft = -err;
+-			return err;
+-		}
+-
+-		if (final_p)
+-			ipv6_addr_copy(&fl.fl6_dst, final_p);
+-
+-		if ((err = xfrm_lookup(&dst, &fl, sk, 0)) < 0) {
+-			sk->sk_route_caps = 0;
+-			return err;
+-		}
+-
+-		ip6_dst_store(sk, dst, NULL);
+-		sk->sk_route_caps = dst->dev->features &
+-			~(NETIF_F_IP_CSUM | NETIF_F_TSO);
+-	}
+-
+-	skb->dst = dst_clone(dst);
+-
+-	/* Restore final destination back after routing done */
+-	ipv6_addr_copy(&fl.fl6_dst, &np->daddr);
+-
+-	return ip6_xmit(sk, skb, &fl, np->opt, 0);
+-}
+-
+-static void v6_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)
+-{
+-	struct ipv6_pinfo *np = inet6_sk(sk);
+-	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *) uaddr;
+-
+-	sin6->sin6_family = AF_INET6;
+-	ipv6_addr_copy(&sin6->sin6_addr, &np->daddr);
+-	sin6->sin6_port	= inet_sk(sk)->dport;
+-	/* We do not store received flowlabel for TCP */
+-	sin6->sin6_flowinfo = 0;
+-	sin6->sin6_scope_id = 0;
+-	if (sk->sk_bound_dev_if &&
+-	    ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_LINKLOCAL)
+-		sin6->sin6_scope_id = sk->sk_bound_dev_if;
+-}
+-
+ static int tcp_v6_remember_stamp(struct sock *sk)
+ {
+ 	/* Alas, not yet... */
+@@ -1631,9 +1486,9 @@ static int tcp_v6_remember_stamp(struct 
+ }
+ 
+ static struct inet_connection_sock_af_ops ipv6_specific = {
+-	.queue_xmit	=	tcp_v6_xmit,
++	.queue_xmit	=	inet6_csk_xmit,
+ 	.send_check	=	tcp_v6_send_check,
+-	.rebuild_header	=	tcp_v6_rebuild_header,
++	.rebuild_header	=	inet6_sk_rebuild_header,
+ 	.conn_request	=	tcp_v6_conn_request,
+ 	.syn_recv_sock	=	tcp_v6_syn_recv_sock,
+ 	.remember_stamp	=	tcp_v6_remember_stamp,
+@@ -1641,7 +1496,7 @@ static struct inet_connection_sock_af_op
+ 
+ 	.setsockopt	=	ipv6_setsockopt,
+ 	.getsockopt	=	ipv6_getsockopt,
+-	.addr2sockaddr	=	v6_addr2sockaddr,
++	.addr2sockaddr	=	inet6_csk_addr2sockaddr,
+ 	.sockaddr_len	=	sizeof(struct sockaddr_in6)
+ };
+ 
+@@ -1660,7 +1515,7 @@ static struct inet_connection_sock_af_op
+ 
+ 	.setsockopt	=	ipv6_setsockopt,
+ 	.getsockopt	=	ipv6_getsockopt,
+-	.addr2sockaddr	=	v6_addr2sockaddr,
++	.addr2sockaddr	=	inet6_csk_addr2sockaddr,
+ 	.sockaddr_len	=	sizeof(struct sockaddr_in6)
+ };
+ 
+
+
+------=_Part_22555_15782914.1134242841408--
