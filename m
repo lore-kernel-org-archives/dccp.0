@@ -1,62 +1,123 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Fri, 09 Dec 2005 18:22:26 +0000
-Subject: Re: dccp socket sometimes not destroyed upon close
-Message-Id: <39e6f6c70512091022g22bfb914k21b816749b81329e@mail.gmail.com>
+Date: Sat, 10 Dec 2005 19:29:32 +0000
+Subject: [PATCH 6/6][IPV6]: Export ipv6_opt_accepted
+Message-Id: <39e6f6c70512101129sae17bb0o69bea0631e0454cc@mail.gmail.com>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="----=_Part_22639_15804733.1134242972042"
 List-Id: <dccp.vger.kernel.org>
-References: <cbec11ac0512081847s7856344ayd46be225d2f903a2@mail.gmail.com>
-In-Reply-To: <cbec11ac0512081847s7856344ayd46be225d2f903a2@mail.gmail.com>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/9/05, Ian McDonald <imcdnzl@gmail.com> wrote:
-> On 11/19/05, Andrea Bittau <a.bittau@cs.ucl.ac.uk> wrote:
-> > When a socket is closed, inet_csk_destroy_sock should be called [currently done
-> > by dccp_close()].  This will exit the ccids and bump down the module use count
-> > [so that you can unload the module].
-> >
-> > dccp_close() will try to close the socket.  If it remains in state DCCP_CLOSING,
-> > it will setup a timer for re-transmitting the "close-req" packet.  In this case,
-> > inet_csk_destroy_sock() will not be called [it is only called if state is
-> > DCCP_CLOSED].  If the socket is closed successfully after the re-transmission,
-> > inet_csk_destroy_sock() will never be called.
-> >
-> >
-> > My way of fixing it is adding at the end of dccp_rcv_close() something like:
-> >         if (atomic_read(sk->sk_prot->orphan_count) &&
-> >             dccp_sk(sk)->dccps_hc_rx_ccid)
-> >                 inet_csk_destroy_sock(sk);
-> >
-> > Adding dccp_done() might work.  I noticed some calls to dccp_done() when
-> > re-transmits fail.  Thus, if the other host totally dies, the socket should be
-> > destroyed [i hope] and this bug shouldn't exist.
-> >
-> >
-> > The main reason why I am posting this is that I wanted to know the correct fix.
-> > I am interested in it primarily for being able to unload the module.
->
-> Andrea - agree with you that it needs fixing. I've got the same
-> problem at the moment - annoying to reboot to unload module...
->
-> When I look at section 8.3/8.4 of the spec for DCCP I think we need a
-> bit of a rewrite on the closing code - which is backed up by Arnaldo's
-> comments. At present we are too TCP like and DCCP has quite a
-> different way for closing compared to TCP.
->
-> I just started looking at how this could be fixed but my head hurts
-> quickly when trying to work it out. Also I'm not entirely sure that
-> dccp_done is safe as it doesn't lock the socket at all...
+------=_Part_22639_15804733.1134242972042
+Content-Type: text/plain; charset=ISO-8859-1
+Content-Transfer-Encoding: quoted-printable
+Content-Disposition: inline
 
-Look at the OSTRA callgraphs at
-http://oops.ghostprotocols.net:81/dccp/ostra, there you can see the
-flow and it may help you.
+Hi David,
 
-The current code was, yes, modelled after the TCP structure, now that
-we have more people working on it and seeing the flaws, we can discuss
-about DCCP needs and strive to figure out a INET (v4/v6) core API that
-can serve both TCP and DCCP :-)
+    Please consider pulling from:
 
-/me still swamped with work, but trying to follow the discussions :-)
+master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.16.git
+
+Best Regards,
 
 - Arnaldo
+
+------=_Part_22639_15804733.1134242972042
+Content-Type: text/x-patch; name=6.patch; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="6.patch"
+
+tree a47e827887f6af53382373476e58a3dde8418c22
+parent 273cab383a9bf4c564e11f0fc2c5bd07f394d76c
+author Arnaldo Carvalho de Melo <acme@mandriva.com> 1134242431 -0200
+committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1134242431 -0200
+
+[IPV6]: Export ipv6_opt_accepted
+
+It was already non-TCP specific, will be used by DCCPv6.
+
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+
+------------------------------------------------------------------------------
+
+ include/net/ipv6.h  |    2 ++
+ net/ipv6/af_inet6.c |   21 +++++++++++++++++++++
+ net/ipv6/tcp_ipv6.c |   16 ----------------
+ 3 files changed, 23 insertions(+), 16 deletions(-)
+
+------------------------------------------------------------------------------
+
+diff --git a/include/net/ipv6.h b/include/net/ipv6.h
+index 0a2ad51..8513761 100644
+--- a/include/net/ipv6.h
++++ b/include/net/ipv6.h
+@@ -240,6 +240,8 @@ extern struct ipv6_txoptions *	ipv6_rene
+ struct ipv6_txoptions *ipv6_fixup_options(struct ipv6_txoptions *opt_space,
+ 					  struct ipv6_txoptions *opt);
+ 
++extern int ipv6_opt_accepted(struct sock *sk, struct sk_buff *skb);
++
+ extern int ip6_frag_nqueues;
+ extern atomic_t ip6_frag_mem;
+ 
+diff --git a/net/ipv6/af_inet6.c b/net/ipv6/af_inet6.c
+index 23675ef..bf17aab 100644
+--- a/net/ipv6/af_inet6.c
++++ b/net/ipv6/af_inet6.c
+@@ -663,6 +663,27 @@ int inet6_sk_rebuild_header(struct sock 
+ 
+ EXPORT_SYMBOL_GPL(inet6_sk_rebuild_header);
+ 
++int ipv6_opt_accepted(struct sock *sk, struct sk_buff *skb)
++{
++	struct ipv6_pinfo *np = inet6_sk(sk);
++	struct inet6_skb_parm *opt = IP6CB(skb);
++
++	if (np->rxopt.all) {
++		if ((opt->hop && (np->rxopt.bits.hopopts ||
++				  np->rxopt.bits.ohopopts)) ||
++		    ((IPV6_FLOWINFO_MASK & *(u32*)skb->nh.raw) &&
++		     np->rxopt.bits.rxflow) ||
++		    (opt->srcrt && (np->rxopt.bits.srcrt ||
++		     np->rxopt.bits.osrcrt)) ||
++		    ((opt->dst1 || opt->dst0) &&
++		     (np->rxopt.bits.dstopts || np->rxopt.bits.odstopts)))
++			return 1;
++	}
++	return 0;
++}
++
++EXPORT_SYMBOL_GPL(ipv6_opt_accepted);
++
+ int
+ snmp6_mib_init(void *ptr[2], size_t mibsize, size_t mibalign)
+ {
+diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
+index 92d6924..4c4983c 100644
+--- a/net/ipv6/tcp_ipv6.c
++++ b/net/ipv6/tcp_ipv6.c
+@@ -711,22 +711,6 @@ static struct request_sock_ops tcp6_requ
+ 	.send_reset	=	tcp_v6_send_reset
+ };
+ 
+-static int ipv6_opt_accepted(struct sock *sk, struct sk_buff *skb)
+-{
+-	struct ipv6_pinfo *np = inet6_sk(sk);
+-	struct inet6_skb_parm *opt = IP6CB(skb);
+-
+-	if (np->rxopt.all) {
+-		if ((opt->hop && (np->rxopt.bits.hopopts || np->rxopt.bits.ohopopts)) ||
+-		    ((IPV6_FLOWINFO_MASK & *(u32*)skb->nh.raw) && np->rxopt.bits.rxflow) ||
+-		    (opt->srcrt && (np->rxopt.bits.srcrt || np->rxopt.bits.osrcrt)) ||
+-		    ((opt->dst1 || opt->dst0) && (np->rxopt.bits.dstopts || np->rxopt.bits.odstopts)))
+-			return 1;
+-	}
+-	return 0;
+-}
+-
+-
+ static void tcp_v6_send_check(struct sock *sk, int len, struct sk_buff *skb)
+ {
+ 	struct ipv6_pinfo *np = inet6_sk(sk);
+
+------=_Part_22639_15804733.1134242972042--
