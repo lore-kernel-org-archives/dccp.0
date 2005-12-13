@@ -1,101 +1,118 @@
-From: "#ZHOU BIN#" <ZHOU0022@ntu.edu.sg>
-Date: Fri, 09 Dec 2005 11:36:36 +0000
-Subject: RE: A doubt on the behavior of a TFRC receiver in the code
-Message-Id: <A975FFC51622704CBEAB749E263D179901554038@mail01.student.main.ntu.edu.sg>
+From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+Date: Tue, 13 Dec 2005 09:34:02 +0000
+Subject: [PATCH 3/3] DCCP: fix connect() race condition upon short connections
+Message-Id: <20051213093402.GC8532@tribal.sorbonet.org>
 List-Id: <dccp.vger.kernel.org>
-References: <A975FFC51622704CBEAB749E263D179901554035@mail01.student.main.ntu.edu.sg>
-In-Reply-To: <A975FFC51622704CBEAB749E263D179901554035@mail01.student.main.ntu.edu.sg>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Ian McDonald,
+The connect system call will initiate a connection, poll whether the connection
+has occured and right before returning, it will check whether the connection was
+shut-down.  In such cases, it will return -1.  If a connection is really short,
+it is possible that the connection occurs and terminates before connect()
+returns.  Upon checking that the connection is closed, connect() will
+incorrectly return -1 when the transfer did occur.
 
-The result is p is always be 0, and the TFRC formula will never be used to determine the sending rate at the sender side. Actually the sending rate will be stable at last due to other constraints.
+I was able to reproduce this race condition consistently by having a server send
+3 packets upon connection and disconnect right after.  I believe this issue
+might exist in TCP too although mitigated by the higher number of CLOSE states.
 
-Regards,
-Zhou Bin 
+I believe there is a better solution than the one I proposed [simplest I could
+think of].
 
------Original Message-----
-From: Ian McDonald [mailto:imcdnzl@gmail.com]
-Sent: Friday, December 09, 2005 4:33 AM
-To: #ZHOU BIN#
-Cc: dccp@vger.kernel.org
-Subject: Re: A doubt on the behavior of a TFRC receiver in the code
+Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
 
+---
 
-On 11/29/05, #ZHOU BIN# <ZHOU0022@ntu.edu.sg> wrote:
-> Hi all,
->
-> I met some problems when studying the following section of source code, which is about the behavior of a TFRC receiver:
->
-> static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
-> {
->         .
-> 993     ins = dccp_rx_hist_add_packet(ccid3_rx_hist, &hcrx->ccid3hcrx_hist,
->                                       &hcrx->ccid3hcrx_li_hist, packet);
->         if (DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK)
->                 return;
-> 999     switch (hcrx->ccid3hcrx_state) {
->         case TFRC_RSTATE_NO_DATA:
->                 .
->                 return;
-> 1008    case TFRC_RSTATE_DATA:
->                 hcrx->ccid3hcrx_bytes_recv += skb->len -
->                                               dccp_hdr(skb)->dccph_doff * 4;
-> 1011            if (ins != 0)
-> 1012                    break;
->                 dccp_timestamp(sk, &now);
->                 if (timeval_delta(&now, &hcrx->ccid3hcrx_tstamp_last_ack) >>                     hcrx->ccid3hcrx_rtt) {
->                         hcrx->ccid3hcrx_tstamp_last_ack = now;
->                         ccid3_hc_rx_send_feedback(sk);
->                 }
->                 return;
->         default:
->                 .
->                 return;
->         }
->         /* Dealing with packet loss */
->         .
-> 1032    ccid3_hc_rx_detect_loss(sk);
->         p_prev = hcrx->ccid3hcrx_p;
->         /* Calculate loss event rate */
->         if (!list_empty(&hcrx->ccid3hcrx_li_hist))
->                 /* Scaling up by 1000000 as fixed decimal */
->                 hcrx->ccid3hcrx_p = 1000000 / dccp_li_hist_calc_i_mean(&hcrx->ccid3hcrx_li_hist);
->         if (hcrx->ccid3hcrx_p > p_prev) {
->                 ccid3_hc_rx_send_feedback(sk);
->                 return;
->         }
-> }
->
-> According to RFC 3448 section 6.1,
->
-> "When a data packet is received, the receiver performs the following steps:
->    1) Add the packet to the packet history.
->    2) Let the previous value of p be p_prev.  Calculate the new value of p as described in Section 5.
->    3) If p > p_prev, cause the feedback timer to expire, and perform the actions described in Section 6.2
->       If p <= p_prev no action need be performed."
->
-> To my way of thinking, the step 1 is done in line 993. However, the step 2 and 3 have no chance to be done in most cases: in the switch process starting from line 999, the only possibility to jump out to the "p" calculation (line 1032) is the variable "ins" is not be 0 (line 1011 and 1012). But ins=1 only happens when unordered packet is received. This is quite different from what RFC says.
->
-> What's wrong in my analysis?
->
-I agree with you after reading through the analysis and the DCCP CCID3
-spec and RFC 3448.
-
-Have a go at providing a patch or at the very least update the Todo
-list for DCCP at http://linux-net.osdl.org/index.php/TODO#DCCP
-
-Thanks for finding this! What effect does it have on performance? I
-would suspect it would cause data to be sent too fast but haven't done
-more analysis...
-
-Ian
---
-Ian McDonald
-http://wand.net.nz/~iam4
-WAND Network Research Group
-University of Waikato
-New Zealand
+diff --git a/include/linux/dccp.h b/include/linux/dccp.h
+index f5ddd89..44c7de6 100644
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -451,6 +451,7 @@ struct dccp_sock {
+ 	__u8				dccps_hc_tx_insert_options:1;
+ 	int				dccps_l_ackr;
+ 	int				dccps_r_ackr;
++	struct tasklet_struct		dccps_delayed_ack;
+ };
+  
+ static inline struct dccp_sock *dccp_sk(const struct sock *sk)
+diff --git a/net/dccp/input.c b/net/dccp/input.c
+index 757539a..168f55b 100644
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -261,6 +261,24 @@ discard:
+ 
+ EXPORT_SYMBOL_GPL(dccp_rcv_established);
+ 
++static void delayed_ack(unsigned long x) {
++        struct sock* sk;
++        struct dccp_sock *dp;
++
++        sk = (struct sock*) x;
++        dp = dccp_sk(sk);
++
++        bh_lock_sock(sk);
++        if (sk->sk_socket->state != SS_CONNECTING) {
++                dccp_send_ack(sk);
++		dp->dccps_delayed_ack.data = 0;
++        }
++        else {
++                tasklet_schedule(&dp->dccps_delayed_ack);
++        }
++        bh_unlock_sock(sk);
++}
++
+ static int dccp_rcv_request_sent_state_process(struct sock *sk,
+ 					       struct sk_buff *skb,
+ 					       const struct dccp_hdr *dh,
+@@ -371,7 +389,25 @@ static int dccp_rcv_request_sent_state_p
+ 			__kfree_skb(skb);
+ 			return 0;
+ 		} 
+-		dccp_send_ack(sk);
++
++                /* There is a race condition in which the connect system call
++                 * returns after a short connection occured and finished.  In
++                 * such a case, connect will think the socket is closed and
++                 * return -1.  We prevent a backlog from occuring by checking
++                 * that the connect returned here.
++		 * -sorbo
++		 */
++                if (sk->sk_socket->state = SS_CONNECTING) {
++			/* check whether we already scheduled tasklet */
++			if (!dp->dccps_delayed_ack.data) {
++                        	tasklet_init(&dp->dccps_delayed_ack, 
++				             &delayed_ack, (unsigned long) sk);
++                        	tasklet_schedule(&dp->dccps_delayed_ack);
++			} else {
++				BUG_TRAP(dp->dccps_delayed_ack.data = 
++					 (unsigned long) sk);
++			}
++                }
+ 		return -1;
+ 	}
+ 
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 4331cda..e5e874b 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -1101,6 +1101,7 @@ int dccp_v4_init_sock(struct sock *sk)
+ 	dp->dccps_service = DCCP_SERVICE_INVALID_VALUE;
+ 	dp->dccps_l_ackr = 0;
+ 	dp->dccps_r_ackr = 0;
++	dp->dccps_delayed_ack.data = 0;
+ 
+ 	return 0;
+ }
+@@ -1136,6 +1137,9 @@ int dccp_v4_destroy_sock(struct sock *sk
+ 	ccid_exit(dp->dccps_hc_rx_ccid, sk);
+ 	ccid_exit(dp->dccps_hc_tx_ccid, sk);
+ 	dp->dccps_hc_rx_ccid = dp->dccps_hc_tx_ccid = NULL;
++
++	/* XXX need to kill tasklet if it's there! */
++	BUG_TRAP(!dp->dccps_delayed_ack.data);
+ 
+ 	return 0;
+ }
