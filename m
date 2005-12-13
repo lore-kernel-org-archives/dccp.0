@@ -1,629 +1,1213 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Tue, 13 Dec 2005 13:05:08 +0000
-Subject: Re: [PATCH 1/3] DCCP: Introduce ACK vector records
-Message-Id: <39e6f6c70512130505y639155d8h77d0d2ca77167d4f@mail.gmail.com>
+From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+Date: Tue, 13 Dec 2005 09:32:24 +0000
+Subject: [PATCH 2/3] DCCP: Introduce CCID2
+Message-Id: <20051213093224.GB8532@tribal.sorbonet.org>
 List-Id: <dccp.vger.kernel.org>
-References: <20051213093130.GA8532@tribal.sorbonet.org>
-In-Reply-To: <20051213093130.GA8532@tribal.sorbonet.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/13/05, Andrea Bittau <a.bittau@cs.ucl.ac.uk> wrote:
-> Initial support for ACK vector records.  Currently there is a fixed
-> number of records which doesn't grow at run-time.  Need to decide
-> what to do [currently dies] when we run out of records [allocate more,
-> return -1?].
->
-> Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
->
-> ---
->
-> diff --git a/net/dccp/Kconfig b/net/dccp/Kconfig
-> index 187ac18..f39abaf 100644
-> --- a/net/dccp/Kconfig
-> +++ b/net/dccp/Kconfig
-> @@ -36,6 +36,13 @@ config IP_DCCP_DEBUG
->
->           Just say N.
->
-> +config IP_DCCP_ACKVEC
-> +       bool "DCCP ACK vector"
-> +       ---help---
-> +         Enable the use of ACK vectors.
-> +
-> +         Just say N.
-> +
->  config IP_DCCP_UNLOAD_HACK
->         depends on IP_DCCP=m && IP_DCCP_CCID3=m
->         bool "DCCP control sock unload hack"
-> diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-> index c9a62cc..12a1fa5 100644
-> --- a/net/dccp/ackvec.c
-> +++ b/net/dccp/ackvec.c
-> @@ -17,15 +17,84 @@
->
->  #include <net/sock.h>
->
-> +static void dccp_ackvec_insert_avr(struct dccp_ackvec *av,
-> +                                  struct dccp_ackvec_record *avr)
-> +{
-> +       struct dccp_ackvec_record *pos, *prev;
-> +
-> +       BUG_ON(av = NULL);
-> +       BUG_ON(avr = NULL);
-> +
-> +#if CONFIG_IP_DCCP_DEBUG
-> +       dccp_pr_debug("SEQ=%llu %p\n", avr->dccpavr_ack_seqno, avr);
-> +       pos = av->dccpav_record;
-> +
-> +       while (pos) {
-> +               dccp_pr_debug("Printing seq=%llu %p\n", pos->dccpavr_ack_seqno,
-> +                             pos);
-> +               pos = pos->dccpavr_next;
-> +       }
-> +#endif
-> +       pos = av->dccpav_record;
-> +
-> +       /* first record */
-> +       if (!pos) {
-> +               avr->dccpavr_next = avr->dccpavr_prev = NULL;
-> +               av->dccpav_record = avr;
-> +               return;
-> +       }
-> +
-> +       /* find where to insert record... ordered by seqno */
-> +       while (pos) {
-> +               prev = pos;
-> +               if (avr->dccpavr_ack_seqno > pos->dccpavr_ack_seqno)
-> +                       break;
-> +               pos = pos->dccpavr_next;
-> +       }
-> +
-> +       /* last record */
-> +       if (!pos) {
-> +               BUG_ON(prev = NULL);
-> +
-> +               prev->dccpavr_next = avr;
-> +               avr->dccpavr_prev = prev;
-> +               avr->dccpavr_next = NULL;
-> +               return;
-> +       }
-> +
-> +       /* in the middle somewhere or head */
-> +       avr->dccpavr_next = pos;
-> +       avr->dccpavr_prev = pos->dccpavr_prev;
-> +       pos->dccpavr_prev = avr;
-> +
-> +       /* middle */
-> +       if (avr->dccpavr_prev) {
-> +               BUG_ON(avr->dccpavr_prev = NULL);
-> +
-> +               avr->dccpavr_prev->dccpavr_next = avr;
-> +       }
-> +       /* head */
-> +       else {
-> +               av->dccpav_record = avr;
-> +       }
-> +}
-> +
->  int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
->  {
->         struct dccp_sock *dp = dccp_sk(sk);
->         struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
-> -       int len = av->dccpav_vec_len + 2;
-> +       int len;
->         struct timeval now;
->         u32 elapsed_time;
->         unsigned char *to, *from;
-> +       struct dccp_ackvec_record *avr;
-> +#ifdef CONFIG_IP_DCCP_DEBUG
-> +       const char *debug_prefix = dp->dccps_role = DCCP_ROLE_CLIENT ?
-> +                               "CLIENT rx ack: " : "server rx ack: ";
-> +#endif
->
-> +       BUG_ON(av = NULL);
-> +       len = av->dccpav_vec_len + 2;
->         dccp_timestamp(sk, &now);
->         elapsed_time = timeval_delta(&now, &av->dccpav_time) / 10;
->
-> @@ -35,19 +104,24 @@ int dccp_insert_option_ackvec(struct soc
->         if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
->                 return -1;
->
-> -       /*
-> -        * XXX: now we have just one ack vector sent record, so
-> -        * we have to wait for it to be cleared.
-> -        *
-> -        * Of course this is not acceptable, but this is just for
-> -        * basic testing now.
-> +       /* We don't have space to store ACK vector.
-> +        * Two options:
-> +        * 1) Allocate more space.
-> +        * 2) Error.
-> +        * We do 2 because it's easy =D
-> +        * -sorbo.
->          */
-> -       if (av->dccpav_ack_seqno != DCCP_MAX_SEQNO + 1)
-> +       if (av->dccpav_record_pool_free = av->dccpav_record_pool_len) {
-> +               BUG_ON(1);
->                 return -1;
-> +       }
-> +       avr = av->dccpav_record_pool[av->dccpav_record_pool_free++];
-> +       BUG_ON(avr = NULL);
->
->         DCCP_SKB_CB(skb)->dccpd_opt_len += len;
->
->         to    = skb_push(skb, len);
-> +       BUG_ON(to = NULL);
->         *to++ = DCCPO_ACK_VECTOR_0;
->         *to++ = len;
->
-> @@ -55,8 +129,8 @@ int dccp_insert_option_ackvec(struct soc
->         from = av->dccpav_buf + av->dccpav_buf_head;
->
->         /* Check if buf_head wraps */
-> -       if (av->dccpav_buf_head + len > av->dccpav_vec_len) {
-> -               const u32 tailsize = (av->dccpav_vec_len - av->dccpav_buf_head);
-> +       if (av->dccpav_buf_head + len > av->dccpav_buf_len) {
-> +               const u32 tailsize = (av->dccpav_buf_len - av->dccpav_buf_head);
->
->                 memcpy(to, from, tailsize);
->                 to   += tailsize;
-> @@ -76,26 +150,37 @@ int dccp_insert_option_ackvec(struct soc
->          *
->          * This implemention uses just one ack record for now.
->          */
-> -       av->dccpav_ack_seqno = DCCP_SKB_CB(skb)->dccpd_seq;
-> -       av->dccpav_ack_ptr   = av->dccpav_buf_head;
-> -       av->dccpav_ack_ackno = av->dccpav_buf_ackno;
-> -       av->dccpav_ack_nonce = av->dccpav_buf_nonce;
-> -       av->dccpav_sent_len  = av->dccpav_vec_len;
-> +       avr->dccpavr_ack_seqno  = DCCP_SKB_CB(skb)->dccpd_seq;
-> +       avr->dccpavr_ack_ptr    = av->dccpav_buf_head;
-> +       avr->dccpavr_ack_ackno  = av->dccpav_buf_ackno;
-> +       avr->dccpavr_ack_nonce  = av->dccpav_buf_nonce;
-> +       avr->dccpavr_sent_len   = av->dccpav_vec_len;
->
-> +       dccp_ackvec_insert_avr(av, avr);
->         dccp_pr_debug("%sACK Vector 0, len=%d, ack_seqno=%llu, "
->                       "ack_ackno=%llu\n",
-> -                     debug_prefix, av->dccpav_sent_len,
-> -                     (unsigned long long)av->dccpav_ack_seqno,
-> -                     (unsigned long long)av->dccpav_ack_ackno);
-> -       return -1;
-> +                     debug_prefix, avr->dccpavr_sent_len,
-> +                     (unsigned long long)avr->dccpavr_ack_seqno,
-> +                     (unsigned long long)avr->dccpavr_ack_ackno);
-> +
-> +       return 0;
->  }
->
->  struct dccp_ackvec *dccp_ackvec_alloc(const unsigned int len,
->                                       const gfp_t priority)
->  {
-> +       struct dccp_ackvec_record *avr;
->         struct dccp_ackvec *av = kmalloc(sizeof(*av) + len, priority);
->
->         if (av != NULL) {
-> +               /* Initial pool of records.  We should allow for this pool to
-> +                * grow at run-time or just put a maximum value for it...
-> +                * For now, it's a maximum value.
-> +                * -sorbo.
-> +                */
-> +               unsigned int records = 128;
-> +               unsigned int i;
-> +
->                 av->dccpav_buf_len      = len;
->                 av->dccpav_buf_head     >                         av->dccpav_buf_tail = av->dccpav_buf_len - 1;
-> @@ -106,13 +191,40 @@ struct dccp_ackvec *dccp_ackvec_alloc(co
->                 av->dccpav_time.tv_sec  = 0;
->                 av->dccpav_time.tv_usec = 0;
->                 av->dccpav_sent_len     = av->dccpav_vec_len = 0;
-> -       }
-> +               av->dccpav_ack_seqno = DCCP_MAX_SEQNO + 1;
->
-> +               av->dccpav_record_pool = kmalloc(
-> +                    sizeof(*av->dccpav_record_pool) * records, priority);
-> +               if (av->dccpav_record_pool = NULL)
-> +                       goto fail_rec_pool;
-> +
-> +               avr = kmalloc(sizeof(*avr) * records, priority);
-> +               if (avr = NULL)
-> +                       goto fail_avr;
-> +
-> +               av->dccpav_record = NULL;
-> +               av->dccpav_record_pool_len = records;
-> +               /* position 0 contains original pointer, so we can free it */
-> +               av->dccpav_record_pool_free = 1;
-> +               for (i = 0; i < av->dccpav_record_pool_len; i++)
-> +                       av->dccpav_record_pool[i] = avr++;
-> +       }
-> +out:
->         return av;
-> +
-> +fail_avr:
-> +       kfree(av->dccpav_record_pool);
-> +
-> +fail_rec_pool:
-> +       kfree(av);
-> +       av = NULL;
-> +       goto out;
->  }
->
->  void dccp_ackvec_free(struct dccp_ackvec *av)
->  {
-> +       kfree(av->dccpav_record_pool[0]);
-> +       kfree(av->dccpav_record_pool);
->         kfree(av);
->  }
->
-> @@ -291,43 +403,61 @@ void dccp_ackvec_print(const struct dccp
->  }
->  #endif
->
-> -static void dccp_ackvec_trow_away_ack_record(struct dccp_ackvec *av)
-> +static void dccp_ackvec_throw_away_ack_record(struct dccp_ackvec *av,
-> +                                             struct dccp_ackvec_record *avr)
->  {
-> -       /*
-> -        * As we're keeping track of the ack vector size (dccpav_vec_len) and
-> -        * the sent ack vector size (dccpav_sent_len) we don't need
-> -        * dccpav_buf_tail at all, but keep this code here as in the future
-> -        * we'll implement a vector of ack records, as suggested in
-> -        * draft-ietf-dccp-spec-11.txt Appendix A. -acme
-> +       /* In appendix A of the spec, I think that ack_ptr + 1 means "ack_ptr
-> +        * one slot to the left".  I.e. we already acked ACK_PTR so we only
-> +        * wish to ack new stuff in the future.  Thus ack_ptr - 1 in this code.
-> +        * -sorbo.
->          */
-> -#if 0
-> -       av->dccpav_buf_tail = av->dccpav_ack_ptr + 1;
-> -       if (av->dccpav_buf_tail >= av->dccpav_vec_len)
-> -               av->dccpav_buf_tail -= av->dccpav_vec_len;
-> -#endif
-> -       av->dccpav_vec_len -= av->dccpav_sent_len;
-> +       /* XXX: we don't use buf_tail but update it anyway... */
-> +       av->dccpav_buf_tail = avr->dccpavr_ack_ptr;
-> +       if (!av->dccpav_buf_tail)
-> +               av->dccpav_buf_tail = av->dccpav_buf_len;
-> +       av->dccpav_buf_tail--;
-> +
-> +       av->dccpav_vec_len -= avr->dccpavr_sent_len;
-> +
-> +       /* free records */
-> +       dccp_pr_debug("free avr: %llu %p\n", avr->dccpavr_ack_seqno, avr);
-> +
-> +       if (avr->dccpavr_prev)
-> +               avr->dccpavr_prev->dccpavr_next = NULL;
-> +       else
-> +               av->dccpav_record = NULL;
-> +       while (avr) {
-> +               av->dccpav_record_pool_free--;
-> +               BUG_ON(av->dccpav_record_pool_free = 0);
-> +
-> +               av->dccpav_record_pool[av->dccpav_record_pool_free] = avr;
-> +               avr = avr->dccpavr_next;
-> +       }
->  }
->
->  void dccp_ackvec_check_rcv_ackno(struct dccp_ackvec *av, struct sock *sk,
->                                  const u64 ackno)
->  {
-> -       /* Check if we actually sent an ACK vector */
-> -       if (av->dccpav_ack_seqno = DCCP_MAX_SEQNO + 1)
-> -               return;
-> -
-> -       if (ackno = av->dccpav_ack_seqno) {
-> +       struct dccp_ackvec_record *avr;
-> +
-> +       avr = av->dccpav_record;
-> +       while (avr) {
-> +               if (ackno = avr->dccpavr_ack_seqno) {
->  #ifdef CONFIG_IP_DCCP_DEBUG
-> -               struct dccp_sock *dp = dccp_sk(sk);
-> -               const char *debug_prefix = dp->dccps_role = DCCP_ROLE_CLIENT ?
-> -                                       "CLIENT rx ack: " : "server rx ack: ";
-> +                       struct dccp_sock *dp = dccp_sk(sk);
-> +                       const char *debug_prefix > +                               dp->dccps_role = DCCP_ROLE_CLIENT ?
-> +                                "CLIENT rx ack: " : "server rx ack: ";
->  #endif
-> -               dccp_pr_debug("%sACK packet 0, len=%d, ack_seqno=%llu, "
-> -                             "ack_ackno=%llu, ACKED!\n",
-> -                             debug_prefix, 1,
-> -                             (unsigned long long)av->dccpav_ack_seqno,
-> -                             (unsigned long long)av->dccpav_ack_ackno);
-> -               dccp_ackvec_trow_away_ack_record(av);
-> -               av->dccpav_ack_seqno = DCCP_MAX_SEQNO + 1;
-> +                       dccp_pr_debug("%sACK packet 0, len=%d, ack_seqno=%llu, "
-> +                                     "ack_ackno=%llu, ACKED!\n",
-> +                                     debug_prefix, 1,
-> +                                     (unsigned long long)avr->dccpavr_ack_seqno,
-> +                                     (unsigned long long)avr->dccpavr_ack_ackno);
-> +                       dccp_ackvec_throw_away_ack_record(av, avr);
-> +                       break;
-> +               }
-> +               avr = avr->dccpavr_next;
->         }
->  }
->
-> @@ -337,26 +467,12 @@ static void dccp_ackvec_check_rcv_ackvec
->                                             const unsigned char *vector)
->  {
->         unsigned char i;
-> +       struct dccp_ackvec_record *avr;
->
-> +       avr = av->dccpav_record;
->         /* Check if we actually sent an ACK vector */
-> -       if (av->dccpav_ack_seqno = DCCP_MAX_SEQNO + 1)
-> +       if (!avr)
->                 return;
-> -       /*
-> -        * We're in the receiver half connection, so if the received an ACK
-> -        * vector ackno (e.g. 50) before dccpav_ack_seqno (e.g. 52), we're
-> -        * not interested.
-> -        *
-> -        * Extra explanation with example:
-> -        *
-> -        * if we received an ACK vector with ackno 50, it can only be acking
-> -        * 50, 49, 48, etc, not 52 (the seqno for the ACK vector we sent).
-> -        */
-> -       /* dccp_pr_debug("is %llu < %llu? ", ackno, av->dccpav_ack_seqno); */
-> -       if (before48(ackno, av->dccpav_ack_seqno)) {
-> -               /* dccp_pr_debug_cat("yes\n"); */
-> -               return;
-> -       }
-> -       /* dccp_pr_debug_cat("no\n"); */
->
->         i = len;
->         while (i--) {
-> @@ -365,11 +481,22 @@ static void dccp_ackvec_check_rcv_ackvec
->
->                 dccp_set_seqno(&ackno_end_rl, ackno - rl);
->
-> +               /* if our AVR sequence number is greater than the ack, go
-> +                * forward in the AVR list until it is not so.
-> +                */
-> +               while (avr) {
-> +                       if (!after48(avr->dccpavr_ack_seqno, ackno))
-> +                               break;
-> +                       avr = avr->dccpavr_next;
-> +               }
-> +               if (!avr)
-> +                       break;
-> +
->                 /*
->                  * dccp_pr_debug("is %llu <= %llu <= %llu? ", ackno_end_rl,
->                  * av->dccpav_ack_seqno, ackno);
->                  */
-> -               if (between48(av->dccpav_ack_seqno, ackno_end_rl, ackno)) {
-> +               if (between48(avr->dccpavr_ack_seqno, ackno_end_rl, ackno)) {
->                         const u8 state = (*vector &
->                                           DCCP_ACKVEC_STATE_MASK) >> 6;
->                         /* dccp_pr_debug_cat("yes\n"); */
-> @@ -389,14 +516,11 @@ static void dccp_ackvec_check_rcv_ackvec
->                                               av->dccpav_ack_seqno,
->                                               (unsigned long long)
->                                               av->dccpav_ack_ackno);
-> -                               dccp_ackvec_trow_away_ack_record(av);
-> +                               dccp_ackvec_throw_away_ack_record(av, avr);
-> +                               break;
->                         }
-> -                       /*
-> -                        * If dccpav_ack_seqno was not received, no problem
-> -                        * we'll send another ACK vector.
-> -                        */
-> -                       av->dccpav_ack_seqno = DCCP_MAX_SEQNO + 1;
-> -                       break;
-> +                       /* If it wasn't received, continue scanning... we might
-> +                        * find another one. */
->                 }
->                 /* dccp_pr_debug_cat("no\n"); */
->
-> diff --git a/net/dccp/ackvec.h b/net/dccp/ackvec.h
-> index d0fd6c6..4aa16df 100644
-> --- a/net/dccp/ackvec.h
-> +++ b/net/dccp/ackvec.h
-> @@ -26,6 +26,19 @@
->  #define DCCP_ACKVEC_STATE_MASK         0xC0 /* 11000000 */
->  #define DCCP_ACKVEC_LEN_MASK           0x3F /* 00111111 */
->
-> +/* ACK vector record as defined in Appendix A of spec.
-> + * The list is sorted by ack_seqno
-> + */
-> +struct dccp_ackvec_record {
-> +       u64                             dccpavr_ack_seqno;
-> +       unsigned int                    dccpavr_ack_ptr;
-> +       u64                             dccpavr_ack_ackno;
-> +       u8                              dccpavr_ack_nonce;
-> +       unsigned int                    dccpavr_sent_len;
-> +       struct dccp_ackvec_record*      dccpavr_next;
-> +       struct dccp_ackvec_record*      dccpavr_prev;
-> +};
-> +
+Initial support for CCID2 [TCP-like].  CCID2 is missing:
+* ECN nonces.
+* Detecting ECN marked ACKs.
+* Determining when flows go silent [ack of acks business].
 
-Use struct list_head
+Support for changing the receivier and transmitter half-connection CCID is
+available through setsockopt.
 
->  /** struct dccp_ackvec - ack vector
->   *
->   * This data structure is the one defined in the DCCP draft
-> @@ -54,19 +67,23 @@
->   * @dccpav_buf - circular buffer of acknowledgeable packets
->   */
->  struct dccp_ackvec {
-> -       unsigned int    dccpav_buf_head;
-> -       unsigned int    dccpav_buf_tail;
-> -       u64             dccpav_buf_ackno;
-> -       u64             dccpav_ack_seqno;
-> -       u64             dccpav_ack_ackno;
-> -       unsigned int    dccpav_ack_ptr;
-> -       unsigned int    dccpav_sent_len;
-> -       unsigned int    dccpav_vec_len;
-> -       unsigned int    dccpav_buf_len;
-> -       struct timeval  dccpav_time;
-> -       u8              dccpav_buf_nonce;
-> -       u8              dccpav_ack_nonce;
-> -       u8              dccpav_buf[0];
-> +       unsigned int                    dccpav_buf_head;
-> +       unsigned int                    dccpav_buf_tail;
-> +       u64                             dccpav_buf_ackno;
-> +       u64                             dccpav_ack_seqno;
-> +       u64                             dccpav_ack_ackno;
-> +       unsigned int                    dccpav_ack_ptr;
-> +       unsigned int                    dccpav_sent_len;
-> +       unsigned int                    dccpav_vec_len;
-> +       unsigned int                    dccpav_buf_len;
-> +       struct timeval                  dccpav_time;
-> +       u8                              dccpav_buf_nonce;
-> +       u8                              dccpav_ack_nonce;
-> +       struct dccp_ackvec_record*      dccpav_record;
-> +       struct dccp_ackvec_record**     dccpav_record_pool;
-> +       unsigned int                    dccpav_record_pool_free;
-> +       unsigned int                    dccpav_record_pool_len;
-> +       u8                              dccpav_buf[0];
->  };
+Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
 
-Try to not reflow the struct for source code alignment at first, to
-ease review, then send a patch just reflowing.
+---
 
->  struct sock;
-> diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-> index 93f26dd..1dcd835 100644
-> --- a/net/dccp/dccp.h
-> +++ b/net/dccp/dccp.h
-> @@ -226,7 +226,8 @@ extern int dccp_child_process(struct soc
->  extern int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
->                                   struct dccp_hdr *dh, unsigned len);
->  extern int dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
-> -                               const struct dccp_hdr *dh, const unsigned len);
-> +                               const struct dccp_hdr *dh, const unsigned len,
-> +                               int fastlane);
->
->  extern int dccp_v4_init_sock(struct sock *sk);
->  extern int dccp_v4_destroy_sock(struct sock *sk);
-> diff --git a/net/dccp/input.c b/net/dccp/input.c
-> index 55e921b..757539a 100644
-> --- a/net/dccp/input.c
-> +++ b/net/dccp/input.c
-> @@ -152,27 +152,36 @@ static int dccp_check_seqno(struct sock
->  }
->
->  int dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
-> -                        const struct dccp_hdr *dh, const unsigned len)
-> +                        const struct dccp_hdr *dh, const unsigned len,
-> +                        int fastlane)
->  {
->         struct dccp_sock *dp = dccp_sk(sk);
->
-> -       if (dccp_check_seqno(sk, skb))
-> -               goto discard;
-> +       /*  If called from the DCCP_OPEN state [fast path] then perform checks
-> +        *  as upper layers don't.  If called from DCCP_PARTOPEN, checks will
-> +        *  be done by upper layers... so don't repeat them. [else ack vector
-> +        *  will be added twice! and packet will be dropped]
-> +        *  -sorbo
-> +        */
-> +       if (fastlane) {
-
-This is unrelated to ack vector records, so should be sent as a
-separate changeset and discussed on its own merits
-
-> +               if (dccp_check_seqno(sk, skb))
-> +                       goto discard;
->
-> -       if (dccp_parse_options(sk, skb))
-> -               goto discard;
-> +               if (dccp_parse_options(sk, skb))
-> +                       goto discard;
->
-> -       if (DCCP_SKB_CB(skb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
-> -               dccp_event_ack_recv(sk, skb);
-> +               if (DCCP_SKB_CB(skb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
-> +                       dccp_event_ack_recv(sk, skb);
->
-> -       if (dp->dccps_options.dccpo_send_ack_vector &&
-> -           dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
-> -                           DCCP_SKB_CB(skb)->dccpd_seq,
-> -                           DCCP_ACKVEC_STATE_RECEIVED))
-> -               goto discard;
-> +               if (dp->dccps_options.dccpo_send_ack_vector &&
-> +                   dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
-> +                                   DCCP_SKB_CB(skb)->dccpd_seq,
-> +                                   DCCP_ACKVEC_STATE_RECEIVED))
-> +                       goto discard;
->
-> -       ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
-> -       ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
-> +               ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
-> +               ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
-> +       }
->
->         switch (dccp_hdr(skb)->dccph_type) {
->         case DCCP_PKT_DATAACK:
-> @@ -288,6 +297,12 @@ static int dccp_rcv_request_sent_state_p
->                         goto out_invalid_packet;
->                 }
->
-> +                if (dp->dccps_options.dccpo_send_ack_vector &&
-> +                    dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
-> +                                    DCCP_SKB_CB(skb)->dccpd_seq,
-> +                                    DCCP_ACKVEC_STATE_RECEIVED))
-> +                        goto out_invalid_packet; /* FIXME: change error code */
-> +
->                 dp->dccps_isr = DCCP_SKB_CB(skb)->dccpd_seq;
->                 dccp_update_gsr(sk, dp->dccps_isr);
->                 /*
-> @@ -400,7 +415,7 @@ static int dccp_rcv_respond_partopen_sta
->
->                 if (dh->dccph_type = DCCP_PKT_DATAACK ||
->                     dh->dccph_type = DCCP_PKT_DATA) {
-> -                       dccp_rcv_established(sk, skb, dh, len);
-> +                       dccp_rcv_established(sk, skb, dh, len, 0);
->                         queued = 1; /* packet was queued
->                                        (by dccp_rcv_established) */
->                 }
-> @@ -474,14 +489,14 @@ int dccp_rcv_state_process(struct sock *
->                 if (dcb->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
->                         dccp_event_ack_recv(sk, skb);
->
-> -               ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
-> -               ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
-> -
->                 if (dp->dccps_options.dccpo_send_ack_vector &&
->                     dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
->                                     DCCP_SKB_CB(skb)->dccpd_seq,
->                                     DCCP_ACKVEC_STATE_RECEIVED))
->                         goto discard;
-> +
-> +               ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
-> +               ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
->         }
->
->         /*
-> diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-> index f935659..5fdad99 100644
-> --- a/net/dccp/ipv4.c
-> +++ b/net/dccp/ipv4.c
-> @@ -795,7 +795,7 @@ int dccp_v4_do_rcv(struct sock *sk, stru
->         struct dccp_hdr *dh = dccp_hdr(skb);
->
->         if (sk->sk_state = DCCP_OPEN) { /* Fast path */
-> -               if (dccp_rcv_established(sk, skb, dh, skb->len))
-> +               if (dccp_rcv_established(sk, skb, dh, skb->len, 1))
->                         goto reset;
->                 return 0;
->         }
-> diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
-> index ba50c96..14f1c13 100644
-> --- a/net/dccp/ipv6.c
-> +++ b/net/dccp/ipv6.c
-> @@ -1159,7 +1159,7 @@ static int dccp_v6_do_rcv(struct sock *s
->                 opt_skb = skb_clone(skb, GFP_ATOMIC);
->
->         if (sk->sk_state = DCCP_OPEN) { /* Fast path */
-> -               if (dccp_rcv_established(sk, skb, dccp_hdr(skb), skb->len))
-> +               if (dccp_rcv_established(sk, skb, dccp_hdr(skb), skb->len, 1))
->                         goto reset;
->                 return 0;
->         }
+diff --git a/include/linux/dccp.h b/include/linux/dccp.h
+index d0bdb49..f5ddd89 100644
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -179,9 +179,14 @@ enum {
+ /* DCCP socket options */
+ #define DCCP_SOCKOPT_PACKET_SIZE	1
+ #define DCCP_SOCKOPT_SERVICE		2
++#define DCCP_SOCKOPT_CCID_RX		3
++#define DCCP_SOCKOPT_CCID_TX		4
+ #define DCCP_SOCKOPT_CCID_RX_INFO	128
+ #define DCCP_SOCKOPT_CCID_TX_INFO	192
+ 
++#define DCCP_CCID_TCP			2
++#define DCCP_CCID_TFRC			3
++
+ #define DCCP_SERVICE_LIST_MAX_LEN      32
+ 
+ #ifdef __KERNEL__
+@@ -444,6 +449,8 @@ struct dccp_sock {
+ 	enum dccp_role			dccps_role:2;
+ 	__u8				dccps_hc_rx_insert_options:1;
+ 	__u8				dccps_hc_tx_insert_options:1;
++	int				dccps_l_ackr;
++	int				dccps_r_ackr;
+ };
+  
+ static inline struct dccp_sock *dccp_sk(const struct sock *sk)
+diff --git a/net/dccp/ccids/Kconfig b/net/dccp/ccids/Kconfig
+index 7684d83..8f0d66e 100644
+--- a/net/dccp/ccids/Kconfig
++++ b/net/dccp/ccids/Kconfig
+@@ -22,6 +22,14 @@ config IP_DCCP_CCID3
+ 	  
+ 	  If in doubt, say M.
+ 
++config IP_DCCP_CCID2
++	tristate "CCID2 (TCP) (EXPERIMENTAL)"
++	depends on IP_DCCP && IP_DCCP_ACKVEC
++	---help---
++	  CCID 2 uses TCP-like congestion control.
++
++	  If in doubt, say M.
++
+ config IP_DCCP_TFRC_LIB
+ 	depends on IP_DCCP_CCID3
+ 	def_tristate IP_DCCP_CCID3
+diff --git a/net/dccp/ccids/Makefile b/net/dccp/ccids/Makefile
+index 956f79f..438f20b 100644
+--- a/net/dccp/ccids/Makefile
++++ b/net/dccp/ccids/Makefile
+@@ -2,4 +2,8 @@ obj-$(CONFIG_IP_DCCP_CCID3) += dccp_ccid
+ 
+ dccp_ccid3-y := ccid3.o
+ 
++obj-$(CONFIG_IP_DCCP_CCID2) += dccp_ccid2.o
++
++dccp_ccid2-y := ccid2.o
++
+ obj-y += lib/
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+new file mode 100644
+index 0000000..1bb532e
+--- /dev/null
++++ b/net/dccp/ccids/ccid2.c
+@@ -0,0 +1,942 @@
++/*
++ *  net/dccp/ccids/ccid2.c
++ *
++ *  Copyright (c) 2005 Andrea Bittau <a.bittau@cs.ucl.ac.uk>
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2 of the License, or
++ *  (at your option) any later version.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, write to the Free Software
++ *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
++ */
++
++/*
++ * This implementation should follow: draft-ietf-dccp-ccid2-10.txt
++ *
++ * BUGS:
++ * - sequence number wrapping
++ * - jiffies wrapping
++ */
++
++#include <linux/config.h>
++#include "../ccid.h"
++#include "../dccp.h"
++#include "ccid2.h"
++
++static int ccid2_debug;
++
++#if 0
++#define CCID2_DEBUG
++#endif
++
++#ifdef CCID2_DEBUG
++#define ccid2_pr_debug(format, a...) \
++        do { if (ccid2_debug) \
++                printk(KERN_DEBUG "%s: " format, __FUNCTION__, ##a); \
++        } while (0)
++#else
++#define ccid2_pr_debug(format, a...)
++#endif
++
++static int _seq_len = 128;
++
++static struct ccid2_hc_tx_sock *ccid2_hc_tx_sk(struct sock *sk)
++{
++	return dccp_sk(sk)->dccps_hc_tx_ccid_private;
++}
++
++static struct ccid2_hc_rx_sock *ccid2_hc_rx_sk(struct sock *sk)
++{
++	return dccp_sk(sk)->dccps_hc_rx_ccid_private;
++}
++
++#ifdef CCID2_DEBUG
++static void check_sanity(struct ccid2_hc_tx_sock *hctx)
++{
++	int len = 0;
++	struct ccid2_seq *seqp;
++	int pipe = 0;
++
++	seqp = hctx->ccid2hctx_seqh;
++
++	/* there is data in the chain */
++	if (seqp != hctx->ccid2hctx_seqt) {
++		seqp = seqp->ccid2s_prev;
++		len++;
++		if (!seqp->ccid2s_acked)
++			pipe++;
++	
++		while (seqp != hctx->ccid2hctx_seqt) {
++			struct ccid2_seq *prev;
++
++			prev = seqp->ccid2s_prev;
++			len++;
++			if (!prev->ccid2s_acked)
++				pipe++;
++
++			/* packets are sent sequentially */
++			BUG_ON(seqp->ccid2s_seq <= prev->ccid2s_seq);
++			BUG_ON(seqp->ccid2s_sent < prev->ccid2s_sent);
++			BUG_ON(len > _seq_len);
++
++			seqp = prev;
++		}
++	}
++
++	BUG_ON(pipe != hctx->ccid2hctx_pipe);
++	ccid2_pr_debug("len of chain=%d\n", len);
++
++	do {
++		seqp = seqp->ccid2s_prev;
++		len++;
++		BUG_ON(len > _seq_len);
++	} while(seqp != hctx->ccid2hctx_seqh);
++
++	BUG_ON(len != _seq_len);
++	ccid2_pr_debug("total len=%d\n", len);
++}
++#endif
++
++static int ccid2_init(struct sock *sk)
++{
++	return 0;
++}
++
++static void ccid2_exit(struct sock *sk)
++{
++}
++
++static int ccid2_hc_tx_send_packet(struct sock *sk,
++				   struct sk_buff *skb, int len)
++{
++	struct ccid2_hc_tx_sock* hctx;
++	
++	switch (DCCP_SKB_CB(skb)->dccpd_type) {
++	case 0: /* XXX data packets from userland come through like this */
++	case DCCP_PKT_DATA:
++	case DCCP_PKT_DATAACK:
++		break;
++
++	/* no congestion control on other packets */
++	default:
++		return 0;
++	}
++
++        hctx = ccid2_hc_tx_sk(sk);
++
++	ccid2_pr_debug("pipe=%d cwnd=%d\n", hctx->ccid2hctx_pipe,
++		       hctx->ccid2hctx_cwnd);
++	
++	if (hctx->ccid2hctx_pipe < hctx->ccid2hctx_cwnd) {
++		/* OK we can send... make sure previous packet was sent off */
++		if (!hctx->ccid2hctx_sendwait) {
++			hctx->ccid2hctx_sendwait = 1;
++			return 0;
++		}
++	}
++
++	return 100; /* XXX */
++}
++
++static inline void ccid2_change_l_ackr(struct sock *sk, int val)
++{
++	struct dccp_sock *dp;
++
++	dp = dccp_sk(sk);
++
++	/* XXX I don't really agree with val != 2.  If cwnd is 1, ack ratio
++	 * should be 1... it shouldn't be allowed to become 2.
++	 * -sorbo.
++	 */
++	if (val != 2) {
++		struct ccid2_hc_tx_sock *hctx;
++		int max = 0;
++
++		hctx = ccid2_hc_tx_sk(sk);
++
++		max = hctx->ccid2hctx_cwnd;
++		max >>= 1;
++
++		/* round up */
++		if (hctx->ccid2hctx_cwnd & 1)
++			max++;
++
++		if (val > max)
++			val = max;
++	}
++
++	ccid2_pr_debug("changing local ack ratio to %d\n", val);
++	BUG_ON(val <= 0);
++	dp->dccps_l_ackr = val;
++}
++
++static inline void ccid2_change_cwnd(struct sock *sk, int val)
++{
++	struct dccp_sock *dp;
++	struct ccid2_hc_tx_sock* hctx;
++	
++	dp = dccp_sk(sk);
++        hctx = ccid2_hc_tx_sk(sk);
++
++	if (val = 0)
++		val = 1;
++
++	/* XXX do we need to change ack ratio? */
++	ccid2_pr_debug("change cwnd to %d\n", val);
++	
++	BUG_ON(val < 1);
++	hctx->ccid2hctx_cwnd = val;
++}
++
++static void ccid2_hc_tx_rto_expire(unsigned long data)
++{
++	struct sock *sk;
++	struct ccid2_hc_tx_sock *hctx;
++	long s;
++
++	sk = (struct sock *) data;
++	hctx = ccid2_hc_tx_sk(sk);
++
++	/* XXX I don't think i'm locking correctly
++	 * -sorbo.
++	 */
++	bh_lock_sock(sk);
++	if (sock_owned_by_user(sk)) {
++		/* XXX need to do something better I guess */
++		hctx->ccid2hctx_rtotimer.expires = jiffies + 200;
++		add_timer(&hctx->ccid2hctx_rtotimer);
++		goto out;
++	}
++
++	ccid2_pr_debug("RTO_EXPIRE\n");
++
++#ifdef CCID2_DEBUG
++	check_sanity(hctx);
++#endif
++
++	/* back-off timer */
++	hctx->ccid2hctx_rto <<= 1;
++
++	s = hctx->ccid2hctx_rto/HZ;
++	if (s > 60)
++		hctx->ccid2hctx_rto = 60*HZ;
++	ccid2_start_rto_timer(sk);
++
++	/* adjust pipe, cwnd etc */
++	hctx->ccid2hctx_pipe = 0;
++	hctx->ccid2hctx_ssthresh = hctx->ccid2hctx_cwnd >> 1;
++	if (hctx->ccid2hctx_ssthresh < 2)
++		hctx->ccid2hctx_ssthresh = 2;
++	ccid2_change_cwnd(sk, 1);
++
++	/* clear state about stuff we sent */
++	hctx->ccid2hctx_seqt = hctx->ccid2hctx_seqh;
++	hctx->ccid2hctx_ssacks = 0;
++	hctx->ccid2hctx_acks = 0;
++	hctx->ccid2hctx_sent = 0;
++
++	/* clear ack ratio state. */
++	hctx->ccid2hctx_arsent = 0;
++	hctx->ccid2hctx_ackloss = 0;
++	hctx->ccid2hctx_rpseq = 0;
++	hctx->ccid2hctx_rpdupack = -1;
++	ccid2_change_l_ackr(sk, 1);
++
++#ifdef CCID2_DEBUG
++	check_sanity(hctx);
++#endif
++out:
++	bh_unlock_sock(sk);
++/*	sock_put(sk); */
++}
++
++static void ccid2_start_rto_timer(struct sock *sk)
++{
++	struct ccid2_hc_tx_sock *hctx;
++
++	hctx = ccid2_hc_tx_sk(sk);
++	ccid2_pr_debug("setting RTO timeout=%ld\n", hctx->ccid2hctx_rto);
++	
++	hctx->ccid2hctx_rtotimer.data = (unsigned long)sk;
++	hctx->ccid2hctx_rtotimer.function = &ccid2_hc_tx_rto_expire;
++	hctx->ccid2hctx_rtotimer.expires = jiffies + hctx->ccid2hctx_rto;
++
++	BUG_ON(timer_pending(&hctx->ccid2hctx_rtotimer));
++	add_timer(&hctx->ccid2hctx_rtotimer);
++}
++
++static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, int len)
++{
++	struct dccp_sock *dp = dccp_sk(sk);
++	struct ccid2_hc_tx_sock* hctx;
++	u64 seq;
++	
++	hctx = ccid2_hc_tx_sk(sk);
++
++#ifdef CCID2_DEBUG
++	check_sanity(hctx);
++#endif
++
++	BUG_ON(!hctx->ccid2hctx_sendwait);
++	hctx->ccid2hctx_sendwait = 0;
++	hctx->ccid2hctx_pipe++;
++	BUG_ON(hctx->ccid2hctx_pipe < 0);
++
++	/* There is an issue.  What if another packet is sent between
++	 * packet_send() and packet_sent().  Then the sequence number would be
++	 * wrong.
++	 * -sorbo.
++	 */
++	seq = dp->dccps_gss;
++
++	hctx->ccid2hctx_seqh->ccid2s_seq = seq;
++	hctx->ccid2hctx_seqh->ccid2s_acked = 0;
++	hctx->ccid2hctx_seqh->ccid2s_sent = jiffies;
++	hctx->ccid2hctx_seqh = hctx->ccid2hctx_seqh->ccid2s_next;
++
++	ccid2_pr_debug("cwnd=%d pipe=%d\n", hctx->ccid2hctx_cwnd, 
++		       hctx->ccid2hctx_pipe);
++	
++	if (hctx->ccid2hctx_seqh = hctx->ccid2hctx_seqt) {
++		/* XXX allocate more space */
++		BUG_ON(1);
++	}
++
++	hctx->ccid2hctx_sent++;
++
++	/* Ack Ratio.  Need to maintain a concept of how many windows we sent */
++	hctx->ccid2hctx_arsent++;
++	/* We had an ack loss in this window... */
++	if (hctx->ccid2hctx_ackloss) {
++		if (hctx->ccid2hctx_arsent >= hctx->ccid2hctx_cwnd) {
++			hctx->ccid2hctx_arsent = 0;
++			hctx->ccid2hctx_ackloss = 0;
++		}
++	}
++	/* No acks lost up to now... */
++	else {
++		/* decrease ack ratio if enough packets were sent */
++		if (dp->dccps_l_ackr > 1) {
++			/* XXX don't calculate denominator each time */
++			int denom;
++
++			denom = dp->dccps_l_ackr*dp->dccps_l_ackr - 
++				dp->dccps_l_ackr;
++			denom = hctx->ccid2hctx_cwnd*hctx->ccid2hctx_cwnd/denom;
++
++			if (hctx->ccid2hctx_arsent >= denom) {
++				ccid2_change_l_ackr(sk, dp->dccps_l_ackr-1);
++				hctx->ccid2hctx_arsent = 0;
++			}
++		}
++		/* we can't increase ack ratio further [1] */
++		else {
++			hctx->ccid2hctx_arsent = 0; /* or maybe set it to cwnd*/
++		}
++	}
++
++	/* setup RTO timer */
++	if (!timer_pending(&hctx->ccid2hctx_rtotimer)) {
++		ccid2_start_rto_timer(sk);
++	}
++#ifdef CCID2_DEBUG
++	ccid2_pr_debug("pipe=%d\n", hctx->ccid2hctx_pipe);
++	ccid2_pr_debug("Sent: seq=%llu\n", seq);
++	do {
++		struct ccid2_seq* seqp;
++		
++		seqp = hctx->ccid2hctx_seqt;
++		while (seqp != hctx->ccid2hctx_seqh) {
++			ccid2_pr_debug("out seq=%llu acked=%d time=%lu\n",
++			       	       seqp->ccid2s_seq, seqp->ccid2s_acked, 
++				       seqp->ccid2s_sent);
++			seqp = seqp->ccid2s_next;
++		}
++	} while(0);
++	ccid2_pr_debug("=====\n");
++	check_sanity(hctx);
++#endif
++}
++
++/* XXX Lame code duplication!
++ * returns -1 if none was found.
++ * else returns the next offset to use in the function call.
++ */
++static int ccid2_ackvector(struct sock *sk, struct sk_buff *skb, int offset,
++			   unsigned char **vec, unsigned char *veclen)
++{
++        const struct dccp_hdr *dh = dccp_hdr(skb);
++        unsigned char *options = (unsigned char *)dh + dccp_hdr_len(skb);
++        unsigned char *opt_ptr;
++        const unsigned char *opt_end = (unsigned char *)dh +
++                                        (dh->dccph_doff * 4);
++        unsigned char opt, len;
++        unsigned char *value;
++
++	BUG_ON(offset < 0);
++	options += offset;
++	opt_ptr = options;
++	if (opt_ptr >= opt_end)
++		return -1;
++
++	while (opt_ptr != opt_end) {
++                opt   = *opt_ptr++;
++                len   = 0;
++                value = NULL;
++
++                /* Check if this isn't a single byte option */
++                if (opt > DCCPO_MAX_RESERVED) {
++                        if (opt_ptr = opt_end)
++                                goto out_invalid_option;
++
++                        len = *opt_ptr++;
++                        if (len < 3)
++                                goto out_invalid_option;
++                        /*
++                         * Remove the type and len fields, leaving
++                         * just the value size
++                         */
++                        len     -= 2;
++                        value   = opt_ptr;
++                        opt_ptr += len;
++
++                        if (opt_ptr > opt_end)
++                                goto out_invalid_option;
++                }
++
++		switch (opt) {
++		case DCCPO_ACK_VECTOR_0:
++		case DCCPO_ACK_VECTOR_1:
++			*vec = value;
++			*veclen = len;
++			return offset + (opt_ptr - options);
++			break;
++		}
++	}
++
++	return -1;
++	
++out_invalid_option:
++	BUG_ON(1); /* should never happen... options were previously parsed ! */
++	return -1;
++}
++
++static void ccid2_hc_tx_kill_rto_timer(struct ccid2_hc_tx_sock *hctx)
++{
++	if (timer_pending(&hctx->ccid2hctx_rtotimer)) {
++		ccid2_pr_debug("deleting RTO timer\n");
++		del_timer(&hctx->ccid2hctx_rtotimer);
++	}
++}
++
++static inline void ccid2_new_ack(struct sock *sk, 
++			         struct ccid2_seq *seqp,
++				 unsigned int *maxincr)
++{
++	struct ccid2_hc_tx_sock *hctx;
++
++	hctx = ccid2_hc_tx_sk(sk);
++
++	/* slow start */
++	if (hctx->ccid2hctx_cwnd < hctx->ccid2hctx_ssthresh) {
++		hctx->ccid2hctx_acks = 0;
++
++		/* We can increase cwnd at most maxincr [ackratio/2] */
++		if (*maxincr) {
++			/* increase every 2 acks */
++			hctx->ccid2hctx_ssacks++;
++			if (hctx->ccid2hctx_ssacks = 2) {
++				ccid2_change_cwnd(sk, hctx->ccid2hctx_cwnd + 1);
++				hctx->ccid2hctx_ssacks = 0;
++				*maxincr = *maxincr - 1;
++			}
++		}
++		/* increased cwnd enough for this single ack */
++		else {
++			hctx->ccid2hctx_ssacks = 0;
++		}
++	}
++	else {
++		hctx->ccid2hctx_ssacks = 0;
++		hctx->ccid2hctx_acks++;
++
++		if (hctx->ccid2hctx_acks >= hctx->ccid2hctx_cwnd) {
++			ccid2_change_cwnd(sk, hctx->ccid2hctx_cwnd + 1);
++			hctx->ccid2hctx_acks = 0;
++		}
++	}
++
++	/* update RTO */
++	if (hctx->ccid2hctx_srtt = -1 ||
++	    (jiffies - hctx->ccid2hctx_lastrtt) >= hctx->ccid2hctx_srtt) {
++		unsigned long r = jiffies - seqp->ccid2s_sent;
++		int s;
++
++		/* first measurement */
++		if (hctx->ccid2hctx_srtt = -1) {
++			ccid2_pr_debug("R: %lu Time=%lu seq=%llu\n", 
++			       	       r, jiffies, seqp->ccid2s_seq);
++			hctx->ccid2hctx_srtt = r;
++			hctx->ccid2hctx_rttvar = r >> 1;
++		}
++		else {
++			/* RTTVAR */
++			long tmp = hctx->ccid2hctx_srtt - r;
++			if (tmp < 0)
++				tmp *= -1;
++			
++			tmp >>= 2;
++			hctx->ccid2hctx_rttvar *= 3;
++			hctx->ccid2hctx_rttvar >>= 2;
++			hctx->ccid2hctx_rttvar += tmp;
++
++			/* SRTT */
++			hctx->ccid2hctx_srtt *= 7;
++			hctx->ccid2hctx_srtt >>= 3;
++			tmp = r >> 3;
++			hctx->ccid2hctx_srtt += tmp;
++		}
++		s = hctx->ccid2hctx_rttvar << 2;
++		/* clock granularity is 1 when based on jiffies */
++		if (!s)
++			s = 1;
++		hctx->ccid2hctx_rto = hctx->ccid2hctx_srtt + s;
++
++		/* must be at least a second */
++		s = hctx->ccid2hctx_rto/HZ;
++		/* DCCP doesn't require this [but I like it cuz my code sux] */
++#if 1
++		if (s < 1)
++			hctx->ccid2hctx_rto = HZ;
++#endif			
++		/* max 60 seconds */	
++		if (s > 60)
++			hctx->ccid2hctx_rto = HZ*60;
++
++		hctx->ccid2hctx_lastrtt = jiffies;
++
++		ccid2_pr_debug("srtt: %ld rttvar: %ld rto: %ld (HZ=%d) R=%lu\n",
++		       	       hctx->ccid2hctx_srtt, hctx->ccid2hctx_rttvar,
++		       	       hctx->ccid2hctx_rto, HZ, r);
++		hctx->ccid2hctx_sent = 0;
++	}
++
++	/* we got a new ack, so re-start RTO timer */
++	ccid2_hc_tx_kill_rto_timer(hctx);
++	ccid2_start_rto_timer(sk);
++}
++
++static void ccid2_hc_tx_dec_pipe(struct ccid2_hc_tx_sock *hctx)
++{
++	hctx->ccid2hctx_pipe--;
++	BUG_ON(hctx->ccid2hctx_pipe < 0);
++
++	if (hctx->ccid2hctx_pipe = 0)
++		ccid2_hc_tx_kill_rto_timer(hctx);
++}
++
++static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
++{
++	struct dccp_sock *dp;
++	struct ccid2_hc_tx_sock *hctx;
++	u64 ackno, seqno;
++	struct ccid2_seq *seqp;
++	unsigned char *vector;
++	unsigned char  veclen;
++	int offset = 0;
++	int done = 0;
++	int loss = 0;
++	unsigned int maxincr = 0;
++	
++	dp = dccp_sk(sk);
++	hctx = ccid2_hc_tx_sk(sk);
++
++#ifdef CCID2_DEBUG
++	check_sanity(hctx);
++#endif
++	/* check reverse path congestion */
++	seqno = DCCP_SKB_CB(skb)->dccpd_seq;
++
++	/* XXX this whole "algorithm" is broken.  Need to fix it to keep track
++	 * of the seqnos of the dupacks so that rpseq and rpdupack are correct
++	 * -sorbo.
++	 */
++	/* need to bootstrap */
++	if (hctx->ccid2hctx_rpdupack = -1) {
++		hctx->ccid2hctx_rpdupack = 0;
++		hctx->ccid2hctx_rpseq = seqno;
++	}
++	else {
++		/* check if packet is consecutive */
++		if ((hctx->ccid2hctx_rpseq + 1) = seqno) {
++			hctx->ccid2hctx_rpseq++;
++		}
++		/* it's a later packet */
++		else if (after48(seqno, hctx->ccid2hctx_rpseq)) {
++			hctx->ccid2hctx_rpdupack++;
++			
++			/* check if we got enough dupacks */
++			if (hctx->ccid2hctx_rpdupack >+			    hctx->ccid2hctx_numdupack) {
++
++				hctx->ccid2hctx_rpdupack = -1; /* XXX lame */
++				hctx->ccid2hctx_rpseq = 0;
++
++				ccid2_change_l_ackr(sk, dp->dccps_l_ackr << 1);
++			}
++		}
++	}
++
++	/* check forward path congestion */
++	/* still didn't send out new data packets */
++	if (hctx->ccid2hctx_seqh = hctx->ccid2hctx_seqt)
++		return;
++
++	switch (DCCP_SKB_CB(skb)->dccpd_type) {
++	case DCCP_PKT_ACK:
++	case DCCP_PKT_DATAACK:
++		break;
++	
++	default:
++		return;
++	}
++
++	ackno = DCCP_SKB_CB(skb)->dccpd_ack_seq;
++	seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
++
++	/* If in slow-start, cwnd can increase at most Ack Ratio / 2 packets for
++	 * this single ack.  I round up.
++	 * -sorbo.
++	 */
++	maxincr = dp->dccps_l_ackr >> 1;
++	maxincr++;
++
++	/* go through all ack vectors */
++	while ( (offset = ccid2_ackvector(sk, skb, offset, 
++					  &vector, &veclen)) != -1) {
++
++		/* go through this ack vector */
++		while (veclen--) {
++			const u8 rl = *vector & DCCP_ACKVEC_LEN_MASK;
++			u64 ackno_end_rl;
++
++			dccp_set_seqno(&ackno_end_rl, ackno - rl);
++			ccid2_pr_debug("ackvec start:%llu end:%llu\n", ackno, 
++				       ackno_end_rl);
++			/* if the seqno we are analyzing is larger than the
++			 * current ackno, then move towards the tail of our
++			 * seqnos.
++			 */
++			while (after48(seqp->ccid2s_seq, ackno)) {
++				if (seqp = hctx->ccid2hctx_seqt) {
++					done = 1;
++					break;
++				}
++				seqp = seqp->ccid2s_prev;
++			}
++			if (done)
++				break;
++
++			/* check all seqnos in the range of the vector
++			 * run length 
++			 */
++			while (between48(seqp->ccid2s_seq,ackno_end_rl,ackno)) {
++				const u8 state = (*vector & 
++						  DCCP_ACKVEC_STATE_MASK) >> 6;
++			
++				/* new packet received or marked */
++				if (state != DCCP_ACKVEC_STATE_NOT_RECEIVED &&
++				    !seqp->ccid2s_acked) {
++				    	if (state = 
++					    DCCP_ACKVEC_STATE_ECN_MARKED) {
++						loss = 1;
++					}
++					else {
++						ccid2_new_ack(sk, seqp,
++							      &maxincr);
++					}
++
++					seqp->ccid2s_acked = 1;
++					ccid2_pr_debug("Got ack for %llu\n",
++					       	       seqp->ccid2s_seq);
++					ccid2_hc_tx_dec_pipe(hctx);
++				}
++				if (seqp = hctx->ccid2hctx_seqt) {
++					done = 1;
++					break;
++				}
++				seqp = seqp->ccid2s_next;
++			}
++			if (done)
++				break;
++			       
++
++			dccp_set_seqno(&ackno, ackno_end_rl - 1);
++			vector++;
++		}
++		if (done)
++			break;
++	}
++
++	/* The state about what is acked should be correct now
++	 * Check for NUMDUPACK
++	 */
++	seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
++	done = 0;
++	while (1) {
++		if (seqp->ccid2s_acked) {
++			done++;
++			if (done = hctx->ccid2hctx_numdupack) {
++				break;
++			}	
++		}
++		if (seqp = hctx->ccid2hctx_seqt) {
++			break;
++		}
++		seqp = seqp->ccid2s_prev;
++	}
++
++	/* If there are at least 3 acknowledgements, anything unacknowledged
++	 * below the last sequence number is considered lost
++	 */
++	if (done = hctx->ccid2hctx_numdupack) {
++		struct ccid2_seq *last_acked = seqp;
++
++		/* check for lost packets */
++		while (1) {
++			if (!seqp->ccid2s_acked) {
++				loss = 1;
++				ccid2_hc_tx_dec_pipe(hctx);
++			}
++			if (seqp = hctx->ccid2hctx_seqt)
++				break;
++			seqp = seqp->ccid2s_prev;
++		}
++
++		hctx->ccid2hctx_seqt = last_acked;
++	}
++
++	/* trim acked packets in tail */
++	while (hctx->ccid2hctx_seqt != hctx->ccid2hctx_seqh) {
++		if (!hctx->ccid2hctx_seqt->ccid2s_acked)
++			break;
++		
++		hctx->ccid2hctx_seqt = hctx->ccid2hctx_seqt->ccid2s_next;
++	}
++
++	if (loss) {
++		/* XXX do bit shifts guarantee a 0 as the new bit? */
++		ccid2_change_cwnd(sk, hctx->ccid2hctx_cwnd >> 1);
++		hctx->ccid2hctx_ssthresh = hctx->ccid2hctx_cwnd;
++		if (hctx->ccid2hctx_ssthresh < 2)
++			hctx->ccid2hctx_ssthresh = 2;
++	}
++
++#ifdef CCID2_DEBUG
++	check_sanity(hctx);
++#endif	
++}
++
++static void ccid2_hc_tx_insert_options(struct sock *sk, struct sk_buff *skb)
++{
++}
++
++static int ccid2_hc_tx_parse_options(struct sock *sk, unsigned char option,
++				     unsigned char len, u16 idx,
++				     unsigned char *value)
++{
++	return 0;
++}
++
++static int ccid2_hc_tx_init(struct sock *sk)
++{
++	struct dccp_sock *dp;
++        struct ccid2_hc_tx_sock *hctx;
++	int seqcount = _seq_len;
++	int i;
++	
++	dp = dccp_sk(sk);
++        dp->dccps_hc_tx_ccid_private = kmalloc(sizeof(*hctx), gfp_any());
++        if (dp->dccps_hc_tx_ccid_private = NULL)
++                return -ENOMEM;
++
++        hctx = ccid2_hc_tx_sk(sk);
++        memset(hctx, 0, sizeof(*hctx));
++
++	/* XXX init variables with proper values */
++	hctx->ccid2hctx_cwnd = 1;
++	hctx->ccid2hctx_ssthresh = 10;
++
++	hctx->ccid2hctx_ssacks = 0;
++	hctx->ccid2hctx_acks = 0;
++	hctx->ccid2hctx_numdupack = 3;
++
++	/* XXX init ~ to window size... */
++	hctx->ccid2hctx_seqbuf = kmalloc(sizeof(*hctx->ccid2hctx_seqbuf)*
++					 seqcount, gfp_any());
++	if (hctx->ccid2hctx_seqbuf = NULL) {
++		kfree(dp->dccps_hc_tx_ccid_private);
++		dp->dccps_hc_tx_ccid_private = NULL;
++		return -ENOMEM;
++	}
++	for (i = 0; i < (seqcount-1); i++) {
++		hctx->ccid2hctx_seqbuf[i].ccid2s_next = 
++			&hctx->ccid2hctx_seqbuf[i+1];
++		hctx->ccid2hctx_seqbuf[i+1].ccid2s_prev = 
++			&hctx->ccid2hctx_seqbuf[i];
++	}
++	hctx->ccid2hctx_seqbuf[seqcount-1].ccid2s_next = hctx->ccid2hctx_seqbuf;
++	hctx->ccid2hctx_seqbuf->ccid2s_prev = 
++		&hctx->ccid2hctx_seqbuf[seqcount-1];
++
++	hctx->ccid2hctx_seqh = hctx->ccid2hctx_seqbuf;
++	hctx->ccid2hctx_seqt = hctx->ccid2hctx_seqh;
++
++	hctx->ccid2hctx_sent = 0;
++	hctx->ccid2hctx_rto = 3*HZ;
++	hctx->ccid2hctx_srtt = -1;
++	hctx->ccid2hctx_rttvar = -1;
++	hctx->ccid2hctx_lastrtt = 0;
++	hctx->ccid2hctx_rpdupack = -1;
++
++	init_timer(&hctx->ccid2hctx_rtotimer);
++
++#ifdef CCID2_DEBUG
++	check_sanity(hctx);
++#endif
++	return 0;
++}
++
++static void ccid2_hc_tx_exit(struct sock *sk)
++{
++        struct ccid2_hc_tx_sock *hctx;
++	struct dccp_sock *dp = dccp_sk(sk);
++
++	hctx = dp->dccps_hc_tx_ccid_private;
++
++	ccid2_hc_tx_kill_rto_timer(hctx);
++
++	kfree(hctx->ccid2hctx_seqbuf);
++
++	kfree(dp->dccps_hc_tx_ccid_private);
++	dp->dccps_hc_tx_ccid_private = NULL;
++}
++
++static void ccid2_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
++{
++}
++
++static void ccid2_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
++{
++	struct dccp_sock *dp;
++	struct ccid2_hc_rx_sock *hcrx;
++
++	switch (DCCP_SKB_CB(skb)->dccpd_type) {
++	case DCCP_PKT_DATA:
++	case DCCP_PKT_DATAACK:
++		dp = dccp_sk(sk);
++		hcrx = ccid2_hc_rx_sk(sk);
++		
++		hcrx->ccid2hcrx_data++;
++		if (hcrx->ccid2hcrx_data >= dp->dccps_r_ackr) {
++			dccp_send_ack(sk);
++			hcrx->ccid2hcrx_data = 0;
++		}
++		break;
++	}
++}
++
++static int ccid2_hc_rx_init(struct sock *sk)
++{
++	struct dccp_sock *dp;
++        struct ccid2_hc_rx_sock *hcrx;
++	
++	dp = dccp_sk(sk);
++        dp->dccps_hc_rx_ccid_private = kmalloc(sizeof(*hcrx), gfp_any());
++        if (dp->dccps_hc_rx_ccid_private = NULL)
++                return -ENOMEM;
++
++        hcrx = ccid2_hc_rx_sk(sk);
++        memset(hcrx, 0, sizeof(*hcrx));
++
++	return 0;
++}
++
++static void ccid2_hc_rx_exit(struct sock *sk)
++{
++	struct dccp_sock *dp = dccp_sk(sk);
++
++	kfree(dp->dccps_hc_rx_ccid_private);
++	dp->dccps_hc_rx_ccid_private = NULL;
++}
++
++static void ccid2_hc_rx_get_info(struct sock *sk, struct tcp_info *info)
++{
++}
++
++static void ccid2_hc_tx_get_info(struct sock *sk, struct tcp_info *info)
++{
++}
++
++static int ccid2_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
++				  u32 __user *optval, int __user *optlen)
++{
++	return -ENOPROTOOPT;
++}
++
++static int ccid2_hc_tx_getsockopt(struct sock *sk, const int optname, int len,
++				  u32 __user *optval, int __user *optlen)
++{
++	return -ENOPROTOOPT;
++}
++
++static struct ccid ccid2 = {
++	.ccid_id		   = 2,
++	.ccid_name		   = "ccid2",
++	.ccid_owner		   = THIS_MODULE,
++	.ccid_init		   = ccid2_init,
++	.ccid_exit		   = ccid2_exit,
++	.ccid_hc_tx_init	   = ccid2_hc_tx_init,
++	.ccid_hc_tx_exit	   = ccid2_hc_tx_exit,
++	.ccid_hc_tx_send_packet	   = ccid2_hc_tx_send_packet,
++	.ccid_hc_tx_packet_sent	   = ccid2_hc_tx_packet_sent,
++	.ccid_hc_tx_packet_recv	   = ccid2_hc_tx_packet_recv,
++	.ccid_hc_tx_insert_options = ccid2_hc_tx_insert_options,
++	.ccid_hc_tx_parse_options  = ccid2_hc_tx_parse_options,
++	.ccid_hc_rx_init	   = ccid2_hc_rx_init,
++	.ccid_hc_rx_exit	   = ccid2_hc_rx_exit,
++	.ccid_hc_rx_insert_options = ccid2_hc_rx_insert_options,
++	.ccid_hc_rx_packet_recv	   = ccid2_hc_rx_packet_recv,
++	.ccid_hc_rx_get_info	   = ccid2_hc_rx_get_info,
++	.ccid_hc_tx_get_info	   = ccid2_hc_tx_get_info,
++	.ccid_hc_rx_getsockopt	   = ccid2_hc_rx_getsockopt,
++	.ccid_hc_tx_getsockopt	   = ccid2_hc_tx_getsockopt,
++};
++
++module_param(ccid2_debug, int, 0444);
++MODULE_PARM_DESC(ccid2_debug, "Enable debug messages");
++ 
++static __init int ccid2_module_init(void)
++{
++	return ccid_register(&ccid2);
++}
++module_init(ccid2_module_init);
++
++static __exit void ccid2_module_exit(void)
++{
++	ccid_unregister(&ccid2);
++}
++module_exit(ccid2_module_exit);
++
++MODULE_AUTHOR("Andrea Bittau <a.bittau@cs.ucl.ac.uk>");
++MODULE_DESCRIPTION("DCCP TCP CCID2 CCID");
++MODULE_LICENSE("GPL");
++MODULE_ALIAS("net-dccp-ccid-2");
+diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
+new file mode 100644
+index 0000000..9ae07f9
+--- /dev/null
++++ b/net/dccp/ccids/ccid2.h
+@@ -0,0 +1,60 @@
++/*
++ *  net/dccp/ccids/ccid2.h
++ *
++ *  Copyright (c) 2005 Andrea Bittau <a.bittau@cs.ucl.ac.uk>
++ *
++ *  This program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2 of the License, or
++ *  (at your option) any later version.
++ *
++ *  This program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with this program; if not, write to the Free Software
++ *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
++ */
++#ifndef _DCCP_CCID2_H_
++#define _DCCP_CCID2_H_
++
++struct ccid2_seq {
++	u64			ccid2s_seq;
++	int			ccid2s_acked;
++	unsigned long		ccid2s_sent;
++	struct ccid2_seq	*ccid2s_prev;
++	struct ccid2_seq	*ccid2s_next;
++};
++
++struct ccid2_hc_tx_sock {
++	int			ccid2hctx_cwnd;
++	int			ccid2hctx_ssacks; /* ACKs recv in slow start */
++	int			ccid2hctx_acks;   /* ACKS recv in AI phase */
++	int			ccid2hctx_ssthresh;
++	int			ccid2hctx_pipe;
++	int			ccid2hctx_numdupack;
++	struct ccid2_seq	*ccid2hctx_seqbuf;
++	struct ccid2_seq	*ccid2hctx_seqh;
++	struct ccid2_seq	*ccid2hctx_seqt;
++	long			ccid2hctx_rto;
++	long			ccid2hctx_srtt;
++	long			ccid2hctx_rttvar;
++	int			ccid2hctx_sent;/* packets sent in this window */
++	unsigned long		ccid2hctx_lastrtt;/*time RTT was last measured*/
++	struct timer_list	ccid2hctx_rtotimer;
++	unsigned long		ccid2hctx_arsent; /* packets sent [ack ratio] */
++	int			ccid2hctx_ackloss; /* ack was lost in this win*/
++	u64			ccid2hctx_rpseq;    /* last consecutive seqno */
++	int			ccid2hctx_rpdupack; /*dupacks since rpseq */
++	int			ccid2hctx_sendwait;
++};
++
++struct ccid2_hc_rx_sock {
++	int	ccid2hcrx_data;
++};
++
++static void ccid2_start_rto_timer(struct sock *sk);
++
++#endif /* _DCCP_CCID2_H_ */
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 5fdad99..4331cda 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -1099,6 +1099,8 @@ int dccp_v4_init_sock(struct sock *sk)
+ 	dp->dccps_mss_cache = 536;
+ 	dp->dccps_role = DCCP_ROLE_UNDEFINED;
+ 	dp->dccps_service = DCCP_SERVICE_INVALID_VALUE;
++	dp->dccps_l_ackr = 0;
++	dp->dccps_r_ackr = 0;
+ 
+ 	return 0;
+ }
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 40a4c68..236da8c 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -256,6 +256,82 @@ static int dccp_setsockopt_service(struc
+ 	return 0;
+ }
+ 
++static int dccp_setsockopt_ccid(struct sock *sk, const u32 ccid, int rx)
++{
++	struct ccid *c;
++	struct dccp_sock *dp = dccp_sk(sk);
++
++	c = ccid_init(ccid, sk);
++
++	if (c = NULL) {
++		ccid_exit(c, sk);
++		return -1;
++	}
++
++	if (rx) {
++		ccid_hc_rx_exit(dp->dccps_hc_rx_ccid, sk);
++		ccid_exit(dp->dccps_hc_rx_ccid, sk);
++		dp->dccps_hc_rx_ccid = c;
++	}
++	else {
++		ccid_hc_tx_exit(dp->dccps_hc_tx_ccid, sk);
++		ccid_exit(dp->dccps_hc_tx_ccid, sk);
++		dp->dccps_hc_tx_ccid = c;
++	}
++	return 0;
++}
++
++static int dccp_setsockopt_ccid_rx(struct sock *sk, const u32 ccid)
++{
++	struct dccp_sock *dp = dccp_sk(sk);
++	int err = -EINVAL;
++
++	lock_sock(sk);
++
++	if (dccp_setsockopt_ccid(sk, ccid, 1))
++		goto out;
++	err = 0;
++
++	switch (ccid) {
++	case DCCP_CCID_TCP:
++		if (!dp->dccps_options.dccpo_send_ack_vector) {
++			dp->dccps_options.dccpo_send_ack_vector = 1;
++			dp->dccps_hc_rx_ackvec = 
++			     dccp_ackvec_alloc(DCCP_MAX_ACKVEC_LEN, GFP_ATOMIC);
++                                if (dp->dccps_hc_rx_ackvec = NULL)
++                        		err = -ENOMEM;
++		}
++		dp->dccps_l_ackr = 1;
++		break;
++	}
++
++out:
++	release_sock(sk);
++	return err;
++}
++
++static int dccp_setsockopt_ccid_tx(struct sock *sk, const u32 ccid)
++{
++	struct dccp_sock *dp = dccp_sk(sk);
++	int err = -EINVAL;
++
++	lock_sock(sk);
++
++	if (dccp_setsockopt_ccid(sk, ccid, 0))
++		goto out;
++	err = 0;
++
++	switch (ccid) {
++	case DCCP_CCID_TCP:
++		dp->dccps_r_ackr = 1;
++		break;
++	}
++
++out:
++	release_sock(sk);
++	return err;
++}
++
+ int dccp_setsockopt(struct sock *sk, int level, int optname,
+ 		    char __user *optval, int optlen)
+ {
+@@ -274,8 +350,16 @@ int dccp_setsockopt(struct sock *sk, int
+ 	if (get_user(val, (int __user *)optval))
+ 		return -EFAULT;
+ 
+-	if (optname = DCCP_SOCKOPT_SERVICE)
++	switch (optname) {
++	case DCCP_SOCKOPT_SERVICE:
+ 		return dccp_setsockopt_service(sk, val, optval, optlen);
++
++	case DCCP_SOCKOPT_CCID_RX:
++		return dccp_setsockopt_ccid_rx(sk, val);
++
++	case DCCP_SOCKOPT_CCID_TX:
++		return dccp_setsockopt_ccid_tx(sk, val);
++	}
+ 
+ 	lock_sock(sk);
+ 	dp = dccp_sk(sk);
