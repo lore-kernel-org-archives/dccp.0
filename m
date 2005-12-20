@@ -1,23 +1,30 @@
-From: "David S. Miller" <davem@davemloft.net>
-Date: Wed, 30 Nov 2005 08:43:28 +0000
-Subject: Re: [PATCH 2/2] [IPV6]: Generalise __tcp_v6_hash, renaming it to
-Message-Id: <20051130.004328.126830978.davem@davemloft.net>
+From: Ian McDonald <imcdnzl@gmail.com>
+Date: Tue, 20 Dec 2005 23:07:30 +0000
+Subject: [PATCH] DCCP: Typo
+Message-Id: <cbec11ac0512201507p168d332bl8e23a2ade30935d0@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <39e6f6c70511292015y181806f0u5f54369f399fa176@mail.gmail.com>
-In-Reply-To: <39e6f6c70511292015y181806f0u5f54369f399fa176@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Wed, 30 Nov 2005 02:15:54 -0200
+Please apply to net-2.6 for 2.6.15 tree.
 
->        Please consider pulling from:
-> 
-> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.16.git
+I hope to actually change this behaviour shortly but this will help
+anybody grepping code at present.
 
-Looks good.
+Signed-off-by: Ian McDonald <imcdnzl@gmail.com>
+---
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index ca03521..656e13e 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -1251,7 +1251,7 @@ static int dccp_v4_destroy_sock(struct s
+ 	struct dccp_sock *dp = dccp_sk(sk);
 
-Pulled and push out, thanks a lot.
-
+ 	/*
+-	 * DCCP doesn't use sk_qrite_queue, just sk_send_head
++	 * DCCP doesn't use sk_write_queue, just sk_send_head
+ 	 * for retransmissions
+ 	 */
+ 	if (sk->sk_send_head != NULL) {
