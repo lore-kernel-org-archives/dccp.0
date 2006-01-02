@@ -1,106 +1,150 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Tue, 13 Dec 2005 00:03:08 +0000
-Subject: [PATCH 1/2][TCP]: Move the TCPF_ enum to tcp_states.h
-Message-Id: <39e6f6c70512121603v63551b49y3566a3e916535d69@mail.gmail.com>
+Date: Mon, 02 Jan 2006 16:53:56 +0000
+Subject: [PATCH 1/3][DCCP]: Do not process a packet twice when it's received in a state != DCCP_OPEN
+Message-Id: <39e6f6c70601020853u6c5345e5oae495bc3fa42c020@mail.gmail.com>
 MIME-Version: 1
-Content-Type: multipart/mixed; boundary="----=_Part_17710_16768905.1134432188064"
+Content-Type: multipart/mixed; boundary="----=_Part_14004_31820136.1136220836415"
 List-Id: <dccp.vger.kernel.org>
 To: dccp@vger.kernel.org
 
-------=_Part_17710_16768905.1134432188064
+------=_Part_14004_31820136.1136220836415
 Content-Type: text/plain; charset=ISO-8859-1
 Content-Transfer-Encoding: quoted-printable
 Content-Disposition: inline
 
 Hi David,
 
-  Please consider pulling from:
+ Please consider pulling from:
 
 master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.16.git
-
-  With these two my old DCCPv6 tree finally gets completely submitted,
-whee! :-) Now to  do new work :-)
 
 Best Regards,
 
 - Arnaldo
 
-------=_Part_17710_16768905.1134432188064
+------=_Part_14004_31820136.1136220836415
 Content-Type: text/x-patch; name=1.patch; charset=us-ascii
 Content-Transfer-Encoding: 7bit
 Content-Disposition: attachment; filename="1.patch"
 
-tree 43548c6bc8d43ef3dbf077d32ee4b495c46b4a78
-parent 0c54986a2b9abe6295ccac354924f563fd5dfc9c
-author Arnaldo Carvalho de Melo <acme@mandriva.com> 1134427004 -0200
-committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1134427004 -0200
+tree 66fbefd8cb4805458e537a3ea143006f8f242d8c
+parent a90860f526898b77e91b6b38e8d266b0bcd6c443
+author Arnaldo Carvalho de Melo <acme@mandriva.com> 1136217256 -0200
+committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1136217256 -0200
 
-[TCP]: Move the TCPF_ enum to tcp_states.h
+[DCCP]: Do not process a packet twice when it's received in a state != DCCP_OPEN.
 
-Upcoming patches will make, for instance, ip_sockglue.c need just this enum
-and not all of tcp.h.
+When packets are received, the connection is either in DCCP_OPEN [fast-path] or
+it isn't.  If it's not [e.g. DCCP_PARTOPEN] upper layers will perform sanity
+checks and parse options.  If it is in DCCP_OPEN, dccp_rcv_established() will do
+it.  It is important not to re-parse options in dccp_rcv_established() when it
+is not called from the fast-path.  Else, fore example, the ack vector will be
+added twice and the CCID will see the packet twice.
 
+The solution is to always enfore sanity checks from the upper layers.  When
+packets arrive in the fast-path, sanity checks will be performed before calling
+dccp_rcv_established().
+
+Note(acme): I rewrote the patch to achieve the same result but keeping
+dccp_rcv_established with the previous semantics and having it split into
+__dccp_rcv_established, that doesn't does do any sanity check, code in state
+!= DCCP_OPEN use this lighter version as they already do the sanity checks.
+
+Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
 ------------------------------------------------------------------------------
 
- linux/tcp.h      |   16 ----------------
- net/tcp_states.h |   16 ++++++++++++++++
- 2 files changed, 16 insertions(+), 16 deletions(-)
+ input.c |   56 ++++++++++++++++++++++++++++++++++----------------------
+ 1 file changed, 34 insertions(+), 22 deletions(-)
 
 ------------------------------------------------------------------------------
 
-diff --git a/include/linux/tcp.h b/include/linux/tcp.h
-index 4e14340..da38eea 100644
---- a/include/linux/tcp.h
-+++ b/include/linux/tcp.h
-@@ -55,22 +55,6 @@ struct tcphdr {
- 	__u16	urg_ptr;
- };
+diff --git a/net/dccp/input.c b/net/dccp/input.c
+index 55e921b..5e312b0 100644
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -151,29 +151,12 @@ static int dccp_check_seqno(struct sock 
+ 	return 0;
+ }
  
--#define TCP_ACTION_FIN	(1 << 7)
+-int dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
+-			 const struct dccp_hdr *dh, const unsigned len)
++static inline int __dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
++					 const struct dccp_hdr *dh,
++					 const unsigned len)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 
+-	if (dccp_check_seqno(sk, skb))
+-		goto discard;
 -
--enum {
--  TCPF_ESTABLISHED = (1 << 1),
--  TCPF_SYN_SENT  = (1 << 2),
--  TCPF_SYN_RECV  = (1 << 3),
--  TCPF_FIN_WAIT1 = (1 << 4),
--  TCPF_FIN_WAIT2 = (1 << 5),
--  TCPF_TIME_WAIT = (1 << 6),
--  TCPF_CLOSE     = (1 << 7),
--  TCPF_CLOSE_WAIT = (1 << 8),
--  TCPF_LAST_ACK  = (1 << 9),
--  TCPF_LISTEN    = (1 << 10),
--  TCPF_CLOSING   = (1 << 11) 
--};
+-	if (dccp_parse_options(sk, skb))
+-		goto discard;
 -
- /*
-  *	The union cast uses a gcc extension to avoid aliasing problems
-  *  (union is compatible to any of its members)
-diff --git a/include/net/tcp_states.h b/include/net/tcp_states.h
-index b9d4176..b0b6459 100644
---- a/include/net/tcp_states.h
-+++ b/include/net/tcp_states.h
-@@ -31,4 +31,20 @@ enum {
+-	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
+-		dccp_event_ack_recv(sk, skb);
+-
+-	if (dp->dccps_options.dccpo_send_ack_vector &&
+-	    dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
+-			    DCCP_SKB_CB(skb)->dccpd_seq,
+-			    DCCP_ACKVEC_STATE_RECEIVED))
+-		goto discard;
+-
+-	ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
+-	ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
+-
+ 	switch (dccp_hdr(skb)->dccph_type) {
+ 	case DCCP_PKT_DATAACK:
+ 	case DCCP_PKT_DATA:
+@@ -250,6 +233,35 @@ discard:
+ 	return 0;
+ }
  
- #define TCP_STATE_MASK	0xF
++int dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
++			 const struct dccp_hdr *dh, const unsigned len)
++{
++	struct dccp_sock *dp = dccp_sk(sk);
++
++	if (dccp_check_seqno(sk, skb))
++		goto discard;
++
++	if (dccp_parse_options(sk, skb))
++		goto discard;
++
++	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
++		dccp_event_ack_recv(sk, skb);
++
++	if (dp->dccps_options.dccpo_send_ack_vector &&
++	    dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
++			    DCCP_SKB_CB(skb)->dccpd_seq,
++			    DCCP_ACKVEC_STATE_RECEIVED))
++		goto discard;
++
++	ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
++	ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
++
++	return __dccp_rcv_established(sk, skb, dh, len);
++discard:
++	__kfree_skb(skb);
++	return 0;
++}
++
+ EXPORT_SYMBOL_GPL(dccp_rcv_established);
  
-+#define TCP_ACTION_FIN	(1 << 7)
-+
-+enum {
-+	TCPF_ESTABLISHED = (1 << 1),
-+	TCPF_SYN_SENT	 = (1 << 2),
-+	TCPF_SYN_RECV	 = (1 << 3),
-+	TCPF_FIN_WAIT1	 = (1 << 4),
-+	TCPF_FIN_WAIT2	 = (1 << 5),
-+	TCPF_TIME_WAIT	 = (1 << 6),
-+	TCPF_CLOSE	 = (1 << 7),
-+	TCPF_CLOSE_WAIT	 = (1 << 8),
-+	TCPF_LAST_ACK	 = (1 << 9),
-+	TCPF_LISTEN	 = (1 << 10),
-+	TCPF_CLOSING	 = (1 << 11) 
-+};
-+
- #endif	/* _LINUX_TCP_STATES_H */
+ static int dccp_rcv_request_sent_state_process(struct sock *sk,
+@@ -400,9 +412,9 @@ static int dccp_rcv_respond_partopen_sta
+ 
+ 		if (dh->dccph_type == DCCP_PKT_DATAACK ||
+ 		    dh->dccph_type == DCCP_PKT_DATA) {
+-			dccp_rcv_established(sk, skb, dh, len);
++			__dccp_rcv_established(sk, skb, dh, len);
+ 			queued = 1; /* packet was queued
+-				       (by dccp_rcv_established) */
++				       (by __dccp_rcv_established) */
+ 		}
+ 		break;
+ 	}
 
-------=_Part_17710_16768905.1134432188064--
+
+------=_Part_14004_31820136.1136220836415--
