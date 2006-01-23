@@ -1,20 +1,28 @@
-From: "David S. Miller" <davem@davemloft.net>
-Date: Wed, 04 Jan 2006 05:14:21 +0000
-Subject: Re: [PATCH 1/4][DCCP] ackvec: Fix spelling of "throw"
-Message-Id: <20060103.211421.50967116.davem@davemloft.net>
+From: Ian McDonald <imcdnzl@gmail.com>
+Date: Mon, 23 Jan 2006 23:14:15 +0000
+Subject: Bug?? out of memory on receive for DCCP
+Message-Id: <cbec11ac0601231514g4d53131dl47bbaafb2997d110@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <39e6f6c70601032012v5c4b60bavdf8bdae4d8bb62ef@mail.gmail.com>
-In-Reply-To: <39e6f6c70601032012v5c4b60bavdf8bdae4d8bb62ef@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Wed, 4 Jan 2006 02:12:32 -0200
+When I have been doing some stress testing on DCCP for my transmit
+changes using ttcp with a million packets I'm getting page allocation
+failures etc on the receive side (in code I haven't changed). I can
+also see memory going up dramatically when viewing through "top"
 
->  Please consider pulling from:
-> 
-> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.git
+Setup is two PCs on a LAN. I'm presuming this is because we don't put
+limit on receive buffers at present and ttcp is not pulling packets
+fast enough off buffers to stop memory exhausation.
 
-All pulled, thanks Arnaldo.
+Is that correct?
+
+Ian
+--
+Ian McDonald
+http://wand.net.nz/~iam4
+WAND Network Research Group
+University of Waikato
+New Zealand
