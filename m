@@ -1,31 +1,49 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Mon, 23 Jan 2006 23:56:40 +0000
-Subject: Re: Bug?? out of memory on receive for DCCP
-Message-Id: <39e6f6c70601231556y7d2548cu251a6086d02df49a@mail.gmail.com>
+From: h.balan@iu-bremen.de
+Date: Mon, 23 Jan 2006 20:13:15 +0000
+Subject: [Fwd: Re: loss detection and tfrc rate]
+Message-Id: <65209.84.56.242.24.1138047195.squirrel@mail2web.iu-bremen.de>
 List-Id: <dccp.vger.kernel.org>
-References: <cbec11ac0601231514g4d53131dl47bbaafb2997d110@mail.gmail.com>
-In-Reply-To: <cbec11ac0601231514g4d53131dl47bbaafb2997d110@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On 1/23/06, Ian McDonald <imcdnzl@gmail.com> wrote:
-> When I have been doing some stress testing on DCCP for my transmit
-> changes using ttcp with a million packets I'm getting page allocation
-> failures etc on the receive side (in code I haven't changed). I can
-> also see memory going up dramatically when viewing through "top"
->
-> Setup is two PCs on a LAN. I'm presuming this is because we don't put
-> limit on receive buffers at present and ttcp is not pulling packets
-> fast enough off buffers to stop memory exhausation.
->
-> Is that correct?
 
-Yes, this is possible, check the ccid3 packet history allocator, it
-doesn't accounts the packet to the socket, try adding some basic upper
-bound on the number of packets on a variable in the dccp_sock struct,
-doing it in a similar way as TCP (memory moderation, etc) is in the
-todo list.
+It=B4s the net-2.6 version from Dave Miller=B4s git at kernel.org (from a w=
+eek
+or so ago, quite similar to 2.6.14). If this is not the ultimate source
+for it, I would appreciate a pointer in the right direction.
 
-- Arnaldo
+Vlad
+
+> On 1/24/06, h.balan@iu-bremen.de <h.balan@iu-bremen.de> wrote:
+>>
+>> I was using DCCP over a very lossy setup (more than 10% losses in each
+>> direction) and I could not get the kernel to stop in the detect_loss()
+>> function (using UML and setting breakpoints). I inserted a printk() in
+>> dccp_li_hist_calc_i_mean() which should be called by all TFRC rate
+>> calculations, but, according to the logs, this function is not called
+>> either.
+>> I would appreciate if someone could check this again, since there
+>> are people on the list much more familiar with the implementation.
+>>
+>> My second question regards the loss intervals used by TFRC. In one of
+>> the
+>> defining documents it is mentioned that a loss interval should be at
+>> least
+>> one measured RTT long, however I could not see where this is implemented
+>> in the source code. Could someone help me here?
+>>
+> Where have you obtained DCCP from and what version are you running?
+>
+> Ian
+> --
+> Ian McDonald
+> http://wand.net.nz/~iam4
+> WAND Network Research Group
+> University of Waikato
+> New Zealand
+>
+
+
+
