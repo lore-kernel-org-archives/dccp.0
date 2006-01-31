@@ -1,75 +1,37 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Mon, 02 Jan 2006 16:54:21 +0000
-Subject: [PATCH 3/3][DCCP]: Notify CCID only after ACK vectors have been processed
-Message-Id: <39e6f6c70601020854m6e746900ue60fb823cddfa297@mail.gmail.com>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="----=_Part_14020_25722383.1136220861935"
+From: Ian McDonald <imcdnzl@gmail.com>
+Date: Tue, 31 Jan 2006 01:21:19 +0000
+Subject: Re: [RFC] TCP MTU probing
+Message-Id: <cbec11ac0601301721g73e99d8y49725f3bcb318b5a@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-------=_Part_14020_25722383.1136220861935
-Content-Type: text/plain; charset=ISO-8859-1
-Content-Transfer-Encoding: quoted-printable
-Content-Disposition: inline
+On 1/31/06, David S. Miller <davem@davemloft.net> wrote:
+> From: John Heffner <jheffner@psc.edu>
+> Date: Tue, 06 Dec 2005 14:42:53 -0500
+>
+> > I'd like to get a few people at least to look this over, and maybe give
+> > it a try.  One remaining item to consider is how best to cache the state
+> > between connections.  Are there any major concerns or reservations about
+> > this approach, or the patch itself?
+>
+Just having a read of this now (missed first time round) and I see
+that PMTUD as per this RFC is also allowed by DCCP in it's spec
+(Section 14.1).
 
-Hi David,
+> and then I'll happily at this in for net-2.6.17
 
- Please consider pulling from:
+At some future stage we should merge this into the DCCP tree too.
+Looking at the code there are quite a few places where it has TCP in
+there where maybe it would be better to have IP in there to save
+further changes when DCCP starts to use the code....
 
-master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.16.git
-
-Best Regards,
-
-- Arnaldo
-
-------=_Part_14020_25722383.1136220861935
-Content-Type: text/x-patch; name=3.patch; charset=us-ascii
-Content-Transfer-Encoding: 7bit
-Content-Disposition: attachment; filename="3.patch"
-
-tree 0ea2fae5f2e089c5c491869a12543c6791d10da1
-parent 7d96f7a6a44a53029fb4d8540ce223e622527798
-author Andrea Bittau <a.bittau@cs.ucl.ac.uk> 1136217403 -0200
-committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1136217403 -0200
-
-[DCCP]: Notify CCID only after ACK vectors have been processed.
-
-The CCID should be notified of packet reception only when a packet is valid.
-Therefore, the ACK vector needs to be processed before notifying the CCID.
-Also, the CCID might need information provided by the ACK vector.
-
-Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
-
-------------------------------------------------------------------------------
-
- input.c |    6 +++---
- 1 file changed, 3 insertions(+), 3 deletions(-)
-
-------------------------------------------------------------------------------
-
-diff --git a/net/dccp/input.c b/net/dccp/input.c
-index cb0f5c9..b6cba72 100644
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -492,14 +492,14 @@ int dccp_rcv_state_process(struct sock *
- 		if (dcb->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
- 			dccp_event_ack_recv(sk, skb);
- 
--		ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
--		ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
--
-  		if (dp->dccps_options.dccpo_send_ack_vector &&
- 		    dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
-  				    DCCP_SKB_CB(skb)->dccpd_seq,
-  				    DCCP_ACKVEC_STATE_RECEIVED))
-  			goto discard;
-+
-+		ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
-+		ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
- 	}
- 
- 	/*
-
-
-------=_Part_14020_25722383.1136220861935--
+Ian
+--
+Ian McDonald
+http://wand.net.nz/~iam4
+WAND Network Research Group
+University of Waikato
+New Zealand
