@@ -1,104 +1,142 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 04 Feb 2006 02:38:36 +0000
-Subject: [PATCH 7/11][DCCP] CCID: Allow ccid_{init,exit} to be NULL
-Message-Id: <39e6f6c70602031838g7f14ebf1s567ad1ba84db9d0b@mail.gmail.com>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="----=_Part_11478_17467437.1139020716593"
+Date: Fri, 03 Feb 2006 19:02:33 +0000
+Subject: Comments on the feature negotiation patch
+Message-Id: <39e6f6c70602031102t672a5310k871a3d5047163557@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-------=_Part_11478_17467437.1139020716593
-Content-Type: text/plain; charset=ISO-8859-1
-Content-Transfer-Encoding: quoted-printable
-Content-Disposition: inline
+Hi Andrea,
 
-Hi David,
+    Now that I have merged the ackvec record and ccid2 patches could
+you please address
+my initial concerns with the feature negotiation patch?
 
-    Please consider pulling from:
+Patch reviewed:  http://128.16.66.93/acme-dccp-feat.diff
 
-master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.17.git
++struct dccp_opt_pend {
++	struct list_head	dccpop_list;
 
-Best Regards,
+Please name this as "dccpop_node", "_list" implies that this member
+contains a list, and not
+that it is part of a list (dccpo_pending)
+
++	u8			dccpop_type;
++	u8			dccpop_feat;
+
++	__u8			dccpo_send_ndp_count;
+
+Try to be consistent with types, using __u8 instead of u8 and unsigned
+char when the struct is
+to be visible only in the kernel build process.
+
++int dccp_feat_change(struct sock *sk, u8 type, u8 feature, u8 *val, u8 len,
++		     gfp_t gfp)
++{
++	struct dccp_opt_pend *opt;
++	struct dccp_sock *dp;
++	
++	dccp_pr_debug("feat change type=%d feat=%d\n", type, feature);
++
++	/* check if that feature is already being negotiated */
++	dp = dccp_sk(sk);
+
+In these cases it saves some lines and thus is the preferred form to have dp
+assigned at its declaration place, like:
+
+          struct dccp_sock *dp = dccp_sk(sk);
+
++	/* negotiation for a new feature */
++	opt = kmalloc(sizeof(*opt), gfp);
++	if (!opt)
++		return -ENOMEM;
++
++	memset(opt, 0, sizeof(*opt));
+
+Use kzalloc, replacing kmalloc + memset(0)
+
++	/* check if we are the black sheep */
++	if (dp->dccps_role = DCCP_ROLE_CLIENT) {
++		spref = rpref;
++		slen = rlen;
++		rpref = opt->dccpop_val;
++		rlen = opt->dccpop_len;
++	}
++	else {
+
+Please use:
+
+           } else {
+
++		default:
++			BUG(); /* XXX implement res */
++		}
+
+This is a bit extreme, WARN_ON(1) please.
+
++	/* put it in the "confirm queue" */
++	if (!opt->dccpop_sc) {
++		opt->dccpop_sc = kmalloc(sizeof(*opt->dccpop_sc), GFP_ATOMIC);
+
+Sure that dccp_feat_reconcile can't be called from process context (GFP_KERNEL)?
+I haven't checked.
+
++		spref = rpref;
++		slen = rlen;
++		rpref = opt->dccpop_val;
++		rlen = opt->dccpop_len;
+
+This one is cosmetic, but some folks like these assignments aligned at
+the =, like:
+
+     spref = rpref;
+     slen   = rlen;
+
++int dccp_feat_init(struct sock *sk)
++{
++	struct dccp_sock *dp;
++	int rc;
++	gfp_t gfp = GFP_KERNEL; /* XXX is this correct ? */
+
+well, you could have dccp_feat_init() receiving this gfp_t and look at
+the callsites to
+see wheter GFP_KERNEL or GFP_ATOMIC should be used, if its just of one type... I
+haven't looked at where dccp_feat_init commences, but I guess that we can have
+this as just GFP_KERNEL.
+
++	/* confirm any options [NN opts] */
++	list_for_each_entry_safe(opt, next, &dp->dccps_options.dccpo_conf,
++				 dccpop_list) {
++		dccp_insert_feat_opt(skb, opt->dccpop_type,
++				     opt->dccpop_feat, opt->dccpop_val,
++				     opt->dccpop_len);
++		
++		/* fear empty confirms */
++		if (opt->dccpop_val)
++			kfree(opt->dccpop_val);
++		kfree(opt);
+
+Humm, kfree without removing opt from dccps_options.dccpo_conf?
+
++	}
++	INIT_LIST_HEAD(&dp->dccps_options.dccpo_conf);
+
+Ah, ok, saving some cycles, should be safe :-)
+
+
++	list_for_each_entry(opt, &dp->dccps_options.dccpo_pending, dccpop_list){
+
+spaces between ) and { please
+
+
+       Please look at this patch again taking those aspects into
+consideration and I'll be
+glad to merge it so that we can get back at testing all these new features.
+
+        Ah, thanks a lot for following the general naming of structs,
+functions, etc, its very
+nice to have consistent coding guidelines!
 
 - Arnaldo
-
-------=_Part_11478_17467437.1139020716593
-Content-Type: text/x-patch; name=7.patch; charset=us-ascii
-Content-Transfer-Encoding: 7bit
-X-Attachment-Id: f_ej9bcm1g
-Content-Disposition: attachment; filename="7.patch"
-
-tree 819a12569a02512dbbb427d857fbe22756bc4772
-parent 90e6088d8191c44c120ede18b19e09ad0da28121
-author Arnaldo Carvalho de Melo <acme@mandriva.com> 1138987435 -0200
-committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1138987435 -0200
-
-[DCCP] CCID: Allow ccid_{init,exit} to be NULL
-
-Testing if the ccid being instantiated has these methods in
-ccid_init().
-
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
-
-------------------------------------------------------------------------------
-
- ccid.c        |    5 +----
- ccids/ccid3.c |   11 -----------
- 2 files changed, 1 insertion(+), 15 deletions(-)
-
-------------------------------------------------------------------------------
-
-diff --git a/net/dccp/ccid.c b/net/dccp/ccid.c
-index 9d8fc0e..06b191a 100644
---- a/net/dccp/ccid.c
-+++ b/net/dccp/ccid.c
-@@ -59,9 +59,6 @@ int ccid_register(struct ccid *ccid)
- {
- 	int err;
- 
--	if (ccid->ccid_init == NULL)
--		return -1;
--
- 	ccids_write_lock();
- 	err = -EEXIST;
- 	if (ccids[ccid->ccid_id] == NULL) {
-@@ -106,7 +103,7 @@ struct ccid *ccid_init(unsigned char id,
- 	if (!try_module_get(ccid->ccid_owner))
- 		goto out_err;
- 
--	if (ccid->ccid_init(sk) != 0)
-+	if (ccid->ccid_init != NULL && ccid->ccid_init(sk) != 0)
- 		goto out_module_put;
- out:
- 	ccids_read_unlock();
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index aa68e0a..c539c33 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -76,15 +76,6 @@ static struct dccp_tx_hist *ccid3_tx_his
- static struct dccp_rx_hist *ccid3_rx_hist;
- static struct dccp_li_hist *ccid3_li_hist;
- 
--static int ccid3_init(struct sock *sk)
--{
--	return 0;
--}
--
--static void ccid3_exit(struct sock *sk)
--{
--}
--
- /* TFRC sender states */
- enum ccid3_hc_tx_states {
-        	TFRC_SSTATE_NO_SENT = 1,
-@@ -1178,8 +1169,6 @@ static struct ccid ccid3 = {
- 	.ccid_id		   = 3,
- 	.ccid_name		   = "ccid3",
- 	.ccid_owner		   = THIS_MODULE,
--	.ccid_init		   = ccid3_init,
--	.ccid_exit		   = ccid3_exit,
- 	.ccid_hc_tx_init	   = ccid3_hc_tx_init,
- 	.ccid_hc_tx_exit	   = ccid3_hc_tx_exit,
- 	.ccid_hc_tx_send_packet	   = ccid3_hc_tx_send_packet,
-
-------=_Part_11478_17467437.1139020716593--
