@@ -1,30 +1,55 @@
 From: Ian McDonald <imcdnzl@gmail.com>
-Date: Wed, 15 Feb 2006 01:53:54 +0000
-Subject: Re: [PATCH/RFC]: Re: Problem with feature negotiation
-Message-Id: <cbec11ac0602141753sff04be1j69557bab17d0bf73@mail.gmail.com>
+Date: Mon, 06 Feb 2006 23:04:08 +0000
+Subject: Re: [PATCH] 1/1 dccp: transmit buffering
+Message-Id: <cbec11ac0602061504y3507004dnf8b13d089d9fceba@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <39e6f6c70602140712k5579e1bfy2445f45e9c97f966@mail.gmail.com>
-In-Reply-To: <39e6f6c70602140712k5579e1bfy2445f45e9c97f966@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-> Take a look at my tree, I guess its fixed now by setting the defaults according
-> to the selection of CCIDs in the kernel config, i.e. if CCID2 is built
-> it is the default,
-> as the spec states, but if it isn't CCID3 becomes the default and an #error is
-> spit if no CCID has been selected for compilation.
->
-> Please test and report results, then I'll push for Dave to get it into 2.6.17
->
-Tested just fine.
+> See the comments below, I guess we don't need yet another lock :-)
 
-Signed-off-by: Ian McDonald <imcdnzl@gmail.com>
+Will look at some more about locks as time permits - we take
+possession of our house today :-)
+> > @@ -191,7 +192,7 @@ static int dccp_wait_for_ccid(struct soc
+> >         while (1) {
+> >                 prepare_to_wait(sk->sk_sleep, &wait, TASK_INTERRUPTIBLE);
+> >
+> > -               if (sk->sk_err || (sk->sk_shutdown & SEND_SHUTDOWN))
+> > +               if (sk->sk_err)
+>
+> Humm, have to check this one...
+
+The reason for this is to allow sending of queued packets when user
+application says close...
+
+> sk_reset_timer() please, so that we make sure we have a reference count
+> for the sock as its going to be on a timer
+
+As I read the timer source code if the timer returns do I have to do a
+sock_put (I am guessing so as I don't see how it would happen
+elsewise).
+
+> > +       dp->dccps_xmit_lock = SPIN_LOCK_UNLOCKED;
+>
+> Not needed
+
+I presume you mean because that is the default state? (Provided I
+don't get rid of the lock altogether)
+
+> sk_stop_timer please, to drop the refcount we grabbed with sk_reset_timer()
+> elsewhere.
+>
+The thing with sk_stop_timer is that it doesn't check if the timer
+routine is in use which would mean that we can have problems (I hit
+this in testing). I presume the best way is to create a
+sk_stop_timer_sync rather than use generic timer...
+
+Ian
 --
 Ian McDonald
 http://wand.net.nz/~iam4
 WAND Network Research Group
-Department of Computer Science
 University of Waikato
 New Zealand
