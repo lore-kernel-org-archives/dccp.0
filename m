@@ -1,7 +1,7 @@
-From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-Date: Wed, 15 Feb 2006 08:56:37 +0000
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Wed, 15 Feb 2006 12:31:37 +0000
 Subject: Re: [PATCH 1/1]: [CCID2]: Fix the use of the RTO timer
-Message-Id: <20060215085636.GA15201@tribal.sorbonet.org>
+Message-Id: <39e6f6c70602150431r6e58825ybf8ea6dc8b6b7de0@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20060215013015.GA14878@tribal.sorbonet.org>
 In-Reply-To: <20060215013015.GA14878@tribal.sorbonet.org>
@@ -10,18 +10,14 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, Feb 15, 2006 at 02:44:53PM +1300, Ian McDonald wrote:
-> This patch looks good in itself but there are further problems
-> unloading than this as it occurs also with the code base prior to
-> CCID2 merging....
+On 2/14/06, Andrea Bittau <a.bittau@cs.ucl.ac.uk> wrote:
+> Drop sock reference count on timer expiration and reset.
+>
+> There was a hybrid use of standard timers and sk_timers.  This caused the
+> reference count of the sock to be incorrect when resetting the RTO timer.  The
+> sock reference count should now be correct, enabling its destruction, and
+> allowing the DCCP module to be unloaded.
 
-Do you have specific examples?  I've been fighting quite a lot in trying to get
-the module to unload itself cleanly =D
+Thanks, applied and pushed to Dave, I wonder why I didn't catched this...
 
-You probably are already aware that there is a reference count kept for timewait
-sockets and for the control sock.  But that is not an issue.  
-
-The only outstanding bug I can think of, which will not cause the module to
-unload, is that connect race condition thing I've been bragging about.
-Basically, if I recall correctly, the connection occurs and terminates before
-sys_connect() returns, and the socket is never freed.
+- Arnaldo
