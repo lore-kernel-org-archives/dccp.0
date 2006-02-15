@@ -1,55 +1,120 @@
-From: Ian McDonald <imcdnzl@gmail.com>
-Date: Fri, 17 Feb 2006 02:17:37 +0000
-Subject: [PATCH] DCCP: Divide by zero fix
-Message-Id: <cbec11ac0602161817j24bc0a53xe25f1aabfcbdad7f@mail.gmail.com>
+From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+Date: Wed, 15 Feb 2006 12:49:47 +0000
+Subject: [PATCH 1/X] [DCCP]: Actually change the CCID upon negotiation.
+Message-Id: <20060215124946.GA5643@tribal.sorbonet.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-In rare circumstances 0 is returned by dccp_li_hist_calc_i_mean which
-leads to a divide by zero in ccid3_hc_rx_packet_recv. Explicitly check
-for zero return now. Update copyright notice at same time.
+Change the CCID upon successful feature negotiation.
 
-Found by Arnaldo
+Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
 
-Signed-off-by: Ian McDonald <imcdnzl@gmail.com>
-----
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 165fc40..fb4db88 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -2,7 +2,7 @@
-  *  net/dccp/ccids/ccid3.c
-  *
-  *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
-- *  Copyright (c) 2005 Ian McDonald <iam4@cs.waikato.ac.nz>
-+ *  Copyright (c) 2005-6 Ian McDonald <imcdnzl@gmail.com>
-  *
-  *  An implementation of the DCCP protocol
-  *
-@@ -925,7 +925,7 @@ static void ccid3_hc_rx_packet_recv(stru
- 	struct dccp_rx_hist_entry *packet;
- 	struct timeval now;
- 	u8 win_count;
--	u32 p_prev, r_sample, t_elapsed;
-+	u32 p_prev, r_sample, t_elapsed, i_mean;
- 	int ins;
+---
 
- 	BUG_ON(hcrx = NULL ||
-@@ -1025,9 +1025,11 @@ static void ccid3_hc_rx_packet_recv(stru
- 	p_prev = hcrx->ccid3hcrx_p;
+diff --git a/net/dccp/feat.c b/net/dccp/feat.c
+index fb74260..094f1ba 100644
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -14,6 +14,7 @@
+ #include <linux/module.h>
+ 
+ #include "dccp.h"
++#include "ccid.h"
+ #include "feat.h"
+ 
+ #define DCCP_FEAT_SP_NOAGREE (-123)
+@@ -26,6 +27,8 @@ int dccp_feat_change(struct sock *sk, u8
  	
- 	/* Calculate loss event rate */
--	if (!list_empty(&hcrx->ccid3hcrx_li_hist))
-+	if (!list_empty(&hcrx->ccid3hcrx_li_hist)) {
-+		i_mean = dccp_li_hist_calc_i_mean(&hcrx->ccid3hcrx_li_hist);
-+		if (i_mean)
- 		/* Scaling up by 1000000 as fixed decimal */
--		hcrx->ccid3hcrx_p = 1000000 /
-dccp_li_hist_calc_i_mean(&hcrx->ccid3hcrx_li_hist);
-+			hcrx->ccid3hcrx_p = 1000000 / i_mean;
-
- 	if (hcrx->ccid3hcrx_p > p_prev) {
- 		ccid3_hc_rx_send_feedback(sk);
+ 	dccp_pr_debug("feat change type=%d feat=%d\n", type, feature);
+ 
++	/* XXX sanity check feat change request */
++
+ 	/* check if that feature is already being negotiated */
+ 	list_for_each_entry(opt, &dp->dccps_options.dccpo_pending,
+ 			    dccpop_node) {
+@@ -62,11 +65,81 @@ int dccp_feat_change(struct sock *sk, u8
+ 
+ EXPORT_SYMBOL_GPL(dccp_feat_change);
+ 
++static int dccp_feat_update_ccid(struct sock *sk, u8 type, u8 val)
++{
++	struct dccp_sock *dp = dccp_sk(sk);
++	struct ccid **ccid;
++	u8 *oldval;
++	/* XXX function ptrs to inline functions.  Is this legal? */
++	int  (*ccid_hc_init)(struct ccid *ccid, struct sock *sk);
++	void (*ccid_hc_exit)(struct ccid *ccid, struct sock *sk);
++	int rc = 0;
++
++	/* figure out if we are changing our CCID or the peer's */	
++	if (type = DCCPO_CHANGE_L) {
++		ccid = &dp->dccps_hc_tx_ccid;
++		oldval = &dp->dccps_options.dccpo_tx_ccid;
++		ccid_hc_init = &ccid_hc_tx_init;
++		ccid_hc_exit = &ccid_hc_tx_exit;
++	} else {
++		ccid = &dp->dccps_hc_rx_ccid;
++		oldval = &dp->dccps_options.dccpo_rx_ccid;
++		ccid_hc_init = &ccid_hc_rx_init;
++		ccid_hc_exit = &ccid_hc_rx_exit;
++	}
++
++	/* check if nothing is being changed. */
++	if (*oldval = val)
++		return 0;
++
++	/* kill old CCID */
++	/* ccid_hc_init() is called only upon receiving a RESPONSE packet */
++	if (sk->sk_state != DCCP_REQUESTING)
++		ccid_hc_exit(*ccid, sk);
++	ccid_exit(*ccid, sk);
++	
++	/* switch CCID */
++	*ccid = ccid_init(val, sk);
++	if (*ccid = NULL) {
++		/* XXX OK we have a problem here.  socket will remain without
++		 * CCID.  I think the only sensible thing is to kill the socket
++		 * ASAP.  Ideally, one would make sure the new CCID could be
++		 * allocated before the old one is deleted.  The problem is that
++		 * ccid_init might play with the private ccid state of sk,
++		 * that's why it's safer to first kill the old ccid.
++		 */
++		rc = -ENOMEM;
++		goto out_exit;
++	}
++	if (sk->sk_state != DCCP_REQUESTING) {
++		rc = ccid_hc_init(*ccid, sk);
++		if (rc)
++			goto out_exit;
++	}
++	
++	*oldval = val;
++
++out:
++	return rc;
++out_exit:
++	ccid_exit(*ccid, sk);
++	*ccid = NULL;
++	goto out;
++}
++
+ /* XXX taking only u8 vals */
+ static int dccp_feat_update(struct sock *sk, u8 type, u8 feat, u8 val)
+ {
+-	/* FIXME implement */
+ 	dccp_pr_debug("changing [%d] feat %d to %d\n", type, feat, val);
++
++	switch (feat) {
++	case DCCPF_CCID:
++		return dccp_feat_update_ccid(sk, type, val);
++
++	default:
++		WARN_ON(1); /* XXX implement */
++		break;
++	}
+ 	return 0;
+ }
+ 
