@@ -1,34 +1,50 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Tue, 28 Feb 2006 20:28:34 +0000
-Subject: Re: [PATCH] Mandatory Option Draft Cleanup
-Message-Id: <39e6f6c70602281228v2e5b5745r1a9281ae97c6ac70@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Thu, 16 Feb 2006 16:33:47 +0000
+Subject: panic in ccid3_hc_rx_packet_recv
+Message-Id: <39e6f6c70602160833j3973cf98xb21dde79da42ac78@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20060222113802.GB21876@c3po.0xdef.net>
-In-Reply-To: <20060222113802.GB21876@c3po.0xdef.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-On 2/28/06, Hagen Paul Pfeifer <hagen@jauu.net> wrote:
->
-> According to dccp draft (draft-ietf-dccp-spec-13.txt) section 5.8.2 (Mandatory
-> Option) the following patch correct the handling of the following cases:
->
-> 1) "... and any Mandatory options received on DCCP-Data packets MUST be
->    ignored."
->
-> 2) "The connection is in error and should be reset with Reset Code 5, ...
->    if option O is absent (Mandatory was the last byte of the option list), or
->    if option O equals Mandatory."
->
->
-> Signed-off-by: Hagen Paul Pfeifer <hagen@jauu.net>
-
-Thanks, I got this one merged already, take a look at:
-
-http://www.kernel.org/git/?p=linux/kernel/git/acme/net-2.6.17.git;a=summary
-
-Will submit to Dave later today.
-
-- Arnaldo
+TG9uZyBzZXNzaW9uIG92ZXIgYSB3aS1maSBsaW5rLCB0b25zIG9mIHBhY2tldHMgYWxyZWFkeSB0
+cmFuc21pdHRlZAp0aGVuIHRoaXMgcGFuaWMsIElhbiwKY2FuIHlvdSB0YWtlIGEgbG9vaz8gVGhl
+cmUgYXJlIHR3byBkaXZpc2lvbnMgaW4gY2NpZDNfaGNfcnhfcGFja2V0X3JlY3YuLi4KCi0gQXJu
+YWxkbwoKWzQyOTU2MjE5LjQ1MDAwMF0gREVCVUdfUEFHRUFMTE9DCls0Mjk1NjIxOS40NTAwMDBd
+IE1vZHVsZXMgbGlua2VkIGluOiBkY2NwX2RpYWcgaW5ldF9kaWFnIGRjY3BfY2NpZDMKZGNjcF90
+ZnJjX2xpYiBkY2NwIGlwdjYgdW5peApbNDI5NTYyMTkuNDUwMDAwXSBDUFU6ICAgIDAKWzQyOTU2
+MjE5LjQ1MDAwMF0gRUlQOiAgICAwMDYwOls8YzQ4NTYwNGI+XSAgICBOb3QgdGFpbnRlZCBWTEkK
+WzQyOTU2MjE5LjQ1MDAwMF0gRUZMQUdTOiAwMDAwMDI0NiAgICgyLjYuMTYtcmMyYWNtZSAjMSkK
+WzQyOTU2MjE5LjQ1MDAwMF0gRUlQIGlzIGF0IGNjaWQzX2hjX3J4X3BhY2tldF9yZWN2KzB4MzNi
+LzB4OGYwIFtkY2NwX2NjaWQzXQpbNDI5NTYyMTkuNDUwMDAwXSBlYXg6IDAwMGY0MjQwICAgZWJ4
+OiAwMDAwMDAwMCAgIGVjeDogMDAwMDAwMDAgICBlZHg6IDAwMDAwMDAwCls0Mjk1NjIxOS40NTAw
+MDBdIGVzaTogYzJhNjc1NzQgICBlZGk6IGMyYTY3NWE0ICAgZWJwOiBjMDJlYWU2MCAgIGVzcDog
+YzAyZWFkZWMKWzQyOTU2MjE5LjQ1MDAwMF0gZHM6IDAwN2IgICBlczogMDA3YiAgIHNzOiAwMDY4
+Cls0Mjk1NjIxOS40NTAwMDBdIFByb2Nlc3Mgc3dhcHBlciAocGlkOiAwLCB0aHJlYWRpbmZvwDJl
+YTAwMCB0YXNrwDI4ZDIwMCkKWzQyOTU2MjE5LjQ1MDAwMF0gU3RhY2s6IDwwPmMyYTY3NWE0IGMw
+MmVhZTQwIDBiNWIwYjA4IDAwMDAwMDE4CjAwMDAwMDA5IDAwMDAwMDAwIDAwMDAwMDAwIDAwMDAx
+NmEzCls0Mjk1NjIxOS40NTAwMDBdICAgICAgICAwMDAwMDAwMCBjMjg2NGY5NCBjMmE2NzU3NCAw
+OTg2NGY5NCBjMjEwMzNjNApjMmE2NzU5YyBjMmE2NzU3NCAwMDAwMDAwNgpbNDI5NTYyMTkuNDUw
+MDAwXSAgICAgICAgMDAwMDAwMDkgMDAwMDAwMDEgMDAwMTU5MjAgMDAwMmJmMzkgMDAwMDAwMDAK
+MDAwMDE4NTMgMDAwNGI3Y2UgMDAwMDAwMTgKWzQyOTU2MjE5LjQ1MDAwMF0gQ2FsbCBUcmFjZToK
+WzQyOTU2MjE5LjQ1MDAwMF0gIFs8YzAxMDMwY2Q+XSBzaG93X3N0YWNrX2xvZ19sdmwrMHhjZC8w
+eDEyMApbNDI5NTYyMTkuNDUwMDAwXSAgWzxjMDEwMzJhZT5dIHNob3dfcmVnaXN0ZXJzKzB4MThl
+LzB4MjIwCls0Mjk1NjIxOS40NTAwMDBdICBbPGMwMTAzNWE5Pl0gZGllKzB4MTA5LzB4MjMwCls0
+Mjk1NjIxOS40NTAwMDBdICBbPGMwMTAzODlmPl0gZG9fdHJhcCsweDdmLzB4YjAKWzQyOTU2MjE5
+LjQ1MDAwMF0gIFs8YzAxMDM5NmU+XSBkb19kaXZpZGVfZXJyb3IrMHg5ZS8weGIwCls0Mjk1NjIx
+OS40NTAwMDBdICBbPGMwMTAyYTY3Pl0gZXJyb3JfY29kZSsweDRmLzB4NTQKWzQyOTU2MjE5LjQ1
+MDAwMF0gIFs8YzQ4NDIwZmI+XSBkY2NwX3Jjdl9lc3RhYmxpc2hlZCsweDdiLzB4MjAwIFtkY2Nw
+XQpbNDI5NTYyMTkuNDUwMDAwXSAgWzxjNDg0MzM2Yz5dIGRjY3BfdjRfZG9fcmN2KzB4MTBjLzB4
+MmQwIFtkY2NwXQpbNDI5NTYyMTkuNDUwMDAwXSAgWzxjNDg0NDMyZT5dIGRjY3BfdjRfcmN2KzB4
+NWZlLzB4NmEwIFtkY2NwXQpbNDI5NTYyMTkuNDUwMDAwXSAgWzxjMDIxYzRkYj5dIGlwX2xvY2Fs
+X2RlbGl2ZXIrMHhjYi8weDIzMApbNDI5NTYyMTkuNDUwMDAwXSAgWzxjMDIxYzI3Nj5dIGlwX3Jj
+disweDJhNi8weDQ0MApbNDI5NTYyMTkuNDUwMDAwXSAgWzxjMDIwN2ZhNj5dIG5ldGlmX3JlY2Vp
+dmVfc2tiKzB4MTY2LzB4MWUwCls0Mjk1NjIxOS40NTAwMDBdICBbPGMwMjA4MDljPl0gcHJvY2Vz
+c19iYWNrbG9nKzB4N2MvMHgxMDAKWzQyOTU2MjE5LjQ1MDAwMF0gIFs8YzAyMDU0NTI+XSBuZXRf
+cnhfYWN0aW9uKzB4NzIvMHgxMTAKWzQyOTU2MjE5LjQ1MDAwMF0gIFs8YzAxMTRkNjI+XSBfX2Rv
+X3NvZnRpcnErMHg1Mi8weGIwCls0Mjk1NjIxOS40NTAwMDBdICBbPGMwMTA0NzIxPl0gZG9fc29m
+dGlycSsweDUxLzB4NjAKLQpUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMgbGlzdDogc2VuZCB0aGUg
+bGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJvZHkgb2YgYSBtZXNzYWdlIHRvIG1ham9y
+ZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRvbW8gaW5mbyBhdCAgaHR0cDovL3ZnZXIu
+a2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5odG1s
