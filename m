@@ -1,47 +1,55 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Wed, 01 Feb 2006 14:18:38 +0000
-Subject: Re: feature negotiation patch for linux
-Message-Id: <39e6f6c70602010618u346f216cl273776bfa0bcc9e0@mail.gmail.com>
+From: Ian McDonald <imcdnzl@gmail.com>
+Date: Fri, 17 Feb 2006 02:17:37 +0000
+Subject: [PATCH] DCCP: Divide by zero fix
+Message-Id: <cbec11ac0602161817j24bc0a53xe25f1aabfcbdad7f@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 1/31/06, Andrea Bittau <a.bittau@cs.ucl.ac.uk> wrote:
-> http://128.16.66.93/acme-dccp-feat.diff
->
-> [no domain name because it's expiring today =( ]
->
-> It's my initial "mega-patch, rough" implementation of feature negotiation for
-> linux, based on acme's tree.
->
-> It supports CHANGE_L, CHANGE_R via setsockopt from userland.
-> It will change / confirm.
-> It supports mandatory options.  [no support from userland yet though].
-> It supports re-transmission of change options.
->
-> TODO:
-> * getsockopt to poll for option status.
-> * setsockopt with a flag for mandatory options.
-> * actually change the option in the protocol itself.  Until now they are only
->   negotiation and an empty function is called =D
->
->
-> Any comments are welcome.  I'll try to contact acme now, and hopefully stuff
-> will start getting merged.
+In rare circumstances 0 is returned by dccp_li_hist_calc_i_mean which
+leads to a divide by zero in ccid3_hc_rx_packet_recv. Explicitly check
+for zero return now. Update copyright notice at same time.
 
+Found by Arnaldo
 
-Excellent news! First round of comments:
+Signed-off-by: Ian McDonald <imcdnzl@gmail.com>
+----
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 165fc40..fb4db88 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -2,7 +2,7 @@
+  *  net/dccp/ccids/ccid3.c
+  *
+  *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
+- *  Copyright (c) 2005 Ian McDonald <iam4@cs.waikato.ac.nz>
++ *  Copyright (c) 2005-6 Ian McDonald <imcdnzl@gmail.com>
+  *
+  *  An implementation of the DCCP protocol
+  *
+@@ -925,7 +925,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	struct dccp_rx_hist_entry *packet;
+ 	struct timeval now;
+ 	u8 win_count;
+-	u32 p_prev, r_sample, t_elapsed;
++	u32 p_prev, r_sample, t_elapsed, i_mean;
+ 	int ins;
 
-+	list_for_each(cur, &dp->dccps_options.dccpo_pending) {
-+		opt = list_entry(cur, struct dccp_opt_pend, dccpop_list);
+ 	BUG_ON(hcrx = NULL ||
+@@ -1025,9 +1025,11 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	p_prev = hcrx->ccid3hcrx_p;
+ 	
+ 	/* Calculate loss event rate */
+-	if (!list_empty(&hcrx->ccid3hcrx_li_hist))
++	if (!list_empty(&hcrx->ccid3hcrx_li_hist)) {
++		i_mean = dccp_li_hist_calc_i_mean(&hcrx->ccid3hcrx_li_hist);
++		if (i_mean)
+ 		/* Scaling up by 1000000 as fixed decimal */
+-		hcrx->ccid3hcrx_p = 1000000 /
+dccp_li_hist_calc_i_mean(&hcrx->ccid3hcrx_li_hist);
++			hcrx->ccid3hcrx_p = 1000000 / i_mean;
 
-Please use list_for_each_entry()
-
-dccp_feat_change should receive a gfp_t for use in kmalloc,
-as it is called from setsockopt and there we should just use GFP_KERNEL.
-
-ACK_RATIO in dccp_feat_init()? CCID2 specific stuff?
-
-- Arnaldo
+ 	if (hcrx->ccid3hcrx_p > p_prev) {
+ 		ccid3_hc_rx_send_feedback(sk);
