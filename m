@@ -1,69 +1,211 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Tue, 21 Feb 2006 12:09:23 +0000
-Subject: Re: [PATCH] 1/1 dccp: transmit buffering
-Message-Id: <39e6f6c70602210409r7a731362gae3571328b6fd2e5@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Sat, 25 Feb 2006 22:28:09 +0000
+Subject: [PATCH] [ICSK]: Introduce inet_csk_ctl_sock_create
+Message-Id: <11409064891373-git-send-email-acme@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
-References: <cbec11ac0602061504y3507004dnf8b13d089d9fceba@mail.gmail.com>
-In-Reply-To: <cbec11ac0602061504y3507004dnf8b13d089d9fceba@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 2/20/06, Ian McDonald <imcdnzl@gmail.com> wrote:
-> Arnaldo, (or anybody else)
->
-> I can get it working with the extra lock but not without... Comments
-> inline and at the end. Help much appreciated!
->
->
-> > Please leave the "extern"
-> >
-> Yep!
->
-> > I guess we don't need this lock, but instead use bh_lock_sock, check if
-> > there are users, look at ccid3_hc_tx_no_feedback_timer & ccid2_hc_tx_rto_expire
-> > (I left a comment even having fixed the problem, duh will fix).
->
-> I'm not sure what you mean by users here. Users of what? Can you explain
+Consolidating open coded sequences in tcp and dccp, v4 and v6.
 
-Look at lock_sock(), release_sock(), bh_lock_sock(), bh_release_sock() and
-at sk_receive_skb and you'll see what I mean :-)
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
-> > sk_reset_timer() please, so that we make sure we have a reference count
-> > for the sock as its going to be on a timer
-> >
-> Will tidyup once get other problems sorted...
->
-> > No need for the {}, just one statement
->
-> Understand. Lazy when removing debugging...
->
-> > sk_eat_skb()  later?
-> >
-> It would be sk_eat_skb in dccp_write_xmit for two reasons:
-> 1) sk_eat_skb alters receive queue. This is write
-> 2) Existing xmit doesn't seem to do anything like this. To me it looks
-> like the lower level does the kfree_skb...
+---
 
-Scrap that suggestion, brainfart :-\
+ include/net/inet_connection_sock.h |    4 ++++
+ net/dccp/ipv4.c                    |   26 ++------------------------
+ net/dccp/ipv6.c                    |   27 +++------------------------
+ net/ipv4/inet_connection_sock.c    |   19 +++++++++++++++++++
+ net/ipv4/tcp_ipv4.c                |   13 +------------
+ net/ipv6/tcp_ipv6.c                |   13 ++-----------
+ 6 files changed, 31 insertions(+), 71 deletions(-)
 
-> >
-> > > +       dp->dccps_xmit_lock = SPIN_LOCK_UNLOCKED;
-> >
-> > Not needed
->
-> Understand - will remove
->
-> Now I have attached two patches. acme1.diff is slightly tidied up
-> version of original patch and works with normal testing and netem
-> testing.
->
-> acme2.diff is an attempt to get rid of spinlock and use sock_lock as I
-> didn't think I needed bh_sock_lock as not receiving packets as that is
-> seemed aimed at that (stopping the interrupt driver trashing receive
-> queues...)
+d2c5bf98ebbf4ad6ab670ec0e65494b04e75ab90
+diff --git a/include/net/inet_connection_sock.h b/include/net/inet_connection_sock.h
+index c0a4d3c..3895420 100644
+--- a/include/net/inet_connection_sock.h
++++ b/include/net/inet_connection_sock.h
+@@ -321,4 +321,8 @@ extern void inet_csk_listen_stop(struct 
+ 
+ extern void inet_csk_addr2sockaddr(struct sock *sk, struct sockaddr *uaddr);
+ 
++extern int inet_csk_ctl_sock_create(struct socket **sock,
++				    unsigned short family,
++				    unsigned short type,
++				    unsigned char protocol);
+ #endif /* _INET_CONNECTION_SOCK_H */
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index f53bce5..7098f10 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -1099,29 +1099,6 @@ static struct inet_protosw dccp_v4_proto
+ 	.flags		= INET_PROTOSW_ICSK,
+ };
+ 
+-static char dccp_v4_ctl_socket_err_msg[] __initdata -	KERN_ERR "DCCP: Failed to create the control socket.\n";
+-
+-static int __init dccp_v4_ctl_sock_init(void)
+-{
+-	int rc = sock_create_kern(PF_INET, SOCK_DCCP, IPPROTO_DCCP,
+-				  &dccp_v4_ctl_socket);
+-	if (rc < 0)
+-		printk(dccp_v4_ctl_socket_err_msg);
+-	else {
+-		dccp_v4_ctl_socket->sk->sk_allocation = GFP_ATOMIC;
+-		inet_sk(dccp_v4_ctl_socket->sk)->uc_ttl = -1;
+-
+-		/* Unhash it so that IP input processing does not even
+-		 * see it, we do not wish this socket to see incoming
+-		 * packets.
+-		 */
+-		dccp_v4_ctl_socket->sk->sk_prot->unhash(dccp_v4_ctl_socket->sk);
+-	}
+-
+-	return rc;
+-}
+-
+ static int __init dccp_v4_init(void)
+ {
+ 	int err = proto_register(&dccp_v4_prot, 1);
+@@ -1135,7 +1112,8 @@ static int __init dccp_v4_init(void)
+ 
+ 	inet_register_protosw(&dccp_v4_protosw);
+ 
+-	err = dccp_v4_ctl_sock_init();
++	err = inet_csk_ctl_sock_create(&dccp_v4_ctl_socket, PF_INET,
++				       SOCK_DCCP, IPPROTO_DCCP);
+ 	if (err)
+ 		goto out_unregister_protosw;
+ out:
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index 3c9f083..6bd9979 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -1229,29 +1229,6 @@ static struct inet_protosw dccp_v6_proto
+ 	.flags		= INET_PROTOSW_ICSK,
+ };
+ 
+-static char dccp_v6_ctl_socket_err_msg[] __initdata -	KERN_ERR "DCCP: Failed to create the control socket.\n";
+-
+-static int __init dccp_v6_ctl_sock_init(void)
+-{
+-	int rc = sock_create_kern(PF_INET6, SOCK_DCCP, IPPROTO_DCCP,
+-				  &dccp_v6_ctl_socket);
+-	if (rc < 0)
+-		printk(dccp_v6_ctl_socket_err_msg);
+-	else {
+-		dccp_v6_ctl_socket->sk->sk_allocation = GFP_ATOMIC;
+-		inet_sk(dccp_v6_ctl_socket->sk)->uc_ttl = -1;
+-
+-		/* Unhash it so that IP input processing does not even
+-		 * see it, we do not wish this socket to see incoming
+-		 * packets.
+-		 */
+-		dccp_v6_ctl_socket->sk->sk_prot->unhash(dccp_v6_ctl_socket->sk);
+-	}
+-
+-	return rc;
+-}
+-
+ static int __init dccp_v6_init(void)
+ {
+ 	int err = proto_register(&dccp_v6_prot, 1);
+@@ -1265,7 +1242,9 @@ static int __init dccp_v6_init(void)
+ 
+ 	inet6_register_protosw(&dccp_v6_protosw);
+ 
+-	if (dccp_v6_ctl_sock_init() != 0)
++	err = inet_csk_ctl_sock_create(&dccp_v6_ctl_socket, PF_INET6,
++				       SOCK_DCCP, IPPROTO_DCCP);
++	if (err != 0)
+ 		goto out_unregister_protosw;
+ out:
+ 	return err;
+diff --git a/net/ipv4/inet_connection_sock.c b/net/ipv4/inet_connection_sock.c
+index ae20281..359f48c 100644
+--- a/net/ipv4/inet_connection_sock.c
++++ b/net/ipv4/inet_connection_sock.c
+@@ -648,3 +648,22 @@ void inet_csk_addr2sockaddr(struct sock 
+ }
+ 
+ EXPORT_SYMBOL_GPL(inet_csk_addr2sockaddr);
++
++int inet_csk_ctl_sock_create(struct socket **sock, unsigned short family,
++			     unsigned short type, unsigned char protocol)
++{
++	int rc = sock_create_kern(family, type, protocol, sock);
++
++	if (rc = 0) {
++		(*sock)->sk->sk_allocation = GFP_ATOMIC;
++		inet_sk((*sock)->sk)->uc_ttl = -1;
++		/*
++		 * Unhash it so that IP input processing does not even see it,
++		 * we do not wish this socket to see incoming packets.
++		 */
++		(*sock)->sk->sk_prot->unhash((*sock)->sk);
++	}
++	return rc;
++}
++
++EXPORT_SYMBOL_GPL(inet_csk_ctl_sock_create);
+diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
+index 57e7a26..4eb903d 100644
+--- a/net/ipv4/tcp_ipv4.c
++++ b/net/ipv4/tcp_ipv4.c
+@@ -1828,21 +1828,10 @@ struct proto tcp_prot = {
+ 	.rsk_prot		= &tcp_request_sock_ops,
+ };
+ 
+-
+-
+ void __init tcp_v4_init(struct net_proto_family *ops)
+ {
+-	int err = sock_create_kern(PF_INET, SOCK_RAW, IPPROTO_TCP, &tcp_socket);
+-	if (err < 0)
++	if (inet_csk_ctl_sock_create(&tcp_socket, PF_INET, SOCK_RAW, IPPROTO_TCP) < 0)
+ 		panic("Failed to create the TCP control socket.\n");
+-	tcp_socket->sk->sk_allocation   = GFP_ATOMIC;
+-	inet_sk(tcp_socket->sk)->uc_ttl = -1;
+-
+-	/* Unhash it so that IP input processing does not even
+-	 * see it, we do not wish this socket to see incoming
+-	 * packets.
+-	 */
+-	tcp_socket->sk->sk_prot->unhash(tcp_socket->sk);
+ }
+ 
+ EXPORT_SYMBOL(ipv4_specific);
+diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
+index 14de503..af6a0c6 100644
+--- a/net/ipv6/tcp_ipv6.c
++++ b/net/ipv6/tcp_ipv6.c
+@@ -1605,21 +1605,12 @@ static struct inet_protosw tcpv6_protosw
+ 
+ void __init tcpv6_init(void)
+ {
+-	int err;
+-
+ 	/* register inet6 protocol */
+ 	if (inet6_add_protocol(&tcpv6_protocol, IPPROTO_TCP) < 0)
+ 		printk(KERN_ERR "tcpv6_init: Could not register protocol\n");
+ 	inet6_register_protosw(&tcpv6_protosw);
+ 
+-	err = sock_create_kern(PF_INET6, SOCK_RAW, IPPROTO_TCP, &tcp6_socket);
+-	if (err < 0)
++	if (inet_csk_ctl_sock_create(&tcp6_socket, PF_INET6, SOCK_RAW,
++				     IPPROTO_TCP) < 0)
+ 		panic("Failed to create the TCPv6 control socket.\n");
+-	tcp6_socket->sk->sk_allocation = GFP_ATOMIC;
+-
+-	/* Unhash it so that IP input processing does not even
+-	 * see it, we do not wish this socket to see incoming
+-	 * packets.
+-	 */
+-	tcp6_socket->sk->sk_prot->unhash(tcp6_socket->sk);
+ }
+-- 
+1.2.2.gd27d
 
-I'll try to take a look later today, now have to visit a customer...
 
-- Arnaldo
