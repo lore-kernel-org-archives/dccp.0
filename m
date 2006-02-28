@@ -1,80 +1,57 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Thu, 23 Feb 2006 22:12:58 +0000
-Subject: [PATCH 6/7] [DCCP]: Rename init_dccp_v4_mibs to dccp_mib_init
-Message-Id: <114073277898-git-send-email-acme@mandriva.com>
+Date: Tue, 28 Feb 2006 22:09:02 +0000
+Subject: [PATCH 3/4] [DCCP] options: Fix some aspects of mandatory option processing
+Message-Id: <1141164542543-git-send-email-acme@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-And introduce dccp_mib_exit grouping previously open coded sequence.
+According to dccp draft (draft-ietf-dccp-spec-13.txt) section 5.8.2 (Mandatory
+Option) the following patch correct the handling of the following cases:
+
+1) "... and any Mandatory options received on DCCP-Data packets MUST be
+  ignored."
+
+2) "The connection is in error and should be reset with Reset Code 5, ...
+  if option O is absent (Mandatory was the last byte of the option list), or
+  if option O equals Mandatory."
 
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Signed-off-by: Hagen Paul Pfeifer <hagen@jauu.net>
 
 ---
 
- net/dccp/proto.c |   18 +++++++++++-------
- 1 files changed, 11 insertions(+), 7 deletions(-)
+ net/dccp/options.c |    7 ++++++-
+ 1 files changed, 6 insertions(+), 1 deletions(-)
 
-2250710f2979bf1e47bba2f6e3fcadfd9a686071
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index a57a8b6..c048d5b 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -933,7 +933,7 @@ void dccp_ctl_sock_exit(void)
- EXPORT_SYMBOL_GPL(dccp_ctl_sock_exit);
- #endif
- 
--static int __init init_dccp_v4_mibs(void)
-+static int __init dccp_mib_init(void)
- {
- 	int rc = -ENOMEM;
- 
-@@ -955,6 +955,13 @@ out_free_one:
- 
- }
- 
-+static int dccp_mib_exit(void)
-+{
-+	free_percpu(dccp_statistics[0]);
-+	free_percpu(dccp_statistics[1]);
-+	dccp_statistics[0] = dccp_statistics[1] = NULL;
-+}
-+
- static int thash_entries;
- module_param(thash_entries, int, 0444);
- MODULE_PARM_DESC(thash_entries, "Number of ehash buckets");
-@@ -1044,7 +1051,7 @@ static int __init dccp_init(void)
- 		INIT_HLIST_HEAD(&dccp_hashinfo.bhash[i].chain);
+61e2a0fe55ae1e6b2d1f7f10660065de8c606e5c
+diff --git a/net/dccp/options.c b/net/dccp/options.c
+index 79d228e..8867b6f 100644
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -109,7 +109,8 @@ int dccp_parse_options(struct sock *sk, 
+ 		case DCCPO_MANDATORY:
+ 			if (mandatory)
+ 				goto out_invalid_option;
+-			mandatory = 1;
++			if (pkt_type != DCCP_PKT_DATA)
++				mandatory = 1;
+ 			break;
+ 		case DCCPO_NDP_COUNT:
+ 			if (len > 3)
+@@ -249,6 +250,10 @@ int dccp_parse_options(struct sock *sk, 
+ 			mandatory = 0;
  	}
  
--	rc = init_dccp_v4_mibs();
-+	rc = dccp_mib_init();
- 	if (rc)
- 		goto out_free_dccp_bhash;
++	/* mandatory was the last byte in option list -> reset connection */
++	if (mandatory)
++		goto out_invalid_option;
++
+ 	return 0;
  
-@@ -1075,9 +1082,7 @@ out_unregister_protosw:
- 	inet_unregister_protosw(&dccp_v4_protosw);
- 	inet_del_protocol(&dccp_protocol, IPPROTO_DCCP);
- out_free_dccp_v4_mibs:
--	free_percpu(dccp_statistics[0]);
--	free_percpu(dccp_statistics[1]);
--	dccp_statistics[0] = dccp_statistics[1] = NULL;
-+	dccp_mib_exit();
- out_free_dccp_bhash:
- 	free_pages((unsigned long)dccp_hashinfo.bhash, bhash_order);
- 	dccp_hashinfo.bhash = NULL;
-@@ -1102,8 +1107,7 @@ static void __exit dccp_fini(void)
- 	if (inet_del_protocol(&dccp_protocol, IPPROTO_DCCP) < 0)
- 		printk(dccp_del_proto_err_msg);
- 
--	free_percpu(dccp_statistics[0]);
--	free_percpu(dccp_statistics[1]);
-+	dccp_mib_exit();
- 	free_pages((unsigned long)dccp_hashinfo.bhash,
- 		   get_order(dccp_hashinfo.bhash_size *
- 			     sizeof(struct inet_bind_hashbucket)));
+ out_invalid_option:
 -- 
 1.2.2.gd27d
 
