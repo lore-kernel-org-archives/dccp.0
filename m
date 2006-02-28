@@ -1,25 +1,64 @@
-From: "David S. Miller" <davem@davemloft.net>
-Date: Thu, 23 Feb 2006 01:51:22 +0000
-Subject: Re: [PATCH 0/4][DCCP]: Improvements
-Message-Id: <20060222.175122.64329718.davem@davemloft.net>
+From: "Ian McDonald" <imcdnzl@gmail.com>
+Date: Tue, 28 Feb 2006 23:18:31 +0000
+Subject: [BUG] DCCP : Suspected race in ackvec code
+Message-Id: <cbec11ac0602281518uc14fe5fl73eda47b211a7d9f@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <11406443213110-git-send-email-acme@mandriva.com>
-In-Reply-To: <11406443213110-git-send-email-acme@mandriva.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Wed, 22 Feb 2006 18:38:41 -0300
+When send_ackvec sysctl is on DCCP locks the machine. Unfortunately it
+doesn't send any output to the kernel.
 
->    Please consider pulling from:
-> 
-> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.17.git
+Test cases:
+On receive end (10.0.2.2):
+./ttcp_acme -c -l500 -r
 
-Pulled thanks.
+On send end (10.0.7.7):
+./ttcp_acme -c -l500 -n1000 -t 10.0.2.2
 
-> P.S.: Testing git-send-email.perl from latest git repo, please let me know
-> of any bogosity.
+And the setup on 10.0.5.5 (which provides a route between 10.0.2.2 and
+10.0.7.7) is:
 
-Looks good from here.
+tc qdisc add dev eth0 root netem delay 50ms loss 10%
+tc qdisc add dev eth1 root netem delay 50ms loss 10%
+
+Passes:
+echo 0 > /proc/sys/net/dccp/default/send_ackvec
+echo 3 > /proc/sys/net/dccp/default/rx_ccid
+echo 3 > /proc/sys/net/dccp/default/tx_ccid
+
+Locks the machine:
+echo 1 > /proc/sys/net/dccp/default/send_ackvec
+echo 3 > /proc/sys/net/dccp/default/rx_ccid
+echo 3 > /proc/sys/net/dccp/default/tx_ccid
+
+Locks the machine:
+echo 1 > /proc/sys/net/dccp/default/send_ackvec
+echo 2 > /proc/sys/net/dccp/default/rx_ccid
+echo 2 > /proc/sys/net/dccp/default/tx_ccid
+
+Doesn't lock the machine but doesn't complete the test:
+echo 0 > /proc/sys/net/dccp/default/send_ackvec
+echo 2 > /proc/sys/net/dccp/default/rx_ccid
+echo 2 > /proc/sys/net/dccp/default/tx_ccid
+
+The only reason I say that there is a race is that the problems are
+similar to when I had races without proper locking when implementing
+tx buffering. When you inject delay/loss with netem it triggers a lot
+more code coverage because timers get fired, data is missing etc.
+
+I've had a quick look around but can't find it yet - I find these
+races quite nasty to find but will keep looking at it over as time
+permits...
+
+Ian
+--
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
