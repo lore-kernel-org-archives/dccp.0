@@ -1,120 +1,249 @@
-From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-Date: Wed, 15 Feb 2006 12:49:47 +0000
-Subject: [PATCH 1/X] [DCCP]: Actually change the CCID upon negotiation.
-Message-Id: <20060215124946.GA5643@tribal.sorbonet.org>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Tue, 28 Feb 2006 22:09:02 +0000
+Subject: [PATCH 2/4] [DCCP] ccid2: coding style cleanups
+Message-Id: <11411645422940-git-send-email-acme@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Change the CCID upon successful feature negotiation.
+No changes in the logic where made.
 
-Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
 ---
 
-diff --git a/net/dccp/feat.c b/net/dccp/feat.c
-index fb74260..094f1ba 100644
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -14,6 +14,7 @@
- #include <linux/module.h>
+ net/dccp/ccids/ccid2.c |   76 ++++++++++++++++--------------------------------
+ 1 files changed, 26 insertions(+), 50 deletions(-)
+
+1c6ddda9288aba6a761b45357d119a47df165d4a
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 11c73ab..e00e225 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -37,10 +37,7 @@
  
- #include "dccp.h"
-+#include "ccid.h"
- #include "feat.h"
+ static int ccid2_debug;
  
- #define DCCP_FEAT_SP_NOAGREE (-123)
-@@ -26,6 +27,8 @@ int dccp_feat_change(struct sock *sk, u8
- 	
- 	dccp_pr_debug("feat change type=%d feat=%d\n", type, feature);
- 
-+	/* XXX sanity check feat change request */
-+
- 	/* check if that feature is already being negotiated */
- 	list_for_each_entry(opt, &dp->dccps_options.dccpo_pending,
- 			    dccpop_node) {
-@@ -62,11 +65,81 @@ int dccp_feat_change(struct sock *sk, u8
- 
- EXPORT_SYMBOL_GPL(dccp_feat_change);
- 
-+static int dccp_feat_update_ccid(struct sock *sk, u8 type, u8 val)
-+{
-+	struct dccp_sock *dp = dccp_sk(sk);
-+	struct ccid **ccid;
-+	u8 *oldval;
-+	/* XXX function ptrs to inline functions.  Is this legal? */
-+	int  (*ccid_hc_init)(struct ccid *ccid, struct sock *sk);
-+	void (*ccid_hc_exit)(struct ccid *ccid, struct sock *sk);
-+	int rc = 0;
-+
-+	/* figure out if we are changing our CCID or the peer's */	
-+	if (type = DCCPO_CHANGE_L) {
-+		ccid = &dp->dccps_hc_tx_ccid;
-+		oldval = &dp->dccps_options.dccpo_tx_ccid;
-+		ccid_hc_init = &ccid_hc_tx_init;
-+		ccid_hc_exit = &ccid_hc_tx_exit;
-+	} else {
-+		ccid = &dp->dccps_hc_rx_ccid;
-+		oldval = &dp->dccps_options.dccpo_rx_ccid;
-+		ccid_hc_init = &ccid_hc_rx_init;
-+		ccid_hc_exit = &ccid_hc_rx_exit;
-+	}
-+
-+	/* check if nothing is being changed. */
-+	if (*oldval = val)
-+		return 0;
-+
-+	/* kill old CCID */
-+	/* ccid_hc_init() is called only upon receiving a RESPONSE packet */
-+	if (sk->sk_state != DCCP_REQUESTING)
-+		ccid_hc_exit(*ccid, sk);
-+	ccid_exit(*ccid, sk);
-+	
-+	/* switch CCID */
-+	*ccid = ccid_init(val, sk);
-+	if (*ccid = NULL) {
-+		/* XXX OK we have a problem here.  socket will remain without
-+		 * CCID.  I think the only sensible thing is to kill the socket
-+		 * ASAP.  Ideally, one would make sure the new CCID could be
-+		 * allocated before the old one is deleted.  The problem is that
-+		 * ccid_init might play with the private ccid state of sk,
-+		 * that's why it's safer to first kill the old ccid.
-+		 */
-+		rc = -ENOMEM;
-+		goto out_exit;
-+	}
-+	if (sk->sk_state != DCCP_REQUESTING) {
-+		rc = ccid_hc_init(*ccid, sk);
-+		if (rc)
-+			goto out_exit;
-+	}
-+	
-+	*oldval = val;
-+
-+out:
-+	return rc;
-+out_exit:
-+	ccid_exit(*ccid, sk);
-+	*ccid = NULL;
-+	goto out;
-+}
-+
- /* XXX taking only u8 vals */
- static int dccp_feat_update(struct sock *sk, u8 type, u8 feat, u8 val)
+-#if 0
+-#define CCID2_DEBUG
+-#endif
+-
++#undef CCID2_DEBUG
+ #ifdef CCID2_DEBUG
+ #define ccid2_pr_debug(format, a...) \
+         do { if (ccid2_debug) \
+@@ -56,10 +53,8 @@ static const int ccid2_seq_len = 128;
+ static void ccid2_hc_tx_check_sanity(const struct ccid2_hc_tx_sock *hctx)
  {
--	/* FIXME implement */
- 	dccp_pr_debug("changing [%d] feat %d to %d\n", type, feat, val);
-+
-+	switch (feat) {
-+	case DCCPF_CCID:
-+		return dccp_feat_update_ccid(sk, type, val);
-+
-+	default:
-+		WARN_ON(1); /* XXX implement */
-+		break;
-+	}
- 	return 0;
- }
+ 	int len = 0;
+-	struct ccid2_seq *seqp;
+ 	int pipe = 0;
+-
+-	seqp = hctx->ccid2hctx_seqh;
++	struct ccid2_seq *seqp = hctx->ccid2hctx_seqh;
  
+ 	/* there is data in the chain */
+ 	if (seqp != hctx->ccid2hctx_seqt) {
+@@ -69,9 +64,8 @@ static void ccid2_hc_tx_check_sanity(con
+ 			pipe++;
+ 	
+ 		while (seqp != hctx->ccid2hctx_seqt) {
+-			struct ccid2_seq *prev;
++			struct ccid2_seq *prev = seqp->ccid2s_prev;
+ 
+-			prev = seqp->ccid2s_prev;
+ 			len++;
+ 			if (!prev->ccid2s_acked)
+ 				pipe++;
+@@ -92,7 +86,7 @@ static void ccid2_hc_tx_check_sanity(con
+ 		seqp = seqp->ccid2s_prev;
+ 		len++;
+ 		BUG_ON(len > ccid2_seq_len);
+-	} while(seqp != hctx->ccid2hctx_seqh);
++	} while (seqp != hctx->ccid2hctx_seqh);
+ 
+ 	BUG_ON(len != ccid2_seq_len);
+ 	ccid2_pr_debug("total len=%d\n", len);
+@@ -141,7 +135,7 @@ static void ccid2_change_l_ack_ratio(str
+ 	 * -sorbo.
+ 	 */
+ 	if (val != 2) {
+-		struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
++		const struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
+ 		int max = hctx->ccid2hctx_cwnd / 2;
+ 
+ 		/* round up */
+@@ -179,9 +173,6 @@ static void ccid2_hc_tx_rto_expire(unsig
+ 	struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
+ 	long s;
+ 
+-	/* XXX I don't think i'm locking correctly
+-	 * -sorbo.
+-	 */
+ 	bh_lock_sock(sk);
+ 	if (sock_owned_by_user(sk)) {
+ 		sk_reset_timer(sk, &hctx->ccid2hctx_rtotimer,
+@@ -278,36 +269,33 @@ static void ccid2_hc_tx_packet_sent(stru
+ 	/* We had an ack loss in this window... */
+ 	if (hctx->ccid2hctx_ackloss) {
+ 		if (hctx->ccid2hctx_arsent >= hctx->ccid2hctx_cwnd) {
+-			hctx->ccid2hctx_arsent = 0;
+-			hctx->ccid2hctx_ackloss = 0;
++			hctx->ccid2hctx_arsent	= 0;
++			hctx->ccid2hctx_ackloss	= 0;
+ 		}
+-	}
+-	/* No acks lost up to now... */
+-	else {
++	} else {
++		/* No acks lost up to now... */
+ 		/* decrease ack ratio if enough packets were sent */
+ 		if (dp->dccps_l_ack_ratio > 1) {
+ 			/* XXX don't calculate denominator each time */
+-			int denom;
++			int denom = dp->dccps_l_ack_ratio * dp->dccps_l_ack_ratio - 
++				    dp->dccps_l_ack_ratio;
+ 
+-			denom = dp->dccps_l_ack_ratio * dp->dccps_l_ack_ratio - 
+-				dp->dccps_l_ack_ratio;
+ 			denom = hctx->ccid2hctx_cwnd * hctx->ccid2hctx_cwnd / denom;
+ 
+ 			if (hctx->ccid2hctx_arsent >= denom) {
+ 				ccid2_change_l_ack_ratio(sk, dp->dccps_l_ack_ratio - 1);
+ 				hctx->ccid2hctx_arsent = 0;
+ 			}
+-		}
+-		/* we can't increase ack ratio further [1] */
+-		else {
++		} else {
++			/* we can't increase ack ratio further [1] */
+ 			hctx->ccid2hctx_arsent = 0; /* or maybe set it to cwnd*/
+ 		}
+ 	}
+ 
+ 	/* setup RTO timer */
+-	if (!timer_pending(&hctx->ccid2hctx_rtotimer)) {
++	if (!timer_pending(&hctx->ccid2hctx_rtotimer))
+ 		ccid2_start_rto_timer(sk);
+-	}
++
+ #ifdef CCID2_DEBUG
+ 	ccid2_pr_debug("pipe=%d\n", hctx->ccid2hctx_pipe);
+ 	ccid2_pr_debug("Sent: seq=%llu\n", seq);
+@@ -320,7 +308,7 @@ static void ccid2_hc_tx_packet_sent(stru
+ 				       seqp->ccid2s_sent);
+ 			seqp = seqp->ccid2s_next;
+ 		}
+-	} while(0);
++	} while (0);
+ 	ccid2_pr_debug("=====\n");
+ 	ccid2_hc_tx_check_sanity(hctx);
+ #endif
+@@ -378,7 +366,6 @@ static int ccid2_ackvector(struct sock *
+ 			*vec	= value;
+ 			*veclen = len;
+ 			return offset + (opt_ptr - options);
+-			break;
+ 		}
+ 	}
+ 
+@@ -416,13 +403,11 @@ static inline void ccid2_new_ack(struct 
+ 				hctx->ccid2hctx_ssacks = 0;
+ 				*maxincr = *maxincr - 1;
+ 			}
+-		}
+-		/* increased cwnd enough for this single ack */
+-		else {
++		} else {
++			/* increased cwnd enough for this single ack */
+ 			hctx->ccid2hctx_ssacks = 0;
+ 		}
+-	}
+-	else {
++	} else {
+ 		hctx->ccid2hctx_ssacks = 0;
+ 		hctx->ccid2hctx_acks++;
+ 
+@@ -444,8 +429,7 @@ static inline void ccid2_new_ack(struct 
+ 			       	       r, jiffies, seqp->ccid2s_seq);
+ 			hctx->ccid2hctx_srtt = r;
+ 			hctx->ccid2hctx_rttvar = r >> 1;
+-		}
+-		else {
++		} else {
+ 			/* RTTVAR */
+ 			long tmp = hctx->ccid2hctx_srtt - r;
+ 			if (tmp < 0)
+@@ -528,12 +512,10 @@ static void ccid2_hc_tx_packet_recv(stru
+ 	if (hctx->ccid2hctx_rpdupack = -1) {
+ 		hctx->ccid2hctx_rpdupack = 0;
+ 		hctx->ccid2hctx_rpseq = seqno;
+-	}
+-	else {
++	} else {
+ 		/* check if packet is consecutive */
+-		if ((hctx->ccid2hctx_rpseq + 1) = seqno) {
++		if ((hctx->ccid2hctx_rpseq + 1) = seqno)
+ 			hctx->ccid2hctx_rpseq++;
+-		}
+ 		/* it's a later packet */
+ 		else if (after48(seqno, hctx->ccid2hctx_rpseq)) {
+ 			hctx->ccid2hctx_rpdupack++;
+@@ -541,7 +523,6 @@ static void ccid2_hc_tx_packet_recv(stru
+ 			/* check if we got enough dupacks */
+ 			if (hctx->ccid2hctx_rpdupack > 			    hctx->ccid2hctx_numdupack) {
+-
+ 				hctx->ccid2hctx_rpdupack = -1; /* XXX lame */
+ 				hctx->ccid2hctx_rpseq = 0;
+ 
+@@ -559,7 +540,6 @@ static void ccid2_hc_tx_packet_recv(stru
+ 	case DCCP_PKT_ACK:
+ 	case DCCP_PKT_DATAACK:
+ 		break;
+-	
+ 	default:
+ 		return;
+ 	}
+@@ -612,11 +592,9 @@ static void ccid2_hc_tx_packet_recv(stru
+ 				    	if (state = 
+ 					    DCCP_ACKVEC_STATE_ECN_MARKED) {
+ 						loss = 1;
+-					}
+-					else {
++					} else
+ 						ccid2_new_ack(sk, seqp,
+ 							      &maxincr);
+-					}
+ 
+ 					seqp->ccid2s_acked = 1;
+ 					ccid2_pr_debug("Got ack for %llu\n",
+@@ -648,13 +626,11 @@ static void ccid2_hc_tx_packet_recv(stru
+ 	while (1) {
+ 		if (seqp->ccid2s_acked) {
+ 			done++;
+-			if (done = hctx->ccid2hctx_numdupack) {
++			if (done = hctx->ccid2hctx_numdupack)
+ 				break;
+-			}	
+ 		}
+-		if (seqp = hctx->ccid2hctx_seqt) {
++		if (seqp = hctx->ccid2hctx_seqt)
+ 			break;
+-		}
+ 		seqp = seqp->ccid2s_prev;
+ 	}
+ 
+@@ -798,6 +774,6 @@ static __exit void ccid2_module_exit(voi
+ module_exit(ccid2_module_exit);
+ 
+ MODULE_AUTHOR("Andrea Bittau <a.bittau@cs.ucl.ac.uk>");
+-MODULE_DESCRIPTION("DCCP TCP CCID2 CCID");
++MODULE_DESCRIPTION("DCCP TCP-Like (CCID2) CCID");
+ MODULE_LICENSE("GPL");
+ MODULE_ALIAS("net-dccp-ccid-2");
+-- 
+1.2.2.gd27d
+
+
