@@ -1,20 +1,77 @@
-From: "David S. Miller" <davem@davemloft.net>
-Date: Fri, 10 Mar 2006 21:29:59 +0000
-Subject: Re: [PATCH 0/9] Build Fixes, cleanups and some DCCP trivial patches
-Message-Id: <20060310.132959.67696730.davem@davemloft.net>
+From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
+Date: Tue, 07 Mar 2006 03:05:51 +0000
+Subject: Report: feat negot state
+Message-Id: <39e6f6c70603061905i1db54071m6cc2776edd3828bb@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <11420257373367-git-send-email-acme@mandriva.com>
-In-Reply-To: <11420257373367-git-send-email-acme@mandriva.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Fri, 10 Mar 2006 18:22:17 -0300
+With the current patch, available at:
 
->    Please consider pulling from:
-> 
-> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.17.git
+http://oops.ghostprotocols.net:81/acme/dccp_minisock.patch
 
-Thanks for fixing all of this stuff up, pulled.
+Simple ttcp session transmitting 5 packets:
+
+127.0.0.1.4496 > 127.0.0.1.5001: request  <change_l ack_ratio 2,
+change_r ccid 2, change_l ccid 2>
+127.0.0.1.5001 > 127.0.0.1.4496: response <change_l ack_ratio 2,
+confirm_l ccid 2, confirm_r ccid 2, confirm_r ack_ratio 2>
+127.0.0.1.4496 > 127.0.0.1.5001: ack      <nop, confirm_r ack_ratio 2,
+ack_vector0 0x00, elapsed_time 108>
+127.0.0.1.4496 > 127.0.0.1.5001: dataack  <nop, nop, ack_vector0 0x00,
+elapsed_time 16857, ndp_count 1>
+127.0.0.1.5001 > 127.0.0.1.4496: ack      <nop, ack_vector0 0x01,
+elapsed_time 20>
+127.0.0.1.4496 > 127.0.0.1.5001: dataack  <nop, ack_vector0 0x00,
+elapsed_time 2495>
+127.0.0.1.5001 > 127.0.0.1.4496: ack      <nop, nop, ack_vector0 0x00,
+elapsed_time 15, ndp_count 1>
+127.0.0.1.4496 > 127.0.0.1.5001: dataack  <nop, ack_vector0 0x00,
+elapsed_time 2404>
+127.0.0.1.5001 > 127.0.0.1.4496: ack      <nop, nop, ack_vector0 0x00,
+elapsed_time 13, ndp_count 2>
+127.0.0.1.4496 > 127.0.0.1.5001: dataack  <nop, ack_vector0 0x00,
+elapsed_time 2327>
+127.0.0.1.5001 > 127.0.0.1.4496: ack      <nop, nop, ack_vector0 0x00,
+elapsed_time 14, ndp_count 3>
+127.0.0.1.4496 > 127.0.0.1.5001: dataack  <nop, ack_vector0 0x00,
+elapsed_time 2077>
+127.0.0.1.5001 > 127.0.0.1.4496: ack      <nop, nop, ack_vector0 0x00,
+elapsed_time 13, ndp_count 4>
+127.0.0.1.4496 > 127.0.0.1.5001: close    <nop, ack_vector0 0x00,
+elapsed_time 8425>
+127.0.0.1.5001 > 127.0.0.1.4496: reset    <nop, nop, ack_vector0 0x00,
+elapsed_time 1121, ndp_count 5>
+
+Still work in progress, requires more testing, but gets feature
+negotiation down to
+dccp_request_sock level, still need to possibly move more stuff to
+dccp_minisock, that
+is (or should) be the bare minimum needed to do feature negotiation
+when we still don't
+have a full blown socket (struct dccp_sock), the previous code is
+wrong as we can't use
+the listening sock to do feature negotiation at all, so we have to
+store the feat negot
+state in the minisock that represents the embryonic connection (struct
+dccp_request_sock),
+and later move this state (in dccp_create_openreq_child) to the newly
+inet_csk_cloned
+full socket.
+
+And I don't like the many allocations still present, even having
+reduced some of the
+previous ones I think perhaps we should use a buffer like when we encode the
+options in a dccp packet, will try this later.
+
+I'm going to have some sleep now, so this is just for you guys to take
+a look at the
+current status, more work is needed and the patch has unrelated
+changes, will split
+when I get satisfied with this stuff.
+
+G'night,
+
+- Arnaldo
