@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Wed, 08 Mar 2006 16:39:11 +0000
+From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+Date: Wed, 08 Mar 2006 19:01:50 +0000
 Subject: Re: Report: feat negot state
-Message-Id: <39e6f6c70603080839t7d98f573u764a01d635ffd5e8@mail.gmail.com>
+Message-Id: <20060308190150.GA1388@tribal.sorbonet.org>
 List-Id: <dccp.vger.kernel.org>
 References: <39e6f6c70603061905i1db54071m6cc2776edd3828bb@mail.gmail.com>
 In-Reply-To: <39e6f6c70603061905i1db54071m6cc2776edd3828bb@mail.gmail.com>
@@ -10,46 +10,69 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 3/8/06, Eddie Kohler <kohler@cs.ucla.edu> wrote:
-> Hi Arnaldo,
->
-> Arnaldo Carvalho de Melo wrote:
-> >>The Init Cookie option lets the server package up all that state, send it to
-> >>the client, and forget it.  The server might still have to load a CCID, but
-> >>that doesn't worry me -- we only have 3 CCIDs.
-> >
-> >
-> > Sure, Init Cookie will be eventually implemented, but I want to
-> > support everything
-> > that is specified in the draft, and furthermore, reworking the core Linux INET
-> > infrastructure to have TCP and DCCP sharing _everything_ that is not specific to
-> > one of them, that has been my goal since day one, if I decided just to implement
-> > Init Cookies I would have a much easier ride, but I'm stubborn on supporting all
-> > the things specified in the draft to the best of my capacity use this
-> > implementation
-> > to fully validate the draft in the Real World(tm), even if takes more time 8)
-> >
-> > If one looks at work Eric Dumazet, Ben LaHaise and others are doing on improving
-> > TCP that _already_ are helping DCCP due to all this code sharing, its
-> > wonderful, I
-> > really, really didn't wanted to go the SCTP way where few things is shared with
-> > other INET connection oriented protocols (well, at the time there was
-> > only TCP :P).
->
-> This is a great approach!  But TCP implements syn cookies, which is very
-> similar to the Init Cookie.  So Init Cookies are not totally DCCP-only.  I'm
-> just saying the DOS need not be such a big deal.
+On Wed, Mar 08, 2006 at 08:08:53AM -0800, Eddie Kohler wrote:
+> >Basically, because i coded server priority features first, and then
+> >non-negotiable.  With NN features, you need to send confirms even for 
+> >stuff you
+> >don't know about [or something like that] so i didn't know where to shove 
+> >the
+> >confirm =D
+> 
+> I don't quite understand this.  If you don't know about the feature, then 
+> how can you tell whether it is NN?
 
-Sure, my idea is to abstract TCP syncookies/DCCP Init Cookies at the
-struct inet_request_sock level, then both will have the same code flow :-)
+OK the issue was this.  With SP, you have a preference list, so whenever you
+confirm X, you can shove the confirm in the preference list data structure for
+X.
 
-So stay tuned as after we get the feature negotiation mostly working I'll attack
-this new syncookies/init cookie abstraction.
+For NN, it might be possible to not have a preference for X. [?]  e.g. say you
+get CHANGE_L ACK_RATIO, maybe you don't even care about ACK_RATIO yourself, so
+you might not have a feature structure list for your own ack ratio, where you
+could put the confirm.
 
-Ah, another thing in the backburner is to support DCCPv6 only, i.e. right now we
-have dccp_ipv4 and dccp_ipv6 modules, but dccp_ipv6 still requires dccp_ipv4
-due to v6 mapped v4 addresses, that is not selectable, but I'll rework this code
-at the inet_connection_sock level to make it possible to have a IPv6 only setup,
-paving the way for IPv4 retirement as I promised to DaveM 8-) :-P
+This is what happens when coding without thinking / designing.  But hey, time =D
 
-- Arnaldo
+> >2) I'll try to re-write the multi-byte feature support patch.  I believe 
+> >this is
+> >   important functionality which is missing.
+> 
+> For NN features, yes.
+
+yea, in fact i initially wrote the patch solely for ack ratios.  I wanted to see
+how CCID2 would behave when ack ratios really did change =D
+
+> The Init Cookie option lets the server package up all that state, send it 
+> to the client, and forget it.  The server might still have to load a CCID, 
+> but that doesn't worry me -- we only have 3 CCIDs.
+
+I remember seeing the init cookie in the spec.  I just re-read it, yes it solves
+the problem.  I didn't know it was so versatile [that you can encode ~200 bytes
+of data.]  I thought it was just a 32bit number or something.
+
+> It's not that bad.  (1) All feature negotiation options are limited to 252 
+> bytes of feature value at most.  (2) All current SP features are one-byte 
+> valued.  So you can do this.
+
+yea, but I was thinking if you chain many change X in the same packet.  I'm not
+sure that's legal.  But anyway, an implementation may process options from the
+tail of the packet to front, and discard any previously seen feature negos for
+the same option.
+
+yea, in fact i got "scared" when I wrote the multi-byte patch.  the:
+if (c = s)
+became a:
+if (memcmp(c, s, len) = 0)
+
+
+anyway, yes, i agree with you that there is no real dos issue.  What got me
+thinking about this was mereley "when will my code suck?" [apart from "in the
+common case"] =D
+
+
+As Arnaldo said, the goal is to get this working properly as quickly as
+possible.  I don't think we are far.  From what I can see, only two big things
+are missing [in feat nego]:
+* Timers & Feature negotation.
+
+Both have been written in some patch, it's just a matter of putting the puzzle
+together and framing it =D
