@@ -1,72 +1,50 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 04 Feb 2006 02:38:23 +0000
-Subject: [PATCH 5/11][LIST]: Introduce list_for_each_entry_from
-Message-Id: <39e6f6c70602031838u586a8f03j944b4ea43c81788c@mail.gmail.com>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="----=_Part_11462_21320302.1139020703836"
+From: "Ian McDonald" <imcdnzl@gmail.com>
+Date: Thu, 09 Mar 2006 01:40:02 +0000
+Subject: [BUG] Performance issues if DCCP packets are routed
+Message-Id: <cbec11ac0603081740o2004650dr8a91de3dd9418189@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-------=_Part_11462_21320302.1139020703836
-Content-Type: text/plain; charset=ISO-8859-1
-Content-Transfer-Encoding: quoted-printable
-Content-Disposition: inline
+I've been testing DCCP using netem for quite a while now - just about
+always with loss and delay. This works really well.
 
-Hi David,
+A few weeks ago I noticed that if netem isn't turned on but traffic
+still goes between boxes through a router the performance is abysmal -
+can be as low as 20K per second instead of 100 Mbit and there is much
+data loss.
 
-    Please consider pulling from:
+I had assumed that this was a recent regression so parked it until I
+had time to test. However I just tested with a clean 2.6.14 and the
+problem persists....
 
-master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.17.git
+The test setup is
 
-Best Regards,
+10.0.1.31 ----- 10.0.1.33/10.0.2.33 ------- 10.0.2.32
 
-- Arnaldo
+and the command is just:
+(from 10.0.1.31) ./ttcp_acme -c -l500 -n10000 -t 10.0.2.32
+and
+(from 10.0.2.32) ./ttcp_acme -c -l500 -n10000 -r
 
-------=_Part_11462_21320302.1139020703836
-Content-Type: text/x-patch; name=5.patch; charset=us-ascii
-Content-Transfer-Encoding: 7bit
-X-Attachment-Id: f_ej9bbgmb
-Content-Disposition: attachment; filename="5.patch"
+the following setup works fine:
+10.0.1.31 ----- 10.0.1.33
+./ttcp_acme -c -l500 -n10000 -t 10.0.1.33
+and
+./ttcp_acme -c -l500 -n10000 -r
 
-tree dd63ed037c6999ea5382a19b95bddd530d10a49f
-parent f46cb510ee1e527b0d6b8a8c13a757c8355d08fd
-author Arnaldo Carvalho de Melo <acme@mandriva.com> 1138971659 -0200
-committer Arnaldo Carvalho de Melo <acme@mandriva.com> 1138971659 -0200
+I'll add this to my list of bugs to look at at some stage (along with
+updating tx buffering, CCID2 not working with loss/delay) but
+interested in seeing if others have similar problems?
 
-[LIST]: Introduce list_for_each_entry_from
-
-For iterating over list of given type continuing from existing point.
-
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
-
-------------------------------------------------------------------------------
-
- list.h |   11 +++++++++++
- 1 file changed, 11 insertions(+)
-
-------------------------------------------------------------------------------
-
-diff --git a/include/linux/list.h b/include/linux/list.h
-index dffc0fe..5bb5aab 100644
---- a/include/linux/list.h
-+++ b/include/linux/list.h
-@@ -409,6 +409,17 @@ static inline void list_splice_init(stru
- 	     pos = list_entry(pos->member.next, typeof(*pos), member))
- 
- /**
-+ * list_for_each_entry_from -	iterate over list of given type
-+ *			continuing from existing point
-+ * @pos:	the type * to use as a loop counter.
-+ * @head:	the head for your list.
-+ * @member:	the name of the list_struct within the struct.
-+ */
-+#define list_for_each_entry_from(pos, head, member) 			\
-+	for (; prefetch(pos->member.next), &pos->member != (head);	\
-+	     pos = list_entry(pos->member.next, typeof(*pos), member))
-+
-+/**
-  * list_for_each_entry_safe - iterate over list of given type safe against removal of list entry
-  * @pos:	the type * to use as a loop counter.
-  * @n:		another type * to use as temporary storage
-
-------=_Part_11462_21320302.1139020703836--
+Ian
+--
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
