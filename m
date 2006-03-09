@@ -1,33 +1,37 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
 Date: Thu, 09 Mar 2006 03:08:09 +0000
-Subject: [PATCH 4/5] [DCCP]: Remove leftover dccp_send_response prototype
-Message-Id: <11418736892593-git-send-email-acme@mandriva.com>
+Subject: [PATCH 1/5] [DCCP] options: Fix handling of ackvecs in DATA packets
+Message-Id: <11418736891639-git-send-email-acme@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+I.e. they should be just ignored, but we have to use 'break', not 'continue',
+as we have to possibly reset the mandatory flag.
+
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
 ---
 
- net/dccp/dccp.h |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+ net/dccp/options.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-13e1f7a3d97bbe362f610e50bc5998fd70e791c2
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index d57d213..7f5be08 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -118,7 +118,6 @@ DECLARE_SNMP_STAT(struct dccp_mib, dccp_
+2024e6ce3ab42e925411b4e51710bfdd09b38e72
+diff --git a/net/dccp/options.c b/net/dccp/options.c
+index 8867b6f..0161a18 100644
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -148,7 +148,7 @@ int dccp_parse_options(struct sock *sk, 
+ 		case DCCPO_ACK_VECTOR_0:
+ 		case DCCPO_ACK_VECTOR_1:
+ 			if (pkt_type = DCCP_PKT_DATA)
+-				continue;
++				break;
  
- extern int  dccp_retransmit_skb(struct sock *sk, struct sk_buff *skb);
- 
--extern int dccp_send_response(struct sock *sk);
- extern void dccp_send_ack(struct sock *sk);
- extern void dccp_send_delayed_ack(struct sock *sk);
- extern void dccp_send_sync(struct sock *sk, const u64 seq,
+ 			if (dp->dccps_options.dccpo_send_ack_vector &&
+ 			    dccp_ackvec_parse(sk, skb, opt, value, len))
 -- 
 1.2.2.gd27d
 
