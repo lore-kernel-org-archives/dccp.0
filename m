@@ -1,208 +1,236 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Fri, 10 Mar 2006 21:22:18 +0000
-Subject: [PATCH 9/9] [DCCP] feat: Pass dccp_minisock ptr where only the minisock is used
-Message-Id: <11420257382226-git-send-email-acme@mandriva.com>
+Date: Thu, 09 Mar 2006 03:08:09 +0000
+Subject: [PATCH 2/5] [DCCP]: Use sk->sk_prot->max_header consistently for non-data packets
+Message-Id: <1141873689179-git-send-email-acme@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is in preparation for having a dccp_minisock embedded into
-dccp_request_sock so that feature negotiation can be done prior to
-creating the full blown dccp_sock.
+Using this also provides opportunities for introducing inet_csk_alloc_skb that
+would call alloc_skb, account it to the sock and skb_reserve(max_header), but
+I'll leave this for later, for now using sk_prot->max_header consistently is
+enough.
 
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
 ---
 
- net/dccp/feat.c  |   30 ++++++++++++++----------------
- net/dccp/feat.h  |    7 ++++---
- net/dccp/proto.c |   11 ++++++-----
- 3 files changed, 24 insertions(+), 24 deletions(-)
+ net/dccp/ipv4.c   |   11 ++++++-----
+ net/dccp/ipv6.c   |   23 ++++++++---------------
+ net/dccp/output.c |   29 ++++++++++++++---------------
+ 3 files changed, 28 insertions(+), 35 deletions(-)
 
-5ce3566336cdf2c351e178368364516f76c964ff
-diff --git a/net/dccp/feat.c b/net/dccp/feat.c
-index ea77a53..54236e1 100644
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -19,10 +19,9 @@
- 
- #define DCCP_FEAT_SP_NOAGREE (-123)
- 
--int dccp_feat_change(struct sock *sk, u8 type, u8 feature, u8 *val, u8 len,
--		     gfp_t gfp)
-+int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
-+		     u8 *val, u8 len, gfp_t gfp)
+cfe9553cf5e731460a695519d7f1c75bbd64e670
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 7098f10..64b7f8b 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -201,7 +201,7 @@ static void dccp_v4_ctl_send_ack(struct 
  {
--	struct dccp_minisock *dmsk = dccp_msk(sk);
- 	struct dccp_opt_pend *opt;
- 	
- 	dccp_pr_debug("feat change type=%d feat=%d\n", type, feature);
-@@ -307,9 +306,9 @@ static int dccp_feat_nn(struct sock *sk,
- 	return 0;
- }
+ 	int err;
+ 	struct dccp_hdr *rxdh = dccp_hdr(rxskb), *dh;
+-	const int dccp_hdr_ack_len = sizeof(struct dccp_hdr) +
++	const u32 dccp_hdr_ack_len = sizeof(struct dccp_hdr) +
+ 				     sizeof(struct dccp_hdr_ext) +
+ 				     sizeof(struct dccp_hdr_ack_bits);
+ 	struct sk_buff *skb;
+@@ -209,12 +209,12 @@ static void dccp_v4_ctl_send_ack(struct 
+ 	if (((struct rtable *)rxskb->dst)->rt_type != RTN_LOCAL)
+ 		return;
  
--static void dccp_feat_empty_confirm(struct sock *sk, u8 type, u8 feature)
-+static void dccp_feat_empty_confirm(struct dccp_minisock *dmsk,
-+				    u8 type, u8 feature)
- {
--	struct dccp_minisock *dmsk = dccp_msk(sk);
- 	/* XXX check if other confirms for that are queued and recycle slot */
- 	struct dccp_opt_pend *opt = kzalloc(sizeof(*opt), GFP_ATOMIC);
+-	skb = alloc_skb(MAX_DCCP_HEADER + 15, GFP_ATOMIC);
++	skb = alloc_skb(dccp_v4_ctl_socket->sk->sk_prot->max_header, GFP_ATOMIC);
+ 	if (skb = NULL)
+ 		return;
  
-@@ -388,7 +387,7 @@ int dccp_feat_change_recv(struct sock *s
- 		 * mandatory
- 		 */
- 		if (rc != DCCP_FEAT_SP_NOAGREE)
--			dccp_feat_empty_confirm(sk, type, feature);
-+			dccp_feat_empty_confirm(dccp_msk(sk), type, feature);
- 	}
+ 	/* Reserve space for headers. */
+-	skb_reserve(skb, MAX_DCCP_HEADER);
++	skb_reserve(skb, dccp_v4_ctl_socket->sk->sk_prot->max_header);
  
- 	/* generate the confirm [if required] */
-@@ -456,9 +455,8 @@ int dccp_feat_confirm_recv(struct sock *
+ 	skb->dst = dst_clone(rxskb->dst);
  
- EXPORT_SYMBOL_GPL(dccp_feat_confirm_recv);
+@@ -715,12 +715,13 @@ static void dccp_v4_ctl_send_reset(struc
+ 	if (dst = NULL)
+ 		return;
  
--void dccp_feat_clean(struct sock *sk)
-+void dccp_feat_clean(struct dccp_minisock *dmsk)
- {
--	struct dccp_minisock *dmsk = dccp_msk(sk);
- 	struct dccp_opt_pend *opt, *next;
- 
- 	list_for_each_entry_safe(opt, next, &dmsk->dccpms_pending,
-@@ -537,49 +535,49 @@ out:
- 	return rc;
- 
- out_clean:
--	dccp_feat_clean(newsk);
-+	dccp_feat_clean(newdmsk);
- 	rc = -ENOMEM;
- 	goto out;
- }
- 
- EXPORT_SYMBOL_GPL(dccp_feat_clone);
- 
--static int __dccp_feat_init(struct sock *sk, u8 type, u8 feat, u8 *val, u8 len)
-+static int __dccp_feat_init(struct dccp_minisock *dmsk, u8 type, u8 feat,
-+			    u8 *val, u8 len)
- {
- 	int rc = -ENOMEM;
- 	u8 *copy = kmalloc(len, GFP_KERNEL);
- 
- 	if (copy != NULL) {
- 		memcpy(copy, val, len);
--		rc = dccp_feat_change(sk, type, feat, copy, len, GFP_KERNEL);
-+		rc = dccp_feat_change(dmsk, type, feat, copy, len, GFP_KERNEL);
- 		if (rc)
- 			kfree(copy);
- 	}
- 	return rc;
- }
- 
--int dccp_feat_init(struct sock *sk)
-+int dccp_feat_init(struct dccp_minisock *dmsk)
- {
--	struct dccp_minisock *dmsk = dccp_msk(sk);
- 	int rc;
- 
- 	INIT_LIST_HEAD(&dmsk->dccpms_pending);
- 	INIT_LIST_HEAD(&dmsk->dccpms_conf);
- 
- 	/* CCID L */
--	rc = __dccp_feat_init(sk, DCCPO_CHANGE_L, DCCPF_CCID,
-+	rc = __dccp_feat_init(dmsk, DCCPO_CHANGE_L, DCCPF_CCID,
- 			      &dmsk->dccpms_tx_ccid, 1);
- 	if (rc)
+-	skb = alloc_skb(MAX_DCCP_HEADER + 15, GFP_ATOMIC);
++	skb = alloc_skb(dccp_v4_ctl_socket->sk->sk_prot->max_header,
++			GFP_ATOMIC);
+ 	if (skb = NULL)
  		goto out;
  
- 	/* CCID R */
--	rc = __dccp_feat_init(sk, DCCPO_CHANGE_R, DCCPF_CCID,
-+	rc = __dccp_feat_init(dmsk, DCCPO_CHANGE_R, DCCPF_CCID,
- 			      &dmsk->dccpms_rx_ccid, 1);
- 	if (rc)
- 		goto out;
+ 	/* Reserve space for headers. */
+-	skb_reserve(skb, MAX_DCCP_HEADER);
++	skb_reserve(skb, dccp_v4_ctl_socket->sk->sk_prot->max_header);
+ 	skb->dst = dst_clone(dst);
  
- 	/* Ack ratio */
--	rc = __dccp_feat_init(sk, DCCPO_CHANGE_L, DCCPF_ACK_RATIO,
-+	rc = __dccp_feat_init(dmsk, DCCPO_CHANGE_L, DCCPF_ACK_RATIO,
- 			      &dmsk->dccpms_ack_ratio, 1);
- out:
- 	return rc;
-diff --git a/net/dccp/feat.h b/net/dccp/feat.h
-index f7c73a3..11e92ec 100644
---- a/net/dccp/feat.h
-+++ b/net/dccp/feat.h
-@@ -14,15 +14,16 @@
- #include <linux/types.h>
- 
- struct sock;
-+struct dccp_minisock;
- 
--extern int  dccp_feat_change(struct sock *sk, u8 type, u8 feature, 
-+extern int  dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature, 
- 			     u8 *val, u8 len, gfp_t gfp);
- extern int  dccp_feat_change_recv(struct sock *sk, u8 type, u8 feature,
- 				  u8 *val, u8 len);
- extern int  dccp_feat_confirm_recv(struct sock *sk, u8 type, u8 feature,
- 				   u8 *val, u8 len);
--extern void dccp_feat_clean(struct sock *sk);
-+extern void dccp_feat_clean(struct dccp_minisock *dmsk);
- extern int  dccp_feat_clone(struct sock *oldsk, struct sock *newsk);
--extern int  dccp_feat_init(struct sock *sk);
-+extern int  dccp_feat_init(struct dccp_minisock *dmsk);
- 
- #endif /* _DCCP_FEAT_H */
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index d637b94..0b26ea0 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -180,7 +180,7 @@ int dccp_init_sock(struct sock *sk, cons
- 	 * setsockopt(CCIDs-I-want/accept). -acme
- 	 */
- 	if (likely(ctl_sock_initialized)) {
--		int rc = dccp_feat_init(sk);
-+		int rc = dccp_feat_init(dmsk);
- 
- 		if (rc)
- 			return rc;
-@@ -229,6 +229,7 @@ EXPORT_SYMBOL_GPL(dccp_init_sock);
- int dccp_destroy_sock(struct sock *sk)
+ 	skb->h.raw = skb_push(skb, dccp_hdr_reset_len);
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index f28f38f..0f328c7 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -514,7 +514,7 @@ static void dccp_v6_send_check(struct so
+ static void dccp_v6_ctl_send_reset(struct sk_buff *rxskb)
  {
+ 	struct dccp_hdr *rxdh = dccp_hdr(rxskb), *dh;
+-	const int dccp_hdr_reset_len = sizeof(struct dccp_hdr) +
++	const u32 dccp_hdr_reset_len = sizeof(struct dccp_hdr) +
+ 				       sizeof(struct dccp_hdr_ext) +
+ 				       sizeof(struct dccp_hdr_reset);
+ 	struct sk_buff *skb;
+@@ -527,18 +527,12 @@ static void dccp_v6_ctl_send_reset(struc
+ 	if (!ipv6_unicast_destination(rxskb))
+ 		return;
+ 
+-	/*
+-	 * We need to grab some memory, and put together an RST,
+-	 * and then put it into the queue to be sent.
+-	 */
+-
+-	skb = alloc_skb(MAX_HEADER + sizeof(struct ipv6hdr) +
+-			dccp_hdr_reset_len, GFP_ATOMIC);
++	skb = alloc_skb(dccp_v6_ctl_socket->sk->sk_prot->max_header,
++			GFP_ATOMIC);
+ 	if (skb = NULL)
+ 	  	return;
+ 
+-	skb_reserve(skb, MAX_HEADER + sizeof(struct ipv6hdr) +
+-		    dccp_hdr_reset_len);
++	skb_reserve(skb, dccp_v6_ctl_socket->sk->sk_prot->max_header);
+ 
+ 	skb->h.raw = skb_push(skb, dccp_hdr_reset_len);
+ 	dh = dccp_hdr(skb);
+@@ -590,18 +584,17 @@ static void dccp_v6_ctl_send_ack(struct 
+ {
+ 	struct flowi fl;
+ 	struct dccp_hdr *rxdh = dccp_hdr(rxskb), *dh;
+-	const int dccp_hdr_ack_len = sizeof(struct dccp_hdr) +
++	const u32 dccp_hdr_ack_len = sizeof(struct dccp_hdr) +
+ 				     sizeof(struct dccp_hdr_ext) +
+ 				     sizeof(struct dccp_hdr_ack_bits);
+ 	struct sk_buff *skb;
+ 
+-	skb = alloc_skb(MAX_HEADER + sizeof(struct ipv6hdr) +
+-			dccp_hdr_ack_len, GFP_ATOMIC);
++	skb = alloc_skb(dccp_v6_ctl_socket->sk->sk_prot->max_header,
++			GFP_ATOMIC);
+ 	if (skb = NULL)
+ 		return;
+ 
+-	skb_reserve(skb, MAX_HEADER + sizeof(struct ipv6hdr) +
+-			 dccp_hdr_ack_len);
++	skb_reserve(skb, dccp_v6_ctl_socket->sk->sk_prot->max_header);
+ 
+ 	skb->h.raw = skb_push(skb, dccp_hdr_ack_len);
+ 	dh = dccp_hdr(skb);
+diff --git a/net/dccp/output.c b/net/dccp/output.c
+index 6f3a5f0..2975e3d 100644
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -49,7 +49,7 @@ static int dccp_transmit_skb(struct sock
+ 		struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
+ 		struct dccp_hdr *dh;
+ 		/* XXX For now we're using only 48 bits sequence numbers */
+-		const int dccp_header_size = sizeof(*dh) +
++		const u32 dccp_header_size = sizeof(*dh) +
+ 					     sizeof(struct dccp_hdr_ext) +
+ 					  dccp_packet_hdr_len(dcb->dccpd_type);
+ 		int err, set_ack = 1;
+@@ -279,17 +279,16 @@ struct sk_buff *dccp_make_response(struc
+ {
+ 	struct dccp_hdr *dh;
+ 	struct dccp_request_sock *dreq;
+-	const int dccp_header_size = sizeof(struct dccp_hdr) +
++	const u32 dccp_header_size = sizeof(struct dccp_hdr) +
+ 				     sizeof(struct dccp_hdr_ext) +
+ 				     sizeof(struct dccp_hdr_response);
+-	struct sk_buff *skb = sock_wmalloc(sk, MAX_HEADER + DCCP_MAX_OPT_LEN +
+-					       dccp_header_size, 1,
++	struct sk_buff *skb = sock_wmalloc(sk, sk->sk_prot->max_header, 1,
+ 					   GFP_ATOMIC);
+ 	if (skb = NULL)
+ 		return NULL;
+ 
+ 	/* Reserve space for headers. */
+-	skb_reserve(skb, MAX_HEADER + DCCP_MAX_OPT_LEN + dccp_header_size);
++	skb_reserve(skb, sk->sk_prot->max_header);
+ 
+ 	skb->dst = dst_clone(dst);
+ 	skb->csum = 0;
+@@ -326,17 +325,16 @@ static struct sk_buff *dccp_make_reset(s
+ {
+ 	struct dccp_hdr *dh;
  	struct dccp_sock *dp = dccp_sk(sk);
-+	struct dccp_minisock *dmsk = dccp_msk(sk);
+-	const int dccp_header_size = sizeof(struct dccp_hdr) +
++	const u32 dccp_header_size = sizeof(struct dccp_hdr) +
+ 				     sizeof(struct dccp_hdr_ext) +
+ 				     sizeof(struct dccp_hdr_reset);
+-	struct sk_buff *skb = sock_wmalloc(sk, MAX_HEADER + DCCP_MAX_OPT_LEN +
+-					       dccp_header_size, 1,
++	struct sk_buff *skb = sock_wmalloc(sk, sk->sk_prot->max_header, 1,
+ 					   GFP_ATOMIC);
+ 	if (skb = NULL)
+ 		return NULL;
  
- 	/*
- 	 * DCCP doesn't use sk_write_queue, just sk_send_head
-@@ -246,7 +247,7 @@ int dccp_destroy_sock(struct sock *sk)
- 	kfree(dp->dccps_service_list);
- 	dp->dccps_service_list = NULL;
+ 	/* Reserve space for headers. */
+-	skb_reserve(skb, MAX_HEADER + DCCP_MAX_OPT_LEN + dccp_header_size);
++	skb_reserve(skb, sk->sk_prot->max_header);
  
--	if (dccp_msk(sk)->dccpms_send_ack_vector) {
-+	if (dmsk->dccpms_send_ack_vector) {
- 		dccp_ackvec_free(dp->dccps_hc_rx_ackvec);
- 		dp->dccps_hc_rx_ackvec = NULL;
- 	}
-@@ -255,7 +256,7 @@ int dccp_destroy_sock(struct sock *sk)
- 	dp->dccps_hc_rx_ccid = dp->dccps_hc_tx_ccid = NULL;
+ 	skb->dst = dst_clone(dst);
+ 	skb->csum = 0;
+@@ -426,12 +424,12 @@ int dccp_connect(struct sock *sk)
  
- 	/* clean up feature negotiation state */
--	dccp_feat_clean(sk);
-+	dccp_feat_clean(dmsk);
+ 	dccp_connect_init(sk);
  
- 	return 0;
- }
-@@ -441,8 +442,8 @@ static int dccp_setsockopt_change(struct
- 		goto out_free_val;
- 	}
+-	skb = alloc_skb(MAX_DCCP_HEADER + 15, sk->sk_allocation);
++	skb = alloc_skb(sk->sk_prot->max_header, sk->sk_allocation);
+ 	if (unlikely(skb = NULL))
+ 		return -ENOBUFS;
  
--	rc = dccp_feat_change(sk, type, opt.dccpsf_feat, val, opt.dccpsf_len,
--			      GFP_KERNEL);
-+	rc = dccp_feat_change(dccp_msk(sk), type, opt.dccpsf_feat,
-+			      val, opt.dccpsf_len, GFP_KERNEL);
- 	if (rc)
- 		goto out_free_val;
+ 	/* Reserve space for headers. */
+-	skb_reserve(skb, MAX_DCCP_HEADER);
++	skb_reserve(skb, sk->sk_prot->max_header);
  
+ 	DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_REQUEST;
+ 	skb->csum = 0;
+@@ -452,7 +450,8 @@ void dccp_send_ack(struct sock *sk)
+ {
+ 	/* If we have been reset, we may not send again. */
+ 	if (sk->sk_state != DCCP_CLOSED) {
+-		struct sk_buff *skb = alloc_skb(MAX_DCCP_HEADER, GFP_ATOMIC);
++		struct sk_buff *skb = alloc_skb(sk->sk_prot->max_header,
++						GFP_ATOMIC);
+ 
+ 		if (skb = NULL) {
+ 			inet_csk_schedule_ack(sk);
+@@ -464,7 +463,7 @@ void dccp_send_ack(struct sock *sk)
+ 		}
+ 
+ 		/* Reserve space for headers */
+-		skb_reserve(skb, MAX_DCCP_HEADER);
++		skb_reserve(skb, sk->sk_prot->max_header);
+ 		skb->csum = 0;
+ 		DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK;
+ 		dccp_transmit_skb(sk, skb);
+@@ -511,14 +510,14 @@ void dccp_send_sync(struct sock *sk, con
+ 	 * dccp_transmit_skb() will set the ownership to this
+ 	 * sock.
+ 	 */
+-	struct sk_buff *skb = alloc_skb(MAX_DCCP_HEADER, GFP_ATOMIC);
++	struct sk_buff *skb = alloc_skb(sk->sk_prot->max_header, GFP_ATOMIC);
+ 
+ 	if (skb = NULL)
+ 		/* FIXME: how to make sure the sync is sent? */
+ 		return;
+ 
+ 	/* Reserve space for headers and prepare control bits. */
+-	skb_reserve(skb, MAX_DCCP_HEADER);
++	skb_reserve(skb, sk->sk_prot->max_header);
+ 	skb->csum = 0;
+ 	DCCP_SKB_CB(skb)->dccpd_type = pkt_type;
+ 	DCCP_SKB_CB(skb)->dccpd_seq = seq;
 -- 
 1.2.2.gd27d
 
