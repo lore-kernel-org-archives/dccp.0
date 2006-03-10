@@ -1,31 +1,34 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Thu, 09 Mar 2006 13:32:39 +0000
-Subject: Re: [PATCH 0/5][DCCP]: Improvements
-Message-Id: <20060309133239.GA29200@mandriva.com>
+Date: Fri, 10 Mar 2006 21:22:17 +0000
+Subject: [PATCH 3/9] [INFINIBAND] ipoib: Remove leftover use of neigh_ops->destructor
+Message-Id: <11420257371843-git-send-email-acme@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
-References: <11418736883636-git-send-email-acme@mandriva.com>
-In-Reply-To: <11418736883636-git-send-email-acme@mandriva.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Wed, Mar 08, 2006 at 10:37:55PM -0800, David S. Miller escreveu:
-> From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-> Date: Thu, 9 Mar 2006 00:08:08 -0300
-> 
-> >    Please consider pulling from:
-> > 
-> > master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.17.git
-> 
-> I'll apply these by hand because I just had to rebase again
-> because a pull from Per's TIPC tree, since it was from before
-> the most recent rebase, corrupted my tree in a way I didn't
-> want to spend the time figuring out how to recover from :-/
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
-OK, when pushing to you I'm always checking if I have the most recently
-rebased tree from you.
+---
 
-Thanks, next time just ask/announce on netdev and I'll rebase happily. :-)
+ drivers/infiniband/ulp/ipoib/ipoib_multicast.c |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
 
-- Arnaldo
+b4692710ef01c342b050947b55240424854d272e
+diff --git a/drivers/infiniband/ulp/ipoib/ipoib_multicast.c b/drivers/infiniband/ulp/ipoib/ipoib_multicast.c
+index a2408d7..19fd173 100644
+--- a/drivers/infiniband/ulp/ipoib/ipoib_multicast.c
++++ b/drivers/infiniband/ulp/ipoib/ipoib_multicast.c
+@@ -115,7 +115,6 @@ static void ipoib_mcast_free(struct ipoi
+ 		if (neigh->ah)
+ 			ipoib_put_ah(neigh->ah);
+ 		*to_ipoib_neigh(neigh->neighbour) = NULL;
+-		neigh->neighbour->ops->destructor = NULL;
+ 		kfree(neigh);
+ 	}
+ 
+-- 
+1.2.2.gd27d
+
+
