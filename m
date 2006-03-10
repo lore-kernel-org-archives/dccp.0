@@ -1,66 +1,59 @@
-From: "Ian McDonald" <imcdnzl@gmail.com>
-Date: Thu, 09 Mar 2006 01:41:02 +0000
-Subject: Re: [BUG] Performance issues if DCCP packets are routed
-Message-Id: <cbec11ac0603081741k51b1436dqd657f35e08085f85@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Fri, 10 Mar 2006 21:22:17 +0000
+Subject: [PATCH 0/9] Build Fixes, cleanups and some DCCP trivial patches
+Message-Id: <11420257373367-git-send-email-acme@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
-References: <cbec11ac0603081740o2004650dr8a91de3dd9418189@mail.gmail.com>
-In-Reply-To: <cbec11ac0603081740o2004650dr8a91de3dd9418189@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-What I neglected to say is that TCP works fine and it is very low latency...
+Hi David,
 
-On 3/9/06, Ian McDonald <imcdnzl@gmail.com> wrote:
-> I've been testing DCCP using netem for quite a while now - just about
-> always with loss and delay. This works really well.
->
-> A few weeks ago I noticed that if netem isn't turned on but traffic
-> still goes between boxes through a router the performance is abysmal -
-> can be as low as 20K per second instead of 100 Mbit and there is much
-> data loss.
->
-> I had assumed that this was a recent regression so parked it until I
-> had time to test. However I just tested with a clean 2.6.14 and the
-> problem persists....
->
-> The test setup is
->
-> 10.0.1.31 ----- 10.0.1.33/10.0.2.33 ------- 10.0.2.32
->
-> and the command is just:
-> (from 10.0.1.31) ./ttcp_acme -c -l500 -n10000 -t 10.0.2.32
-> and
-> (from 10.0.2.32) ./ttcp_acme -c -l500 -n10000 -r
->
-> the following setup works fine:
-> 10.0.1.31 ----- 10.0.1.33
-> ./ttcp_acme -c -l500 -n10000 -t 10.0.1.33
-> and
-> ./ttcp_acme -c -l500 -n10000 -r
->
-> I'll add this to my list of bugs to look at at some stage (along with
-> updating tx buffering, CCID2 not working with loss/delay) but
-> interested in seeing if others have similar problems?
->
-> Ian
-> --
-> Ian McDonald
-> Web: http://wand.net.nz/~iam4
-> Blog: http://imcdnzl.blogspot.com
-> WAND Network Research Group
-> Department of Computer Science
-> University of Waikato
-> New Zealand
->
+   Please consider pulling from:
 
+master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.17.git
 
---
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+Best Regards,
+
+- Arnaldo
+
+ b/drivers/infiniband/ulp/ipoib/ipoib_multicast.c |    2
+ b/include/linux/dccp.h                           |   43 ++++---
+ b/include/net/inet_connection_sock.h             |    5
+ b/net/802/psnap.c                                |    2
+ b/net/core/skbuff.c                              |    3
+ b/net/core/sock.c                                |   20 +--
+ b/net/dccp/dccp.h                                |   11 -
+ b/net/dccp/diag.c                                |    2
+ b/net/dccp/feat.c                                |   81 ++++++-------
+ b/net/dccp/feat.h                                |    7 -
+ b/net/dccp/input.c                               |    8 -
+ b/net/dccp/ipv4.c                                |   72 ++++++------
+ b/net/dccp/ipv6.c                                |  138 +++++++++++------------
+ b/net/dccp/minisocks.c                           |    9 -
+ b/net/dccp/options.c                             |   30 ++---
+ b/net/dccp/proto.c                               |   23 +--
+ b/net/ipv4/af_inet.c                             |  120 ++++++++++----------
+ b/net/ipv4/inet_connection_sock.c                |   30 +++++
+ b/net/ipv4/ip_sockglue.c                         |   35 ++---
+ b/net/ipv4/raw.c                                 |   46 +++----
+ b/net/ipv4/tcp.c                                 |   27 +---
+ b/net/ipv4/tcp_ipv4.c                            |   34 ++---
+ b/net/ipv4/udp.c                                 |   48 +++-----
+ b/net/ipv6/af_inet6.c                            |  120 ++++++++++----------
+ b/net/ipv6/ipv6_sockglue.c                       |   40 +++---
+ b/net/ipv6/ipv6_syms.c                           |    4
+ b/net/ipv6/raw.c                                 |   94 +++++++--------
+ b/net/ipv6/tcp_ipv6.c                            |   64 +++++-----
+ b/net/ipv6/udp.c                                 |   48 ++++----
+ b/net/netfilter/nf_sockopt.c                     |    2
+ b/net/sctp/ipv6.c                                |   92 +++++++--------
+ b/net/sctp/protocol.c                            |   95 +++++++--------
+ b/security/dummy.c                               |    4
+ b/security/selinux/include/xfrm.h                |   11 +
+ net/dccp/feat.c                                  |   30 ++---
+ net/dccp/proto.c                                 |   45 +++----
+ net/ipv4/tcp.c                                   |   16 +-
+ 37 files changed, 730 insertions(+), 731 deletions(-)
+
