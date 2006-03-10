@@ -1,494 +1,1731 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Thu, 09 Mar 2006 03:08:10 +0000
-Subject: [PATCH 5/5] [DCCP] options: Make dccp_insert_options & friends yell on error
-Message-Id: <11418736903418-git-send-email-acme@mandriva.com>
+Date: Fri, 10 Mar 2006 21:22:17 +0000
+Subject: [PATCH 6/9] [NET]: Identation & other cleanups related to compat_[gs]etsockopt cset
+Message-Id: <1142025737272-git-send-email-acme@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-And not the silly LIMIT_NETDEBUG and silently return without inserting
-the option requested.
-
-Also drop some old debugging messages associated to option insertion.
+No code changes, just tidying up, in some cases moving EXPORT_SYMBOLs to
+just after the function exported, etc.
 
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
 ---
 
- net/dccp/ackvec.c      |   14 +++---
- net/dccp/ccid.h        |   18 ++++----
- net/dccp/ccids/ccid3.c |   37 +++++++++-------
- net/dccp/dccp.h        |    8 ++--
- net/dccp/options.c     |  109 ++++++++++++++++++++----------------------------
- net/dccp/output.c      |   18 +++++++-
- 6 files changed, 102 insertions(+), 102 deletions(-)
+ net/core/sock.c            |   20 +++---
+ net/dccp/ipv4.c            |   72 +++++++++++------------
+ net/dccp/ipv6.c            |  138 ++++++++++++++++++++++----------------------
+ net/dccp/proto.c           |    9 ++-
+ net/ipv4/af_inet.c         |  120 +++++++++++++++++++-------------------
+ net/ipv4/ip_sockglue.c     |   35 +++++------
+ net/ipv4/raw.c             |   46 +++++++--------
+ net/ipv4/tcp.c             |   16 +++--
+ net/ipv4/tcp_ipv4.c        |   34 +++++------
+ net/ipv4/udp.c             |   48 +++++++--------
+ net/ipv6/af_inet6.c        |  120 +++++++++++++++++++-------------------
+ net/ipv6/ipv6_sockglue.c   |   40 ++++++-------
+ net/ipv6/ipv6_syms.c       |    4 -
+ net/ipv6/raw.c             |   94 ++++++++++++++----------------
+ net/ipv6/tcp_ipv6.c        |   64 ++++++++++----------
+ net/ipv6/udp.c             |   48 ++++++++-------
+ net/netfilter/nf_sockopt.c |    2 -
+ net/sctp/ipv6.c            |   92 +++++++++++++++--------------
+ net/sctp/protocol.c        |   94 +++++++++++++++---------------
+ 19 files changed, 540 insertions(+), 556 deletions(-)
 
-3dabf50385c2b28630c104ca8cdbb0be7b1b6d70
-diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-index 08b1b08..10ff54b 100644
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -81,15 +81,16 @@ int dccp_insert_option_ackvec(struct soc
- 	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
- 		return -1;
+96d51c8c2816c58290a8379ba383eb8d520ab0b4
+diff --git a/net/core/sock.c b/net/core/sock.c
+index bdbe6aa..e1c1a36 100644
+--- a/net/core/sock.c
++++ b/net/core/sock.c
+@@ -1397,14 +1397,14 @@ int sock_common_getsockopt(struct socket
+ EXPORT_SYMBOL(sock_common_getsockopt);
  
--	avr = dccp_ackvec_record_new();
--	if (avr = NULL)
--		return -1;
--
- 	dccp_timestamp(sk, &now);
- 	elapsed_time = timeval_delta(&now, &av->dccpav_time) / 10;
- 
--	if (elapsed_time != 0)
--		dccp_insert_option_elapsed_time(sk, skb, elapsed_time);
-+	if (elapsed_time != 0 &&
-+	    dccp_insert_option_elapsed_time(sk, skb, elapsed_time))
-+		return -1;
-+
-+	avr = dccp_ackvec_record_new();
-+	if (avr = NULL)
-+		return -1;
- 
- 	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
- 
-@@ -310,7 +311,6 @@ int dccp_ackvec_add(struct dccp_ackvec *
- 	av->dccpav_buf_ackno = ackno;
- 	dccp_timestamp(sk, &av->dccpav_time);
- out:
--	dccp_pr_debug("");
- 	return 0;
- 
- out_duplicate:
-diff --git a/net/dccp/ccid.h b/net/dccp/ccid.h
-index 3199f07..803edad 100644
---- a/net/dccp/ccid.h
-+++ b/net/dccp/ccid.h
-@@ -41,9 +41,9 @@ struct ccid_operations {
- 						    unsigned char option,
- 						    unsigned char len, u16 idx,
- 						    unsigned char* value);
--	void		(*ccid_hc_rx_insert_options)(struct sock *sk,
-+	int		(*ccid_hc_rx_insert_options)(struct sock *sk,
- 						     struct sk_buff *skb);
--	void		(*ccid_hc_tx_insert_options)(struct sock *sk,
-+	int		(*ccid_hc_tx_insert_options)(struct sock *sk,
- 						     struct sk_buff *skb);
- 	void		(*ccid_hc_tx_packet_recv)(struct sock *sk,
- 						  struct sk_buff *skb);
-@@ -146,18 +146,20 @@ static inline int ccid_hc_rx_parse_optio
- 	return rc;
- }
- 
--static inline void ccid_hc_tx_insert_options(struct ccid *ccid, struct sock *sk,
--					     struct sk_buff *skb)
-+static inline int ccid_hc_tx_insert_options(struct ccid *ccid, struct sock *sk,
-+					    struct sk_buff *skb)
+ #ifdef CONFIG_COMPAT
+-int compat_sock_common_getsockopt(struct socket *sock, int level,
+-		int optname, char __user *optval, int __user *optlen)
++int compat_sock_common_getsockopt(struct socket *sock, int level, int optname,
++				  char __user *optval, int __user *optlen)
  {
- 	if (ccid->ccid_ops->ccid_hc_tx_insert_options != NULL)
--		ccid->ccid_ops->ccid_hc_tx_insert_options(sk, skb);
-+		return ccid->ccid_ops->ccid_hc_tx_insert_options(sk, skb);
-+	return 0;
- }
+ 	struct sock *sk = sock->sk;
  
--static inline void ccid_hc_rx_insert_options(struct ccid *ccid, struct sock *sk,
--					     struct sk_buff *skb)
-+static inline int ccid_hc_rx_insert_options(struct ccid *ccid, struct sock *sk,
-+					    struct sk_buff *skb)
+-	if (sk->sk_prot->compat_setsockopt)
+-		return sk->sk_prot->compat_getsockopt(sk, level,
+-			optname, optval, optlen);
++	if (sk->sk_prot->compat_setsockopt != NULL)
++		return sk->sk_prot->compat_getsockopt(sk, level, optname,
++						      optval, optlen);
+ 	return sk->sk_prot->getsockopt(sk, level, optname, optval, optlen);
+ }
+ EXPORT_SYMBOL(compat_sock_common_getsockopt);
+@@ -1440,14 +1440,14 @@ int sock_common_setsockopt(struct socket
+ EXPORT_SYMBOL(sock_common_setsockopt);
+ 
+ #ifdef CONFIG_COMPAT
+-int compat_sock_common_setsockopt(struct socket *sock,
+-		int level, int optname, char __user *optval, int optlen)
++int compat_sock_common_setsockopt(struct socket *sock, int level, int optname,
++				  char __user *optval, int optlen)
  {
- 	if (ccid->ccid_ops->ccid_hc_rx_insert_options != NULL)
--		ccid->ccid_ops->ccid_hc_rx_insert_options(sk, skb);
-+		return ccid->ccid_ops->ccid_hc_rx_insert_options(sk, skb);
-+	return 0;
+ 	struct sock *sk = sock->sk;
+ 
+-	if (sk->sk_prot->compat_setsockopt)
+-		return sk->sk_prot->compat_setsockopt(sk, level,
+-			optname, optval, optlen);
++	if (sk->sk_prot->compat_setsockopt != NULL)
++		return sk->sk_prot->compat_setsockopt(sk, level, optname,
++						      optval, optlen);
+ 	return sk->sk_prot->setsockopt(sk, level, optname, optval, optlen);
+ }
+ EXPORT_SYMBOL(compat_sock_common_setsockopt);
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 8a33c84..2904799 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -986,20 +986,20 @@ do_time_wait:
  }
  
- static inline void ccid_hc_rx_get_info(struct ccid *ccid, struct sock *sk,
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index ff426a9..0b9630b 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -574,16 +574,15 @@ static void ccid3_hc_tx_packet_recv(stru
- 	}
- }
+ static struct inet_connection_sock_af_ops dccp_ipv4_af_ops = {
+-	.queue_xmit	= ip_queue_xmit,
+-	.send_check	= dccp_v4_send_check,
+-	.rebuild_header	= inet_sk_rebuild_header,
+-	.conn_request	= dccp_v4_conn_request,
+-	.syn_recv_sock	= dccp_v4_request_recv_sock,
+-	.net_header_len	= sizeof(struct iphdr),
+-	.setsockopt	= ip_setsockopt,
+-	.getsockopt	= ip_getsockopt,
++	.queue_xmit	   = ip_queue_xmit,
++	.send_check	   = dccp_v4_send_check,
++	.rebuild_header	   = inet_sk_rebuild_header,
++	.conn_request	   = dccp_v4_conn_request,
++	.syn_recv_sock	   = dccp_v4_request_recv_sock,
++	.net_header_len	   = sizeof(struct iphdr),
++	.setsockopt	   = ip_setsockopt,
++	.getsockopt	   = ip_getsockopt,
++	.addr2sockaddr	   = inet_csk_addr2sockaddr,
++	.sockaddr_len	   = sizeof(struct sockaddr_in),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_ip_setsockopt,
+-	.compat_getsockopt	= compat_ip_getsockopt,
++	.compat_setsockopt = compat_ip_setsockopt,
++	.compat_getsockopt = compat_ip_getsockopt,
+ #endif
+-	.addr2sockaddr	= inet_csk_addr2sockaddr,
+-	.sockaddr_len	= sizeof(struct sockaddr_in),
+ };
  
--static void ccid3_hc_tx_insert_options(struct sock *sk, struct sk_buff *skb)
-+static int ccid3_hc_tx_insert_options(struct sock *sk, struct sk_buff *skb)
- {
- 	const struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 
- 	BUG_ON(hctx = NULL);
- 
--	if (!(sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN))
--		return;
--
--	 DCCP_SKB_CB(skb)->dccpd_ccval = hctx->ccid3hctx_last_win_count;
-+	if (sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN)
-+		DCCP_SKB_CB(skb)->dccpd_ccval = hctx->ccid3hctx_last_win_count;
-+	return 0;
- }
- 
- static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
-@@ -774,7 +773,7 @@ static void ccid3_hc_rx_send_feedback(st
- 	dccp_send_ack(sk);
- }
- 
--static void ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
-+static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
- {
- 	const struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
- 	__be32 x_recv, pinv;
-@@ -782,23 +781,27 @@ static void ccid3_hc_rx_insert_options(s
- 	BUG_ON(hcrx = NULL);
- 
- 	if (!(sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN))
--		return;
-+		return 0;
- 
- 	DCCP_SKB_CB(skb)->dccpd_ccval = hcrx->ccid3hcrx_last_counter;
- 
- 	if (dccp_packet_without_ack(skb))
--		return;
--		
--	if (hcrx->ccid3hcrx_elapsed_time != 0)
--		dccp_insert_option_elapsed_time(sk, skb,
--						hcrx->ccid3hcrx_elapsed_time);
--	dccp_insert_option_timestamp(sk, skb);
-+		return 0;
-+
- 	x_recv = htonl(hcrx->ccid3hcrx_x_recv);
- 	pinv   = htonl(hcrx->ccid3hcrx_pinv);
--	dccp_insert_option(sk, skb, TFRC_OPT_LOSS_EVENT_RATE,
--			   &pinv, sizeof(pinv));
--	dccp_insert_option(sk, skb, TFRC_OPT_RECEIVE_RATE,
--			   &x_recv, sizeof(x_recv));
-+		
-+	if ((hcrx->ccid3hcrx_elapsed_time != 0 &&
-+	     dccp_insert_option_elapsed_time(sk, skb,
-+					     hcrx->ccid3hcrx_elapsed_time)) ||
-+	    dccp_insert_option_timestamp(sk, skb) ||
-+	    dccp_insert_option(sk, skb, TFRC_OPT_LOSS_EVENT_RATE,
-+		    	       &pinv, sizeof(pinv)) ||
-+	    dccp_insert_option(sk, skb, TFRC_OPT_RECEIVE_RATE,
-+		    	       &x_recv, sizeof(x_recv)))
-+		return -1;
-+
-+	return 0;
- }
- 
- /* calculate first loss interval
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 7f5be08..34e70fb 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -326,13 +326,13 @@ static inline int dccp_ack_pending(const
- 	       inet_csk_ack_scheduled(sk);
- }
- 
--extern void dccp_insert_options(struct sock *sk, struct sk_buff *skb);
--extern void dccp_insert_option_elapsed_time(struct sock *sk,
-+extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
-+extern int dccp_insert_option_elapsed_time(struct sock *sk,
- 					    struct sk_buff *skb,
- 					    u32 elapsed_time);
--extern void dccp_insert_option_timestamp(struct sock *sk,
-+extern int dccp_insert_option_timestamp(struct sock *sk,
- 					 struct sk_buff *skb);
--extern void dccp_insert_option(struct sock *sk, struct sk_buff *skb,
-+extern int dccp_insert_option(struct sock *sk, struct sk_buff *skb,
- 			       unsigned char option,
- 			       const void *value, unsigned char len);
- 
-diff --git a/net/dccp/options.c b/net/dccp/options.c
-index 0161a18..da16760 100644
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -283,17 +283,14 @@ static inline int dccp_ndp_len(const int
- 	return likely(ndp <= 0xFF) ? 1 : ndp <= 0xFFFF ? 2 : 3;
- }
- 
--void dccp_insert_option(struct sock *sk, struct sk_buff *skb,
-+int dccp_insert_option(struct sock *sk, struct sk_buff *skb,
- 			const unsigned char option,
- 			const void *value, const unsigned char len)
- {
- 	unsigned char *to;
- 
--	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len + 2 > DCCP_MAX_OPT_LEN) {
--		LIMIT_NETDEBUG(KERN_INFO "DCCP: packet too small to insert "
--			       "%d option!\n", option);
--		return;
--	}
-+	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len + 2 > DCCP_MAX_OPT_LEN)
-+		return -1;
- 
- 	DCCP_SKB_CB(skb)->dccpd_opt_len += len + 2;
- 
-@@ -302,11 +299,12 @@ void dccp_insert_option(struct sock *sk,
- 	*to++ = len + 2;
- 
- 	memcpy(to, value, len);
-+	return 0;
- }
- 
- EXPORT_SYMBOL_GPL(dccp_insert_option);
- 
--static void dccp_insert_option_ndp(struct sock *sk, struct sk_buff *skb)
-+static int dccp_insert_option_ndp(struct sock *sk, struct sk_buff *skb)
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	int ndp = dp->dccps_ndp_count;
-@@ -322,7 +320,7 @@ static void dccp_insert_option_ndp(struc
- 		const int len = ndp_len + 2;
- 
- 		if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
--			return;
-+			return -1;
- 
- 		DCCP_SKB_CB(skb)->dccpd_opt_len += len;
- 
-@@ -331,6 +329,8 @@ static void dccp_insert_option_ndp(struc
- 		*ptr++ = len;
- 		dccp_encode_value_var(ndp, ptr, ndp_len);
- 	}
-+
-+	return 0;
- }
- 
- static inline int dccp_elapsed_time_len(const u32 elapsed_time)
-@@ -338,27 +338,18 @@ static inline int dccp_elapsed_time_len(
- 	return elapsed_time = 0 ? 0 : elapsed_time <= 0xFFFF ? 2 : 4;
- }
- 
--void dccp_insert_option_elapsed_time(struct sock *sk,
--				     struct sk_buff *skb,
--				     u32 elapsed_time)
-+int dccp_insert_option_elapsed_time(struct sock *sk, struct sk_buff *skb,
-+				    u32 elapsed_time)
- {
--#ifdef CONFIG_IP_DCCP_DEBUG
--	struct dccp_sock *dp = dccp_sk(sk);
--	const char *debug_prefix = dp->dccps_role = DCCP_ROLE_CLIENT ?
--					"CLIENT TX opt: " : "server TX opt: ";
+ static int dccp_v4_init_sock(struct sock *sk)
+@@ -1044,10 +1044,6 @@ static struct proto dccp_v4_prot = {
+ 	.init			= dccp_v4_init_sock,
+ 	.setsockopt		= dccp_setsockopt,
+ 	.getsockopt		= dccp_getsockopt,
+-#ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_dccp_setsockopt,
+-	.compat_getsockopt	= compat_dccp_getsockopt,
 -#endif
- 	const int elapsed_time_len = dccp_elapsed_time_len(elapsed_time);
- 	const int len = 2 + elapsed_time_len;
- 	unsigned char *to;
+ 	.sendmsg		= dccp_sendmsg,
+ 	.recvmsg		= dccp_recvmsg,
+ 	.backlog_rcv		= dccp_v4_do_rcv,
+@@ -1062,6 +1058,10 @@ static struct proto dccp_v4_prot = {
+ 	.obj_size		= sizeof(struct dccp_sock),
+ 	.rsk_prot		= &dccp_request_sock_ops,
+ 	.twsk_prot		= &dccp_timewait_sock_ops,
++#ifdef CONFIG_COMPAT
++	.compat_setsockopt	= compat_dccp_setsockopt,
++	.compat_getsockopt	= compat_dccp_getsockopt,
++#endif
+ };
  
- 	if (elapsed_time_len = 0)
--		return;
-+		return 0;
+ static struct net_protocol dccp_v4_protocol = {
+@@ -1071,30 +1071,30 @@ static struct net_protocol dccp_v4_proto
+ };
  
--	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN) {
--		LIMIT_NETDEBUG(KERN_INFO "DCCP: packet too small to "
--					 "insert elapsed time!\n");
--		return;
--	}
-+	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
-+		return -1;
+ static const struct proto_ops inet_dccp_ops = {
+-	.family		= PF_INET,
+-	.owner		= THIS_MODULE,
+-	.release	= inet_release,
+-	.bind		= inet_bind,
+-	.connect	= inet_stream_connect,
+-	.socketpair	= sock_no_socketpair,
+-	.accept		= inet_accept,
+-	.getname	= inet_getname,
++	.family		   = PF_INET,
++	.owner		   = THIS_MODULE,
++	.release	   = inet_release,
++	.bind		   = inet_bind,
++	.connect	   = inet_stream_connect,
++	.socketpair	   = sock_no_socketpair,
++	.accept		   = inet_accept,
++	.getname	   = inet_getname,
+ 	/* FIXME: work on tcp_poll to rename it to inet_csk_poll */
+-	.poll		= dccp_poll,
+-	.ioctl		= inet_ioctl,
++	.poll		   = dccp_poll,
++	.ioctl		   = inet_ioctl,
+ 	/* FIXME: work on inet_listen to rename it to sock_common_listen */
+-	.listen		= inet_dccp_listen,
+-	.shutdown	= inet_shutdown,
+-	.setsockopt	= sock_common_setsockopt,
+-	.getsockopt	= sock_common_getsockopt,
++	.listen		   = inet_dccp_listen,
++	.shutdown	   = inet_shutdown,
++	.setsockopt	   = sock_common_setsockopt,
++	.getsockopt	   = sock_common_getsockopt,
++	.sendmsg	   = inet_sendmsg,
++	.recvmsg	   = sock_common_recvmsg,
++	.mmap		   = sock_no_mmap,
++	.sendpage	   = sock_no_sendpage,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_sock_common_setsockopt,
+-	.compat_getsockopt	= compat_sock_common_getsockopt,
++	.compat_setsockopt = compat_sock_common_setsockopt,
++	.compat_getsockopt = compat_sock_common_getsockopt,
+ #endif
+-	.sendmsg	= inet_sendmsg,
+-	.recvmsg	= sock_common_recvmsg,
+-	.mmap		= sock_no_mmap,
+-	.sendpage	= sock_no_sendpage,
+ };
  
- 	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
- 
-@@ -374,10 +365,7 @@ void dccp_insert_option_elapsed_time(str
- 		memcpy(to, &var32, 4);
- 	}
- 
--	dccp_pr_debug("%sELAPSED_TIME=%u, len=%d, seqno=%llu\n",
--		      debug_prefix, elapsed_time,
--		      len,
--		      (unsigned long long) DCCP_SKB_CB(skb)->dccpd_seq);
-+	return 0;
+ static struct inet_protosw dccp_v4_protosw = {
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index 89106c7..65e2ab0 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -1106,40 +1106,40 @@ do_time_wait:
  }
  
- EXPORT_SYMBOL_GPL(dccp_insert_option_elapsed_time);
-@@ -398,7 +386,7 @@ void dccp_timestamp(const struct sock *s
+ static struct inet_connection_sock_af_ops dccp_ipv6_af_ops = {
+-	.queue_xmit	= inet6_csk_xmit,
+-	.send_check	= dccp_v6_send_check,
+-	.rebuild_header	= inet6_sk_rebuild_header,
+-	.conn_request	= dccp_v6_conn_request,
+-	.syn_recv_sock	= dccp_v6_request_recv_sock,
+-	.net_header_len	= sizeof(struct ipv6hdr),
+-	.setsockopt	= ipv6_setsockopt,
+-	.getsockopt	= ipv6_getsockopt,
++	.queue_xmit	   = inet6_csk_xmit,
++	.send_check	   = dccp_v6_send_check,
++	.rebuild_header	   = inet6_sk_rebuild_header,
++	.conn_request	   = dccp_v6_conn_request,
++	.syn_recv_sock	   = dccp_v6_request_recv_sock,
++	.net_header_len	   = sizeof(struct ipv6hdr),
++	.setsockopt	   = ipv6_setsockopt,
++	.getsockopt	   = ipv6_getsockopt,
++	.addr2sockaddr	   = inet6_csk_addr2sockaddr,
++	.sockaddr_len	   = sizeof(struct sockaddr_in6),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_ipv6_setsockopt,
+-	.compat_getsockopt	= compat_ipv6_getsockopt,
++	.compat_setsockopt = compat_ipv6_setsockopt,
++	.compat_getsockopt = compat_ipv6_getsockopt,
+ #endif
+-	.addr2sockaddr	= inet6_csk_addr2sockaddr,
+-	.sockaddr_len	= sizeof(struct sockaddr_in6)
+ };
  
- EXPORT_SYMBOL_GPL(dccp_timestamp);
+ /*
+  *	DCCP over IPv4 via INET6 API
+  */
+ static struct inet_connection_sock_af_ops dccp_ipv6_mapped = {
+-	.queue_xmit	= ip_queue_xmit,
+-	.send_check	= dccp_v4_send_check,
+-	.rebuild_header	= inet_sk_rebuild_header,
+-	.conn_request	= dccp_v6_conn_request,
+-	.syn_recv_sock	= dccp_v6_request_recv_sock,
+-	.net_header_len	= sizeof(struct iphdr),
+-	.setsockopt	= ipv6_setsockopt,
+-	.getsockopt	= ipv6_getsockopt,
++	.queue_xmit	   = ip_queue_xmit,
++	.send_check	   = dccp_v4_send_check,
++	.rebuild_header	   = inet_sk_rebuild_header,
++	.conn_request	   = dccp_v6_conn_request,
++	.syn_recv_sock	   = dccp_v6_request_recv_sock,
++	.net_header_len	   = sizeof(struct iphdr),
++	.setsockopt	   = ipv6_setsockopt,
++	.getsockopt	   = ipv6_getsockopt,
++	.addr2sockaddr	   = inet6_csk_addr2sockaddr,
++	.sockaddr_len	   = sizeof(struct sockaddr_in6),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_ipv6_setsockopt,
+-	.compat_getsockopt	= compat_ipv6_getsockopt,
++	.compat_setsockopt = compat_ipv6_setsockopt,
++	.compat_getsockopt = compat_ipv6_getsockopt,
+ #endif
+-	.addr2sockaddr	= inet6_csk_addr2sockaddr,
+-	.sockaddr_len	= sizeof(struct sockaddr_in6)
+ };
  
--void dccp_insert_option_timestamp(struct sock *sk, struct sk_buff *skb)
-+int dccp_insert_option_timestamp(struct sock *sk, struct sk_buff *skb)
- {
- 	struct timeval tv;
- 	__be32 now;
-@@ -408,19 +396,15 @@ void dccp_insert_option_timestamp(struct
- 	/* yes this will overflow but that is the point as we want a
- 	 * 10 usec 32 bit timer which mean it wraps every 11.9 hours */
- 
--	dccp_insert_option(sk, skb, DCCPO_TIMESTAMP, &now, sizeof(now));
-+	return dccp_insert_option(sk, skb, DCCPO_TIMESTAMP, &now, sizeof(now));
+ /* NOTE: A lot of things set to zero explicitly by call to
+@@ -1166,33 +1166,33 @@ static int dccp_v6_destroy_sock(struct s
  }
  
- EXPORT_SYMBOL_GPL(dccp_insert_option_timestamp);
+ static struct proto dccp_v6_prot = {
+-	.name		= "DCCPv6",
+-	.owner		= THIS_MODULE,
+-	.close		= dccp_close,
+-	.connect	= dccp_v6_connect,
+-	.disconnect	= dccp_disconnect,
+-	.ioctl		= dccp_ioctl,
+-	.init		= dccp_v6_init_sock,
+-	.setsockopt	= dccp_setsockopt,
+-	.getsockopt	= dccp_getsockopt,
++	.name		   = "DCCPv6",
++	.owner		   = THIS_MODULE,
++	.close		   = dccp_close,
++	.connect	   = dccp_v6_connect,
++	.disconnect	   = dccp_disconnect,
++	.ioctl		   = dccp_ioctl,
++	.init		   = dccp_v6_init_sock,
++	.setsockopt	   = dccp_setsockopt,
++	.getsockopt	   = dccp_getsockopt,
++	.sendmsg	   = dccp_sendmsg,
++	.recvmsg	   = dccp_recvmsg,
++	.backlog_rcv	   = dccp_v6_do_rcv,
++	.hash		   = dccp_v6_hash,
++	.unhash		   = dccp_unhash,
++	.accept		   = inet_csk_accept,
++	.get_port	   = dccp_v6_get_port,
++	.shutdown	   = dccp_shutdown,
++	.destroy	   = dccp_v6_destroy_sock,
++	.orphan_count	   = &dccp_orphan_count,
++	.max_header	   = MAX_DCCP_HEADER,
++	.obj_size	   = sizeof(struct dccp6_sock),
++	.rsk_prot	   = &dccp6_request_sock_ops,
++	.twsk_prot	   = &dccp6_timewait_sock_ops,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_dccp_setsockopt,
+-	.compat_getsockopt	= compat_dccp_getsockopt,
++	.compat_setsockopt = compat_dccp_setsockopt,
++	.compat_getsockopt = compat_dccp_getsockopt,
+ #endif
+-	.sendmsg	= dccp_sendmsg,
+-	.recvmsg	= dccp_recvmsg,
+-	.backlog_rcv	= dccp_v6_do_rcv,
+-	.hash		= dccp_v6_hash,
+-	.unhash		= dccp_unhash,
+-	.accept		= inet_csk_accept,
+-	.get_port	= dccp_v6_get_port,
+-	.shutdown	= dccp_shutdown,
+-	.destroy	= dccp_v6_destroy_sock,
+-	.orphan_count	= &dccp_orphan_count,
+-	.max_header	= MAX_DCCP_HEADER,
+-	.obj_size	= sizeof(struct dccp6_sock),
+-	.rsk_prot	= &dccp6_request_sock_ops,
+-	.twsk_prot	= &dccp6_timewait_sock_ops,
+ };
  
--static void dccp_insert_option_timestamp_echo(struct sock *sk,
--					      struct sk_buff *skb)
-+static int dccp_insert_option_timestamp_echo(struct sock *sk,
-+					     struct sk_buff *skb)
+ static struct inet6_protocol dccp_v6_protocol = {
+@@ -1202,28 +1202,28 @@ static struct inet6_protocol dccp_v6_pro
+ };
+ 
+ static struct proto_ops inet6_dccp_ops = {
+-	.family		= PF_INET6,
+-	.owner		= THIS_MODULE,
+-	.release	= inet6_release,
+-	.bind		= inet6_bind,
+-	.connect	= inet_stream_connect,
+-	.socketpair	= sock_no_socketpair,
+-	.accept		= inet_accept,
+-	.getname	= inet6_getname,
+-	.poll		= dccp_poll,
+-	.ioctl		= inet6_ioctl,
+-	.listen		= inet_dccp_listen,
+-	.shutdown	= inet_shutdown,
+-	.setsockopt	= sock_common_setsockopt,
+-	.getsockopt	= sock_common_getsockopt,
++	.family		   = PF_INET6,
++	.owner		   = THIS_MODULE,
++	.release	   = inet6_release,
++	.bind		   = inet6_bind,
++	.connect	   = inet_stream_connect,
++	.socketpair	   = sock_no_socketpair,
++	.accept		   = inet_accept,
++	.getname	   = inet6_getname,
++	.poll		   = dccp_poll,
++	.ioctl		   = inet6_ioctl,
++	.listen		   = inet_dccp_listen,
++	.shutdown	   = inet_shutdown,
++	.setsockopt	   = sock_common_setsockopt,
++	.getsockopt	   = sock_common_getsockopt,
++	.sendmsg	   = inet_sendmsg,
++	.recvmsg	   = sock_common_recvmsg,
++	.mmap		   = sock_no_mmap,
++	.sendpage	   = sock_no_sendpage,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_sock_common_setsockopt,
+-	.compat_getsockopt	= compat_sock_common_getsockopt,
++	.compat_setsockopt = compat_sock_common_setsockopt,
++	.compat_getsockopt = compat_sock_common_getsockopt,
+ #endif
+-	.sendmsg	= inet_sendmsg,
+-	.recvmsg	= sock_common_recvmsg,
+-	.mmap		= sock_no_mmap,
+-	.sendpage	= sock_no_sendpage,
+ };
+ 
+ static struct inet_protosw dccp_v6_protosw = {
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 3e9b710..3292837 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -516,18 +516,19 @@ int dccp_setsockopt(struct sock *sk, int
+ 							     optlen);
+ 	return do_dccp_setsockopt(sk, level, optname, optval, optlen);
+ }
++
+ EXPORT_SYMBOL_GPL(dccp_setsockopt);
+ 
+ #ifdef CONFIG_COMPAT
+ int compat_dccp_setsockopt(struct sock *sk, int level, int optname,
+-		    char __user *optval, int optlen)
++			   char __user *optval, int optlen)
  {
- 	struct dccp_sock *dp = dccp_sk(sk);
--#ifdef CONFIG_IP_DCCP_DEBUG
--	const char *debug_prefix = dp->dccps_role = DCCP_ROLE_CLIENT ?
--					"CLIENT TX opt: " : "server TX opt: ";
--#endif
- 	struct timeval now;
- 	__be32 tstamp_echo;
- 	u32 elapsed_time;
-@@ -432,11 +416,8 @@ static void dccp_insert_option_timestamp
- 	elapsed_time_len = dccp_elapsed_time_len(elapsed_time);
- 	len = 6 + elapsed_time_len;
- 
--	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN) {
--		LIMIT_NETDEBUG(KERN_INFO "DCCP: packet too small to insert "
--					 "timestamp echo!\n");
--		return;
--	}
-+	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
-+		return -1;
- 
- 	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
- 
-@@ -456,14 +437,10 @@ static void dccp_insert_option_timestamp
- 		memcpy(to, &var32, 4);
- 	}
- 
--	dccp_pr_debug("%sTIMESTAMP_ECHO=%u, len=%d, seqno=%llu\n",
--		      debug_prefix, dp->dccps_timestamp_echo,
--		      len,
--		      (unsigned long long) DCCP_SKB_CB(skb)->dccpd_seq);
+ 	if (level != SOL_DCCP)
+ 		return inet_csk_compat_setsockopt(sk, level, optname,
+ 						  optval, optlen);
 -
- 	dp->dccps_timestamp_echo = 0;
- 	dp->dccps_timestamp_time.tv_sec = 0;
- 	dp->dccps_timestamp_time.tv_usec = 0;
-+	return 0;
+ 	return do_dccp_setsockopt(sk, level, optname, optval, optlen);
  }
++
+ EXPORT_SYMBOL_GPL(compat_dccp_setsockopt);
+ #endif
  
- static int dccp_insert_feat_opt(struct sk_buff *skb, u8 type, u8 feat,
-@@ -491,7 +468,7 @@ static int dccp_insert_feat_opt(struct s
- 	return 0;
+@@ -609,17 +610,19 @@ int dccp_getsockopt(struct sock *sk, int
+ 							     optlen);
+ 	return do_dccp_getsockopt(sk, level, optname, optval, optlen);
  }
++
+ EXPORT_SYMBOL_GPL(dccp_getsockopt);
  
--static void dccp_insert_feat(struct sock *sk, struct sk_buff *skb)
-+static int dccp_insert_options_feat(struct sock *sk, struct sk_buff *skb)
+ #ifdef CONFIG_COMPAT
+ int compat_dccp_getsockopt(struct sock *sk, int level, int optname,
+-		    char __user *optval, int __user *optlen)
++			   char __user *optval, int __user *optlen)
  {
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	struct dccp_opt_pend *opt, *next;
-@@ -551,44 +528,48 @@ static void dccp_insert_feat(struct sock
- 		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
- 					  inet_csk(sk)->icsk_rto, DCCP_RTO_MAX);
- 	}
+ 	if (level != SOL_DCCP)
+ 		return inet_csk_compat_getsockopt(sk, level, optname,
+ 						  optval, optlen);
+ 	return do_dccp_getsockopt(sk, level, optname, optval, optlen);
+ }
 +
-+	return 0;
+ EXPORT_SYMBOL_GPL(compat_dccp_getsockopt);
+ #endif
+ 
+diff --git a/net/ipv4/af_inet.c b/net/ipv4/af_inet.c
+index 454e523..dc206f1 100644
+--- a/net/ipv4/af_inet.c
++++ b/net/ipv4/af_inet.c
+@@ -788,53 +788,53 @@ int inet_ioctl(struct socket *sock, unsi
  }
  
--void dccp_insert_options(struct sock *sk, struct sk_buff *skb)
-+int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
+ const struct proto_ops inet_stream_ops = {
+-	.family =	PF_INET,
+-	.owner =	THIS_MODULE,
+-	.release =	inet_release,
+-	.bind =		inet_bind,
+-	.connect =	inet_stream_connect,
+-	.socketpair =	sock_no_socketpair,
+-	.accept =	inet_accept,
+-	.getname =	inet_getname,
+-	.poll =		tcp_poll,
+-	.ioctl =	inet_ioctl,
+-	.listen =	inet_listen,
+-	.shutdown =	inet_shutdown,
+-	.setsockopt =	sock_common_setsockopt,
+-	.getsockopt =	sock_common_getsockopt,
++	.family		   = PF_INET,
++	.owner		   = THIS_MODULE,
++	.release	   = inet_release,
++	.bind		   = inet_bind,
++	.connect	   = inet_stream_connect,
++	.socketpair	   = sock_no_socketpair,
++	.accept		   = inet_accept,
++	.getname	   = inet_getname,
++	.poll		   = tcp_poll,
++	.ioctl		   = inet_ioctl,
++	.listen		   = inet_listen,
++	.shutdown	   = inet_shutdown,
++	.setsockopt	   = sock_common_setsockopt,
++	.getsockopt	   = sock_common_getsockopt,
++	.sendmsg	   = inet_sendmsg,
++	.recvmsg	   = sock_common_recvmsg,
++	.mmap		   = sock_no_mmap,
++	.sendpage	   = tcp_sendpage,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_sock_common_setsockopt,
+-	.compat_getsockopt	= compat_sock_common_getsockopt,
++	.compat_setsockopt = compat_sock_common_setsockopt,
++	.compat_getsockopt = compat_sock_common_getsockopt,
+ #endif
+-	.sendmsg =	inet_sendmsg,
+-	.recvmsg =	sock_common_recvmsg,
+-	.mmap =		sock_no_mmap,
+-	.sendpage =	tcp_sendpage
+ };
+ 
+ const struct proto_ops inet_dgram_ops = {
+-	.family =	PF_INET,
+-	.owner =	THIS_MODULE,
+-	.release =	inet_release,
+-	.bind =		inet_bind,
+-	.connect =	inet_dgram_connect,
+-	.socketpair =	sock_no_socketpair,
+-	.accept =	sock_no_accept,
+-	.getname =	inet_getname,
+-	.poll =		udp_poll,
+-	.ioctl =	inet_ioctl,
+-	.listen =	sock_no_listen,
+-	.shutdown =	inet_shutdown,
+-	.setsockopt =	sock_common_setsockopt,
+-	.getsockopt =	sock_common_getsockopt,
++	.family		   = PF_INET,
++	.owner		   = THIS_MODULE,
++	.release	   = inet_release,
++	.bind		   = inet_bind,
++	.connect	   = inet_dgram_connect,
++	.socketpair	   = sock_no_socketpair,
++	.accept		   = sock_no_accept,
++	.getname	   = inet_getname,
++	.poll		   = udp_poll,
++	.ioctl		   = inet_ioctl,
++	.listen		   = sock_no_listen,
++	.shutdown	   = inet_shutdown,
++	.setsockopt	   = sock_common_setsockopt,
++	.getsockopt	   = sock_common_getsockopt,
++	.sendmsg	   = inet_sendmsg,
++	.recvmsg	   = sock_common_recvmsg,
++	.mmap		   = sock_no_mmap,
++	.sendpage	   = inet_sendpage,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_sock_common_setsockopt,
+-	.compat_getsockopt	= compat_sock_common_getsockopt,
++	.compat_setsockopt = compat_sock_common_setsockopt,
++	.compat_getsockopt = compat_sock_common_getsockopt,
+ #endif
+-	.sendmsg =	inet_sendmsg,
+-	.recvmsg =	sock_common_recvmsg,
+-	.mmap =		sock_no_mmap,
+-	.sendpage =	inet_sendpage,
+ };
+ 
+ /*
+@@ -842,28 +842,28 @@ const struct proto_ops inet_dgram_ops = 
+  * udp_poll
+  */
+ static const struct proto_ops inet_sockraw_ops = {
+-	.family =	PF_INET,
+-	.owner =	THIS_MODULE,
+-	.release =	inet_release,
+-	.bind =		inet_bind,
+-	.connect =	inet_dgram_connect,
+-	.socketpair =	sock_no_socketpair,
+-	.accept =	sock_no_accept,
+-	.getname =	inet_getname,
+-	.poll =		datagram_poll,
+-	.ioctl =	inet_ioctl,
+-	.listen =	sock_no_listen,
+-	.shutdown =	inet_shutdown,
+-	.setsockopt =	sock_common_setsockopt,
+-	.getsockopt =	sock_common_getsockopt,
++	.family		   = PF_INET,
++	.owner		   = THIS_MODULE,
++	.release	   = inet_release,
++	.bind		   = inet_bind,
++	.connect	   = inet_dgram_connect,
++	.socketpair	   = sock_no_socketpair,
++	.accept		   = sock_no_accept,
++	.getname	   = inet_getname,
++	.poll		   = datagram_poll,
++	.ioctl		   = inet_ioctl,
++	.listen		   = sock_no_listen,
++	.shutdown	   = inet_shutdown,
++	.setsockopt	   = sock_common_setsockopt,
++	.getsockopt	   = sock_common_getsockopt,
++	.sendmsg	   = inet_sendmsg,
++	.recvmsg	   = sock_common_recvmsg,
++	.mmap		   = sock_no_mmap,
++	.sendpage	   = inet_sendpage,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_sock_common_setsockopt,
+-	.compat_getsockopt	= compat_sock_common_getsockopt,
++	.compat_setsockopt = compat_sock_common_setsockopt,
++	.compat_getsockopt = compat_sock_common_getsockopt,
+ #endif
+-	.sendmsg =	inet_sendmsg,
+-	.recvmsg =	sock_common_recvmsg,
+-	.mmap =		sock_no_mmap,
+-	.sendpage =	inet_sendpage,
+ };
+ 
+ static struct net_proto_family inet_family_ops = {
+diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
+index 49ff1cd..12e0bf1 100644
+--- a/net/ipv4/ip_sockglue.c
++++ b/net/ipv4/ip_sockglue.c
+@@ -910,8 +910,8 @@ int ip_setsockopt(struct sock *sk, int l
+ }
+ 
+ #ifdef CONFIG_COMPAT
+-int compat_ip_setsockopt(struct sock *sk, int level,
+-		int optname, char __user *optval, int optlen)
++int compat_ip_setsockopt(struct sock *sk, int level, int optname,
++			 char __user *optval, int optlen)
  {
- 	struct dccp_sock *dp = dccp_sk(sk);
+ 	int err;
  
- 	DCCP_SKB_CB(skb)->dccpd_opt_len = 0;
- 
--	if (dp->dccps_options.dccpo_send_ndp_count)
--		dccp_insert_option_ndp(sk, skb);
-+	if (dp->dccps_options.dccpo_send_ndp_count &&
-+	    dccp_insert_option_ndp(sk, skb))
-+		return -1;
- 
- 	if (!dccp_packet_without_ack(skb)) {
- 		if (dp->dccps_options.dccpo_send_ack_vector &&
--		    dccp_ackvec_pending(dp->dccps_hc_rx_ackvec))
--			dccp_insert_option_ackvec(sk, skb);
--		if (dp->dccps_timestamp_echo != 0)
--			dccp_insert_option_timestamp_echo(sk, skb);
-+		    dccp_ackvec_pending(dp->dccps_hc_rx_ackvec) &&
-+		    dccp_insert_option_ackvec(sk, skb))
-+			return -1;
-+
-+		if (dp->dccps_timestamp_echo != 0 &&
-+		    dccp_insert_option_timestamp_echo(sk, skb))
-+			return -1;
+@@ -922,19 +922,21 @@ int compat_ip_setsockopt(struct sock *sk
+ #ifdef CONFIG_NETFILTER
+ 	/* we need to exclude all possible ENOPROTOOPTs except default case */
+ 	if (err = -ENOPROTOOPT && optname != IP_HDRINCL &&
+-		optname != IP_IPSEC_POLICY && optname != IP_XFRM_POLICY
++	    optname != IP_IPSEC_POLICY && optname != IP_XFRM_POLICY
+ #ifdef CONFIG_IP_MROUTE
+-		&& (optname < MRT_BASE || optname > (MRT_BASE + 10))
++	    && (optname < MRT_BASE || optname > (MRT_BASE + 10))
+ #endif
+ 	   ) {
+ 		lock_sock(sk);
+-		err = compat_nf_setsockopt(sk, PF_INET,
+-				optname, optval, optlen);
++		err = compat_nf_setsockopt(sk, PF_INET, optname,
++					   optval, optlen);
+ 		release_sock(sk);
  	}
- 
- 	if (dp->dccps_hc_rx_insert_options) {
--		ccid_hc_rx_insert_options(dp->dccps_hc_rx_ccid, sk, skb);
-+		if (ccid_hc_rx_insert_options(dp->dccps_hc_rx_ccid, sk, skb))
-+			return -1;
- 		dp->dccps_hc_rx_insert_options = 0;
- 	}
- 	if (dp->dccps_hc_tx_insert_options) {
--		ccid_hc_tx_insert_options(dp->dccps_hc_tx_ccid, sk, skb);
-+		if (ccid_hc_tx_insert_options(dp->dccps_hc_tx_ccid, sk, skb))
-+			return -1;
- 		dp->dccps_hc_tx_insert_options = 0;
- 	}
- 
- 	/* Feature negotiation */
--	switch(DCCP_SKB_CB(skb)->dccpd_type) {
--		/* Data packets can't do feat negotiation */
--	case DCCP_PKT_DATA:
--	case DCCP_PKT_DATAACK:
--		break;
--	default:
--		dccp_insert_feat(sk, skb);
--		break;
--	}
-+	/* Data packets can't do feat negotiation */
-+	if (DCCP_SKB_CB(skb)->dccpd_type != DCCP_PKT_DATA &&
-+	    DCCP_SKB_CB(skb)->dccpd_type != DCCP_PKT_DATAACK &&
-+	    dccp_insert_options_feat(sk, skb))
-+		return -1;
- 
- 	/* XXX: insert other options when appropriate */
- 
-@@ -602,4 +583,6 @@ void dccp_insert_options(struct sock *sk
- 			DCCP_SKB_CB(skb)->dccpd_opt_len += padding;
- 		}
- 	}
-+
-+	return 0;
+ #endif
+ 	return err;
  }
-diff --git a/net/dccp/output.c b/net/dccp/output.c
-index 2975e3d..7409e4a 100644
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -83,7 +83,11 @@ static int dccp_transmit_skb(struct sock
- 		}
- 
- 		dcb->dccpd_seq = dp->dccps_gss;
--		dccp_insert_options(sk, skb);
 +
-+		if (dccp_insert_options(sk, skb)) {
-+			kfree_skb(skb);
-+			return -EPROTO;
-+		}
- 		
- 		skb->h.raw = skb_push(skb, dccp_header_size);
- 		dh = dccp_hdr(skb);
-@@ -296,7 +300,11 @@ struct sk_buff *dccp_make_response(struc
- 	dreq = dccp_rsk(req);
- 	DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_RESPONSE;
- 	DCCP_SKB_CB(skb)->dccpd_seq  = dreq->dreq_iss;
--	dccp_insert_options(sk, skb);
++EXPORT_SYMBOL(compat_ip_setsockopt);
+ #endif
+ 
+ /*
+@@ -1180,27 +1182,24 @@ int ip_getsockopt(struct sock *sk, int l
+ }
+ 
+ #ifdef CONFIG_COMPAT
+-int compat_ip_getsockopt(struct sock *sk, int level,
+-		int optname, char __user *optval, int __user *optlen)
++int compat_ip_getsockopt(struct sock *sk, int level, int optname,
++			 char __user *optval, int __user *optlen)
+ {
+-	int err;
+-
+-	err = do_ip_getsockopt(sk, level, optname, optval, optlen);
++	int err = do_ip_getsockopt(sk, level, optname, optval, optlen);
+ #ifdef CONFIG_NETFILTER
+ 	/* we need to exclude all possible ENOPROTOOPTs except default case */
+ 	if (err = -ENOPROTOOPT && optname != IP_PKTOPTIONS
+ #ifdef CONFIG_IP_MROUTE
+-		&& (optname < MRT_BASE || optname > MRT_BASE+10)
++	    && (optname < MRT_BASE || optname > MRT_BASE+10)
+ #endif
+ 	   ) {
+ 	   	int len;
+ 
+-		if(get_user(len,optlen))
++		if (get_user(len, optlen))
+ 			return -EFAULT;
+ 
+ 		lock_sock(sk);
+-		err = compat_nf_getsockopt(sk, PF_INET,
+-				optname, optval, &len);
++		err = compat_nf_getsockopt(sk, PF_INET, optname, optval, &len);
+ 		release_sock(sk);
+ 		if (err >= 0)
+ 			err = put_user(len, optlen);
+@@ -1209,13 +1208,11 @@ int compat_ip_getsockopt(struct sock *sk
+ #endif
+ 	return err;
+ }
 +
-+	if (dccp_insert_options(sk, skb)) {
-+		kfree_skb(skb);
-+		return NULL;
-+	}
++EXPORT_SYMBOL(compat_ip_getsockopt);
+ #endif
  
- 	skb->h.raw = skb_push(skb, dccp_header_size);
+ EXPORT_SYMBOL(ip_cmsg_recv);
  
-@@ -344,7 +352,11 @@ static struct sk_buff *dccp_make_reset(s
- 	DCCP_SKB_CB(skb)->dccpd_reset_code = code;
- 	DCCP_SKB_CB(skb)->dccpd_type	   = DCCP_PKT_RESET;
- 	DCCP_SKB_CB(skb)->dccpd_seq	   = dp->dccps_gss;
--	dccp_insert_options(sk, skb);
+ EXPORT_SYMBOL(ip_getsockopt);
+ EXPORT_SYMBOL(ip_setsockopt);
+-#ifdef CONFIG_COMPAT
+-EXPORT_SYMBOL(compat_ip_getsockopt);
+-EXPORT_SYMBOL(compat_ip_setsockopt);
+-#endif
+diff --git a/net/ipv4/raw.c b/net/ipv4/raw.c
+index f1b02b3..fc25624 100644
+--- a/net/ipv4/raw.c
++++ b/net/ipv4/raw.c
+@@ -682,11 +682,10 @@ static int raw_setsockopt(struct sock *s
+ 
+ #ifdef CONFIG_COMPAT
+ static int compat_raw_setsockopt(struct sock *sk, int level, int optname,
+-			  char __user *optval, int optlen)
++				 char __user *optval, int optlen)
+ {
+ 	if (level != SOL_RAW)
+-		return compat_ip_setsockopt(sk, level,
+-				optname, optval, optlen);
++		return compat_ip_setsockopt(sk, level, optname, optval, optlen);
+ 	return do_raw_setsockopt(sk, level, optname, optval, optlen);
+ }
+ #endif
+@@ -713,11 +712,10 @@ static int raw_getsockopt(struct sock *s
+ 
+ #ifdef CONFIG_COMPAT
+ static int compat_raw_getsockopt(struct sock *sk, int level, int optname,
+-			  char __user *optval, int __user *optlen)
++				 char __user *optval, int __user *optlen)
+ {
+ 	if (level != SOL_RAW)
+-		return compat_ip_getsockopt(sk, level,
+-				optname, optval, optlen);
++		return compat_ip_getsockopt(sk, level, optname, optval, optlen);
+ 	return do_raw_getsockopt(sk, level, optname, optval, optlen);
+ }
+ #endif
+@@ -751,26 +749,26 @@ static int raw_ioctl(struct sock *sk, in
+ }
+ 
+ struct proto raw_prot = {
+-	.name =		"RAW",
+-	.owner =	THIS_MODULE,
+-	.close =	raw_close,
+-	.connect =	ip4_datagram_connect,
+-	.disconnect =	udp_disconnect,
+-	.ioctl =	raw_ioctl,
+-	.init =		raw_init,
+-	.setsockopt =	raw_setsockopt,
+-	.getsockopt =	raw_getsockopt,
++	.name		   = "RAW",
++	.owner		   = THIS_MODULE,
++	.close		   = raw_close,
++	.connect	   = ip4_datagram_connect,
++	.disconnect	   = udp_disconnect,
++	.ioctl		   = raw_ioctl,
++	.init		   = raw_init,
++	.setsockopt	   = raw_setsockopt,
++	.getsockopt	   = raw_getsockopt,
++	.sendmsg	   = raw_sendmsg,
++	.recvmsg	   = raw_recvmsg,
++	.bind		   = raw_bind,
++	.backlog_rcv	   = raw_rcv_skb,
++	.hash		   = raw_v4_hash,
++	.unhash		   = raw_v4_unhash,
++	.obj_size	   = sizeof(struct raw_sock),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt =	compat_raw_setsockopt,
+-	.compat_getsockopt =	compat_raw_getsockopt,
++	.compat_setsockopt = compat_raw_setsockopt,
++	.compat_getsockopt = compat_raw_getsockopt,
+ #endif
+-	.sendmsg =	raw_sendmsg,
+-	.recvmsg =	raw_recvmsg,
+-	.bind =		raw_bind,
+-	.backlog_rcv =	raw_rcv_skb,
+-	.hash =		raw_v4_hash,
+-	.unhash =	raw_v4_unhash,
+-	.obj_size =	sizeof(struct raw_sock),
+ };
+ 
+ #ifdef CONFIG_PROC_FS
+diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
+index 89da253..4b0272c 100644
+--- a/net/ipv4/tcp.c
++++ b/net/ipv4/tcp.c
+@@ -1879,14 +1879,16 @@ int tcp_setsockopt(struct sock *sk, int 
+ }
+ 
+ #ifdef CONFIG_COMPAT
+-int compat_tcp_setsockopt(struct sock *sk, int level,
+-		int optname, char __user *optval, int optlen)
++int compat_tcp_setsockopt(struct sock *sk, int level, int optname,
++			  char __user *optval, int optlen)
+ {
+ 	if (level != SOL_TCP)
+ 		return inet_csk_compat_setsockopt(sk, level, optname,
+ 						  optval, optlen);
+ 	return do_tcp_setsockopt(sk, level, optname, optval, optlen);
+ }
 +
-+	if (dccp_insert_options(sk, skb)) {
-+		kfree_skb(skb);
-+		return NULL;
-+	}
++EXPORT_SYMBOL(compat_tcp_setsockopt);
+ #endif
  
- 	skb->h.raw = skb_push(skb, dccp_header_size);
+ /* Return information about state of tcp endpoint in API format. */
+@@ -2051,14 +2053,16 @@ int tcp_getsockopt(struct sock *sk, int 
+ }
  
+ #ifdef CONFIG_COMPAT
+-int compat_tcp_getsockopt(struct sock *sk, int level,
+-		int optname, char __user *optval, int __user *optlen)
++int compat_tcp_getsockopt(struct sock *sk, int level, int optname,
++			  char __user *optval, int __user *optlen)
+ {
+ 	if (level != SOL_TCP)
+ 		return inet_csk_compat_getsockopt(sk, level, optname,
+ 						  optval, optlen);
+ 	return do_tcp_getsockopt(sk, level, optname, optval, optlen);
+ }
++
++EXPORT_SYMBOL(compat_tcp_getsockopt);
+ #endif
+ 
+ extern void __skb_cb_too_small_for_tcp(int, int);
+@@ -2177,7 +2181,3 @@ EXPORT_SYMBOL(tcp_sendpage);
+ EXPORT_SYMBOL(tcp_setsockopt);
+ EXPORT_SYMBOL(tcp_shutdown);
+ EXPORT_SYMBOL(tcp_statistics);
+-#ifdef CONFIG_COMPAT
+-EXPORT_SYMBOL(compat_tcp_setsockopt);
+-EXPORT_SYMBOL(compat_tcp_getsockopt);
+-#endif
+diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
+index 249ef6c..9e85c04 100644
+--- a/net/ipv4/tcp_ipv4.c
++++ b/net/ipv4/tcp_ipv4.c
+@@ -1217,21 +1217,21 @@ int tcp_v4_tw_remember_stamp(struct inet
+ }
+ 
+ struct inet_connection_sock_af_ops ipv4_specific = {
+-	.queue_xmit	=	ip_queue_xmit,
+-	.send_check	=	tcp_v4_send_check,
+-	.rebuild_header	=	inet_sk_rebuild_header,
+-	.conn_request	=	tcp_v4_conn_request,
+-	.syn_recv_sock	=	tcp_v4_syn_recv_sock,
+-	.remember_stamp	=	tcp_v4_remember_stamp,
+-	.net_header_len	=	sizeof(struct iphdr),
+-	.setsockopt	=	ip_setsockopt,
+-	.getsockopt	=	ip_getsockopt,
++	.queue_xmit	   = ip_queue_xmit,
++	.send_check	   = tcp_v4_send_check,
++	.rebuild_header	   = inet_sk_rebuild_header,
++	.conn_request	   = tcp_v4_conn_request,
++	.syn_recv_sock	   = tcp_v4_syn_recv_sock,
++	.remember_stamp	   = tcp_v4_remember_stamp,
++	.net_header_len	   = sizeof(struct iphdr),
++	.setsockopt	   = ip_setsockopt,
++	.getsockopt	   = ip_getsockopt,
++	.addr2sockaddr	   = inet_csk_addr2sockaddr,
++	.sockaddr_len	   = sizeof(struct sockaddr_in),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt =	compat_ip_setsockopt,
+-	.compat_getsockopt =	compat_ip_getsockopt,
++	.compat_setsockopt = compat_ip_setsockopt,
++	.compat_getsockopt = compat_ip_getsockopt,
+ #endif
+-	.addr2sockaddr	=	inet_csk_addr2sockaddr,
+-	.sockaddr_len	=	sizeof(struct sockaddr_in),
+ };
+ 
+ /* NOTE: A lot of things set to zero explicitly by call to
+@@ -1812,10 +1812,6 @@ struct proto tcp_prot = {
+ 	.shutdown		= tcp_shutdown,
+ 	.setsockopt		= tcp_setsockopt,
+ 	.getsockopt		= tcp_getsockopt,
+-#ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_tcp_setsockopt,
+-	.compat_getsockopt	= compat_tcp_getsockopt,
+-#endif
+ 	.sendmsg		= tcp_sendmsg,
+ 	.recvmsg		= tcp_recvmsg,
+ 	.backlog_rcv		= tcp_v4_do_rcv,
+@@ -1834,6 +1830,10 @@ struct proto tcp_prot = {
+ 	.obj_size		= sizeof(struct tcp_sock),
+ 	.twsk_prot		= &tcp_timewait_sock_ops,
+ 	.rsk_prot		= &tcp_request_sock_ops,
++#ifdef CONFIG_COMPAT
++	.compat_setsockopt	= compat_tcp_setsockopt,
++	.compat_getsockopt	= compat_tcp_getsockopt,
++#endif
+ };
+ 
+ void __init tcp_v4_init(struct net_proto_family *ops)
+diff --git a/net/ipv4/udp.c b/net/ipv4/udp.c
+index 0b0721b..3f93292 100644
+--- a/net/ipv4/udp.c
++++ b/net/ipv4/udp.c
+@@ -1263,11 +1263,10 @@ static int udp_setsockopt(struct sock *s
+ 
+ #ifdef CONFIG_COMPAT
+ static int compat_udp_setsockopt(struct sock *sk, int level, int optname,
+-		char __user *optval, int optlen)
++				 char __user *optval, int optlen)
+ {
+ 	if (level != SOL_UDP)
+-		return compat_ip_setsockopt(sk, level,
+-				optname, optval, optlen);
++		return compat_ip_setsockopt(sk, level, optname, optval, optlen);
+ 	return do_udp_setsockopt(sk, level, optname, optval, optlen);
+ }
+ #endif
+@@ -1316,11 +1315,10 @@ static int udp_getsockopt(struct sock *s
+ 
+ #ifdef CONFIG_COMPAT
+ static int compat_udp_getsockopt(struct sock *sk, int level, int optname,
+-			  char __user *optval, int __user *optlen)
++				 char __user *optval, int __user *optlen)
+ {
+ 	if (level != SOL_UDP)
+-		return compat_ip_getsockopt(sk, level,
+-				optname, optval, optlen);
++		return compat_ip_getsockopt(sk, level, optname, optval, optlen);
+ 	return do_udp_getsockopt(sk, level, optname, optval, optlen);
+ }
+ #endif
+@@ -1372,27 +1370,27 @@ unsigned int udp_poll(struct file *file,
+ }
+ 
+ struct proto udp_prot = {
+- 	.name =		"UDP",
+-	.owner =	THIS_MODULE,
+-	.close =	udp_close,
+-	.connect =	ip4_datagram_connect,
+-	.disconnect =	udp_disconnect,
+-	.ioctl =	udp_ioctl,
+-	.destroy =	udp_destroy_sock,
+-	.setsockopt =	udp_setsockopt,
+-	.getsockopt =	udp_getsockopt,
++ 	.name		   = "UDP",
++	.owner		   = THIS_MODULE,
++	.close		   = udp_close,
++	.connect	   = ip4_datagram_connect,
++	.disconnect	   = udp_disconnect,
++	.ioctl		   = udp_ioctl,
++	.destroy	   = udp_destroy_sock,
++	.setsockopt	   = udp_setsockopt,
++	.getsockopt	   = udp_getsockopt,
++	.sendmsg	   = udp_sendmsg,
++	.recvmsg	   = udp_recvmsg,
++	.sendpage	   = udp_sendpage,
++	.backlog_rcv	   = udp_queue_rcv_skb,
++	.hash		   = udp_v4_hash,
++	.unhash		   = udp_v4_unhash,
++	.get_port	   = udp_v4_get_port,
++	.obj_size	   = sizeof(struct udp_sock),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt =	compat_udp_setsockopt,
+-	.compat_getsockopt =	compat_udp_getsockopt,
++	.compat_setsockopt = compat_udp_setsockopt,
++	.compat_getsockopt = compat_udp_getsockopt,
+ #endif
+-	.sendmsg =	udp_sendmsg,
+-	.recvmsg =	udp_recvmsg,
+-	.sendpage =	udp_sendpage,
+-	.backlog_rcv =	udp_queue_rcv_skb,
+-	.hash =		udp_v4_hash,
+-	.unhash =	udp_v4_unhash,
+-	.get_port =	udp_v4_get_port,
+-	.obj_size =	sizeof(struct udp_sock),
+ };
+ 
+ /* ------------------------------------------------------------------------ */
+diff --git a/net/ipv6/af_inet6.c b/net/ipv6/af_inet6.c
+index 97844c4..bc8d196 100644
+--- a/net/ipv6/af_inet6.c
++++ b/net/ipv6/af_inet6.c
+@@ -456,53 +456,53 @@ int inet6_ioctl(struct socket *sock, uns
+ }
+ 
+ const struct proto_ops inet6_stream_ops = {
+-	.family =	PF_INET6,
+-	.owner =	THIS_MODULE,
+-	.release =	inet6_release,
+-	.bind =		inet6_bind,
+-	.connect =	inet_stream_connect,		/* ok		*/
+-	.socketpair =	sock_no_socketpair,		/* a do nothing	*/
+-	.accept =	inet_accept,			/* ok		*/
+-	.getname =	inet6_getname, 
+-	.poll =		tcp_poll,			/* ok		*/
+-	.ioctl =	inet6_ioctl,			/* must change  */
+-	.listen =	inet_listen,			/* ok		*/
+-	.shutdown =	inet_shutdown,			/* ok		*/
+-	.setsockopt =	sock_common_setsockopt,		/* ok		*/
+-	.getsockopt =	sock_common_getsockopt,		/* ok		*/
++	.family		   = PF_INET6,
++	.owner		   = THIS_MODULE,
++	.release	   = inet6_release,
++	.bind		   = inet6_bind,
++	.connect	   = inet_stream_connect,	/* ok		*/
++	.socketpair	   = sock_no_socketpair,	/* a do nothing	*/
++	.accept		   = inet_accept,		/* ok		*/
++	.getname	   = inet6_getname, 
++	.poll		   = tcp_poll,			/* ok		*/
++	.ioctl		   = inet6_ioctl,		/* must change  */
++	.listen		   = inet_listen,		/* ok		*/
++	.shutdown	   = inet_shutdown,		/* ok		*/
++	.setsockopt	   = sock_common_setsockopt,	/* ok		*/
++	.getsockopt	   = sock_common_getsockopt,	/* ok		*/
++	.sendmsg	   = inet_sendmsg,		/* ok		*/
++	.recvmsg	   = sock_common_recvmsg,	/* ok		*/
++	.mmap		   = sock_no_mmap,
++	.sendpage	   = tcp_sendpage,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_sock_common_setsockopt,
+-	.compat_getsockopt	= compat_sock_common_getsockopt,
++	.compat_setsockopt = compat_sock_common_setsockopt,
++	.compat_getsockopt = compat_sock_common_getsockopt,
+ #endif
+-	.sendmsg =	inet_sendmsg,			/* ok		*/
+-	.recvmsg =	sock_common_recvmsg,		/* ok		*/
+-	.mmap =		sock_no_mmap,
+-	.sendpage =	tcp_sendpage
+ };
+ 
+ const struct proto_ops inet6_dgram_ops = {
+-	.family =	PF_INET6,
+-	.owner =	THIS_MODULE,
+-	.release =	inet6_release,
+-	.bind =		inet6_bind,
+-	.connect =	inet_dgram_connect,		/* ok		*/
+-	.socketpair =	sock_no_socketpair,		/* a do nothing	*/
+-	.accept =	sock_no_accept,			/* a do nothing	*/
+-	.getname =	inet6_getname, 
+-	.poll =		udp_poll,			/* ok		*/
+-	.ioctl =	inet6_ioctl,			/* must change  */
+-	.listen =	sock_no_listen,			/* ok		*/
+-	.shutdown =	inet_shutdown,			/* ok		*/
+-	.setsockopt =	sock_common_setsockopt,		/* ok		*/
+-	.getsockopt =	sock_common_getsockopt,		/* ok		*/
++	.family		   = PF_INET6,
++	.owner		   = THIS_MODULE,
++	.release	   = inet6_release,
++	.bind		   = inet6_bind,
++	.connect	   = inet_dgram_connect,	/* ok		*/
++	.socketpair	   = sock_no_socketpair,	/* a do nothing	*/
++	.accept		   = sock_no_accept,		/* a do nothing	*/
++	.getname	   = inet6_getname, 
++	.poll		   = udp_poll,			/* ok		*/
++	.ioctl		   = inet6_ioctl,		/* must change  */
++	.listen		   = sock_no_listen,		/* ok		*/
++	.shutdown	   = inet_shutdown,		/* ok		*/
++	.setsockopt	   = sock_common_setsockopt,	/* ok		*/
++	.getsockopt	   = sock_common_getsockopt,	/* ok		*/
++	.sendmsg	   = inet_sendmsg,		/* ok		*/
++	.recvmsg	   = sock_common_recvmsg,	/* ok		*/
++	.mmap		   = sock_no_mmap,
++	.sendpage	   = sock_no_sendpage,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_sock_common_setsockopt,
+-	.compat_getsockopt	= compat_sock_common_getsockopt,
++	.compat_setsockopt = compat_sock_common_setsockopt,
++	.compat_getsockopt = compat_sock_common_getsockopt,
+ #endif
+-	.sendmsg =	inet_sendmsg,			/* ok		*/
+-	.recvmsg =	sock_common_recvmsg,		/* ok		*/
+-	.mmap =		sock_no_mmap,
+-	.sendpage =	sock_no_sendpage,
+ };
+ 
+ static struct net_proto_family inet6_family_ops = {
+@@ -513,28 +513,28 @@ static struct net_proto_family inet6_fam
+ 
+ /* Same as inet6_dgram_ops, sans udp_poll.  */
+ static const struct proto_ops inet6_sockraw_ops = {
+-	.family =	PF_INET6,
+-	.owner =	THIS_MODULE,
+-	.release =	inet6_release,
+-	.bind =		inet6_bind,
+-	.connect =	inet_dgram_connect,		/* ok		*/
+-	.socketpair =	sock_no_socketpair,		/* a do nothing	*/
+-	.accept =	sock_no_accept,			/* a do nothing	*/
+-	.getname =	inet6_getname, 
+-	.poll =		datagram_poll,			/* ok		*/
+-	.ioctl =	inet6_ioctl,			/* must change  */
+-	.listen =	sock_no_listen,			/* ok		*/
+-	.shutdown =	inet_shutdown,			/* ok		*/
+-	.setsockopt =	sock_common_setsockopt,		/* ok		*/
+-	.getsockopt =	sock_common_getsockopt,		/* ok		*/
++	.family		   = PF_INET6,
++	.owner		   = THIS_MODULE,
++	.release	   = inet6_release,
++	.bind		   = inet6_bind,
++	.connect	   = inet_dgram_connect,	/* ok		*/
++	.socketpair	   = sock_no_socketpair,	/* a do nothing	*/
++	.accept		   = sock_no_accept,		/* a do nothing	*/
++	.getname	   = inet6_getname, 
++	.poll		   = datagram_poll,		/* ok		*/
++	.ioctl		   = inet6_ioctl,		/* must change  */
++	.listen		   = sock_no_listen,		/* ok		*/
++	.shutdown	   = inet_shutdown,		/* ok		*/
++	.setsockopt	   = sock_common_setsockopt,	/* ok		*/
++	.getsockopt	   = sock_common_getsockopt,	/* ok		*/
++	.sendmsg	   = inet_sendmsg,		/* ok		*/
++	.recvmsg	   = sock_common_recvmsg,	/* ok		*/
++	.mmap		   = sock_no_mmap,
++	.sendpage	   = sock_no_sendpage,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_sock_common_setsockopt,
+-	.compat_getsockopt	= compat_sock_common_getsockopt,
++	.compat_setsockopt = compat_sock_common_setsockopt,
++	.compat_getsockopt = compat_sock_common_getsockopt,
+ #endif
+-	.sendmsg =	inet_sendmsg,			/* ok		*/
+-	.recvmsg =	sock_common_recvmsg,		/* ok		*/
+-	.mmap =		sock_no_mmap,
+-	.sendpage =	sock_no_sendpage,
+ };
+ 
+ static struct inet_protosw rawv6_protosw = {
+diff --git a/net/ipv6/ipv6_sockglue.c b/net/ipv6/ipv6_sockglue.c
+index 988eac5..602feec 100644
+--- a/net/ipv6/ipv6_sockglue.c
++++ b/net/ipv6/ipv6_sockglue.c
+@@ -645,17 +645,15 @@ int ipv6_setsockopt(struct sock *sk, int
+ 
+ #ifdef CONFIG_COMPAT
+ int compat_ipv6_setsockopt(struct sock *sk, int level, int optname,
+-		    char __user *optval, int optlen)
++			   char __user *optval, int optlen)
+ {
+ 	int err;
+ 
+ 	if (level = SOL_IP && sk->sk_type != SOCK_RAW) {
+-		if (udp_prot.compat_setsockopt)
+-			return udp_prot.compat_setsockopt(sk, level,
+-					optname, optval, optlen);
+-		else
+-			return udp_prot.setsockopt(sk, level,
+-					optname, optval, optlen);
++		if (udp_prot.compat_setsockopt != NULL)
++			return udp_prot.compat_setsockopt(sk, level, optname,
++							  optval, optlen);
++		return udp_prot.setsockopt(sk, level, optname, optval, optlen);
+ 	}
+ 
+ 	if (level != SOL_IPV6)
+@@ -665,15 +663,17 @@ int compat_ipv6_setsockopt(struct sock *
+ #ifdef CONFIG_NETFILTER
+ 	/* we need to exclude all possible ENOPROTOOPTs except default case */
+ 	if (err = -ENOPROTOOPT && optname != IPV6_IPSEC_POLICY &&
+-			optname != IPV6_XFRM_POLICY) {
++	    optname != IPV6_XFRM_POLICY) {
+ 		lock_sock(sk);
+-		err = compat_nf_setsockopt(sk, PF_INET6, optname, optval,
+-				optlen);
++		err = compat_nf_setsockopt(sk, PF_INET6, optname,
++					   optval, optlen);
+ 		release_sock(sk);
+ 	}
+ #endif
+ 	return err;
+ }
++
++EXPORT_SYMBOL(compat_ipv6_setsockopt);
+ #endif
+ 
+ static int ipv6_getsockopt_sticky(struct sock *sk, struct ipv6_opt_hdr *hdr,
+@@ -927,20 +927,18 @@ int ipv6_getsockopt(struct sock *sk, int
+ 
+ #ifdef CONFIG_COMPAT
+ int compat_ipv6_getsockopt(struct sock *sk, int level, int optname,
+-		    char __user *optval, int __user *optlen)
++			   char __user *optval, int __user *optlen)
+ {
+ 	int err;
+ 
+ 	if (level = SOL_IP && sk->sk_type != SOCK_RAW) {
+-		if (udp_prot.compat_getsockopt)
+-			return udp_prot.compat_getsockopt(sk, level,
+-					optname, optval, optlen);
+-		else
+-			return udp_prot.getsockopt(sk, level,
+-					optname, optval, optlen);
++		if (udp_prot.compat_getsockopt != NULL)
++			return udp_prot.compat_getsockopt(sk, level, optname,
++							  optval, optlen);
++		return udp_prot.getsockopt(sk, level, optname, optval, optlen);
+ 	}
+ 
+-	if(level != SOL_IPV6)
++	if (level != SOL_IPV6)
+ 		return -ENOPROTOOPT;
+ 
+ 	err = do_ipv6_getsockopt(sk, level, optname, optval, optlen);
+@@ -954,8 +952,8 @@ int compat_ipv6_getsockopt(struct sock *
+ 			return -EFAULT;
+ 
+ 		lock_sock(sk);
+-		err = compat_nf_getsockopt(sk, PF_INET6, optname, optval,
+-				&len);
++		err = compat_nf_getsockopt(sk, PF_INET6,
++					   optname, optval, &len);
+ 		release_sock(sk);
+ 		if (err >= 0)
+ 			err = put_user(len, optlen);
+@@ -963,6 +961,8 @@ int compat_ipv6_getsockopt(struct sock *
+ #endif
+ 	return err;
+ }
++
++EXPORT_SYMBOL(compat_ipv6_getsockopt);
+ #endif
+ 
+ void __init ipv6_packet_init(void)
+diff --git a/net/ipv6/ipv6_syms.c b/net/ipv6/ipv6_syms.c
+index 61419e1..1648278 100644
+--- a/net/ipv6/ipv6_syms.c
++++ b/net/ipv6/ipv6_syms.c
+@@ -18,10 +18,6 @@ EXPORT_SYMBOL(ip6_route_output);
+ EXPORT_SYMBOL(addrconf_lock);
+ EXPORT_SYMBOL(ipv6_setsockopt);
+ EXPORT_SYMBOL(ipv6_getsockopt);
+-#ifdef CONFIG_COMPAT
+-EXPORT_SYMBOL(compat_ipv6_setsockopt);
+-EXPORT_SYMBOL(compat_ipv6_getsockopt);
+-#endif
+ EXPORT_SYMBOL(inet6_register_protosw);
+ EXPORT_SYMBOL(inet6_unregister_protosw);
+ EXPORT_SYMBOL(inet6_add_protocol);
+diff --git a/net/ipv6/raw.c b/net/ipv6/raw.c
+index 8de5a8e..0f63078 100644
+--- a/net/ipv6/raw.c
++++ b/net/ipv6/raw.c
+@@ -913,23 +913,21 @@ static int rawv6_setsockopt(struct sock 
+ 
+ #ifdef CONFIG_COMPAT
+ static int compat_rawv6_setsockopt(struct sock *sk, int level, int optname,
+-			  char __user *optval, int optlen)
++				   char __user *optval, int optlen)
+ {
+-	switch(level) {
+-		case SOL_RAW:
++	switch (level) {
++	case SOL_RAW:
++		break;
++	case SOL_ICMPV6:
++		if (inet_sk(sk)->num != IPPROTO_ICMPV6)
++			return -EOPNOTSUPP;
++		return rawv6_seticmpfilter(sk, level, optname, optval, optlen);
++	case SOL_IPV6:
++		if (optname = IPV6_CHECKSUM)
+ 			break;
+-
+-		case SOL_ICMPV6:
+-			if (inet_sk(sk)->num != IPPROTO_ICMPV6)
+-				return -EOPNOTSUPP;
+-			return rawv6_seticmpfilter(sk, level, optname, optval,
+-						   optlen);
+-		case SOL_IPV6:
+-			if (optname = IPV6_CHECKSUM)
+-				break;
+-		default:
+-			return compat_ipv6_setsockopt(sk, level,
+-					optname, optval, optlen);
++	default:
++		return compat_ipv6_setsockopt(sk, level, optname,
++					      optval, optlen);
+ 	};
+ 	return do_rawv6_setsockopt(sk, level, optname, optval, optlen);
+ }
+@@ -989,23 +987,21 @@ static int rawv6_getsockopt(struct sock 
+ 
+ #ifdef CONFIG_COMPAT
+ static int compat_rawv6_getsockopt(struct sock *sk, int level, int optname,
+-			  char __user *optval, int __user *optlen)
++				   char __user *optval, int __user *optlen)
+ {
+-	switch(level) {
+-		case SOL_RAW:
++	switch (level) {
++	case SOL_RAW:
++		break;
++	case SOL_ICMPV6:
++		if (inet_sk(sk)->num != IPPROTO_ICMPV6)
++			return -EOPNOTSUPP;
++		return rawv6_geticmpfilter(sk, level, optname, optval, optlen);
++	case SOL_IPV6:
++		if (optname = IPV6_CHECKSUM)
+ 			break;
+-
+-		case SOL_ICMPV6:
+-			if (inet_sk(sk)->num != IPPROTO_ICMPV6)
+-				return -EOPNOTSUPP;
+-			return rawv6_geticmpfilter(sk, level, optname, optval,
+-						   optlen);
+-		case SOL_IPV6:
+-			if (optname = IPV6_CHECKSUM)
+-				break;
+-		default:
+-			return compat_ipv6_getsockopt(sk, level,
+-					optname, optval, optlen);
++	default:
++		return compat_ipv6_getsockopt(sk, level, optname,
++					      optval, optlen);
+ 	};
+ 	return do_rawv6_getsockopt(sk, level, optname, optval, optlen);
+ }
+@@ -1056,27 +1052,27 @@ static int rawv6_init_sk(struct sock *sk
+ }
+ 
+ struct proto rawv6_prot = {
+-	.name =		"RAWv6",
+-	.owner =	THIS_MODULE,
+-	.close =	rawv6_close,
+-	.connect =	ip6_datagram_connect,
+-	.disconnect =	udp_disconnect,
+-	.ioctl =	rawv6_ioctl,
+-	.init =		rawv6_init_sk,
+-	.destroy =	inet6_destroy_sock,
+-	.setsockopt =	rawv6_setsockopt,
+-	.getsockopt =	rawv6_getsockopt,
++	.name		   = "RAWv6",
++	.owner		   = THIS_MODULE,
++	.close		   = rawv6_close,
++	.connect	   = ip6_datagram_connect,
++	.disconnect	   = udp_disconnect,
++	.ioctl		   = rawv6_ioctl,
++	.init		   = rawv6_init_sk,
++	.destroy	   = inet6_destroy_sock,
++	.setsockopt	   = rawv6_setsockopt,
++	.getsockopt	   = rawv6_getsockopt,
++	.sendmsg	   = rawv6_sendmsg,
++	.recvmsg	   = rawv6_recvmsg,
++	.bind		   = rawv6_bind,
++	.backlog_rcv	   = rawv6_rcv_skb,
++	.hash		   = raw_v6_hash,
++	.unhash		   = raw_v6_unhash,
++	.obj_size	   = sizeof(struct raw6_sock),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt =	compat_rawv6_setsockopt,
+-	.compat_getsockopt =	compat_rawv6_getsockopt,
++	.compat_setsockopt = compat_rawv6_setsockopt,
++	.compat_getsockopt = compat_rawv6_getsockopt,
+ #endif
+-	.sendmsg =	rawv6_sendmsg,
+-	.recvmsg =	rawv6_recvmsg,
+-	.bind =		rawv6_bind,
+-	.backlog_rcv =	rawv6_rcv_skb,
+-	.hash =		raw_v6_hash,
+-	.unhash =	raw_v6_unhash,
+-	.obj_size =	sizeof(struct raw6_sock),
+ };
+ 
+ #ifdef CONFIG_PROC_FS
+diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
+index 2f8975e..301eee7 100644
+--- a/net/ipv6/tcp_ipv6.c
++++ b/net/ipv6/tcp_ipv6.c
+@@ -1298,22 +1298,21 @@ static int tcp_v6_remember_stamp(struct 
+ }
+ 
+ static struct inet_connection_sock_af_ops ipv6_specific = {
+-	.queue_xmit	=	inet6_csk_xmit,
+-	.send_check	=	tcp_v6_send_check,
+-	.rebuild_header	=	inet6_sk_rebuild_header,
+-	.conn_request	=	tcp_v6_conn_request,
+-	.syn_recv_sock	=	tcp_v6_syn_recv_sock,
+-	.remember_stamp	=	tcp_v6_remember_stamp,
+-	.net_header_len	=	sizeof(struct ipv6hdr),
+-
+-	.setsockopt	=	ipv6_setsockopt,
+-	.getsockopt	=	ipv6_getsockopt,
++	.queue_xmit	   = inet6_csk_xmit,
++	.send_check	   = tcp_v6_send_check,
++	.rebuild_header	   = inet6_sk_rebuild_header,
++	.conn_request	   = tcp_v6_conn_request,
++	.syn_recv_sock	   = tcp_v6_syn_recv_sock,
++	.remember_stamp	   = tcp_v6_remember_stamp,
++	.net_header_len	   = sizeof(struct ipv6hdr),
++	.setsockopt	   = ipv6_setsockopt,
++	.getsockopt	   = ipv6_getsockopt,
++	.addr2sockaddr	   = inet6_csk_addr2sockaddr,
++	.sockaddr_len	   = sizeof(struct sockaddr_in6),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_ipv6_setsockopt,
+-	.compat_getsockopt	= compat_ipv6_getsockopt,
++	.compat_setsockopt = compat_ipv6_setsockopt,
++	.compat_getsockopt = compat_ipv6_getsockopt,
+ #endif
+-	.addr2sockaddr	=	inet6_csk_addr2sockaddr,
+-	.sockaddr_len	=	sizeof(struct sockaddr_in6)
+ };
+ 
+ /*
+@@ -1321,26 +1320,23 @@ static struct inet_connection_sock_af_op
+  */
+ 
+ static struct inet_connection_sock_af_ops ipv6_mapped = {
+-	.queue_xmit	=	ip_queue_xmit,
+-	.send_check	=	tcp_v4_send_check,
+-	.rebuild_header	=	inet_sk_rebuild_header,
+-	.conn_request	=	tcp_v6_conn_request,
+-	.syn_recv_sock	=	tcp_v6_syn_recv_sock,
+-	.remember_stamp	=	tcp_v4_remember_stamp,
+-	.net_header_len	=	sizeof(struct iphdr),
+-
+-	.setsockopt	=	ipv6_setsockopt,
+-	.getsockopt	=	ipv6_getsockopt,
++	.queue_xmit	   = ip_queue_xmit,
++	.send_check	   = tcp_v4_send_check,
++	.rebuild_header	   = inet_sk_rebuild_header,
++	.conn_request	   = tcp_v6_conn_request,
++	.syn_recv_sock	   = tcp_v6_syn_recv_sock,
++	.remember_stamp	   = tcp_v4_remember_stamp,
++	.net_header_len	   = sizeof(struct iphdr),
++	.setsockopt	   = ipv6_setsockopt,
++	.getsockopt	   = ipv6_getsockopt,
++	.addr2sockaddr	   = inet6_csk_addr2sockaddr,
++	.sockaddr_len	   = sizeof(struct sockaddr_in6),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_ipv6_setsockopt,
+-	.compat_getsockopt	= compat_ipv6_getsockopt,
++	.compat_setsockopt = compat_ipv6_setsockopt,
++	.compat_getsockopt = compat_ipv6_getsockopt,
+ #endif
+-	.addr2sockaddr	=	inet6_csk_addr2sockaddr,
+-	.sockaddr_len	=	sizeof(struct sockaddr_in6)
+ };
+ 
+-
+-
+ /* NOTE: A lot of things set to zero explicitly by call to
+  *       sk_alloc() so need not be done here.
+  */
+@@ -1574,10 +1570,6 @@ struct proto tcpv6_prot = {
+ 	.shutdown		= tcp_shutdown,
+ 	.setsockopt		= tcp_setsockopt,
+ 	.getsockopt		= tcp_getsockopt,
+-#ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_tcp_setsockopt,
+-	.compat_getsockopt	= compat_tcp_getsockopt,
+-#endif
+ 	.sendmsg		= tcp_sendmsg,
+ 	.recvmsg		= tcp_recvmsg,
+ 	.backlog_rcv		= tcp_v6_do_rcv,
+@@ -1596,6 +1588,10 @@ struct proto tcpv6_prot = {
+ 	.obj_size		= sizeof(struct tcp6_sock),
+ 	.twsk_prot		= &tcp6_timewait_sock_ops,
+ 	.rsk_prot		= &tcp6_request_sock_ops,
++#ifdef CONFIG_COMPAT
++	.compat_setsockopt	= compat_tcp_setsockopt,
++	.compat_getsockopt	= compat_tcp_getsockopt,
++#endif
+ };
+ 
+ static struct inet6_protocol tcpv6_protocol = {
+diff --git a/net/ipv6/udp.c b/net/ipv6/udp.c
+index 538ada0..8d3432a 100644
+--- a/net/ipv6/udp.c
++++ b/net/ipv6/udp.c
+@@ -934,11 +934,11 @@ static int udpv6_setsockopt(struct sock 
+ 
+ #ifdef CONFIG_COMPAT
+ static int compat_udpv6_setsockopt(struct sock *sk, int level, int optname,
+-		char __user *optval, int optlen)
++				   char __user *optval, int optlen)
+ {
+ 	if (level != SOL_UDP)
+-		return compat_ipv6_setsockopt(sk, level,
+-				optname, optval, optlen);
++		return compat_ipv6_setsockopt(sk, level, optname,
++					      optval, optlen);
+ 	return do_udpv6_setsockopt(sk, level, optname, optval, optlen);
+ }
+ #endif
+@@ -987,11 +987,11 @@ static int udpv6_getsockopt(struct sock 
+ 
+ #ifdef CONFIG_COMPAT
+ static int compat_udpv6_getsockopt(struct sock *sk, int level, int optname,
+-			  char __user *optval, int __user *optlen)
++				   char __user *optval, int __user *optlen)
+ {
+ 	if (level != SOL_UDP)
+-		return compat_ipv6_getsockopt(sk, level,
+-				optname, optval, optlen);
++		return compat_ipv6_getsockopt(sk, level, optname,
++					      optval, optlen);
+ 	return do_udpv6_getsockopt(sk, level, optname, optval, optlen);
+ }
+ #endif
+@@ -1069,26 +1069,26 @@ void udp6_proc_exit(void) {
+ /* ------------------------------------------------------------------------ */
+ 
+ struct proto udpv6_prot = {
+-	.name =		"UDPv6",
+-	.owner =	THIS_MODULE,
+-	.close =	udpv6_close,
+-	.connect =	ip6_datagram_connect,
+-	.disconnect =	udp_disconnect,
+-	.ioctl =	udp_ioctl,
+-	.destroy =	udpv6_destroy_sock,
+-	.setsockopt =	udpv6_setsockopt,
+-	.getsockopt =	udpv6_getsockopt,
++	.name		   = "UDPv6",
++	.owner		   = THIS_MODULE,
++	.close		   = udpv6_close,
++	.connect	   = ip6_datagram_connect,
++	.disconnect	   = udp_disconnect,
++	.ioctl		   = udp_ioctl,
++	.destroy	   = udpv6_destroy_sock,
++	.setsockopt	   = udpv6_setsockopt,
++	.getsockopt	   = udpv6_getsockopt,
++	.sendmsg	   = udpv6_sendmsg,
++	.recvmsg	   = udpv6_recvmsg,
++	.backlog_rcv	   = udpv6_queue_rcv_skb,
++	.hash		   = udp_v6_hash,
++	.unhash		   = udp_v6_unhash,
++	.get_port	   = udp_v6_get_port,
++	.obj_size	   = sizeof(struct udp6_sock),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt =	compat_udpv6_setsockopt,
+-	.compat_getsockopt =	compat_udpv6_getsockopt,
++	.compat_setsockopt = compat_udpv6_setsockopt,
++	.compat_getsockopt = compat_udpv6_getsockopt,
+ #endif
+-	.sendmsg =	udpv6_sendmsg,
+-	.recvmsg =	udpv6_recvmsg,
+-	.backlog_rcv =	udpv6_queue_rcv_skb,
+-	.hash =		udp_v6_hash,
+-	.unhash =	udp_v6_unhash,
+-	.get_port =	udp_v6_get_port,
+-	.obj_size =	sizeof(struct udp6_sock),
+ };
+ 
+ static struct inet_protosw udpv6_protosw = {
+diff --git a/net/netfilter/nf_sockopt.c b/net/netfilter/nf_sockopt.c
+index da1cd48..0a63d7d 100644
+--- a/net/netfilter/nf_sockopt.c
++++ b/net/netfilter/nf_sockopt.c
+@@ -133,7 +133,7 @@ EXPORT_SYMBOL(nf_getsockopt);
+ 
+ #ifdef CONFIG_COMPAT
+ static int compat_nf_sockopt(struct sock *sk, int pf, int val,
+-		      char __user *opt, int *len, int get)
++			     char __user *opt, int *len, int get)
+ {
+ 	struct list_head *i;
+ 	struct nf_sockopt_ops *ops;
+diff --git a/net/sctp/ipv6.c b/net/sctp/ipv6.c
+index bbee14d..c20d282 100644
+--- a/net/sctp/ipv6.c
++++ b/net/sctp/ipv6.c
+@@ -861,27 +861,27 @@ static int sctp_inet6_supported_addrs(co
+ }
+ 
+ static const struct proto_ops inet6_seqpacket_ops = {
+-	.family     = PF_INET6,
+-	.owner      = THIS_MODULE,
+-	.release    = inet6_release,
+-	.bind       = inet6_bind,
+-	.connect    = inet_dgram_connect,
+-	.socketpair = sock_no_socketpair,
+-	.accept     = inet_accept,
+-	.getname    = inet6_getname,
+-	.poll       = sctp_poll,
+-	.ioctl      = inet6_ioctl,
+-	.listen     = sctp_inet_listen,
+-	.shutdown   = inet_shutdown,
+-	.setsockopt = sock_common_setsockopt,
+-	.getsockopt = sock_common_getsockopt,
++	.family		   = PF_INET6,
++	.owner		   = THIS_MODULE,
++	.release	   = inet6_release,
++	.bind		   = inet6_bind,
++	.connect	   = inet_dgram_connect,
++	.socketpair	   = sock_no_socketpair,
++	.accept		   = inet_accept,
++	.getname	   = inet6_getname,
++	.poll		   = sctp_poll,
++	.ioctl		   = inet6_ioctl,
++	.listen		   = sctp_inet_listen,
++	.shutdown	   = inet_shutdown,
++	.setsockopt	   = sock_common_setsockopt,
++	.getsockopt	   = sock_common_getsockopt,
++	.sendmsg	   = inet_sendmsg,
++	.recvmsg	   = sock_common_recvmsg,
++	.mmap		   = sock_no_mmap,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_sock_common_setsockopt,
+-	.compat_getsockopt	= compat_sock_common_getsockopt,
++	.compat_setsockopt = compat_sock_common_setsockopt,
++	.compat_getsockopt = compat_sock_common_getsockopt,
+ #endif
+-	.sendmsg    = inet_sendmsg,
+-	.recvmsg    = sock_common_recvmsg,
+-	.mmap       = sock_no_mmap,
+ };
+ 
+ static struct inet_protosw sctpv6_seqpacket_protosw = {
+@@ -915,35 +915,35 @@ static struct inet6_protocol sctpv6_prot
+ };
+ 
+ static struct sctp_af sctp_ipv6_specific = {
+-	.sctp_xmit       = sctp_v6_xmit,
+-	.setsockopt      = ipv6_setsockopt,
+-	.getsockopt      = ipv6_getsockopt,
++	.sa_family	   = AF_INET6,
++	.sctp_xmit	   = sctp_v6_xmit,
++	.setsockopt	   = ipv6_setsockopt,
++	.getsockopt	   = ipv6_getsockopt,
++	.get_dst	   = sctp_v6_get_dst,
++	.get_saddr	   = sctp_v6_get_saddr,
++	.copy_addrlist	   = sctp_v6_copy_addrlist,
++	.from_skb	   = sctp_v6_from_skb,
++	.from_sk	   = sctp_v6_from_sk,
++	.to_sk_saddr	   = sctp_v6_to_sk_saddr,
++	.to_sk_daddr	   = sctp_v6_to_sk_daddr,
++	.from_addr_param   = sctp_v6_from_addr_param,
++	.to_addr_param	   = sctp_v6_to_addr_param,
++	.dst_saddr	   = sctp_v6_dst_saddr,
++	.cmp_addr	   = sctp_v6_cmp_addr,
++	.scope		   = sctp_v6_scope,
++	.addr_valid	   = sctp_v6_addr_valid,
++	.inaddr_any	   = sctp_v6_inaddr_any,
++	.is_any		   = sctp_v6_is_any,
++	.available	   = sctp_v6_available,
++	.skb_iif	   = sctp_v6_skb_iif,
++	.is_ce		   = sctp_v6_is_ce,
++	.seq_dump_addr	   = sctp_v6_seq_dump_addr,
++	.net_header_len	   = sizeof(struct ipv6hdr),
++	.sockaddr_len	   = sizeof(struct sockaddr_in6),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_ipv6_setsockopt,
+-	.compat_getsockopt	= compat_ipv6_getsockopt,
++	.compat_setsockopt = compat_ipv6_setsockopt,
++	.compat_getsockopt = compat_ipv6_getsockopt,
+ #endif
+-	.get_dst	 = sctp_v6_get_dst,
+-	.get_saddr	 = sctp_v6_get_saddr,
+-	.copy_addrlist   = sctp_v6_copy_addrlist,
+-	.from_skb        = sctp_v6_from_skb,
+-	.from_sk         = sctp_v6_from_sk,
+-	.to_sk_saddr     = sctp_v6_to_sk_saddr,
+-	.to_sk_daddr     = sctp_v6_to_sk_daddr,
+-	.from_addr_param = sctp_v6_from_addr_param,
+-	.to_addr_param   = sctp_v6_to_addr_param,
+-	.dst_saddr       = sctp_v6_dst_saddr,
+-	.cmp_addr        = sctp_v6_cmp_addr,
+-	.scope           = sctp_v6_scope,
+-	.addr_valid      = sctp_v6_addr_valid,
+-	.inaddr_any      = sctp_v6_inaddr_any,
+-	.is_any          = sctp_v6_is_any,
+-	.available       = sctp_v6_available,
+-	.skb_iif         = sctp_v6_skb_iif,
+-	.is_ce           = sctp_v6_is_ce,
+-	.seq_dump_addr   = sctp_v6_seq_dump_addr,
+-	.net_header_len  = sizeof(struct ipv6hdr),
+-	.sockaddr_len    = sizeof(struct sockaddr_in6),
+-	.sa_family       = AF_INET6,
+ };
+ 
+ static struct sctp_pf sctp_pf_inet6_specific = {
+diff --git a/net/sctp/protocol.c b/net/sctp/protocol.c
+index d90f549..e66988e 100644
+--- a/net/sctp/protocol.c
++++ b/net/sctp/protocol.c
+@@ -831,28 +831,28 @@ static struct notifier_block sctp_inetad
+ 
+ /* Socket operations.  */
+ static const struct proto_ops inet_seqpacket_ops = {
+-	.family      = PF_INET,
+-	.owner       = THIS_MODULE,
+-	.release     = inet_release,       /* Needs to be wrapped... */
+-	.bind        = inet_bind,
+-	.connect     = inet_dgram_connect,
+-	.socketpair  = sock_no_socketpair,
+-	.accept      = inet_accept,
+-	.getname     = inet_getname,      /* Semantics are different.  */
+-	.poll        = sctp_poll,
+-	.ioctl       = inet_ioctl,
+-	.listen      = sctp_inet_listen,
+-	.shutdown    = inet_shutdown,     /* Looks harmless.  */
+-	.setsockopt  = sock_common_setsockopt,   /* IP_SOL IP_OPTION is a problem. */
+-	.getsockopt  = sock_common_getsockopt,
++	.family		   = PF_INET,
++	.owner		   = THIS_MODULE,
++	.release	   = inet_release,	/* Needs to be wrapped... */
++	.bind		   = inet_bind,
++	.connect	   = inet_dgram_connect,
++	.socketpair	   = sock_no_socketpair,
++	.accept		   = inet_accept,
++	.getname	   = inet_getname,	/* Semantics are different.  */
++	.poll		   = sctp_poll,
++	.ioctl		   = inet_ioctl,
++	.listen		   = sctp_inet_listen,
++	.shutdown	   = inet_shutdown,	/* Looks harmless.  */
++	.setsockopt	   = sock_common_setsockopt, /* IP_SOL IP_OPTION is a problem */
++	.getsockopt	   = sock_common_getsockopt,
++	.sendmsg	   = inet_sendmsg,
++	.recvmsg	   = sock_common_recvmsg,
++	.mmap		   = sock_no_mmap,
++	.sendpage	   = sock_no_sendpage,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt  = compat_sock_common_setsockopt,
+-	.compat_getsockopt  = compat_sock_common_getsockopt,
++	.compat_setsockopt = compat_sock_common_setsockopt,
++	.compat_getsockopt = compat_sock_common_getsockopt,
+ #endif
+-	.sendmsg     = inet_sendmsg,
+-	.recvmsg     = sock_common_recvmsg,
+-	.mmap        = sock_no_mmap,
+-	.sendpage    = sock_no_sendpage,
+ };
+ 
+ /* Registration with AF_INET family.  */
+@@ -884,35 +884,35 @@ static struct net_protocol sctp_protocol
+ 
+ /* IPv4 address related functions.  */
+ static struct sctp_af sctp_ipv4_specific = {
+-	.sctp_xmit      = sctp_v4_xmit,
+-	.setsockopt     = ip_setsockopt,
+-	.getsockopt     = ip_getsockopt,
++	.sa_family	   = AF_INET,
++	.sctp_xmit	   = sctp_v4_xmit,
++	.setsockopt	   = ip_setsockopt,
++	.getsockopt	   = ip_getsockopt,
++	.get_dst	   = sctp_v4_get_dst,
++	.get_saddr	   = sctp_v4_get_saddr,
++	.copy_addrlist	   = sctp_v4_copy_addrlist,
++	.from_skb	   = sctp_v4_from_skb,
++	.from_sk	   = sctp_v4_from_sk,
++	.to_sk_saddr	   = sctp_v4_to_sk_saddr,
++	.to_sk_daddr	   = sctp_v4_to_sk_daddr,
++	.from_addr_param   = sctp_v4_from_addr_param,
++	.to_addr_param	   = sctp_v4_to_addr_param,	
++	.dst_saddr	   = sctp_v4_dst_saddr,
++	.cmp_addr	   = sctp_v4_cmp_addr,
++	.addr_valid	   = sctp_v4_addr_valid,
++	.inaddr_any	   = sctp_v4_inaddr_any,
++	.is_any		   = sctp_v4_is_any,
++	.available	   = sctp_v4_available,
++	.scope		   = sctp_v4_scope,
++	.skb_iif	   = sctp_v4_skb_iif,
++	.is_ce		   = sctp_v4_is_ce,
++	.seq_dump_addr	   = sctp_v4_seq_dump_addr,
++	.net_header_len	   = sizeof(struct iphdr),
++	.sockaddr_len	   = sizeof(struct sockaddr_in),
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt     = compat_ip_setsockopt,
+-	.compat_getsockopt     = compat_ip_getsockopt,
++	.compat_setsockopt = compat_ip_setsockopt,
++	.compat_getsockopt = compat_ip_getsockopt,
+ #endif
+-	.get_dst	= sctp_v4_get_dst,
+-	.get_saddr	= sctp_v4_get_saddr,
+-	.copy_addrlist  = sctp_v4_copy_addrlist,
+-	.from_skb       = sctp_v4_from_skb,
+-	.from_sk        = sctp_v4_from_sk,
+-	.to_sk_saddr    = sctp_v4_to_sk_saddr,
+-	.to_sk_daddr    = sctp_v4_to_sk_daddr,
+-	.from_addr_param= sctp_v4_from_addr_param,
+-	.to_addr_param  = sctp_v4_to_addr_param,	
+-	.dst_saddr      = sctp_v4_dst_saddr,
+-	.cmp_addr       = sctp_v4_cmp_addr,
+-	.addr_valid     = sctp_v4_addr_valid,
+-	.inaddr_any     = sctp_v4_inaddr_any,
+-	.is_any         = sctp_v4_is_any,
+-	.available      = sctp_v4_available,
+-	.scope          = sctp_v4_scope,
+-	.skb_iif        = sctp_v4_skb_iif,
+-	.is_ce          = sctp_v4_is_ce,
+-	.seq_dump_addr  = sctp_v4_seq_dump_addr,
+-	.net_header_len = sizeof(struct iphdr),
+-	.sockaddr_len   = sizeof(struct sockaddr_in),
+-	.sa_family      = AF_INET,
+ };
+ 
+ struct sctp_pf *sctp_get_pf_specific(sa_family_t family) {
 -- 
 1.2.2.gd27d
 
