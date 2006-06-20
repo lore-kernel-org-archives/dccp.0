@@ -1,73 +1,136 @@
 From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 24 Jun 2006 22:36:15 +0000
-Subject: Re: mail voor linux mailinglist
-Message-Id: <5640c7e00606241536k1d14d17er509da41e8de8d5de@mail.gmail.com>
+Date: Tue, 20 Jun 2006 23:40:05 +0000
+Subject: Locking validator output on DCCP
+Message-Id: <5640c7e00606201640wa1ad17fl46a32ceb49513867@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <449A9006.9030608@intec.ugent.be>
-In-Reply-To: <449A9006.9030608@intec.ugent.be>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/23/06, Johannes Deleu <Johannes.Deleu@intec.ugent.be> wrote:
->
-> Hi,
->
-> for a project, we're interested in using DCCP. As such, I did some
-> performance measurements with the latest version of the DCCP
-> implementation. To my opinion, they are not really what I expected.
-> Could you give some ideas or maybe some information about the current
-> status of the implementation (e.g. is packet loss detection planned for
-> implementation, when ?) ?
+Folks,
 
-Packet loss has been implemented and is working for me. What is your
-test environment? I am using netem on a router between two boxes.
->
-> Results of similar tests are also interesting to see if they compare.
-> For the tests, I used an impairment node (based on linux, which
-> introduced some packet loss).
->
-> Measurements where performed with the patched iperf on linux-2.6.16.20
-> and I came to the following table:
->
->                     TCP                 DCCP-CCID3 (Send/Recv)
-> No drop       94 Mbps          93.3 Mbps      93.2 Mbps
-> Drop 1%      83.4 Mbps       93.3 Mbps      92.3 Mbps
-> Drop 5%      16.6 Mbps       93.3 Mbps      88.6 Mbps
-> Drop 10%    3.25 Mbps       93.3 Mbps      83.9 Mbps
->
-> The transmitter does not detect the packet loss and doesnt slow down,
-> instead it keeps sending <CCID option 192 4294967295>.
-> As CCID3 is TFRC, I expected similar results for TCP and DCCP-CCID3.
->
-> When i tried out linux-2.6.17.1 (no packet drop) the receiver seems to
-> stop sending feedback packets after a while and the transmitter slows
-> down. The receiving process doesnt receive any data (recv doesnt return).
->
-> [  3] local 10.0.1.3 port 3743 connected with 10.0.1.1 port 5001
-> [  3]  0.0- 1.0 sec  11.0 MBytes  92.5 Mbits/sec
-> [  3]  1.0- 2.0 sec  10.9 MBytes  91.6 Mbits/sec
-> [  3]  2.0- 3.0 sec  10.9 MBytes  91.6 Mbits/sec
-> [  3]  3.0- 4.0 sec  10.9 MBytes  91.6 Mbits/sec
-> [  3]  4.0- 5.0 sec  10.9 MBytes  91.6 Mbits/sec
-> [  3]  5.0- 6.0 sec  10.9 MBytes  91.6 Mbits/sec
-> [  3]  6.0- 7.0 sec  6.86 MBytes  57.5 Mbits/sec
-> [  3]  7.0- 8.0 sec    194 KBytes  1.59 Mbits/sec
-> [  3]  8.0- 9.0 sec    100 KBytes    819 Kbits/sec
-> [  3]  9.0-10.0 sec    100 KBytes    819 Kbits/sec
-> [  3] 10.0-11.0 sec    100 KBytes    819 Kbits/sec
-> [  3] 11.0-12.0 sec    100 KBytes    819 Kbits/sec
-> [  3] 12.0-13.0 sec    100 KBytes    819 Kbits/sec
->
-There are a few issues still with DCCP at the moment (which is why it
-is marked experimental). Keep supplying us data/info and we will see
-what we will do. Nobody is working fulltime on this code so it can
-take a while to fix - feel free to help though!
+I am getting this when I am using DCCP with 2.6.17-rc6-mm2 with Ingo's
+lock dependency patch:
 
-One note - when using CCID3 have you turned off ackvecs via the sysctl
-as that is really for CCID2... It's probably something we should do in
-the code actually.
+Jun 21 09:38:58 localhost kernel: [  102.068588]
+Jun 21 09:38:58 localhost kernel: [  102.068592]
+======================Jun 21 09:38:58 localhost kernel: [  102.068602] [ INFO: possible
+recursive locking detected ]
+Jun 21 09:38:58 localhost kernel: [  102.068608]
+---------------------------------------------
+Jun 21 09:38:58 localhost kernel: [  102.068615] idle/0 is trying to
+acquire lock:
+Jun 21 09:38:58 localhost kernel: [  102.068620]
+(&sk->sk_lock.slock#3){-+..}, at: [<c0245511>] sk_clone+0x5a/0x190
+Jun 21 09:38:58 localhost kernel: [  102.068644]
+Jun 21 09:38:58 localhost kernel: [  102.068646] but task is already
+holding lock:
+Jun 21 09:38:58 localhost kernel: [  102.068651]
+(&sk->sk_lock.slock#3){-+..}, at: [<c024650d>]
+sk_receive_skb+0xe6/0xfe
+Jun 21 09:38:58 localhost kernel: [  102.068668]
+Jun 21 09:38:58 localhost kernel: [  102.068670] other info that might
+help us debug this:
+Jun 21 09:38:58 localhost kernel: [  102.068676] 2 locks held by idle/0:
+Jun 21 09:38:58 localhost kernel: [  102.068679]  #0:
+(&tp->rx_lock){-+..}, at: [<e087d915>] rtl8139_poll+0x42/0x41c
+[8139too]
+Jun 21 09:38:58 localhost kernel: [  102.068722]  #1:
+(&sk->sk_lock.slock#3){-+..}, at: [<c024650d>]
+sk_receive_skb+0xe6/0xfe
+Jun 21 09:38:58 localhost kernel: [  102.068739]
+Jun 21 09:38:58 localhost kernel: [  102.068741] stack backtrace:
+Jun 21 09:38:58 localhost kernel: [  102.069053]  [<c0103a2a>]
+show_trace_log_lvl+0x53/0xff
+Jun 21 09:38:58 localhost kernel: [  102.069091]  [<c0104078>]
+show_trace+0x16/0x19
+Jun 21 09:38:58 localhost kernel: [  102.069121]  [<c010411e>]
+dump_stack+0x1a/0x1f
+Jun 21 09:38:58 localhost kernel: [  102.069151]  [<c012d6cb>]
+__lock_acquire+0x8e6/0x902
+Jun 21 09:38:58 localhost kernel: [  102.069363]  [<c012d879>]
+lock_acquire+0x4e/0x66
+Jun 21 09:38:58 localhost kernel: [  102.069562]  [<c029779d>]
+_spin_lock+0x24/0x32
+Jun 21 09:38:58 localhost kernel: [  102.069777]  [<c0245511>]
+sk_clone+0x5a/0x190
+Jun 21 09:38:58 localhost kernel: [  102.071244]  [<c026cc93>]
+inet_csk_clone+0xf/0x67
+Jun 21 09:38:58 localhost kernel: [  102.072932]  [<e0cc7f31>]
+dccp_create_openreq_child+0x17/0x2fe [dccp]
+Jun 21 09:38:58 localhost kernel: [  102.072993]  [<e0b48c9b>]
+dccp_v4_request_recv_sock+0x47/0x260 [dccp_ipv4]
+Jun 21 09:38:58 localhost kernel: [  102.073020]  [<e0cc8340>]
+dccp_check_req+0x128/0x264 [dccp]
+Jun 21 09:38:58 localhost kernel: [  102.073049]  [<e0b48a38>]
+dccp_v4_do_rcv+0x74/0x290 [dccp_ipv4]
+Jun 21 09:38:58 localhost kernel: [  102.073067]  [<c0246492>]
+sk_receive_skb+0x6b/0xfe
+Jun 21 09:38:58 localhost kernel: [  102.074607]  [<e0b49e9c>]
+dccp_v4_rcv+0x4ea/0x66e [dccp_ipv4]
+Jun 21 09:38:58 localhost kernel: [  102.074651]  [<c0265540>]
+ip_local_deliver+0x159/0x1f1
+Jun 21 09:38:58 localhost kernel: [  102.076322]  [<c02653ba>]
+ip_rcv+0x3e9/0x416
+Jun 21 09:38:58 localhost kernel: [  102.077995]  [<c024b768>]
+netif_receive_skb+0x287/0x317
+Jun 21 09:38:58 localhost kernel: [  102.079562]  [<e087db67>]
+rtl8139_poll+0x294/0x41c [8139too]
+Jun 21 09:38:58 localhost kernel: [  102.079610]  [<c024d149>]
+net_rx_action+0x8b/0x17c
+Jun 21 09:38:58 localhost kernel: [  102.081181]  [<c011adf6>]
+__do_softirq+0x54/0xb3
+Jun 21 09:38:58 localhost kernel: [  102.081357]  [<c011ae84>]
+do_softirq+0x2f/0x47
+Jun 21 09:38:58 localhost kernel: [  102.081482]  [<c011b0a5>]
+irq_exit+0x39/0x46
+Jun 21 09:38:58 localhost kernel: [  102.081608]  [<c0104f73>] do_IRQ+0x77/0x84
+Jun 21 09:38:58 localhost kernel: [  102.081644]  [<c0103561>]
+common_interrupt+0x25/0x2c
+Jun 21 09:38:58 localhost kernel: [  154.463644] CCID: Registered CCID 3 (ccid3)
+
+The code of sk_clone (net/core/sock.c) is:
+
+struct sock *sk_clone(const struct sock *sk, const gfp_t priority)
+{
+	struct sock *newsk = sk_alloc(sk->sk_family, priority, sk->sk_prot, 0);
+
+	if (newsk != NULL) {
+		struct sk_filter *filter;
+
+		memcpy(newsk, sk, sk->sk_prot->obj_size);
+
+		/* SANITY */
+		sk_node_init(&newsk->sk_node);
+		sock_lock_init(newsk);
+
+The relevant code is the sock_lock_init
+
+The code of sk_receive_skb (net/core/sock.c) is:
+
+int sk_receive_skb(struct sock *sk, struct sk_buff *skb)
+{
+	int rc = NET_RX_SUCCESS;
+
+	if (sk_filter(sk, skb, 0))
+		goto discard_and_relse;
+
+	skb->dev = NULL;
+
+	bh_lock_sock(sk);
+
+The relevant code is the bh_lock_sock.
+
+As I read this it is not a recursive lock as sk_clone is occurring
+second and is actually creating a new socket so they are trying to
+lock on different sockets.
+
+Can someone tell me whether I am correct in my thinking or not? If I
+am then I will work out how to tell the lock validator not to worry
+about it.
+
+Thanks,
 
 Ian
 -- 
