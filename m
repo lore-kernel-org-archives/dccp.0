@@ -1,43 +1,50 @@
-From: Herbert Xu <herbert@gondor.apana.org.au>
-Date: Wed, 21 Jun 2006 00:34:13 +0000
+From: Arjan van de Ven <arjan@linux.intel.com>
+Date: Wed, 21 Jun 2006 10:18:11 +0000
 Subject: Re: Locking validator output on DCCP
-Message-Id: <20060621003413.GA31915@gondor.apana.org.au>
+Message-Id: <1150885091.3057.30.camel@laptopd505.fenrus.org>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00606201640wa1ad17fl46a32ceb49513867@mail.gmail.com>
 In-Reply-To: <5640c7e00606201640wa1ad17fl46a32ceb49513867@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="hz-gb-2312"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-T24gVHVlLCBKdW4gMjAsIDIwMDYgYXQgMTE6NDA6MDVQTSArMDAwMCwgSWFuIE1jRG9uYWxkIHdy
-b3RlOgo+IAo+IEkgYW0gZ2V0dGluZyB0aGlzIHdoZW4gSSBhbSB1c2luZyBEQ0NQIHdpdGggMi42
-LjE3LXJjNi1tbTIgd2l0aCBJbmdvJ3MKPiBsb2NrIGRlcGVuZGVuY3kgcGF0Y2g6Cj4gCj4gSnVu
-IDIxIDA5OjM4OjU4IGxvY2FsaG9zdCBrZXJuZWw6IFsgIDEwMi4wNjg1ODhdCj4gSnVuIDIxIDA5
-OjM4OjU4IGxvY2FsaG9zdCBrZXJuZWw6IFsgIDEwMi4wNjg1OTJdCj4gPT09PT09PT09PT09PT09
-PT09PT09PT4gSnVuIDIxIDA5OjM4OjU4IGxvY2FsaG9zdCBrZXJuZWw6IFsgIDEwMi4wNjg2MDJd
-IFsgSU5GTzogcG9zc2libGUKPiByZWN1cnNpdmUgbG9ja2luZyBkZXRlY3RlZCBdCj4gSnVuIDIx
-IDA5OjM4OjU4IGxvY2FsaG9zdCBrZXJuZWw6IFsgIDEwMi4wNjg2MDhdCj4gLS0tLS0tLS0tLS0t
-LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCj4gSnVuIDIxIDA5OjM4OjU4IGxvY2Fs
-aG9zdCBrZXJuZWw6IFsgIDEwMi4wNjg2MTVdIGlkbGUvMCBpcyB0cnlpbmcgdG8KPiBhY3F1aXJl
-IGxvY2s6Cj4gSnVuIDIxIDA5OjM4OjU4IGxvY2FsaG9zdCBrZXJuZWw6IFsgIDEwMi4wNjg2MjBd
-Cj4gKCZzay0+c2tfbG9jay5zbG9jayMzKXstKy4ufSwgYXQ6IFs8YzAyNDU1MTE+XSBza19jbG9u
-ZSsweDVhLzB4MTkwCj4gSnVuIDIxIDA5OjM4OjU4IGxvY2FsaG9zdCBrZXJuZWw6IFsgIDEwMi4w
-Njg2NDRdCj4gSnVuIDIxIDA5OjM4OjU4IGxvY2FsaG9zdCBrZXJuZWw6IFsgIDEwMi4wNjg2NDZd
-IGJ1dCB0YXNrIGlzIGFscmVhZHkKPiBob2xkaW5nIGxvY2s6Cj4gSnVuIDIxIDA5OjM4OjU4IGxv
-Y2FsaG9zdCBrZXJuZWw6IFsgIDEwMi4wNjg2NTFdCj4gKCZzay0+c2tfbG9jay5zbG9jayMzKXst
-Ky4ufSwgYXQ6IFs8YzAyNDY1MGQ+XQo+IHNrX3JlY2VpdmVfc2tiKzB4ZTYvMHhmZQoKLi4uCiAK
-PiBBcyBJIHJlYWQgdGhpcyBpdCBpcyBub3QgYSByZWN1cnNpdmUgbG9jayBhcyBza19jbG9uZSBp
-cyBvY2N1cnJpbmcKPiBzZWNvbmQgYW5kIGlzIGFjdHVhbGx5IGNyZWF0aW5nIGEgbmV3IHNvY2tl
-dCBzbyB0aGV5IGFyZSB0cnlpbmcgdG8KPiBsb2NrIG9uIGRpZmZlcmVudCBzb2NrZXRzLgo+IAo+
-IENhbiBzb21lb25lIHRlbGwgbWUgd2hldGhlciBJIGFtIGNvcnJlY3QgaW4gbXkgdGhpbmtpbmcg
-b3Igbm90PyBJZiBJCj4gYW0gdGhlbiBJIHdpbGwgd29yayBvdXQgaG93IHRvIHRlbGwgdGhlIGxv
-Y2sgdmFsaWRhdG9yIG5vdCB0byB3b3JyeQo+IGFib3V0IGl0LgoKSSBhZ3JlZSwgdGhpcyBsb29r
-cyBib2d1cy4gIEluZ28sIGNvdWxkIHlvdSBwbGVhc2UgdGFrZSBhIGxvb2s/CgpUaGFua3MsCi0t
-IApWaXNpdCBPcGVuc3dhbiBhdCBodHRwOi8vd3d3Lm9wZW5zd2FuLm9yZy8KRW1haWw6IEhlcmJl
-cnQgWHUgfntQbVY+SEl+fSA8aGVyYmVydEBnb25kb3IuYXBhbmEub3JnLmF1PgpIb21lIFBhZ2U6
-IGh0dHA6Ly9nb25kb3IuYXBhbmEub3JnLmF1L35oZXJiZXJ0LwpQR1AgS2V5OiBodHRwOi8vZ29u
-ZG9yLmFwYW5hLm9yZy5hdS9+aGVyYmVydC9wdWJrZXkudHh0Ci0KVG8gdW5zdWJzY3JpYmUgZnJv
-bSB0aGlzIGxpc3Q6IHNlbmQgdGhlIGxpbmUgInVuc3Vic2NyaWJlIGRjY3AiIGluCnRoZSBib2R5
-IG9mIGEgbWVzc2FnZSB0byBtYWpvcmRvbW9Admdlci5rZXJuZWwub3JnCk1vcmUgbWFqb3Jkb21v
-IGluZm8gYXQgIGh0dHA6Ly92Z2VyLmtlcm5lbC5vcmcvbWFqb3Jkb21vLWluZm8uaHRtbA==
+On Wed, 2006-06-21 at 10:34 +1000, Herbert Xu wrote:
+> > As I read this it is not a recursive lock as sk_clone is occurring
+> > second and is actually creating a new socket so they are trying to
+> > lock on different sockets.
+> > 
+> > Can someone tell me whether I am correct in my thinking or not? If I
+> > am then I will work out how to tell the lock validator not to worry
+> > about it.
+> 
+> I agree, this looks bogus.  Ingo, could you please take a look?
+
+Fix is relatively easy:
+
+
+sk_clone creates a new socket, and thus can never deadlock, and in fact
+can be called with the original socket locked. This therefore is a
+legitimate nesting case; mark it as such.
+
+Signed-off-by: Arjan van de Ven <arjan@linux.intel.com>
+
+
+---
+ net/core/sock.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Index: linux-2.6.17-rc6-mm2/net/core/sock.c
+=================================--- linux-2.6.17-rc6-mm2.orig/net/core/sock.c
++++ linux-2.6.17-rc6-mm2/net/core/sock.c
+@@ -846,7 +846,7 @@ struct sock *sk_clone(const struct sock 
+ 		/* SANITY */
+ 		sk_node_init(&newsk->sk_node);
+ 		sock_lock_init(newsk);
+-		bh_lock_sock(newsk);
++		bh_lock_sock_nested(newsk);
+ 
+ 		atomic_set(&newsk->sk_rmem_alloc, 0);
+ 		atomic_set(&newsk->sk_wmem_alloc, 0);
+
