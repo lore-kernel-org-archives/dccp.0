@@ -1,78 +1,58 @@
-From: "Ian McDonald" <imcdnzl@gmail.com>
-Date: Tue, 09 May 2006 03:02:55 +0000
-Subject: Re: dccp-iperf and high speed UDP, Was: [dccp] DCCP with iperf was Re: Question on iperf versions
-Message-Id: <cbec11ac0605082002g48b3518eq1d30f649b8e58b6c@mail.gmail.com>
+From: Johannes Deleu <Johannes.Deleu@intec.ugent.be>
+Date: Thu, 22 Jun 2006 12:41:42 +0000
+Subject: mail voor linux mailinglist
+Message-Id: <449A9006.9030608@intec.ugent.be>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 5/9/06, Dimitrios Miras <d.miras@cs.ucl.ac.uk> wrote:
-> Hi Ian,
->
-> we talked a while ago, hope you're doing fine. Well, I need to ask you
-> something that puzzles me:
->   I do DCCP ccid3 iperfs between two machines at the two ends of a 1Gb/s
-> transatlantic link with 177ms RTT. Iperf tells me that the sender's
-> throughput goes up to 900mbps, however, the receiver appears to be
-> hanging, or reporting far lower throughput. Using ifconfig, i notice
-> huge numbers of dropped packets on the interface. Well, when I use the
-> same scenario on a local testbed (machines connect to a local gigabit
-> switch and RTT is fraction of ms).. i don';t get this behaviour,
-> throughput is as expected ~900+ mbps.
-> Do you have any ideas why this is happening? Why are packets being
-> dropped on the interface? I've stuck with this big time.
->
-> Thanks in advance,
-> Dimitrios Miras
->
-Dimitrios,
 
-I've been investigating this a bit further and thought I'd cc dccp
-development list as well - trust that this is OK.
+Hi,
 
-When I run iperf between the two nodes with a box as a router in
-between I get the following through the kernel logs:
-May  9 13:55:49 localhost kernel: [17185928.512000] DCCP: Step 6
-failed for DATA packet, (LSWL(91744560301) <= P.seqno(91744560658) <S.SWH(91744560400)) and (P.ackno doesn't exist or LAWL(93698688431) <P.ackno(1125899906842620) <= S.AWH(93698688459), sending SYNC...
+for a project, we're interested in using DCCP. As such, I did some 
+performance measurements with the latest version of the DCCP 
+implementation. To my opinion, they are not really what I expected. 
+Could you give some ideas or maybe some information about the current 
+status of the implementation (e.g. is packet loss detection planned for 
+implementation, when ?) ?
 
-As I understand this it is showing that the packet received has too
-high a sequence number and my thoughts are on this is that we have had
-too many packets dropped by the network. DCCP checks in input.c to see
-whether sequence number is not too low or too high.
+Results of similar tests are also interesting to see if they compare.
+For the tests, I used an impairment node (based on linux, which 
+introduced some packet loss).
 
-So I went onto my router and ran top and see that I am using 100% of
-my CPU on hardware interrupts and software interrupts. What I think is
-happening is that the routing queues are building up and then it drops
-the packets but DCCP says your sequence number is too high for the
-packets it does receive as I haven't seen the other packets (which
-were dropped).
+Measurements where performed with the patched iperf on linux-2.6.16.20 
+and I came to the following table:
 
-Now I would have thought that DCCP should back off when it knows it is
-being constrained somehow. It does do this on other tests that I do
-with loss etc. So I thought that I would test on TCP to see whether it
-can handle the 100 Mbit speed (it is an old box...). So I tested this
-and it uses approximately 75% of CPU for hi/si when running iperf with
-TCP between my two end nodes.
+                    TCP                 DCCP-CCID3 (Send/Recv)
+No drop       94 Mbps          93.3 Mbps      93.2 Mbps
+Drop 1%      83.4 Mbps       93.3 Mbps      92.3 Mbps
+Drop 5%      16.6 Mbps       93.3 Mbps      88.6 Mbps
+Drop 10%    3.25 Mbps       93.3 Mbps      83.9 Mbps
 
-That is where I am leaving it for today until I get more time. This
-needs checking for it's congestion control really... there are other
-reports also that DCCP uses an unfair share of traffic when mixed with
-TCP so suspect that there is something wrong in it's calculations
-about how much traffic to let through...
+The transmitter does not detect the packet loss and doesnt slow down, 
+instead it keeps sending <CCID option 192 4294967295>.
+As CCID3 is TFRC, I expected similar results for TCP and DCCP-CCID3.
 
-Hopefully this might help you somewhat or help others to look at
-fixing if they can beat me to it.
+When i tried out linux-2.6.17.1 (no packet drop) the receiver seems to 
+stop sending feedback packets after a while and the transmitter slows 
+down. The receiving process doesnt receive any data (recv doesnt return).
 
-BTW mine is CCID3 as well and ackvecs off.
+[  3] local 10.0.1.3 port 3743 connected with 10.0.1.1 port 5001
+[  3]  0.0- 1.0 sec  11.0 MBytes  92.5 Mbits/sec
+[  3]  1.0- 2.0 sec  10.9 MBytes  91.6 Mbits/sec
+[  3]  2.0- 3.0 sec  10.9 MBytes  91.6 Mbits/sec
+[  3]  3.0- 4.0 sec  10.9 MBytes  91.6 Mbits/sec
+[  3]  4.0- 5.0 sec  10.9 MBytes  91.6 Mbits/sec
+[  3]  5.0- 6.0 sec  10.9 MBytes  91.6 Mbits/sec
+[  3]  6.0- 7.0 sec  6.86 MBytes  57.5 Mbits/sec
+[  3]  7.0- 8.0 sec    194 KBytes  1.59 Mbits/sec
+[  3]  8.0- 9.0 sec    100 KBytes    819 Kbits/sec
+[  3]  9.0-10.0 sec    100 KBytes    819 Kbits/sec
+[  3] 10.0-11.0 sec    100 KBytes    819 Kbits/sec
+[  3] 11.0-12.0 sec    100 KBytes    819 Kbits/sec
+[  3] 12.0-13.0 sec    100 KBytes    819 Kbits/sec
 
-Ian
---
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+best regards,
+Johannes
