@@ -1,46 +1,47 @@
 From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-Date: Mon, 12 Jun 2006 17:56:03 +0000
-Subject: [PATCH 1/1] DCCP fix calculation of ackvec length
-Message-Id: <20060612175603.GA2279@shorty.sorbonet.org>
+Date: Thu, 22 Jun 2006 17:53:10 +0000
+Subject: [PATCH 02/11] DCCP: Fix how DCCP_ACKVEC_STATE_NOT_RECEIVED is used
+Message-Id: <20060622175310.GB4230@shorty.sorbonet.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-The length of the ack vector was incorrectly calculated upon the reception of an
-"ack-of-an-ack".  This would cause the length to become "negative" [i.e. the
-integer would wrap] causing an incorrect ack vector which was too long.
-Consequently, the ackvector could not be inserted into packets as an option [it
-semply was too long] and all packets transmitted would get dropped.  This
-includes dropping pure ACKs.  Eventually, even the sender on the other side
-would stop because ACKs are not being sent by the receiver.
+Fix the way state is masked out.  DCCP_ACKVEC_STATE_NOT_RECEIVED is defined as
+appears in the packet, therefore bit shifting is not required.  This fix allows
+CCID2 to correctly detect losses.
 
 Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
 
 ---
 
 diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-index 2349078..6e7d91c 100644
+index 8dab723..bc5ff12 100644
 --- a/net/dccp/ackvec.c
 +++ b/net/dccp/ackvec.c
-@@ -354,11 +373,14 @@ static void dccp_ackvec_throw_record(str
- {
- 	struct dccp_ackvec_record *next;
+@@ -436,8 +436,7 @@ static void dccp_ackvec_check_rcv_ackvec
+ 		break;
+ found:
+ 		if (between48(avr->dccpavr_ack_seqno, ackno_end_rl, ackno)) {
+-			const u8 state = (*vector &
+-					  DCCP_ACKVEC_STATE_MASK) >> 6;
++			const u8 state = *vector & DCCP_ACKVEC_STATE_MASK;
+ 			if (state != DCCP_ACKVEC_STATE_NOT_RECEIVED) {
+ #ifdef CONFIG_IP_DCCP_DEBUG
+ 				struct dccp_sock *dp = dccp_sk(sk);
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index d4f9e2d..6fe9cb9 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -583,8 +583,8 @@ static void ccid2_hc_tx_packet_recv(stru
+ 			 * run length
+ 			 */
+ 			while (between48(seqp->ccid2s_seq,ackno_end_rl,ackno)) {
+-				const u8 state = (*vector &
+-						  DCCP_ACKVEC_STATE_MASK) >> 6;
++				const u8 state = *vector &
++						 DCCP_ACKVEC_STATE_MASK;
  
--	av->dccpav_buf_tail = avr->dccpavr_ack_ptr - 1;
--	if (av->dccpav_buf_tail = 0)
--		av->dccpav_buf_tail = DCCP_MAX_ACKVEC_LEN - 1;
--
--	av->dccpav_vec_len -= avr->dccpavr_sent_len;
-+	/* sort out vector length */
-+	if (av->dccpav_buf_head <= avr->dccpavr_ack_ptr) {
-+		av->dccpav_vec_len = avr->dccpavr_ack_ptr - av->dccpav_buf_head;
-+	}
-+	else {
-+		av->dccpav_vec_len = DCCP_MAX_ACKVEC_LEN - 1 - av->dccpav_buf_head
-+				     + avr->dccpavr_ack_ptr;
-+	}
- 
- 	/* free records */
- 	list_for_each_entry_safe_from(avr, next, &av->dccpav_records,
+ 				/* new packet received or marked */
+ 				if (state != DCCP_ACKVEC_STATE_NOT_RECEIVED &&
