@@ -1,55 +1,47 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 22 Jun 2006 18:06:57 +0000
-Subject: Re: [PATCH 07/11] CCID2: Tell DCCP to quickly check whether cwnd is available
-Message-Id: <5640c7e00606221106k5e064999m8c90e94513605cc2@mail.gmail.com>
+From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+Date: Thu, 22 Jun 2006 22:23:23 +0000
+Subject: HOWTO profile CCID2
+Message-Id: <20060622222323.GA2291@shorty.sorbonet.org>
 List-Id: <dccp.vger.kernel.org>
-References: <20060622175734.GG4230@shorty.sorbonet.org>
-In-Reply-To: <20060622175734.GG4230@shorty.sorbonet.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-I'm trying to get my tx buffering code in a good shape for merging
-again at the moment... this will help solve this.
+The Practice:
+======wget darkircop.org/profile.tgz
+cd profile
+make
 
-On 6/23/06, Andrea Bittau <a.bittau@cs.ucl.ac.uk> wrote:
-> If not enough cwnd is available, tell the sender to check again as soon as
-> possible.  This will increase CPU utilization (polling frequently for cwnd) but
-> will improve network performance.  That is, the sender will need to wait less
-> before detecting the increase of cwnd.  A better architecture would be for the
-> CCID to call-back (or dequeue) from DCCP when it is able to transmit
-> traffic---not the other way around as it currently occurs.
->
-> Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
->
-> ---
->
-> diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-> index c11201b..b2d140f 100644
-> --- a/net/dccp/ccids/ccid2.c
-> +++ b/net/dccp/ccids/ccid2.c
-> @@ -160,7 +160,7 @@ static int ccid2_hc_tx_send_packet(struc
->                 }
->         }
->
-> -       return 100; /* XXX */
-> +       return 1; /* XXX CCID should dequeue when ready instead of polling */
->  }
->
->  static void ccid2_change_l_ack_ratio(struct sock *sk, int val)
-> -
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
->
+insmod ccid2.ko ccid2_profile=1
 
+./profiler log
 
--- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+LD_PRELOAD=./libintr.so iperf -X DCCP -i1 -l 1400 -c 1.2.3.5 -t 60
+
+cat log | grep "^pid.* 0 " | awk '{print $3 " " $4}' > log.cwnd
+cat log | grep "^pid.* 1 " | awk '{print $3 " " $4}' > log.rtt
+cat log | grep "^pid.* 2 " | awk '{print $3 " " $4}' > log.pipe
+cat log | grep "^pid.* 3 " | awk '{print $3 " " $4}' > log.rate
+
+The Theory:
+=====* If the module is loaded with profiling information, changes in CCID2's state
+  will be recorded.
+* Use getsockopt on the socket to obtain all profiling info.
+* To simplify the process, I coded profiler.c which will poll getsockopt() on a
+  socket and log info on a file.
+* profiler.c needs a DCCP socket to monitor.  You can pass one to it via UNIX
+  sockets.
+* libintr will intercept library calls which create DCCP sockets.  When a DCCP
+  socket is created, it will be sent to the profiler so that it can monitor it.
+  This allows you to monitor the sockets created by a program [such as iperf]
+  without having to screw with its code.
+
+Details:
+====
+* RTT is initialized to -1, hence the giant number on the first sample.
+* Pipe is only recorded if it varies > 3 I think.  Otherwise, you would get huge
+  amounts of data [pipe normally varies +-1].
+* X amount is allocated in the kernel for storing profiling information.  It is
+  a ring buffer.  If there is an overflow, profiler.c will tell you.  Try either
+  increasing allocated size in kernel or polling frequency.
