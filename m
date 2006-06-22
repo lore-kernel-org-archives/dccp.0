@@ -1,47 +1,67 @@
 From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-Date: Thu, 22 Jun 2006 17:53:10 +0000
-Subject: [PATCH 02/11] DCCP: Fix how DCCP_ACKVEC_STATE_NOT_RECEIVED is used
-Message-Id: <20060622175310.GB4230@shorty.sorbonet.org>
+Date: Thu, 22 Jun 2006 17:59:06 +0000
+Subject: [PATCH 09/11] CCID2: Add Kconfig option for CCID2 debug
+Message-Id: <20060622175906.GI4230@shorty.sorbonet.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Fix the way state is masked out.  DCCP_ACKVEC_STATE_NOT_RECEIVED is defined as
-appears in the packet, therefore bit shifting is not required.  This fix allows
-CCID2 to correctly detect losses.
+Allow the user to choose whether or not to enable CCID2 debugging via Kconfig.
 
 Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
 
 ---
 
-diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-index 8dab723..bc5ff12 100644
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -436,8 +436,7 @@ static void dccp_ackvec_check_rcv_ackvec
- 		break;
- found:
- 		if (between48(avr->dccpavr_ack_seqno, ackno_end_rl, ackno)) {
--			const u8 state = (*vector &
--					  DCCP_ACKVEC_STATE_MASK) >> 6;
-+			const u8 state = *vector & DCCP_ACKVEC_STATE_MASK;
- 			if (state != DCCP_ACKVEC_STATE_NOT_RECEIVED) {
- #ifdef CONFIG_IP_DCCP_DEBUG
- 				struct dccp_sock *dp = dccp_sk(sk);
+diff --git a/net/dccp/ccids/Kconfig b/net/dccp/ccids/Kconfig
+index ca00191..25fb4f6 100644
+--- a/net/dccp/ccids/Kconfig
++++ b/net/dccp/ccids/Kconfig
+@@ -30,6 +30,14 @@ config IP_DCCP_CCID2
+ 
+ 	  If in doubt, say M.
+ 
++config IP_DCCP_CCID2_DEBUG
++	  bool "CCID2 debug"
++	  depends on IP_DCCP_CCID2
++	  ---help---
++	    Enable CCID2 debug messages.
++	    
++	    If in doubt, say N.
++
+ config IP_DCCP_CCID3
+ 	tristate "CCID3 (TCP-Friendly) (EXPERIMENTAL)"
+ 	depends on IP_DCCP
 diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index d4f9e2d..6fe9cb9 100644
+index f0bc0b6..db0f1f1 100644
 --- a/net/dccp/ccids/ccid2.c
 +++ b/net/dccp/ccids/ccid2.c
-@@ -583,8 +583,8 @@ static void ccid2_hc_tx_packet_recv(stru
- 			 * run length
- 			 */
- 			while (between48(seqp->ccid2s_seq,ackno_end_rl,ackno)) {
--				const u8 state = (*vector &
--						  DCCP_ACKVEC_STATE_MASK) >> 6;
-+				const u8 state = *vector &
-+						 DCCP_ACKVEC_STATE_MASK;
+@@ -36,8 +36,7 @@ #include "ccid2.h"
  
- 				/* new packet received or marked */
- 				if (state != DCCP_ACKVEC_STATE_NOT_RECEIVED &&
+ static int ccid2_debug;
+ 
+-#undef CCID2_DEBUG
+-#ifdef CCID2_DEBUG
++#ifdef CONFIG_IP_DCCP_CCID2_DEBUG
+ #define ccid2_pr_debug(format, a...) \
+         do { if (ccid2_debug) \
+                 printk(KERN_DEBUG "%s: " format, __FUNCTION__, ##a); \
+@@ -46,7 +45,7 @@ #else
+ #define ccid2_pr_debug(format, a...)
+ #endif
+ 
+-#ifdef CCID2_DEBUG
++#ifdef CONFIG_IP_DCCP_CCID2_DEBUG
+ static void ccid2_hc_tx_check_sanity(const struct ccid2_hc_tx_sock *hctx)
+ {
+ 	int len = 0;
+@@ -340,7 +339,7 @@ static void ccid2_hc_tx_packet_sent(stru
+ 	if (!timer_pending(&hctx->ccid2hctx_rtotimer))
+ 		ccid2_start_rto_timer(sk);
+ 
+-#ifdef CCID2_DEBUG
++#ifdef CONFIG_IP_DCCP_CCID2_DEBUG
+ 	ccid2_pr_debug("pipe=%d\n", hctx->ccid2hctx_pipe);
+ 	ccid2_pr_debug("Sent: seq=%llu\n", seq);
+ 	do {
