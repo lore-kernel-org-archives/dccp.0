@@ -1,38 +1,56 @@
-From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-Date: Thu, 20 Jul 2006 18:02:29 +0000
-Subject: [PATCH 2/3]: ACKVEC: Optimization - Do not traverse records if none will be found
-Message-Id: <20060720180229.GB3313@shorty.sorbonet.org>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Wed, 19 Jul 2006 19:03:25 +0000
+Subject: [PATCH 1/1] [DCCP]: Shift sysctls
+Message-Id: <200607200703.25559.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Do not traverse the list of ack vector records [proportional to window size]
-when we know we will not find what we are looking for.  This is especially
-useful because ack vectors are checked twice:
-1) Upon parsing of options.
-2) Upon notification of a new ack.
+For 2.6.19 unless considered trivial enough.
 
-All of the work will occur during check #1.  Therefore, when check #2 is
-performed, no new work will be done.  This is now "detected" and there is no
-performance hit when doing #2.
+This applies on top of previous patch and shifts further sysctls into
+feat.h. No change in functionality - shifting code only. Tested.
 
-Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-
+Signed off by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
-
-diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-index 35308cf..73cb055 100644
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -416,7 +416,8 @@ #endif
- 				      (unsigned long long)avr->dccpavr_ack_ackno);
- 			dccp_ackvec_throw_record(av, avr);
- 			break;
--		}
-+		} else if (avr->dccpavr_ack_seqno > ackno)
-+			break; /* old news */
- 	}
- }
+diff --git a/net/dccp/feat.h b/net/dccp/feat.h
+index b44c455..cee553d 100644
+--- a/net/dccp/feat.h
++++ b/net/dccp/feat.h
+@@ -27,5 +27,10 @@ extern int  dccp_feat_clone(struct sock 
+ extern int  dccp_feat_init(struct dccp_minisock *dmsk);
  
+ extern int  dccp_feat_default_sequence_window;
++extern int  dccp_feat_default_rx_ccid;
++extern int  dccp_feat_default_tx_ccid;
++extern int  dccp_feat_default_ack_ratio;
++extern int  dccp_feat_default_send_ack_vector;
++extern int  dccp_feat_default_send_ndp_count;
+ 
+ #endif /* _DCCP_FEAT_H */
+diff --git a/net/dccp/sysctl.c b/net/dccp/sysctl.c
+index c1ba945..38bc157 100644
+--- a/net/dccp/sysctl.c
++++ b/net/dccp/sysctl.c
+@@ -11,18 +11,12 @@
+ 
+ #include <linux/mm.h>
+ #include <linux/sysctl.h>
++#include "feat.h"
+ 
+ #ifndef CONFIG_SYSCTL
+ #error This file should not be compiled without CONFIG_SYSCTL defined
+ #endif
+ 
+-extern int dccp_feat_default_sequence_window;
+-extern int dccp_feat_default_rx_ccid;
+-extern int dccp_feat_default_tx_ccid;
+-extern int dccp_feat_default_ack_ratio;
+-extern int dccp_feat_default_send_ack_vector;
+-extern int dccp_feat_default_send_ndp_count;
+-
+ static struct ctl_table dccp_default_table[] = {
+ 	{
+ 		.ctl_name	= NET_DCCP_DEFAULT_SEQ_WINDOW,
