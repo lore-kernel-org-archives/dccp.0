@@ -1,14 +1,35 @@
-From: David Miller <davem@davemloft.net>
-Date: Mon, 24 Jul 2006 06:33:39 +0000
-Subject: Re: [PATCH 1/1][DCCP]: Fix default sequence window size
-Message-Id: <20060723.233339.99201949.davem@davemloft.net>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Wed, 26 Jul 2006 21:40:56 +0000
+Subject: Re: dccp: dead code?
+Message-Id: <5640c7e00607261440g5ff3a37buca7642aa20e0435d@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <39e6f6c70607231332v29c59c1fjb9cd21a3fe9928c2@mail.gmail.com>
-In-Reply-To: <39e6f6c70607231332v29c59c1fjb9cd21a3fe9928c2@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+On 7/27/06, Venkat Yekkirala <vyekkirala@trustedcs.com> wrote:
+> Hi,
+>
+> I am trying to figure out where/when dccp_v4_reqsk_send_ack and
+> dccp_v6_reqsk_send_ack
+> set to request_sock_ops.send_ack are being invoked. Or are these leftover
+> dead code?
+>
+> Thanks,
+>
+> venkat
+>
+I will look at later but post these types of questions to
+dccp@vger.kernel.org as Arnaldo and I are often busy and others can
+help also.
 
-I applied this patch to my tree, thanks a lot Arnaldo.
+Ian
+-- 
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
