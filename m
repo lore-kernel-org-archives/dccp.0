@@ -1,7 +1,7 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Fri, 04 Aug 2006 14:28:36 +0000
+From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+Date: Fri, 04 Aug 2006 14:41:38 +0000
 Subject: Re: [PATCH 1/1] CCID2: Experimental support for tcp_congestion_ops
-Message-Id: <44D35994.3020905@mandriva.com>
+Message-Id: <20060804144138.GA6528@shorty.sorbonet.org>
 List-Id: <dccp.vger.kernel.org>
 References: <20060804110752.GA4262@shorty.sorbonet.org>
 In-Reply-To: <20060804110752.GA4262@shorty.sorbonet.org>
@@ -10,29 +10,13 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Andrea Bittau wrote:
-> This is an experimental patch to bridge CCID2 and existing tcp congestion contrl
-> algorithms.  Added support for "tcp_congestion_ops" in CCID2.  This allows for
-> CCID2 to use different variants of congestion control.  The default is the RFC
-> CCID2, named with much originality, "ccid2".
-> 
-> I added support for a "tcp adaptor" which allows existing tcp algorithms to be
-> used withing CCID2.  They may be selected by asking for "tcp_name", where name
-> is "reno", "vegas", etc.
-> 
-> The following TCP algorithms are believed to work [at least partially] with
-> appropriate byte counting turned off:
-> bic, compound, cubic, highspeed, htcp, reno, scalable, vegas, veno.
-> These don't seem to work properly [I haven't added full support yet]:
-> hybla, lp, westwood.
-> 
-> This patch is mainly an RFC.  If people seem to like the idea, I can work on
-> making the patch look good.
+On Fri, Aug 04, 2006 at 11:28:36AM -0300, Arnaldo Carvalho de Melo wrote:
+> Keep on experimenting, this is the spirit, that is why
+> tcp_congestion_ops is in inet_connection_sock, eventually I want to have
 
-Keep on experimenting, this is the spirit, that is why
-tcp_congestion_ops is in inet_connection_sock, eventually I want to have
-it renamed to congestion_ops, and your experiments will help in
-diagnosing whatever change in the existing abstractions is needed for us
-to get closer to this goal :-)
-
-- Arnaldo
+Yea I noticed that when it was too late.  The other thing to do is to abstract
+the state which congestion_ops use.  It shouldn't access directly tcp's cwnd,
+srtt and so on.  There should probably be a structure named something like
+congestion_state which contains that information.  This way, both DCCP and TCP
+can provide the relevant information in a uniform way to the congestion
+algorithms.
