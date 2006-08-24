@@ -1,25 +1,33 @@
 From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Thu, 24 Aug 2006 03:18:36 +0000
-Subject: [PATCH 1/7] [DCCP]: Fix typo
-Message-Id: <200608241518.37099.ian.mcdonald@jandi.co.nz>
+Date: Thu, 24 Aug 2006 03:21:51 +0000
+Subject: [PATCH 3/7] [DCCP]: Introduces follows48 function
+Message-Id: <200608241521.52012.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This fixes a small typo in net/dccp/libs/packet_history.c
+This adds a new function to see if two sequence numbers follow each other.
 
 Signed off by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
-diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
-index ad98d6a..6739be1 100644
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -1,5 +1,5 @@
- /*
-- *  net/dccp/packet_history.h
-+ *  net/dccp/packet_history.c
-  *
-  *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
-  *
+diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
+index b8931d3..84b477d 100644
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -81,6 +81,14 @@ static inline u64 max48(const u64 seq1, 
+ 	return after48(seq1, seq2) ? seq1 : seq2;
+ }
+ 
++/* is seq1 next seqno after seq2 */
++static inline int follows48(const u64 seq1, const u64 seq2)
++{
++	int diff = (seq1 & 0xFFFF) - (seq2 & 0xFFFF);
++	
++	return diff=1;
++}
++
+ enum {
+ 	DCCP_MIB_NUM = 0,
+ 	DCCP_MIB_ACTIVEOPENS,			/* ActiveOpens */
