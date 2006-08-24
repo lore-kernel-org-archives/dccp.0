@@ -1,21 +1,57 @@
-From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-Date: Mon, 28 Aug 2006 19:54:12 +0000
-Subject: Re: Fwd: CCID2 patches
-Message-Id: <20060828195412.GA54671@shorty.sorbonet.org>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Thu, 24 Aug 2006 03:23:17 +0000
+Subject: [PATCH 4/7] [DCCP]: Introduce dccp_rx_hist_find_entry
+Message-Id: <200608241523.17715.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <5640c7e00608271718wce9b5fbwf5ecb33c62a8ab94@mail.gmail.com>
-In-Reply-To: <5640c7e00608271718wce9b5fbwf5ecb33c62a8ab94@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Tue, Aug 29, 2006 at 07:15:09AM +1200, Ian McDonald wrote:
-> Don't let pride get in your way. If you want to see why just google
+This adds a new function dccp_rx_hist_find_entry.
 
-I'm a male after all; despite the name.  I'm just worried that arnaldo is not
-around anymore.  He hasn't been on IRC for some months now, and he used to be
-~24/7 =D.
-
-When arnaldo sends me an "I'm alive" mail i'll sort out the patches once more.
-[And no... I won't accept spoofed mail =D.]
+Signed off by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
+index 7b6b03e..1c68182 100644
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -365,6 +365,25 @@ struct dccp_tx_hist_entry *
+ 
+ EXPORT_SYMBOL_GPL(dccp_tx_hist_find_entry);
+ 
++int dccp_rx_hist_find_entry(const struct list_head *list, const u64 seq, 
++   u8 *ccval)
++{
++	struct dccp_rx_hist_entry *packet = NULL, *entry;
++
++	list_for_each_entry(entry, list, dccphrx_node)
++		if (entry->dccphrx_seqno = seq) {
++			packet = entry;
++			break;
++		}
++
++	if (packet)
++		*ccval = packet->dccphrx_ccval;
++
++	return packet != NULL;
++}
++
++EXPORT_SYMBOL_GPL(dccp_rx_hist_find_entry);
++
+ void dccp_tx_hist_purge_older(struct dccp_tx_hist *hist,
+ 			      struct list_head *list,
+ 			      struct dccp_tx_hist_entry *packet)
+diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
+index 27c4309..aea9c5d 100644
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -106,6 +106,8 @@ static inline void dccp_tx_hist_entry_de
+ extern struct dccp_tx_hist_entry *
+ 			dccp_tx_hist_find_entry(const struct list_head *list,
+ 						const u64 seq);
++extern int dccp_rx_hist_find_entry(const struct list_head *list, const u64 seq,
++   u8 *ccval);
+ 
+ static inline void dccp_tx_hist_add_entry(struct list_head *list,
+ 					  struct dccp_tx_hist_entry *entry)
