@@ -1,40 +1,40 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 29 Aug 2006 01:21:40 +0000
-Subject: Re: low tx speed in ccid3 after loss
-Message-Id: <5640c7e00608281821y2b70523fu98da7a21cdeb0125@mail.gmail.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Thu, 24 Aug 2006 03:16:33 +0000
+Subject: [PATCH 0/7] [DCCP]: Fixes and enhancements
+Message-Id: <200608241516.34448.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <20060827030500.9618.qmail@web30003.mail.mud.yahoo.com>
-In-Reply-To: <20060827030500.9618.qmail@web30003.mail.mud.yahoo.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 8/29/06, Burak Gorkemli <burakgmail-dccp@yahoo.com> wrote:
-> Hi Ian,
+Please find following a series of patches for DCCP.
 
-Hi Burak,
+These have been tested against torvalds/linux-2.6.git and davem/net-2.6.19.git
 
-Just replying on the dccp list only - ietf don't need to know
-implementation details.
->
-> I am reading the ccid3 code for a while now and it seems to me that "the interval since the most recent packet loss event" is not taken into account while calculating I_mean, as you and Edgar suspect.  The first interval used for calculating i_tot0 in dccp_li_hist_calc_i_mean() should point to "the interval since the most recent packet loss event", but it does not, I guess. In the morning I will debug this more and try to fix it, if all goes well. Actually I did some modifications today but they did not relieve my problems altogether.
+My opinion is that 1 and 2 can go straight into 2.6.18 as documentation
+changes only - Dave - are you able to do as Arnaldo is very busy at present.
 
-Correct. I am sure of that since I wrote that code - you are running
-the latest patches I presume? Basically how I would write the code is
-to see if p including the non-loss time is less than p excluding it
-then change p.
+I would love 3, 4, 5 to go into 2.6.18 as these resolve long standing CCID3
+issues that have been in the DCCP tree since inception and have caught a
+number of people.
 
->
-> BTW, can you recommend me a tool for debugging the ccid (and dccp) module? I think there is Ostra but you seem to discourage its usage in the Ostra wiki page (http://wiki.linux.net.nz/Ostra).
+Number 6 is just shifting code around to tidy it up and introduces no change
+in logic. You could argue for it to go in either 2.6.18 or 2.6.19!
 
-Ostra is a great tool but it is a little bit out of date at present as
-Arnaldo has been very busy.
+Number 7 is implementing transmit buffering and is 2.6.19 material.
+Andrea - this might be quite useful for you in CCID2 as well I believe.
 
-I used a mixture of printk's spread around the place and dccp_probe
-(which is on my website in the patches).
+These patches are all capable of being done independently except 3, 4, 5 which
+are a group.
 
-Ian
+Also on http://wand.net.nz/~iam4/dccp/patches/ are the following further
+patches which are not ready for merge but others might be interested in:
+-DCCP-Probe ala TCP-Probe
+-The starts of memory buffer limiting (this is not actually needed for number
+7 as it is actually receive where problems occur which is an existing issue)
+-My research code
+
 -- 
 Ian McDonald
 Web: http://wand.net.nz/~iam4
