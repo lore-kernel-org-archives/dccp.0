@@ -1,7 +1,7 @@
-From: David Miller <davem@davemloft.net>
-Date: Thu, 24 Aug 2006 11:59:27 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Thu, 24 Aug 2006 18:09:13 +0000
 Subject: Re: [PATCH 0/7] [DCCP]: Fixes and enhancements
-Message-Id: <20060824.045927.41635764.davem@davemloft.net>
+Message-Id: <5640c7e00608241109l1a0102c5m77a77b35ef2a12e5@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200608241516.34448.ian.mcdonald@jandi.co.nz>
 In-Reply-To: <200608241516.34448.ian.mcdonald@jandi.co.nz>
@@ -10,14 +10,21 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Thu, 24 Aug 2006 15:16:33 +1200
+> I spent all of today on USAGI's IPSEC/MIPV6 patches and related
+> issues, so I'll look into this tomorrow.
+>
+> Thanks Ian.
+>
+Yes I saw that. Take your time as this is nowhere near as important!
 
-> My opinion is that 1 and 2 can go straight into 2.6.18 as
-> documentation changes only - Dave - are you able to do as Arnaldo is
-> very busy at present.
+Regards,
 
-I spent all of today on USAGI's IPSEC/MIPV6 patches and related
-issues, so I'll look into this tomorrow.
-
-Thanks Ian.
+Ian
+-- 
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
