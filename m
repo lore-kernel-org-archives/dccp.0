@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sun, 27 Aug 2006 04:33:15 +0000
+From: "Edgar E. Iglesias" <edgar.iglesias@axis.com>
+Date: Mon, 28 Aug 2006 06:17:49 +0000
 Subject: Re: low tx speed in ccid3 after loss
-Message-Id: <5640c7e00608262133qc0308a1o6ce50554fa83508d@mail.gmail.com>
+Message-Id: <20060828061749.GA15693@edgar.underground.se.axis.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20060827030500.9618.qmail@web30003.mail.mud.yahoo.com>
 In-Reply-To: <20060827030500.9618.qmail@web30003.mail.mud.yahoo.com>
@@ -10,33 +10,43 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Burak wrote on the Linux DCCP mailing list:
-> > After applying Ian's patches (except for bestpacketnext) I did some tests with ccid3 and came across a problem. In some cases when packet loss occurs, transmit rate drops down and stays there, with almost no increase. Besides, p value is set to a value bigger than zero after the loss, and does not change again, although no loss occurs - which may be the explanation of the unchanging tx rate ???
->
+On Sun, Aug 27, 2006 at 04:33:15PM +1200, Ian McDonald wrote:
+> Burak wrote on the Linux DCCP mailing list:
+> >> After applying Ian's patches (except for bestpacketnext) I did some 
+> >tests with ccid3 and came across a problem. In some cases when packet loss 
+> >occurs, transmit rate drops down and stays there, with almost no increase. 
+> >Besides, p value is set to a value bigger than zero after the loss, and 
+> >does not change again, although no loss occurs - which may be the 
+> >explanation of the unchanging tx rate ???
+> >
+> 
+> I have a question for people. If DCCP detects loss once and once only
+> (as I suspect is happening here (Burak - can you confirm through a
+> packet trace please?) then I haven't read anything in the spec of TFRC
+> or CCID3 which says that you can lower the loss rate later on when you
+> don't have a loss. As I read the spec you only recalculate the loss
+> rate when you get a loss and thus if you have a loss when you are
+> starting you have a real issue.
 
-I have a question for people. If DCCP detects loss once and once only
-(as I suspect is happening here (Burak - can you confirm through a
-packet trace please?) then I haven't read anything in the spec of TFRC
-or CCID3 which says that you can lower the loss rate later on when you
-don't have a loss. As I read the spec you only recalculate the loss
-rate when you get a loss and thus if you have a loss when you are
-starting you have a real issue.
+Hi Ian,
 
-Am I missing something obvious here? I probably am but I can't quite
-see at the moment - can someone point it out to me. As I read it the
-calculation is based on this part of the TFRC spec:
-             If (p > 0)
-                 Calculate X_calc using the TCP throughput equation.
-                 X = max(min(X_calc, min_rate), s/t_mbi);
-If p doesn't change then X_calc doesn't change and therefore you can't
-go above X_calc
+I beleive you need to recompute the loss rate on every received data packet.
+While there is no packet loss, the average loss interval will increase and 
+p will decrease.
 
-Ian
+This is because we take into account the interval between the lastest loss
+event and the current sequence number if it helps us increase the rate.
+
+RFC 3448:
+"When calculating the average loss interval we need to decide whether
+    to include the interval since the most recent packet loss event.  We
+    only do this if it is sufficiently large to increase the average
+    loss interval."
+
+Without this, TFRC will never push the rate up to find newly added bw, unless
+it is in slowstart ofcourse.
+
+Best regards 
 -- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+        Programmer
+        Edgar E. Iglesias <edgar.iglesias@axis.com> 46.46.272.1946
