@@ -1,7 +1,7 @@
-From: gerrit@erg.abdn.ac.uk
-Date: Fri, 08 Sep 2006 10:49:14 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Fri, 08 Sep 2006 18:08:27 +0000
 Subject: Re: Proposed socket API change
-Message-Id: <200609081149.14383@strip-the-willow>
+Message-Id: <5640c7e00609081108i400adad0i3913fba3d96a7ee7@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200609081031.41701@strip-the-willow>
 In-Reply-To: <200609081031.41701@strip-the-willow>
@@ -10,18 +10,22 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  > In a forthcoming communication to SIGCOMM-06, the inventors of DCCP say that
-|  > they were "motivated by keeping the basic API as simple as UDP's" and that
-|  > "DCCP should provide applications with an API as simple as that of UDP".
-|  
-|  I think the same authors killed me on this point.  I believe their motivation is
-|  "we want service codes to be used" and that they are a useful thing.  I agree
-|  with them, but I don't agree on "forcing the users to use service codes".  
-I have the same idea; the proposal is an attempt to make the API simple without
-contradicting the spec. UDP also does not contradict its spec and yet is simple
-to program; if the same can be done with DCCP, that would be great. 
+On 9/8/06, gerrit@erg.abdn.ac.uk <gerrit@erg.abdn.ac.uk> wrote:
+> Thanks for mentioning dccp@ietf.org, have copied message there. If there are no
+> strong objections, will send patch on Monday.
+>
+> - Gerrit
 
-Thanks for mentioning dccp@ietf.org, have copied message there. If there are no 
-strong objections, will send patch on Monday.
+I agree about the service code personally but we shouldn't accept into
+Linux something that deliberately breaks the RFC. We need to convince
+the protocol authors first.
 
-- Gerrit
+Ian
+-- 
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
