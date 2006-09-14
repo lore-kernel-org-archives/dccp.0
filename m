@@ -1,36 +1,55 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Fri, 22 Sep 2006 02:46:30 +0000
-Subject: Re: [PATCH 0/7] [DCCP]: Further fixes and enhancements
-Message-Id: <39e6f6c70609211946g34ea56bbp9eeea01920842901@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Thu, 14 Sep 2006 17:10:00 +0000
+Subject: [PATCH 4/10]: [DCCP] CCID2: Fix jiffie wrap issues
+Message-Id: <20060914170959.GE20651@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200609221425.16349.ian.mcdonald@jandi.co.nz>
-In-Reply-To: <200609221425.16349.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 9/21/06, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> Here is my latest set of patches for DCCP.
->
-> If possible I would like these to go into 2.6.19. I have tested against
-> 2.6.18rc5 and latest net-2.6.19 git tree of Dave M as well.
->
-> Dave - Patches 1 and 2 are trivial and just introducing constants and using
-> them. Patch 4 is shifting some code into a header. If patch 3 could be
-> merged also that would be great - it is just about the same as Stephen
-> Hemminger's TCP Probe code but instead for DCCP. Patch 3 depends on patch 1.
->
-> I think it would be good for Arnaldo or another person to sign off on 5, 6
-> and 7 after a bit more of a look. These fix up packet size setting for
-> CCID3 and also change them to work on half connections as you may have
-> different packet sizes for each. I've tested myself thoroughly but others
-> might have an opinion on the style of these. These three patches need to be
-> applied in order.
+Jiffies are now handled correctly (I hope) in CCID2.  If they wrap, no problem.
 
-Everything seems fine, I'll merge them early tomorrow, do some testing
-and push to DaveM,
+Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
-Thanks,
+------------------------------------------------------------------------------
 
-- Arnaldo
+ ccid2.c |    8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+------------------------------------------------------------------------------
+
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index b1d90c0..54a6b7e 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -27,7 +27,6 @@
+  *
+  * BUGS:
+  * - sequence number wrapping
+- * - jiffies wrapping
+  */
+ 
+ #include "../ccid.h"
+@@ -71,7 +70,8 @@ static void ccid2_hc_tx_check_sanity(con
+ 
+ 			/* packets are sent sequentially */
+ 			BUG_ON(seqp->ccid2s_seq <= prev->ccid2s_seq);
+-			BUG_ON(seqp->ccid2s_sent < prev->ccid2s_sent);
++			BUG_ON(time_before(seqp->ccid2s_sent,
++					   prev->ccid2s_sent));
+ 			BUG_ON(len > ccid2_seq_len);
+ 
+ 			seqp = prev;
+@@ -418,8 +418,8 @@ static inline void ccid2_new_ack(struct 
+ 
+ 	/* update RTO */
+ 	if (hctx->ccid2hctx_srtt = -1 ||
+-	    (jiffies - hctx->ccid2hctx_lastrtt) >= hctx->ccid2hctx_srtt) {
+-		unsigned long r = jiffies - seqp->ccid2s_sent;
++	    time_after(jiffies, hctx->ccid2hctx_lastrtt + hctx->ccid2hctx_srtt)) {
++		unsigned long r = (long)jiffies - (long)seqp->ccid2s_sent;
+ 		int s;
+ 
+ 		/* first measurement */
