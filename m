@@ -1,44 +1,19 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 14 Sep 2006 15:44:32 +0000
-Subject: [PATCH 2.6.17][Trivial]  net/dccp: update references to standards
-Message-Id: <200609141644.32243@strip-the-willow>
+Date: Thu, 14 Sep 2006 15:49:33 +0000
+Subject: Re: [PATCH 2.6.17][Trivial]  net/dccp: update references to standards
+Message-Id: <200609141649.33877@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
+References: <200609141644.32243@strip-the-willow>
+In-Reply-To: <200609141644.32243@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Update documentation references.
+Sorry kmail garbled this, clean text below.
 
-Updates the references to spec documents throughout the code,
-taking into account that
-
-* the DCCP, CCID 2, and CCID 3 drafts all became RFCs in March this year 
-
-* RFC 1063 was obsoleted by RFC 1191
-
-* draft-ietf-tcpimpl-pmtud-0x.txt was published as an Informational
-   RFC, RFC 2923 on 2000-09-22.
-
-All references verified; patches against stable and Torvald's tree.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+- Gerrit
 --
- dccp/Kconfig       |    4 ++--
- dccp/ackvec.c      |   12 ++++++------
- dccp/ackvec.h      |    3 +--
- dccp/ccids/Kconfig |   19 +++++++++----------
- dccp/ccids/ccid2.c |    2 +-
- dccp/ccids/ccid3.c |    3 +--
- dccp/dccp.h        |    2 +-
- dccp/input.c       |    4 ++--
- dccp/ipv4.c        |    4 ++--
- dccp/ipv6.c        |    2 +-
- dccp/options.c     |    2 +-
- dccp/proto.c       |    2 +-
- dccp/timer.c       |    5 ++---
- ipv4/tcp_output.c  |    2 +-
- 14 files changed, 31 insertions(+), 35 deletions(-)
 
 diff --git a/net/dccp/Kconfig b/net/dccp/Kconfig
 index 859e335..2c345c0 100644
@@ -261,37 +236,6 @@ index 07a3469..fb0db1f 100644
  			 *	options sent from the HC-Sender to the
 diff --git a/net/dccp/proto.c b/net/dccp/proto.c
 index 6f14bb5..9ca05e7 100644
-[DCCP]: Update documentation references to standards documents.
-
-An update of the document references used throughout code comments,
-taking into account that
-* the DCCP, CCID 2, and CCID 3 drafts all became RFCs in March this year 
-* RFC 1063 was obsoleted by RFC 1191
-* draft-ietf-tcpimpl-pmtud-0x.txt as published as an Informational
-   RFC, RFC 2923 on 2000-09-22.
-
-References have all been verified.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
---
-
- dccp/Kconfig       |    4 ++--
- dccp/ackvec.c      |   12 ++++++------
- dccp/ackvec.h      |    3 +--
- dccp/ccids/Kconfig |   19 +++++++++----------
- dccp/ccids/ccid2.c |    2 +-
- dccp/ccids/ccid3.c |    3 +--
- dccp/dccp.h        |    2 +-
- dccp/input.c       |    4 ++--
- dccp/ipv4.c        |    4 ++--
- dccp/ipv6.c        |    2 +-
- dccp/options.c     |    2 +-
- dccp/proto.c       |    2 +-
- dccp/timer.c       |    5 ++---
- ipv4/tcp_output.c  |    2 +-
- 14 files changed, 31 insertions(+), 35 deletions(-)
-
-
 --- a/net/dccp/proto.c
 +++ b/net/dccp/proto.c
 @@ -907,7 +907,7 @@ adjudge_to_death:
@@ -334,5 +278,3 @@ index b4f3ffe..d9e316f 100644
   *
   * 1. It is independent of path mtu.
   * 2. Ideally, it is maximal possible segment size i.e. 65535-40.
-
-
