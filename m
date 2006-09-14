@@ -1,8 +1,10 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Thu, 14 Sep 2006 17:12:50 +0000
+Date: Thu, 14 Sep 2006 17:13:42 +0000
 Subject: [PATCH 8/10]: [DCCP] CCID2: Allocate seq records on demand
-Message-Id: <20060914171247.GI20651@mandriva.com>
+Message-Id: <20060914171342.GJ20651@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
+References: <20060914171247.GI20651@mandriva.com>
+In-Reply-To: <20060914171247.GI20651@mandriva.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
