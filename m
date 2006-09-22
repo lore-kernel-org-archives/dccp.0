@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 21 Sep 2006 23:37:17 +0000
+From: Sally Floyd <sallyfloyd@mac.com>
+Date: Fri, 22 Sep 2006 13:26:01 +0000
 Subject: Re: [dccp] Packet size s on CCID3
-Message-Id: <5640c7e00609211637v3ef96b54kf6efe6c6c13a4e76@mail.gmail.com>
+Message-Id: <cf450b133ceda5ddfceb0d0d2d998301@mac.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00609202022j1b97cf1g30797ffcd9b650b6@mail.gmail.com>
 In-Reply-To: <5640c7e00609202022j1b97cf1g30797ffcd9b650b6@mail.gmail.com>
@@ -10,27 +10,32 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 9/22/06, Gorry Fairhurst <gorry@erg.abdn.ac.uk> wrote:
-> Let, me add a few more thoughts, and see what others think...
->
-> * I also have a problem with how to find "s" when thinking about an
-> "unknown" application. I'm not really sure how this is intended to work for
-> variable-sized packets. Calculating an average value for an application that
-> naturally varies the size doesn't seem to me to be straight-forward.
->
-> One value of "s" that makes sense, is possibly the largest segment size sent
-> by the session. This is at least conservative - for fixed-sized flows it is
-> identical to the optimum "s". For bursty flows, it is safe.
->
-It is actually the opposite of what you say here. If you do the maths
-and set s large then you can send more packets per second than what
-you should be able to.
+> Why not just calculate a packet rate per second? Or am I missing
+> something obvious?
 
--- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+No, that is a good question.
+
+One reason for including the packet size s is discussed in
+Section 5.3 of RFC 4342:
+
+    "The packet size s is used in the TCP throughput equation.  A CCID 3
+    implementation MAY calculate s as the segment size averaged over
+    multiple round trip times -- for example, over the most recent four
+    loss intervals, for loss intervals as defined in Section 6.1.
+    Alternately, a CCID 3 implementation MAY use the Maximum Packet Size
+    to derive s.  In this case, s is set to the Maximum Segment Size
+    (MSS), the maximum size in bytes for the data segment, not including
+    the default DCCP and IP packet headers.  Each packet transmitted then
+    counts as one MSS, regardless of the actual segment size, and the TCP
+    throughput equation can be interpreted as specifying the sending rate
+    in packets per second."
+
+Thus, an implementation MAY calculate the allowed sending rate
+in bytes per second, using for s the average segment size.
+Or an implementation may use the MSS for s, and in fact calculate
+the allowed sending rate simply in packets per second.  This would be
+a purely local implementation decision.
+
+- Sally
+http://www.icir.org/floyd/
+
