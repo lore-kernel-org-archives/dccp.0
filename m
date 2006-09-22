@@ -1,29 +1,28 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Mon, 25 Sep 2006 17:58:08 +0000
-Subject: Re: CCID2: Tell DCCP to quickly check whether cwnd is available
-Message-Id: <5640c7e00609251058x71d94e12sdd08a64c99f02f19@mail.gmail.com>
+From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
+Date: Fri, 22 Sep 2006 14:50:22 +0000
+Subject: Re: [PATCH 2.6.19] net/dccp: set safe upper bound for option length
+Message-Id: <39e6f6c70609220750i681a28c4lf912c7ccb393cd72@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200609210930.21903@strip-the-willow>
-In-Reply-To: <200609210930.21903@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
->   * Notification Mechanism Between CCID <=> Main Module
->     The Lai implementation used a hybrid polling / asynchronous notification principle,
->     which involved setting a flag and using a syscall. The mechanism you suggested
->     earlier sounds very interesting - if you have any patches, could you make them
->     available via your website please?
+On 9/22/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [DCCP]: current upper limit for option length is 128 bytes;
+> much less than actually possible. This patch sets a safe upper
+> bound on option length of 992, under worst-case assumptions.
+>
+> This patches against the 2.6.19 tree by David.
 
-I'm not sure if the above is addressed at me. In case it is all my
-patches are currently on the web.
+Gerrit, could you please use my net-2.6.19? I'm going over the pending
+dccp patches backlog and it is possible that this patch now doesn't
+applies, haven't checked tho as I'm going out, will check in 20
+minutes or so.
 
--- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+Ah, and please keep dccp@vger.kernel.org instead of netdev when the
+patch is only dccp specific.
+
+Thanks,
+
+- Arnaldo
