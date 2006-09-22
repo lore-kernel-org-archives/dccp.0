@@ -1,31 +1,30 @@
-From: Eddie Kohler <kohler@cs.ucla.edu>
-Date: Fri, 22 Sep 2006 16:57:57 +0000
-Subject: Re: [PATCH 6/7] [DCCP]: Fix setting of packet size in CCID3
-Message-Id: <45141615.30908@cs.ucla.edu>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Fri, 22 Sep 2006 02:30:14 +0000
+Subject: [PATCH 5/7] [DCCP]: Introduce two new socket options
+Message-Id: <200609221430.14555.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <200609221432.20022.ian.mcdonald@jandi.co.nz>
-In-Reply-To: <200609221432.20022.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-> |  +	case DCCP_SOCKOPT_TX_PACKET_SIZE:
-> |  +		if (dmsk->dccpms_tx_ccid != DCCPC_CCID3)
-> |  +			err = -EINVAL;
-> This is unfortunate: it is in the generic dccp code but
-> works only for CCID 3. Same for DCCP_SOCKOPT_RX_PACKET_SIZE.
+This creates two new socket options DCCP_SOCKOPT_TX_PACKET_SIZE
+and DCCP_SOCKOPT_RX_PACKET_SIZE. DCCP_SOCKOPT_PACKET_SIZE doesn't
+work and packet size should be set independently on two half
+connections.
 
-I agree with Gerrit.  An average packet size congestion control parameter 
-might be useful for multiple CCIDs, even if only some CCIDs would use it. 
-Would prefer that this sets the parameter in all cases.
-
-E
-
-> 
-> 
-> --Gerrit
-> -
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/include/linux/dccp.h b/include/linux/dccp.h
+index a073164..ef1c57b 100644
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -200,6 +200,8 @@ #define DCCP_SOCKOPT_PACKET_SIZE	1
+ #define DCCP_SOCKOPT_SERVICE		2
+ #define DCCP_SOCKOPT_CHANGE_L		3
+ #define DCCP_SOCKOPT_CHANGE_R		4
++#define DCCP_SOCKOPT_TX_PACKET_SIZE	5
++#define DCCP_SOCKOPT_RX_PACKET_SIZE	6
+ #define DCCP_SOCKOPT_CCID_RX_INFO	128
+ #define DCCP_SOCKOPT_CCID_TX_INFO	192
+ 
