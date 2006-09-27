@@ -1,21 +1,19 @@
-From: David Miller <davem@davemloft.net>
-Date: Tue, 19 Sep 2006 20:06:25 +0000
-Subject: Re: [PATCH 3/10]: [DCCP] ackvec: Remove unused variables
-Message-Id: <20060919.130625.67560473.davem@davemloft.net>
+From: Vladimir M <vladivm@mail.ru>
+Date: Wed, 27 Sep 2006 11:56:54 +0000
+Subject: Sequence numbers in Response packets (Linux 2.6.17)
+Message-Id: <E1GSY22-000OxT-00.vladivm-mail-ru@f75.mail.ru>
 List-Id: <dccp.vger.kernel.org>
-References: <20060914170928.GD20651@mandriva.com>
-In-Reply-To: <20060914170928.GD20651@mandriva.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Thu, 14 Sep 2006 14:09:28 -0300
 
-> Get rid of unused variables in ackvector state.
-> 
-> Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-> Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Hi,
 
-Applied, thanks.
+While doing some tresting, I've noticed a funny behaviour of DCCP implementation in 2.6 kernel. From Ethereal capture seems that retransmitted response packets do not increment the sequence number. Is it a correct behaviour? If yes, then why is it done like this, since protocol's RFC instructs to increment on every outgoing packet. 
+
+B.R.
+Vladimir.
+
+P.S. Don't know, it it has been already discussed on the list or not, or even patched. I have original DCCP version from 2.6.17 FC5, but havnt found anything related in archives of this list
