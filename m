@@ -1,58 +1,83 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 24 Sep 2006 21:19:30 +0000
-Subject: [PATCH 3/4][DCCP]: Use constants for CCIDs
-Message-Id: <20060924211929.GD6263@mandriva.com>
+From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+Date: Thu, 28 Sep 2006 05:16:53 +0000
+Subject: [PATCH] CCID2: Fix compile warning on some platforms
+Message-Id: <20060928051653.GA7898@shorty.sorbonet.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi David,
+Explicitly cast argument to unsigned long long when using the %llu format string
+[trick stolen from DaveM =D].  This will remove a compiler warning  on some
+platforms when a u64 is printed.
 
-   Please consider pulling from:
+Note to Arnaldo: This patch should be applied after the three you already have
+in the queue.  Else, it may apply with some fuzz, or not at all.
 
-master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.git
+Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
 
-Best Regards,
-
-- Arnaldo
-
-With constants for CCID numbers this now uses them in some places.
-
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid2.c |    2 +-
- net/dccp/ccids/ccid3.c |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index 457dd3d..2efb505 100644
+index 755f744..9d6eefd 100644
 --- a/net/dccp/ccids/ccid2.c
 +++ b/net/dccp/ccids/ccid2.c
-@@ -808,7 +808,7 @@ static void ccid2_hc_rx_packet_recv(stru
- }
+@@ -352,14 +352,14 @@ static void ccid2_hc_tx_packet_sent(stru
  
- static struct ccid_operations ccid2 = {
--	.ccid_id		= 2,
-+	.ccid_id		= DCCPC_CCID2,
- 	.ccid_name		= "ccid2",
- 	.ccid_owner		= THIS_MODULE,
- 	.ccid_hc_tx_obj_size	= sizeof(struct ccid2_hc_tx_sock),
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 195aa95..67d2dc0 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -1240,7 +1240,7 @@ static int ccid3_hc_tx_getsockopt(struct
- }
+ #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
+ 	ccid2_pr_debug("pipe=%d\n", hctx->ccid2hctx_pipe);
+-	ccid2_pr_debug("Sent: seq=%llu\n", seq);
++	ccid2_pr_debug("Sent: seq=%llu\n", (unsigned long long) seq);
+ 	do {
+ 		struct ccid2_seq *seqp = hctx->ccid2hctx_seqt;
  
- static struct ccid_operations ccid3 = {
--	.ccid_id		   = 3,
-+	.ccid_id		   = DCCPC_CCID3,
- 	.ccid_name		   = "ccid3",
- 	.ccid_owner		   = THIS_MODULE,
- 	.ccid_hc_tx_obj_size	   = sizeof(struct ccid3_hc_tx_sock),
--- 
-1.4.2.1.g3d5c
-
+ 		while (seqp != hctx->ccid2hctx_seqh) {
+ 			ccid2_pr_debug("out seq=%llu acked=%d time=%lu\n",
+-			       	       seqp->ccid2s_seq, seqp->ccid2s_acked,
+-				       seqp->ccid2s_sent);
++			       	       (unsigned long long) seqp->ccid2s_seq,
++				       seqp->ccid2s_acked, seqp->ccid2s_sent);
+ 			seqp = seqp->ccid2s_next;
+ 		}
+ 	} while (0);
+@@ -480,7 +480,8 @@ static inline void ccid2_new_ack(struct 
+ 		/* first measurement */
+ 		if (hctx->ccid2hctx_srtt = -1) {
+ 			ccid2_pr_debug("R: %lu Time=%lu seq=%llu\n",
+-			       	       r, jiffies, seqp->ccid2s_seq);
++			       	       r, jiffies,
++				       (unsigned long long) seqp->ccid2s_seq);
+ 			ccid2_change_srtt(hctx, r);
+ 			hctx->ccid2hctx_rttvar = r >> 1;
+ 		} else {
+@@ -646,8 +647,9 @@ static void ccid2_hc_tx_packet_recv(stru
+ 			u64 ackno_end_rl;
+ 
+ 			dccp_set_seqno(&ackno_end_rl, ackno - rl);
+-			ccid2_pr_debug("ackvec start:%llu end:%llu\n", ackno,
+-				       ackno_end_rl);
++			ccid2_pr_debug("ackvec start:%llu end:%llu\n",
++				       (unsigned long long) ackno,
++				       (unsigned long long) ackno_end_rl);
+ 			/* if the seqno we are analyzing is larger than the
+ 			 * current ackno, then move towards the tail of our
+ 			 * seqnos.
+@@ -682,7 +684,8 @@ static void ccid2_hc_tx_packet_recv(stru
+ 
+ 					seqp->ccid2s_acked = 1;
+ 					ccid2_pr_debug("Got ack for %llu\n",
+-					       	       seqp->ccid2s_seq);
++					       	       (unsigned long long)
++						       seqp->ccid2s_seq);
+ 					ccid2_hc_tx_dec_pipe(sk);
+ 				}
+ 				if (seqp = hctx->ccid2hctx_seqt) {
+@@ -735,6 +738,7 @@ static void ccid2_hc_tx_packet_recv(stru
+ 		while (1) {
+ 			if (!seqp->ccid2s_acked) {
+ 				ccid2_pr_debug("Packet lost: %llu\n",
++					       (unsigned long long)
+ 					       seqp->ccid2s_seq);
+ 				/* XXX need to traverse from tail -> head in
+ 				 * order to detect multiple congestion events in
