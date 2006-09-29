@@ -1,284 +1,104 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 24 Sep 2006 21:21:02 +0000
-Subject: [PATCH 4/4][DCCP]: Introduce dccp_probe
-Message-Id: <20060924212101.GE6263@mandriva.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 29 Sep 2006 17:24:55 +0000
+Subject: Oops in DCCPv6
+Message-Id: <200609291824.55831@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-Hi David,
+While looking at DCCPv6 connections, I encountered the following oops:
 
-   Please consider pulling from:
+Sep 29 17:38:30 gerrit kernel: BUG: unable to handle kernel paging request =
+at virtual address 00300084
+Sep 29 17:38:30 gerrit kernel:  printing eip:
+Sep 29 17:38:30 gerrit kernel: c03bb4ac
+Sep 29 17:38:30 gerrit kernel: *pde =3D 00000000
+Sep 29 17:38:30 gerrit kernel: Oops: 0000 [#1]
+Sep 29 17:38:30 gerrit kernel: Modules linked in: usbhid sd_mod
+Sep 29 17:38:30 gerrit kernel: CPU:    0
+Sep 29 17:38:30 gerrit kernel: EIP:    0060:[kfree_skb+9/46]    Not tainted=
+ VLI
+Sep 29 17:38:30 gerrit kernel: EFLAGS: 00010206   (2.6.18UDP-Lite-g9937f971=
+-dirty #3)
+Sep 29 17:38:31 gerrit kernel: EIP is at kfree_skb+0x9/0x2e
+Sep 29 17:38:31 gerrit kernel: eax: 00300000   ebx: f2de2818   ecx: f60663e=
+0   edx: 00300000
+Sep 29 17:38:31 gerrit kernel: esi: f60663f8   edi: f6066000   ebp: f479fd2=
+4   esp: f479fd24
+Sep 29 17:38:32 gerrit kernel: ds: 007b   es: 007b   ss: 0068
+Sep 29 17:38:32 gerrit kernel: Process ttcp_dccp (pid: 5743, ti=F479e000 ta=
+sk=F4660ab0 task.ti=F479e000)
+Sep 29 17:38:33 gerrit kernel: Stack: f479fd2c c045be46 f479fd58 c03b9070 c=
+0121085 00000292 f7b0b02c f7b0b02c=20
+Sep 29 17:38:33 gerrit kernel:        000000f8 f60663e0 f7b0b02c f7b0b02c f=
+7b0b02c f479fd88 c03df571 00000002=20
+Sep 29 17:38:33 gerrit kernel:        c046301a f479fd94 00000246 c041847d 0=
+0000000 00000246 f7b0b02c f7b0b02c=20
+Sep 29 17:38:33 gerrit kernel: Call Trace:
+Sep 29 17:38:33 gerrit kernel:  [dccp_v6_reqsk_destructor+20/22] dccp_v6_re=
+qsk_destructor+0x14/0x16
+Sep 29 17:38:34 gerrit kernel:  [reqsk_queue_destroy+101/197] reqsk_queue_d=
+estroy+0x65/0xc5
+Sep 29 17:38:34 gerrit kernel:  [inet_csk_listen_stop+46/378] inet_csk_list=
+en_stop+0x2e/0x17a
+Sep 29 17:38:34 gerrit kernel:  [dccp_close+383/522] dccp_close+0x17f/0x20a
+Sep 29 17:38:34 gerrit kernel:  [inet_release+47/76] inet_release+0x2f/0x4c
+Sep 29 17:38:35 gerrit kernel:  [inet6_release+40/44] inet6_release+0x28/0x=
+2c
+Sep 29 17:38:35 gerrit kernel:  [sock_release+23/115] sock_release+0x17/0x73
+Sep 29 17:38:35 gerrit kernel:  [sock_close+33/61] sock_close+0x21/0x3d
+Sep 29 17:38:35 gerrit kernel:  [__fput+187/368] __fput+0xbb/0x170
+Sep 29 17:38:35 gerrit kernel:  [fput+24/36] fput+0x18/0x24
+Sep 29 17:38:35 gerrit kernel:  [filp_close+65/103] filp_close+0x41/0x67
+Sep 29 17:38:35 gerrit kernel:  [put_files_struct+126/198] put_files_struct=
++0x7e/0xc6
+Sep 29 17:38:35 gerrit kernel:  [do_exit+382/2251] do_exit+0x17e/0x8cb
+Sep 29 17:38:35 gerrit kernel:  [do_group_exit+43/123] do_group_exit+0x2b/0=
+x7b
+Sep 29 17:38:35 gerrit kernel:  [get_signal_to_deliver+799/1053] get_signal=
+_to_deliver+0x31f/0x41d
+Sep 29 17:38:35 gerrit kernel:  [do_notify_resume+1007/1780] do_notify_resu=
+me+0x3ef/0x6f4
+Sep 29 17:38:35 gerrit kernel:  [work_notifysig+19/26] work_notifysig+0x13/=
+0x1a
+Sep 29 17:38:35 gerrit kernel:  [phys_startup_32+-1210107764/-1073741824] 0=
+xb7ef388c
+Sep 29 17:38:35 gerrit kernel:  =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3DSep 29 17:=
+38:35 gerrit kernel: Code: 9a 00 00 00 c7 44 24 04 e8 ba 4f c0 c7 04 24 06 =
+ae 49 c0 e8 1c e2 d5 ff e8 b6 8c d4 ff e9 59 ff ff ff 55 89 e5 89 c2 85 c0 =
+74 12 <8b> 80 84 00 00 00 83 e8 01 75 09 89 d0 e8 26 ff ff ff 5d c3 ff=20
+Sep 29 17:38:35 gerrit kernel: EIP: [kfree_skb+9/46] kfree_skb+0x9/0x2e SS:=
+ESP 0068:f479fd24
+Sep 29 17:38:35 gerrit kernel:  <1>Fixing recursive fault but reboot is nee=
+ded!
 
-master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.git
+-----------------------------------------
+CONFIGURATION
+ * all DCCP modules built into the kernel
+ * latest davem-2.6 tree (DCCP part corresponds to acme-2.6.19)
 
-Best Regards,
+HOW TO REPRODUCE
+ * Oops was encountered on host with listening socket
+ * let tccp listen to AF_UNSPEC socket (i.e. both v4/v6)
+ * connect from other host to the IPv4 address (but don't actually transfer=
+ data)
+ * kill listening client on host =3D=3D> OOPS
 
-- Arnaldo
+I could not find out the exact cause, but the following may be helpful
+ * while the oops happened, a lock was held by dccp_close:
+   sk_lock-AF_INET6  dccp_close+0x12/0x20a
+ * the above suggests the following trace:
+    --dccp_close calls inet_csk_listen_stop(sk);
+    --inet_csk_listen_stop calls reqsk_queue_destroy
+    --the destructor dccp_v6_reqsk_destructor is called later in inet_csk_l=
+isten_stop,
+      in the while loop, which calls inet_csk_destroy_sock
+    --inet_csk_destroy_sock calls sk->sk_prot->destroy(sk), which goes to d=
+ccp_v6_reqsk_destructor
 
-This adds DCCP probing shamelessly ripped off from TCP probes by Stephen
-Hemminger.
+Sorry, I can't offer more explanation.
 
-I've put in here support for further CCID3 variables as well.
-Andrea/Arnaldo might look to extend for CCID2.
-
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
----
- net/dccp/Kconfig  |   16 ++++
- net/dccp/Makefile |    2 +
- net/dccp/probe.c  |  198 +++++++++++++++++++++++++++++++++++++++++++++++++++++
- 3 files changed, 216 insertions(+), 0 deletions(-)
-
-diff --git a/net/dccp/Kconfig b/net/dccp/Kconfig
-index 859e335..e2a095d 100644
---- a/net/dccp/Kconfig
-+++ b/net/dccp/Kconfig
-@@ -40,6 +40,22 @@ config IP_DCCP_DEBUG
- 
- 	  Just say N.
- 
-+config NET_DCCPPROBE
-+	tristate "DCCP connection probing"
-+	depends on PROC_FS && KPROBES
-+	---help---
-+	This module allows for capturing the changes to DCCP connection
-+	state in response to incoming packets. It is used for debugging
-+	DCCP congestion avoidance modules. If you don't understand
-+	what was just said, you don't need it: say N.
-+
-+	Documentation on how to use the packet generator can be found
-+	at http://linux-net.osdl.org/index.php/DccpProbe
-+
-+	To compile this code as a module, choose M here: the
-+	module will be called dccp_probe.
-+
-+
- endmenu
- 
- endmenu
-diff --git a/net/dccp/Makefile b/net/dccp/Makefile
-index 7696e21..17ed99c 100644
---- a/net/dccp/Makefile
-+++ b/net/dccp/Makefile
-@@ -11,9 +11,11 @@ dccp_ipv4-y := ipv4.o
- dccp-$(CONFIG_IP_DCCP_ACKVEC) += ackvec.o
- 
- obj-$(CONFIG_INET_DCCP_DIAG) += dccp_diag.o
-+obj-$(CONFIG_NET_DCCPPROBE) += dccp_probe.o
- 
- dccp-$(CONFIG_SYSCTL) += sysctl.o
- 
- dccp_diag-y := diag.o
-+dccp_probe-y := probe.o
- 
- obj-y += ccids/
-diff --git a/net/dccp/probe.c b/net/dccp/probe.c
-new file mode 100644
-index 0000000..146496f
---- /dev/null
-+++ b/net/dccp/probe.c
-@@ -0,0 +1,198 @@
-+/*
-+ * dccp_probe - Observe the DCCP flow with kprobes.
-+ *
-+ * The idea for this came from Werner Almesberger's umlsim
-+ * Copyright (C) 2004, Stephen Hemminger <shemminger@osdl.org>
-+ *
-+ * Modified for DCCP from Stephen Hemminger's code
-+ * Copyright (C) 2006, Ian McDonald <ian.mcdonald@jandi.co.nz>
-+ *
-+ * This program is free software; you can redistribute it and/or modify
-+ * it under the terms of the GNU General Public License as published by
-+ * the Free Software Foundation; either version 2 of the License, or
-+ * (at your option) any later version.
-+ *
-+ * This program is distributed in the hope that it will be useful,
-+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
-+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+ * GNU General Public License for more details.
-+ *
-+ * You should have received a copy of the GNU General Public License
-+ * along with this program; if not, write to the Free Software
-+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-+ */
-+
-+#include <linux/kernel.h>
-+#include <linux/kprobes.h>
-+#include <linux/socket.h>
-+#include <linux/dccp.h>
-+#include <linux/proc_fs.h>
-+#include <linux/module.h>
-+#include <linux/kfifo.h>
-+#include <linux/vmalloc.h>
-+
-+#include "dccp.h"
-+#include "ccid.h"
-+#include "ccids/ccid3.h"
-+
-+static int port;
-+
-+static int bufsize = 64 * 1024;
-+
-+static const char procname[] = "dccpprobe";
-+
-+struct {
-+	struct kfifo	  *fifo;
-+	spinlock_t	  lock;
-+	wait_queue_head_t wait;
-+	struct timeval	  tstart;
-+} dccpw;
-+
-+static void printl(const char *fmt, ...)
-+{
-+	va_list args;
-+	int len;
-+	struct timeval now;
-+	char tbuf[256];
-+
-+	va_start(args, fmt);
-+	do_gettimeofday(&now);
-+
-+	now.tv_sec -= dccpw.tstart.tv_sec;
-+	now.tv_usec -= dccpw.tstart.tv_usec;
-+	if (now.tv_usec < 0) {
-+		--now.tv_sec;
-+		now.tv_usec += 1000000;
-+	}
-+
-+	len = sprintf(tbuf, "%lu.%06lu ",
-+		      (unsigned long) now.tv_sec,
-+		      (unsigned long) now.tv_usec);
-+	len += vscnprintf(tbuf+len, sizeof(tbuf)-len, fmt, args);
-+	va_end(args);
-+
-+	kfifo_put(dccpw.fifo, tbuf, len);
-+	wake_up(&dccpw.wait);
-+}
-+
-+static int jdccp_sendmsg(struct kiocb *iocb, struct sock *sk,
-+			 struct msghdr *msg, size_t size)
-+{
-+	const struct dccp_minisock *dmsk = dccp_msk(sk);
-+	const struct inet_sock *inet = inet_sk(sk);
-+	const struct ccid3_hc_tx_sock *hctx;
-+
-+	if (dmsk->dccpms_tx_ccid = DCCPC_CCID3)
-+		hctx = ccid3_hc_tx_sk(sk);
-+	else
-+		hctx = NULL;
-+
-+	if (port = 0 || ntohs(inet->dport) = port ||
-+	    ntohs(inet->sport) = port) {
-+		if (hctx)
-+			printl("%d.%d.%d.%d:%u %d.%d.%d.%d:%u %d %d %d %d %d\n",
-+			   NIPQUAD(inet->saddr), ntohs(inet->sport),
-+			   NIPQUAD(inet->daddr), ntohs(inet->dport), size,
-+			   hctx->ccid3hctx_s, hctx->ccid3hctx_rtt,
-+			   hctx->ccid3hctx_p, hctx->ccid3hctx_t_ipi);
-+		else
-+			printl("%d.%d.%d.%d:%u %d.%d.%d.%d:%u %d\n",
-+			   NIPQUAD(inet->saddr), ntohs(inet->sport),
-+			   NIPQUAD(inet->daddr), ntohs(inet->dport), size);
-+	}
-+
-+	jprobe_return();
-+	return 0;
-+}
-+
-+static struct jprobe dccp_send_probe = {
-+	.kp	= { .addr = (kprobe_opcode_t *)&dccp_sendmsg, },
-+	.entry	= (kprobe_opcode_t *)&jdccp_sendmsg,
-+};
-+
-+static int dccpprobe_open(struct inode *inode, struct file *file)
-+{
-+	kfifo_reset(dccpw.fifo);
-+	do_gettimeofday(&dccpw.tstart);
-+	return 0;
-+}
-+
-+static ssize_t dccpprobe_read(struct file *file, char __user *buf,
-+			      size_t len, loff_t *ppos)
-+{
-+	int error = 0, cnt = 0;
-+	unsigned char *tbuf;
-+
-+	if (!buf || len < 0)
-+		return -EINVAL;
-+
-+	if (len = 0)
-+		return 0;
-+
-+	tbuf = vmalloc(len);
-+	if (!tbuf)
-+		return -ENOMEM;
-+
-+	error = wait_event_interruptible(dccpw.wait,
-+					 __kfifo_len(dccpw.fifo) != 0);
-+	if (error)
-+		goto out_free;
-+
-+	cnt = kfifo_get(dccpw.fifo, tbuf, len);
-+	error = copy_to_user(buf, tbuf, cnt);
-+
-+out_free:
-+	vfree(tbuf);
-+
-+	return error ? error : cnt;
-+}
-+
-+static struct file_operations dccpprobe_fops = {
-+	.owner	 = THIS_MODULE,
-+	.open	 = dccpprobe_open,
-+	.read    = dccpprobe_read,
-+};
-+
-+static __init int dccpprobe_init(void)
-+{
-+	int ret = -ENOMEM;
-+
-+	init_waitqueue_head(&dccpw.wait);
-+	spin_lock_init(&dccpw.lock);
-+	dccpw.fifo = kfifo_alloc(bufsize, GFP_KERNEL, &dccpw.lock);
-+
-+	if (!proc_net_fops_create(procname, S_IRUSR, &dccpprobe_fops))
-+		goto err0;
-+
-+	ret = register_jprobe(&dccp_send_probe);
-+	if (ret)
-+		goto err1;
-+
-+	pr_info("DCCP watch registered (port=%d)\n", port);
-+	return 0;
-+err1:
-+	proc_net_remove(procname);
-+err0:
-+	kfifo_free(dccpw.fifo);
-+	return ret;
-+}
-+module_init(dccpprobe_init);
-+
-+static __exit void dccpprobe_exit(void)
-+{
-+	kfifo_free(dccpw.fifo);
-+	proc_net_remove(procname);
-+	unregister_jprobe(&dccp_send_probe);
-+
-+}
-+module_exit(dccpprobe_exit);
-+
-+MODULE_PARM_DESC(port, "Port to match (0=all)");
-+module_param(port, int, 0);
-+
-+MODULE_PARM_DESC(bufsize, "Log buffer size (default 64k)");
-+module_param(bufsize, int, 0);
-+
-+MODULE_AUTHOR("Ian McDonald <ian.mcdonald@jandi.co.nz>");
-+MODULE_DESCRIPTION("DCCP snooper");
-+MODULE_LICENSE("GPL");
--- 
-1.4.2.1.g3d5c
+Gerrit
 
