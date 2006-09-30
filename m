@@ -1,54 +1,29 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Thu, 14 Sep 2006 17:09:08 +0000
-Subject: [PATCH 2/10]: [DCCP] ackvec: Fix how DCCP_ACKVEC_STATE_NOT_RECEIVED is used
-Message-Id: <20060914170907.GC20651@mandriva.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Sat, 30 Sep 2006 05:42:08 +0000
+Subject: [PATCH 1/1] DCCP: Fix DCCP Probe typo
+Message-Id: <200609301742.08319.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Fix the way state is masked out.  DCCP_ACKVEC_STATE_NOT_RECEIVED is defined as
-appears in the packet, therefore bit shifting is not required.  This fix allows
-CCID2 to correctly detect losses.
+This mirrors commit 82fe7c924e61f9444b376498496942d41fbe9d26
 
-Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+DCCP probe was a copy of TCP probe complete with this bug.
 
-------------------------------------------------------------------------------
-
- ackvec.c      |    3 +--
- ccids/ccid2.c |    4 ++--
- 2 files changed, 3 insertions(+), 4 deletions(-)
-
-------------------------------------------------------------------------------
-
-diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-index 8dab723..bc5ff12 100644
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -436,8 +436,7 @@ static void dccp_ackvec_check_rcv_ackvec
- 		break;
- found:
- 		if (between48(avr->dccpavr_ack_seqno, ackno_end_rl, ackno)) {
--			const u8 state = (*vector &
--					  DCCP_ACKVEC_STATE_MASK) >> 6;
-+			const u8 state = *vector & DCCP_ACKVEC_STATE_MASK;
- 			if (state != DCCP_ACKVEC_STATE_NOT_RECEIVED) {
- #ifdef CONFIG_IP_DCCP_DEBUG
- 				struct dccp_sock *dp = dccp_sk(sk);
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index e961562..b1d90c0 100644
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -582,8 +582,8 @@ static void ccid2_hc_tx_packet_recv(stru
- 			 * run length
- 			 */
- 			while (between48(seqp->ccid2s_seq,ackno_end_rl,ackno)) {
--				const u8 state = (*vector &
--						  DCCP_ACKVEC_STATE_MASK) >> 6;
-+				const u8 state = *vector &
-+						 DCCP_ACKVEC_STATE_MASK;
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/Kconfig b/net/dccp/Kconfig
+index e2a095d..a40e0b0 100644
+--- a/net/dccp/Kconfig
++++ b/net/dccp/Kconfig
+@@ -49,7 +49,7 @@ config NET_DCCPPROBE
+ 	DCCP congestion avoidance modules. If you don't understand
+ 	what was just said, you don't need it: say N.
  
- 				/* new packet received or marked */
- 				if (state != DCCP_ACKVEC_STATE_NOT_RECEIVED &&
+-	Documentation on how to use the packet generator can be found
++	Documentation on how to use DCCP connection probing can be found
+ 	at http://linux-net.osdl.org/index.php/DccpProbe
+ 
+ 	To compile this code as a module, choose M here: the
