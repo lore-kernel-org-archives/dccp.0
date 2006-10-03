@@ -1,7 +1,7 @@
 From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 03 Oct 2006 03:26:09 +0000
+Date: Tue, 03 Oct 2006 03:40:14 +0000
 Subject: Re: [dccp] Packet size s on CCID3
-Message-Id: <5640c7e00610022026t98b9239i536b0eb5363b9c34@mail.gmail.com>
+Message-Id: <5640c7e00610022040i6fcf4645rf3ea1633dd62dbee@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00609202022j1b97cf1g30797ffcd9b650b6@mail.gmail.com>
 In-Reply-To: <5640c7e00609202022j1b97cf1g30797ffcd9b650b6@mail.gmail.com>
@@ -10,12 +10,8 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 9/23/06, Sally Floyd <sallyfloyd@mac.com> wrote:
-> > Why not just calculate a packet rate per second? Or am I missing
-> > something obvious?
->
-> No, that is a good question.
->
+Just re-reading this again:
+
 > One reason for including the packet size s is discussed in
 > Section 5.3 of RFC 4342:
 >
@@ -39,35 +35,22 @@ On 9/23/06, Sally Floyd <sallyfloyd@mac.com> wrote:
 >
 > - Sally
 
-I'm still thinking this all through and want to discuss this a bit further.
+Why do we have to assume s = MSS? If we actually track the number of
+packets this makes the situation far worse and we can't send at a fair
+rate. For example if MSS is 1500 bytes and we are actually using 50
+byte packets then we can only send 1/30 th of what we are permitted
+under the TCP throughput equation.
 
-The papers by Padhye and Floyd for the TCP throughput equation all
-seem to say that given a fixed RTT and fixed loss rate that you have a
-fixed throughput rate in packets per second. Have I read this
-correctly?
+Using MSS is fair if we are using a byte rate per second
+implementation but if we do a packet per second implementation (given
+X and s act to cancel out) this seems patently wrong.
 
-The throughput rate is then based on the packet size for a given loss
-rate and RTT. If packet sizes increase, throughput increases but the
-packet transmission rate remains the same.
+This would not be open to application abuse as the protocl would be
+just tracking packets per second.
 
-Said another way we don't alter packet sending rate if we alter the
-size of the packet. I'm not sure that this is correct on things like
-wireless links but this is the starting point for TFRC at present.
-
-If the mss is used then t_ipi = s/X_inst according to TFRC spec. That
-means that it will get less than fair share which makes sense (Richard
-I had this around the wrong way when we were discussing).
-
-I personally don't see why you would do all the calculations for
-average packet size etc when you can simplify it by just counting
-packets. I'm guessing that it was done in this way because people
-wanted to calculate throughput rates due to the protocols being
-thought of but this is far less relevant when you are datagram based
-and don't normally fragment.
-
-If I get time I'll experiment with implementations in Linux.
-
-Regards,
+Forgive me if I'm making a fundamental error - I would like to see
+what I am doing wrong if I am. I know that what I am saying is not
+what RFC4342 says but I'm referring to the ideas behind it.
 
 Ian
 -- 
