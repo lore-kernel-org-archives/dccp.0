@@ -1,55 +1,34 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 24 Sep 2006 21:18:57 +0000
-Subject: [PATCH 2/4][DCCP]: Introduce constants for CCID numbers
-Message-Id: <20060924211856.GC6263@mandriva.com>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Mon, 23 Oct 2006 23:35:51 +0000
+Subject: Re: [PATCH 2.6.17][Trivial] net/dccp: update references to standards
+Message-Id: <5640c7e00610231635n763ffe70ncd2f4a2652009748@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi David,
+On 9/23/06, Arnaldo Carvalho de Melo <arnaldo.melo@gmail.com> wrote:
+> On 9/14/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> > Sorry kmail garbled this, clean text below.
+> >
+> > - Gerrit
+>
+> Applied, thanks
+>
+> - Arnaldo
 
-   Please consider pulling from:
+I haven't seen this and others upstream yet after a month. I know you
+are flat out Arnaldo but just wondering whether this is an oversight
+as you said it was applied and somewhere along the line it seems to
+have gone to /dev/null
 
-master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.git
-
-Best Regards,
-
-- Arnaldo
-
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
----
- include/linux/dccp.h |    8 +++++++-
- 1 files changed, 7 insertions(+), 1 deletions(-)
-
-diff --git a/include/linux/dccp.h b/include/linux/dccp.h
-index 29f9291..d6f4ec4 100644
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -169,6 +169,12 @@ enum {
- 	DCCPO_MAX_CCID_SPECIFIC = 255,
- };
- 
-+/* DCCP CCIDS */
-+enum {
-+	DCCPC_CCID2 = 2,
-+	DCCPC_CCID3 = 3,
-+};
-+
- /* DCCP features */
- enum {
- 	DCCPF_RESERVED = 0,
-@@ -320,7 +326,7 @@ static inline unsigned int dccp_hdr_len(
- /* initial values for each feature */
- #define DCCPF_INITIAL_SEQUENCE_WINDOW		100
- #define DCCPF_INITIAL_ACK_RATIO			2
--#define DCCPF_INITIAL_CCID			2
-+#define DCCPF_INITIAL_CCID			DCCPC_CCID2
- #define DCCPF_INITIAL_SEND_ACK_VECTOR		1
- /* FIXME: for now we're default to 1 but it should really be 0 */
- #define DCCPF_INITIAL_SEND_NDP_COUNT		1
+Ian
 -- 
-1.4.2.1.g3d5c
-
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
