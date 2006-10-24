@@ -1,427 +1,440 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 11 Oct 2006 15:27:00 +0000
-Subject: [Patch 2/3]:  dccp: Oops in DCCPv6
-Message-Id: <200610111627.00880@strip-the-willow>
+Date: Tue, 24 Oct 2006 13:59:28 +0000
+Subject: [PATCH 4/17] [DCCP]: Ackvec patches by Bittau
+Message-Id: <200610241459.28411@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This part just shifts the code in ipv4.c in order
-to resolve dependencies among the static functions.
+These patches were written by Andrea Bittau and 
+were posted and signed-off by him as 
 
-It applies on the previous patch (don't use it standalone).
+	 01_ackvec_opt
+	 02_ackvec_speed
+	 03_ackvec_ccid_speed
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- ipv4.c |  368 ++++++++++++++++++++++++++++++++---------------------------------
- 1 file changed, 183 insertions(+), 185 deletions(-)
+Given that he achieved Gigabit speed with these patches, I think they
+should really be `in'.
 
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index d27e208..f87b0c0 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -193,86 +193,6 @@ static inline void dccp_do_pmtu_discover
- 	} /* else let the usual retransmit timer handle it */
+
+Original commit messages:
+============
+[ACKVEC]: Split long ack vectors across multiple options
+  ack vectors grow proportional to the window size.  If an ack vector does not fit
+  into a single option, it must be spread across multiple options.  This patch
+  will allow for windows to grow larger.
+  http://www.mail-archive.com/dccp@vger.kernel.org/msg00399.html
+
+[ACKVEC - Optimization]:  Do not traverse records if none will be found
+  Do not traverse the list of ack vector records [proportional to window size]
+  when we know we will not find what we are looking for.  This is especially
+  useful because ack vectors are checked twice:
+    1) Upon parsing of options.
+    2) Upon notification of a new ack.
+
+  All of the work will occur during check #1.  Therefore, when check #2 is
+  performed, no new work will be done.  This is now "detected" and there is no
+  performance hit when doing #2.
+  http://www.mail-archive.com/dccp@vger.kernel.org/msg00400.html
+
+[ACKVEC & CCID2]: Code optimizations
+   These are code optimizations which are relevant when dealing with large windows.
+   They are not coded the way I would like to, but they do the job for the
+   short-term.  This patch should be more neat.
+   http://www.mail-archive.com/dccp@vger.kernel.org/msg00401.html
+
+
+Signed-off-by: Gerrit Renker  <gerrit@erg.abdn.ac.uk>
+------------------------------------------------------------------------------
+
+ net/dccp/ackvec.c      |  115 ++++++++++++++++++++++++++++++-------------------
+ net/dccp/ackvec.h      |   22 ++++-----
+ net/dccp/ccids/ccid2.c |   22 ++++++++-
+ net/dccp/ccids/ccid2.h |    3 -
+ net/dccp/options.c     |    7 +-
+ 5 files changed, 109 insertions(+), 60 deletions(-)
+
+------------------------------------------------------------------------------
+
+diff --git a/net/dccp/options.c b/net/dccp/options.c
+index fb0db1f..81c53e1 100644
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -76,6 +76,7 @@ #endif
+ 	u32 elapsed_time;
+ 	int rc;
+ 	int mandatory = 0;
++	u64 ackno = DCCP_SKB_CB(skb)->dccpd_ack_seq;
+ 
+ 	memset(opt_recv, 0, sizeof(*opt_recv));
+ 
+@@ -152,9 +153,9 @@ #endif
+ 			if (pkt_type = DCCP_PKT_DATA)
+ 				break;
+ 
+-			if (dccp_msk(sk)->dccpms_send_ack_vector &&
+-			    dccp_ackvec_parse(sk, skb, opt, value, len))
+-				goto out_invalid_option;
++			if (dccp_msk(sk)->dccpms_send_ack_vector)
++				ackno = dccp_ackvec_parse(sk, ackno, opt,
++							  value, len);
+ 			break;
+ 		case DCCPO_TIMESTAMP:
+ 			if (len != 4)
+diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
+index 5b2ef4a..ebd7949 100644
+--- a/net/dccp/ccids/ccid2.h
++++ b/net/dccp/ccids/ccid2.h
+@@ -35,7 +35,7 @@ struct ccid2_seq {
+ 	struct ccid2_seq	*ccid2s_next;
+ };
+ 
+-#define CCID2_SEQBUF_LEN 256
++#define CCID2_SEQBUF_LEN 1024
+ #define CCID2_SEQBUF_MAX 128
+ 
+ /** struct ccid2_hc_tx_sock - CCID2 TX half connection
+@@ -72,6 +72,7 @@ struct ccid2_hc_tx_sock {
+ 	int			ccid2hctx_rpdupack;
+ 	int			ccid2hctx_sendwait;
+ 	unsigned long		ccid2hctx_last_cong;
++	u64			ccid2hctx_high_ack;
+ };
+ 
+ struct ccid2_hc_rx_sock {
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 2fbb84b..e0f85e9 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -618,7 +618,17 @@ static void ccid2_hc_tx_packet_recv(stru
+ 	}
+ 
+ 	ackno = DCCP_SKB_CB(skb)->dccpd_ack_seq;
+-	seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
++	if (ackno > hctx->ccid2hctx_high_ack)
++		hctx->ccid2hctx_high_ack = ackno;
++
++	seqp = hctx->ccid2hctx_seqt;
++	while (before48(seqp->ccid2s_seq, ackno)) {
++		seqp = seqp->ccid2s_next;
++		if (seqp = hctx->ccid2hctx_seqh) {
++			seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
++			break;
++		}
++	}
+ 
+ 	/* If in slow-start, cwnd can increase at most Ack Ratio / 2 packets for
+ 	 * this single ack.  I round up.
+@@ -695,7 +705,14 @@ static void ccid2_hc_tx_packet_recv(stru
+ 	/* The state about what is acked should be correct now
+ 	 * Check for NUMDUPACK
+ 	 */
+-	seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
++	seqp = hctx->ccid2hctx_seqt;
++	while (seqp->ccid2s_seq < hctx->ccid2hctx_high_ack) {
++		seqp = seqp->ccid2s_next;
++		if (seqp = hctx->ccid2hctx_seqh) {
++			seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
++			break;
++		}
++	}
+ 	done = 0;
+ 	while (1) {
+ 		if (seqp->ccid2s_acked) {
+@@ -769,6 +786,7 @@ static int ccid2_hc_tx_init(struct ccid 
+ 	hctx->ccid2hctx_lastrtt  = 0;
+ 	hctx->ccid2hctx_rpdupack = -1;
+ 	hctx->ccid2hctx_last_cong = jiffies;
++	hctx->ccid2hctx_high_ack = 0;
+ 
+ 	hctx->ccid2hctx_rtotimer.function = &ccid2_hc_tx_rto_expire;
+ 	hctx->ccid2hctx_rtotimer.data	  = (unsigned long)sk;
+diff --git a/net/dccp/ackvec.h b/net/dccp/ackvec.h
+index cf8f20c..da1bec8 100644
+--- a/net/dccp/ackvec.h
++++ b/net/dccp/ackvec.h
+@@ -17,7 +17,9 @@ #include <linux/time.h>
+ #include <linux/types.h>
+ 
+ /* Read about the ECN nonce to see why it is 253 */
+-#define DCCP_MAX_ACKVEC_LEN 253
++#define DCCP_MAX_ACKVEC_OPT_LEN 253
++/* We can spread an ack vector across multiple options */
++#define DCCP_MAX_ACKVEC_LEN     (DCCP_MAX_ACKVEC_OPT_LEN * 2)
+ 
+ #define DCCP_ACKVEC_STATE_RECEIVED	0
+ #define DCCP_ACKVEC_STATE_ECN_MARKED	(1 << 6)
+@@ -31,7 +33,7 @@ #define DCCP_ACKVEC_LEN_MASK		0x3F /* 00
+  * This data structure is the one defined in RFC 4340, Appendix A.
+  *
+  * @dccpav_buf_head - circular buffer head
+- * @dccpav_buf_tail - circular buffer tail
++ * @dccpav_vec_len -
+  * @dccpav_buf_ackno - ack # of the most recent packet acknowledgeable in the
+  * 		       buffer (i.e. %dccpav_buf_head)
+  * @dccpav_buf_nonce - the one-bit sum of the ECN Nonces on all packets acked
+@@ -41,20 +43,19 @@ #define DCCP_ACKVEC_LEN_MASK		0x3F /* 00
+  * Ack Vectors it has recently sent. For each packet sent carrying an
+  * Ack Vector, it remembers four variables:
+  *
+- * @dccpav_ack_ptr - the value of buf_head at the time of acknowledgement.
+  * @dccpav_records - list of dccp_ackvec_record
++ * @dccpav_buf_nonce -
+  * @dccpav_ack_nonce - the one-bit sum of the ECN Nonces for all State 0.
+  *
+- * @dccpav_time		- the time in usecs
++ * @dccpav_time	- the time in usecs
+  * @dccpav_buf - circular buffer of acknowledgeable packets
+  */
+ struct dccp_ackvec {
+ 	u64		dccpav_buf_ackno;
+ 	struct list_head dccpav_records;
+ 	struct timeval	dccpav_time;
+-	u8		dccpav_buf_head;
+-	u8		dccpav_ack_ptr;
+-	u8		dccpav_vec_len;
++	int		dccpav_buf_head;
++	int		dccpav_vec_len;
+ 	u8		dccpav_buf_nonce;
+ 	u8		dccpav_ack_nonce;
+ 	u8		dccpav_buf[DCCP_MAX_ACKVEC_LEN];
+@@ -77,9 +78,9 @@ struct dccp_ackvec_record {
+ 	struct list_head dccpavr_node;
+ 	u64		 dccpavr_ack_seqno;
+ 	u64		 dccpavr_ack_ackno;
+-	u8		 dccpavr_ack_ptr;
++	int		 dccpavr_ack_ptr;
+ 	u8		 dccpavr_ack_nonce;
+-	u8		 dccpavr_sent_len;
++	int		 dccpavr_sent_len;
+ };
+ 
+ struct sock;
+@@ -94,10 +95,9 @@ extern void dccp_ackvec_free(struct dccp
+ 
+ extern int dccp_ackvec_add(struct dccp_ackvec *av, const struct sock *sk,
+ 			   const u64 ackno, const u8 state);
+-
+ extern void dccp_ackvec_check_rcv_ackno(struct dccp_ackvec *av,
+ 					struct sock *sk, const u64 ackno);
+-extern int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
++extern u64 dccp_ackvec_parse(struct sock *sk, u64 ackno,
+ 			     const u8 opt, const u8 *value, const u8 len);
+ 
+ extern int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb);
+diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
+index 01345df..f18f76e 100644
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -72,11 +72,18 @@ #ifdef CONFIG_IP_DCCP_DEBUG
+ 				"CLIENT tx: " : "server tx: ";
+ #endif
+ 	struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
+-	int len = av->dccpav_vec_len + 2;
++	int len;
+ 	struct timeval now;
+ 	u32 elapsed_time;
+ 	unsigned char *to, *from;
+ 	struct dccp_ackvec_record *avr;
++	int optc, i;
++
++	/* Figure out how many options do we need to represent the ackvec */
++	optc = av->dccpav_vec_len / DCCP_MAX_ACKVEC_OPT_LEN;
++	if (av->dccpav_vec_len % DCCP_MAX_ACKVEC_OPT_LEN)
++		optc++;
++	len = optc*2 + av->dccpav_vec_len;
+ 
+ 	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
+ 		return -1;
+@@ -94,24 +101,42 @@ #endif
+ 
+ 	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
+ 
+-	to    = skb_push(skb, len);
+-	*to++ = DCCPO_ACK_VECTOR_0;
+-	*to++ = len;
+-
+-	len  = av->dccpav_vec_len;
++	to   = skb_push(skb, len);
+ 	from = av->dccpav_buf + av->dccpav_buf_head;
++	len  = av->dccpav_vec_len;
++
++	/* write the vectors */
++	for (i = 0; i < optc; i++) {
++		int copylen = len;
++		if (copylen > DCCP_MAX_ACKVEC_OPT_LEN)
++			copylen = DCCP_MAX_ACKVEC_OPT_LEN;
++
++		*to++ = DCCPO_ACK_VECTOR_0;
++		*to++ = copylen+2;
+ 
+-	/* Check if buf_head wraps */
+-	if ((int)av->dccpav_buf_head + len > DCCP_MAX_ACKVEC_LEN) {
+-		const u32 tailsize = DCCP_MAX_ACKVEC_LEN - av->dccpav_buf_head;
++		/* Check if buf_head wraps */
++		if ((from + copylen) > &av->dccpav_buf[DCCP_MAX_ACKVEC_LEN]) {
++			u32 tailsize = &av->dccpav_buf[DCCP_MAX_ACKVEC_LEN] -
++				       from;
+ 
+-		memcpy(to, from, tailsize);
+-		to   += tailsize;
+-		len  -= tailsize;
+-		from = av->dccpav_buf;
++			memcpy(to, from, tailsize);
++			to	+= tailsize;
++			from     = av->dccpav_buf;
++			copylen	-= tailsize;
++			len     -= tailsize;
++
++			BUG_ON((from + copylen) >
++			       &av->dccpav_buf[DCCP_MAX_ACKVEC_LEN]);
++		}
++
++		memcpy(to, from, copylen);
++		to   += copylen;
++		from += copylen;
++
++		len -= copylen;
+ 	}
++	BUG_ON(len != 0);
+ 
+-	memcpy(to, from, len);
+ 	/*
+ 	 *	From RFC 4340, A.2:
+ 	 *
+@@ -145,7 +170,6 @@ struct dccp_ackvec *dccp_ackvec_alloc(co
+ 		av->dccpav_buf_head	= DCCP_MAX_ACKVEC_LEN - 1;
+ 		av->dccpav_buf_ackno	= DCCP_MAX_SEQNO + 1;
+ 		av->dccpav_buf_nonce = av->dccpav_buf_nonce = 0;
+-		av->dccpav_ack_ptr	= 0;
+ 		av->dccpav_time.tv_sec	= 0;
+ 		av->dccpav_time.tv_usec	= 0;
+ 		av->dccpav_vec_len	= 0;
+@@ -174,13 +198,13 @@ void dccp_ackvec_free(struct dccp_ackvec
  }
  
--static void dccp_v4_reqsk_send_ack(struct sk_buff *rxskb,
--				   struct request_sock *req)
--{
--	int err;
--	struct dccp_hdr *rxdh = dccp_hdr(rxskb), *dh;
--	const u32 dccp_hdr_ack_len = sizeof(struct dccp_hdr) +
--				     sizeof(struct dccp_hdr_ext) +
--				     sizeof(struct dccp_hdr_ack_bits);
--	struct sk_buff *skb;
--
--	if (((struct rtable *)rxskb->dst)->rt_type != RTN_LOCAL)
--		return;
--
--	skb = alloc_skb(dccp_v4_ctl_socket->sk->sk_prot->max_header, GFP_ATOMIC);
--	if (skb = NULL)
--		return;
--
--	/* Reserve space for headers. */
--	skb_reserve(skb, dccp_v4_ctl_socket->sk->sk_prot->max_header);
--
--	skb->dst = dst_clone(rxskb->dst);
--
--	skb->h.raw = skb_push(skb, dccp_hdr_ack_len);
--	dh = dccp_hdr(skb);
--	memset(dh, 0, dccp_hdr_ack_len);
--
--	/* Build DCCP header and checksum it. */
--	dh->dccph_type	   = DCCP_PKT_ACK;
--	dh->dccph_sport	   = rxdh->dccph_dport;
--	dh->dccph_dport	   = rxdh->dccph_sport;
--	dh->dccph_doff	   = dccp_hdr_ack_len / 4;
--	dh->dccph_x	   = 1;
--
--	dccp_hdr_set_seq(dh, DCCP_SKB_CB(rxskb)->dccpd_ack_seq);
--	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb),
--			 DCCP_SKB_CB(rxskb)->dccpd_seq);
--
--	bh_lock_sock(dccp_v4_ctl_socket->sk);
--	err = ip_build_and_send_pkt(skb, dccp_v4_ctl_socket->sk,
--				    rxskb->nh.iph->daddr,
--				    rxskb->nh.iph->saddr, NULL);
--	bh_unlock_sock(dccp_v4_ctl_socket->sk);
--
--	if (err = NET_XMIT_CN || err = 0) {
--		DCCP_INC_STATS_BH(DCCP_MIB_OUTSEGS);
--		DCCP_INC_STATS_BH(DCCP_MIB_OUTRSTS);
--	}
--}
--
--static int dccp_v4_send_response(struct sock *sk, struct request_sock *req,
--				 struct dst_entry *dst)
--{
--	int err = -1;
--	struct sk_buff *skb;
--
--	/* First, grab a route. */
--	
--	if (dst = NULL && (dst = inet_csk_route_req(sk, req)) = NULL)
--		goto out;
--
--	skb = dccp_make_response(sk, dst, req);
--	if (skb != NULL) {
--		const struct inet_request_sock *ireq = inet_rsk(req);
--		struct dccp_hdr *dh = dccp_hdr(skb);
--
--		dh->dccph_checksum = dccp_v4_checksum(skb, ireq->loc_addr,
--						      ireq->rmt_addr);
--		memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
--		err = ip_build_and_send_pkt(skb, sk, ireq->loc_addr,
--					    ireq->rmt_addr,
--					    ireq->opt);
--		if (err = NET_XMIT_CN)
--			err = 0;
--	}
--
--out:
--	dst_release(dst);
--	return err;
--}
--
- /*
-  * This routine is called by the ICMP module when it gets some sort of error
-  * condition. If err < 0 then the socket should be closed and the error
-@@ -449,93 +369,6 @@ static inline u64 dccp_v4_init_sequence(
- 					   dccp_hdr(skb)->dccph_sport);
+ static inline u8 dccp_ackvec_state(const struct dccp_ackvec *av,
+-				   const u8 index)
++				   const int index)
+ {
+ 	return av->dccpav_buf[index] & DCCP_ACKVEC_STATE_MASK;
  }
  
--int dccp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
--{
--	struct inet_request_sock *ireq;
--	struct dccp_sock dp;
--	struct request_sock *req;
--	struct dccp_request_sock *dreq;
--	const __be32 saddr = skb->nh.iph->saddr;
--	const __be32 daddr = skb->nh.iph->daddr;
-- 	const __be32 service = dccp_hdr_request(skb)->dccph_req_service;
--	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
--	__u8 reset_code = DCCP_RESET_CODE_TOO_BUSY;
--
--	/* Never answer to DCCP_PKT_REQUESTs send to broadcast or multicast */
--	if (((struct rtable *)skb->dst)->rt_flags &
--	    (RTCF_BROADCAST | RTCF_MULTICAST)) {
--		reset_code = DCCP_RESET_CODE_NO_CONNECTION;
--		goto drop;
--	}
--
--	if (dccp_bad_service_code(sk, service)) {
--		reset_code = DCCP_RESET_CODE_BAD_SERVICE_CODE;
--		goto drop;
-- 	}
+ static inline u8 dccp_ackvec_len(const struct dccp_ackvec *av,
+-				 const u8 index)
++				 const int index)
+ {
+ 	return av->dccpav_buf[index] & DCCP_ACKVEC_LEN_MASK;
+ }
+@@ -280,7 +304,7 @@ int dccp_ackvec_add(struct dccp_ackvec *
+ 		 *	could reduce the complexity of this scan.)
+ 		 */
+ 		u64 delta = dccp_delta_seqno(ackno, av->dccpav_buf_ackno);
+-		u8 index = av->dccpav_buf_head;
++		int index = av->dccpav_buf_head;
+ 
+ 		while (1) {
+ 			const u8 len = dccp_ackvec_len(av, index);
+@@ -389,30 +413,35 @@ #endif
+ 				      (unsigned long long)avr->dccpavr_ack_ackno);
+ 			dccp_ackvec_throw_record(av, avr);
+ 			break;
+-		}
++		} else if (avr->dccpavr_ack_seqno > ackno)
++			break; /* old news */
+ 	}
+ }
+ 
+-static void dccp_ackvec_check_rcv_ackvector(struct dccp_ackvec *av,
+-					    struct sock *sk, u64 ackno,
+-					    const unsigned char len,
+-					    const unsigned char *vector)
++static u64 dccp_ackvec_check_rcv_ackvector(struct dccp_ackvec *av,
++					   struct sock *sk, u64 ackno,
++					   const unsigned char len,
++					   const unsigned char *vector)
+ {
+ 	unsigned char i;
+ 	struct dccp_ackvec_record *avr;
++	int use_head = 1;
+ 
+ 	/* Check if we actually sent an ACK vector */
+ 	if (list_empty(&av->dccpav_records))
+-		return;
++		return ackno; /* It's OK, because we will always return */
+ 
+ 	i = len;
 -	/*
--	 * TW buckets are converted to open requests without
--	 * limitations, they conserve resources and peer is
--	 * evidently real one.
+-	 * XXX
+-	 * I think it might be more efficient to work backwards. See comment on
+-	 * rcv_ackno. -sorbo.
 -	 */
--	if (inet_csk_reqsk_queue_is_full(sk))
--		goto drop;
+-	avr = list_entry(av->dccpav_records.next, struct dccp_ackvec_record,
+-			 dccpavr_node);
++	list_for_each_entry_reverse(avr, &av->dccpav_records, dccpavr_node) {
++		if (!before48(avr->dccpavr_ack_seqno, ackno)) {
++			use_head = 0;
++			break;
++		}
++	}
++	if (use_head)
++		avr = list_entry(av->dccpav_records.next,
++				 struct dccp_ackvec_record, dccpavr_node);
++
+ 	while (i--) {
+ 		const u8 rl = *vector & DCCP_ACKVEC_LEN_MASK;
+ 		u64 ackno_end_rl;
+@@ -429,7 +458,10 @@ static void dccp_ackvec_check_rcv_ackvec
+ 				goto found;
+ 		}
+ 		/* End of the dccpav_records list, not found, exit */
+-		break;
++		break; /* Do not need to return a correct ackno because the next
++		        * batch of ackvectors will not make situation better
++			* (their acknos will be lower)
++			*/
+ found:
+ 		if (between48(avr->dccpavr_ack_seqno, ackno_end_rl, ackno)) {
+ 			const u8 state = *vector & DCCP_ACKVEC_STATE_MASK;
+@@ -449,30 +481,27 @@ #endif
+ 					      (unsigned long long)
+ 					      avr->dccpavr_ack_ackno);
+ 				dccp_ackvec_throw_record(av, avr);
+-				break;
++				break; /* Don't care about other ACKs because we
++				        * released the most possible state
++					*/
+ 			}
+ 			/*
+ 			 * If it wasn't received, continue scanning... we might
+ 			 * find another one.
+ 			 */
+ 		}
 -
--	/*
--	 * Accept backlog is full. If we have already queued enough
--	 * of warm entries in syn queue, drop request. It is better than
--	 * clogging syn queue with openreqs with exponentially increasing
--	 * timeout.
--	 */
--	if (sk_acceptq_is_full(sk) && inet_csk_reqsk_queue_young(sk) > 1)
--		goto drop;
+ 		dccp_set_seqno(&ackno, ackno_end_rl - 1);
+ 		++vector;
+ 	}
++	return ackno;
+ }
+ 
+-int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
+-		      const u8 opt, const u8 *value, const u8 len)
++inline u64 dccp_ackvec_parse(struct sock *sk, u64 ackno,
++				    const u8 opt, const u8 *value, const u8 len)
+ {
+-	if (len > DCCP_MAX_ACKVEC_LEN)
+-		return -1;
 -
--	req = reqsk_alloc(&dccp_request_sock_ops);
--	if (req = NULL)
--		goto drop;
--
--	if (dccp_parse_options(sk, skb))
--		goto drop_and_free;
--
--	dccp_openreq_init(req, &dp, skb);
--
--	if (security_inet_conn_request(sk, skb, req))
--		goto drop_and_free;
--
--	ireq = inet_rsk(req);
--	ireq->loc_addr = daddr;
--	ireq->rmt_addr = saddr;
--	req->rcv_wnd	= dccp_feat_default_sequence_window;
--	ireq->opt	= NULL;
--
--	/* 
--	 * Step 3: Process LISTEN state
--	 *
--	 * Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookie
--	 *
--	 * In fact we defer setting S.GSR, S.SWL, S.SWH to
--	 * dccp_create_openreq_child.
--	 */
--	dreq = dccp_rsk(req);
--	dreq->dreq_isr	   = dcb->dccpd_seq;
--	dreq->dreq_iss	   = dccp_v4_init_sequence(sk, skb);
--	dreq->dreq_service = service;
--
--	if (dccp_v4_send_response(sk, req, NULL))
--		goto drop_and_free;
--
--	inet_csk_reqsk_queue_hash_add(sk, req, DCCP_TIMEOUT_INIT);
+ 	/* dccp_ackvector_print(DCCP_SKB_CB(skb)->dccpd_ack_seq, value, len); */
+-	dccp_ackvec_check_rcv_ackvector(dccp_sk(sk)->dccps_hc_rx_ackvec, sk,
+-					DCCP_SKB_CB(skb)->dccpd_ack_seq,
+-				        len, value);
 -	return 0;
--
--drop_and_free:
--	reqsk_free(req);
--drop:
--	DCCP_INC_STATS_BH(DCCP_MIB_ATTEMPTFAILS);
--	dcb->dccpd_reset_code = reset_code;
--	return -1;
--}
--
--EXPORT_SYMBOL_GPL(dccp_v4_conn_request);
--
- /*
-  * The three way handshake has completed - we got a valid ACK or DATAACK -
-  * now create the new socket.
-@@ -687,6 +520,85 @@ static struct dst_entry* dccp_v4_route_s
- 	return &rt->u.dst;
++	return dccp_ackvec_check_rcv_ackvector(dccp_sk(sk)->dccps_hc_rx_ackvec,
++					       sk, ackno, len, value);
  }
  
-+static void dccp_v4_reqsk_send_ack(struct sk_buff *rxskb,
-+				   struct request_sock *req)
-+{
-+	int err;
-+	struct dccp_hdr *rxdh = dccp_hdr(rxskb), *dh;
-+	const u32 dccp_hdr_ack_len = sizeof(struct dccp_hdr) +
-+				     sizeof(struct dccp_hdr_ext) +
-+				     sizeof(struct dccp_hdr_ack_bits);
-+	struct sk_buff *skb;
-+
-+	if (((struct rtable *)rxskb->dst)->rt_type != RTN_LOCAL)
-+		return;
-+
-+	skb = alloc_skb(dccp_v4_ctl_socket->sk->sk_prot->max_header, GFP_ATOMIC);
-+	if (skb = NULL)
-+		return;
-+
-+	/* Reserve space for headers. */
-+	skb_reserve(skb, dccp_v4_ctl_socket->sk->sk_prot->max_header);
-+
-+	skb->dst = dst_clone(rxskb->dst);
-+
-+	skb->h.raw = skb_push(skb, dccp_hdr_ack_len);
-+	dh = dccp_hdr(skb);
-+	memset(dh, 0, dccp_hdr_ack_len);
-+
-+	/* Build DCCP header and checksum it. */
-+	dh->dccph_type	   = DCCP_PKT_ACK;
-+	dh->dccph_sport	   = rxdh->dccph_dport;
-+	dh->dccph_dport	   = rxdh->dccph_sport;
-+	dh->dccph_doff	   = dccp_hdr_ack_len / 4;
-+	dh->dccph_x	   = 1;
-+
-+	dccp_hdr_set_seq(dh, DCCP_SKB_CB(rxskb)->dccpd_ack_seq);
-+	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb),
-+			 DCCP_SKB_CB(rxskb)->dccpd_seq);
-+
-+	bh_lock_sock(dccp_v4_ctl_socket->sk);
-+	err = ip_build_and_send_pkt(skb, dccp_v4_ctl_socket->sk,
-+				    rxskb->nh.iph->daddr,
-+				    rxskb->nh.iph->saddr, NULL);
-+	bh_unlock_sock(dccp_v4_ctl_socket->sk);
-+
-+	if (err = NET_XMIT_CN || err = 0) {
-+		DCCP_INC_STATS_BH(DCCP_MIB_OUTSEGS);
-+		DCCP_INC_STATS_BH(DCCP_MIB_OUTRSTS);
-+	}
-+}
-+
-+static int dccp_v4_send_response(struct sock *sk, struct request_sock *req,
-+				 struct dst_entry *dst)
-+{
-+	int err = -1;
-+	struct sk_buff *skb;
-+
-+	/* First, grab a route. */
-+
-+	if (dst = NULL && (dst = inet_csk_route_req(sk, req)) = NULL)
-+		goto out;
-+
-+	skb = dccp_make_response(sk, dst, req);
-+	if (skb != NULL) {
-+		const struct inet_request_sock *ireq = inet_rsk(req);
-+		struct dccp_hdr *dh = dccp_hdr(skb);
-+
-+		dh->dccph_checksum = dccp_v4_checksum(skb, ireq->loc_addr,
-+						      ireq->rmt_addr);
-+		memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
-+		err = ip_build_and_send_pkt(skb, sk, ireq->loc_addr,
-+					    ireq->rmt_addr,
-+					    ireq->opt);
-+		if (err = NET_XMIT_CN)
-+			err = 0;
-+	}
-+
-+out:
-+	dst_release(dst);
-+	return err;
-+}
- static void dccp_v4_ctl_send_reset(struct sk_buff *rxskb)
- {
- 	int err;
-@@ -757,6 +669,110 @@ out:
- 	 dst_release(dst);
- }
- 
-+static void dccp_v4_reqsk_destructor(struct request_sock *req)
-+{
-+	kfree(inet_rsk(req)->opt);
-+}
-+
-+static struct request_sock_ops dccp_request_sock_ops = {
-+	.family		= PF_INET,
-+	.obj_size	= sizeof(struct dccp_request_sock),
-+	.rtx_syn_ack	= dccp_v4_send_response,
-+	.send_ack	= dccp_v4_reqsk_send_ack,
-+	.destructor	= dccp_v4_reqsk_destructor,
-+	.send_reset	= dccp_v4_ctl_send_reset,
-+};
-+
-+static struct timewait_sock_ops dccp_timewait_sock_ops = {
-+	.twsk_obj_size	= sizeof(struct inet_timewait_sock),
-+};
-+
-+int dccp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
-+{
-+	struct inet_request_sock *ireq;
-+	struct dccp_sock dp;
-+	struct request_sock *req;
-+	struct dccp_request_sock *dreq;
-+	const __be32 saddr = skb->nh.iph->saddr;
-+	const __be32 daddr = skb->nh.iph->daddr;
-+ 	const __be32 service = dccp_hdr_request(skb)->dccph_req_service;
-+	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
-+	__u8 reset_code = DCCP_RESET_CODE_TOO_BUSY;
-+
-+	/* Never answer to DCCP_PKT_REQUESTs send to broadcast or multicast */
-+	if (((struct rtable *)skb->dst)->rt_flags &
-+	    (RTCF_BROADCAST | RTCF_MULTICAST)) {
-+		reset_code = DCCP_RESET_CODE_NO_CONNECTION;
-+		goto drop;
-+	}
-+
-+	if (dccp_bad_service_code(sk, service)) {
-+		reset_code = DCCP_RESET_CODE_BAD_SERVICE_CODE;
-+		goto drop;
-+ 	}
-+	/*
-+	 * TW buckets are converted to open requests without
-+	 * limitations, they conserve resources and peer is
-+	 * evidently real one.
-+	 */
-+	if (inet_csk_reqsk_queue_is_full(sk))
-+		goto drop;
-+
-+	/*
-+	 * Accept backlog is full. If we have already queued enough
-+	 * of warm entries in syn queue, drop request. It is better than
-+	 * clogging syn queue with openreqs with exponentially increasing
-+	 * timeout.
-+	 */
-+	if (sk_acceptq_is_full(sk) && inet_csk_reqsk_queue_young(sk) > 1)
-+		goto drop;
-+
-+	req = reqsk_alloc(&dccp_request_sock_ops);
-+	if (req = NULL)
-+		goto drop;
-+
-+	if (dccp_parse_options(sk, skb))
-+		goto drop_and_free;
-+
-+	dccp_openreq_init(req, &dp, skb);
-+
-+	if (security_inet_conn_request(sk, skb, req))
-+		goto drop_and_free;
-+
-+	ireq = inet_rsk(req);
-+	ireq->loc_addr = daddr;
-+	ireq->rmt_addr = saddr;
-+	req->rcv_wnd	= dccp_feat_default_sequence_window;
-+	ireq->opt	= NULL;
-+
-+	/*
-+	 * Step 3: Process LISTEN state
-+	 *
-+	 *   Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
-+	 *
-+	 *   In fact we defer setting S.GSR, S.SWL, S.SWH to
-+	 *   dccp_create_openreq_child.
-+	 */
-+	dreq = dccp_rsk(req);
-+	dreq->dreq_isr	   = dcb->dccpd_seq;
-+	dreq->dreq_iss	   = dccp_v4_init_sequence(sk, skb);
-+	dreq->dreq_service = service;
-+
-+	if (dccp_v4_send_response(sk, req, NULL))
-+		goto drop_and_free;
-+
-+	inet_csk_reqsk_queue_hash_add(sk, req, DCCP_TIMEOUT_INIT);
-+	return 0;
-+
-+drop_and_free:
-+	reqsk_free(req);
-+drop:
-+	DCCP_INC_STATS_BH(DCCP_MIB_ATTEMPTFAILS);
-+	dcb->dccpd_reset_code = reset_code;
-+	return -1;
-+}
-+EXPORT_SYMBOL_GPL(dccp_v4_conn_request);
-+
- int dccp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
- {
- 	struct dccp_hdr *dh = dccp_hdr(skb);
-@@ -1015,24 +1031,6 @@ static int dccp_v4_init_sock(struct sock
- 	return err;
- }
- 
--static void dccp_v4_reqsk_destructor(struct request_sock *req)
--{
--	kfree(inet_rsk(req)->opt);
--}
--
--static struct request_sock_ops dccp_request_sock_ops = {
--	.family		= PF_INET,
--	.obj_size	= sizeof(struct dccp_request_sock),
--	.rtx_syn_ack	= dccp_v4_send_response,
--	.send_ack	= dccp_v4_reqsk_send_ack,
--	.destructor	= dccp_v4_reqsk_destructor,
--	.send_reset	= dccp_v4_ctl_send_reset,
--};
--
--static struct timewait_sock_ops dccp_timewait_sock_ops = {
--	.twsk_obj_size	= sizeof(struct inet_timewait_sock),
--};
--
- static struct proto dccp_v4_prot = {
- 	.name			= "DCCP",
- 	.owner			= THIS_MODULE,
+ static char dccp_ackvec_slab_msg[] __initdata 
+
