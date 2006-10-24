@@ -1,35 +1,31 @@
-From: Rick Jones <rick.jones2@hp.com>
-Date: Fri, 13 Oct 2006 23:48:26 +0000
-Subject: Re: getaddrinfo - should accept IPPROTO_SCTP no?
-Message-Id: <453025CA.70506@hp.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 24 Oct 2006 13:58:51 +0000
+Subject: [PATCH 0/17] [DCCP]: patch-backlog, bug-fixes, some code simplifications
+Message-Id: <200610241458.51517@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <5640c7e00610131559n4a3ad8c5x66cf4b72deb57868@mail.gmail.com>
-In-Reply-To: <5640c7e00610131559n4a3ad8c5x66cf4b72deb57868@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-> In all the DCCP code which has similar issues I just do the protocol
-> selection on the socket call e.g.
->         case TCP:
->             new_sock = socket(AF_INET,SOCK_STREAM,0);
->             break;
->         case DCCP:
->             new_sock = socket(AF_INET,SOCK_DCCP,IPPROTO_DCCP);
->             break;
->         case UDP:
->             new_sock = socket(AF_INET,SOCK_DGRAM,0);
->             break;
-> 
-> I'm sure you know all this anyway so apologies in advance for telling
-> you something you probably already know!
+As promised earlier, this is the set of patches which I have been
+keeping up-to-date; they divide into:
 
-No worries.
+	* patches sent to this list that have not been merged
+	  [I claim that this is exhaustive, i.e. all other patches
+           have been merged - notify me if there is one missing]
+	* bug fixes
+	* `cosmetic' patches to simplify and consolidate code
 
-David mentioned that I need to talk to the glibc folks.  I'm still trying to web 
-search my way to finding them.  Meanwhile I may do in netperf for this what I do 
-for Solaris' arbitrary clearing of the ai_protocol field - kludge around it and 
-have netperf emit a warning.
+The set is consistent in itself and patches on top of the latest davem-2.6
+tree, but: all are stacked, i.e. the best way of applying is
 
-rick jones
+	for p in $patches; do git-apply < $p; done
+
+There are no new files introduced, so this works without problem. I have put
+in extra time to check / tidy each and every one. I hope that this will pay
+off, as I have little benefit from this and had to take this time away from
+other commitments.
+
+
+Gerrit
