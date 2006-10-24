@@ -1,55 +1,115 @@
-From: Eddie Kohler <kohler@cs.ucla.edu>
-Date: Wed, 04 Oct 2006 16:20:10 +0000
-Subject: Re: [dccp] Packet size s on CCID3
-Message-Id: <4523DF3A.30102@cs.ucla.edu>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 24 Oct 2006 07:48:47 +0000
+Subject: Re: 2.6.19-rcX vs 2.6.20
+Message-Id: <200610240848.47708@strip-the-willow>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="Boundary-00=_fVcPFwOshYleTDd"
 List-Id: <dccp.vger.kernel.org>
-References: <5640c7e00609202022j1b97cf1g30797ffcd9b650b6@mail.gmail.com>
-In-Reply-To: <5640c7e00609202022j1b97cf1g30797ffcd9b650b6@mail.gmail.com>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Ian,
+--Boundary-00=_fVcPFwOshYleTDd
+Content-Type: text/plain;
+  charset="iso-8859-1"
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
 
-Ian McDonald wrote:
-> Now change s to 300 bytes we get a Xcalc of 3128 and a t_ipi of 96
-> msecs. Put in ANY number for s and you will get the same t_ipi of 96
-> msecs.
-> 
-> This illustrates my point that CCID3 is a packet per second based
-> congestion control.
-> 
-> Now if we specify the s is 300 to the implementation we get the
-> desired result, if we average it we get the correct result. However we
-> can't switch to a packet based equation because if we do the spec says
-> we should use s=MSS. Lets assume MSS60. Now Xcalc is 15221
-> bytes/sec. t_ipi is 96 msecs. And we can send the correct rate of
-> packets.
+It seems that I am not the only one having headaches about which patches
+are applied and which not. I spent a major part yesterday trying to get
+the set of patches consistent with regard to Dave's/Arnaldo's latest tree.
 
-You absolutely CAN switch to a packet based equation (assuming s is fixed at 
-MSS), because that packet based equation will have ENTIRELY IDENTICAL BEHAVIOR 
-to the byte based equation!  Specs talk about observed behavior, that is what 
-makes them specs.
+What I have been doing over time is collecting all patches that were posted on this
+list and have not made it upstream into a consistent, stacked set of patches.
+
+With my own work this adds up to currently 17 patches, including:
+	* 3 patches from Andrea which have also not been merged
+	* 1 patch (typo) by Ian which has not been merged
+	* patches from me with annotations that Arnaldo made incorporated
+	* a few bug fixes (see also earlier posting)
+	* general updates (such as the one Ian pointed out, but also the
+          second part of the oops patch to reduce the number of forward decls)
+
+Every day, after pulling, I have to reconstruct the whole stacked batch of patches
+by applying them one after the other again. Even the script which does this is tedious.
+Now I see the headaches it costs Arnaldo as well and hence:
+
+  ==> Is there any way of using a separate DCCP repository for the mere purpose of
+      keeping accepted and discussed patches in a consistent state?
+
+It is little point if everyone keeps a separate stack of patches. On the other hand, it
+is frustrating work having to chase after old and partially applied patches, battle with
+rebased trees, merged close windows etc. 
+
+With regard to 2.6.19-rX vs 2.6.20 I think that it is better not to submit more patches
+not (only) because David said so, but with regard to `postponing headaches': all non-2.6.19-rX
+patches have later again to be rebased/changed. Yesterday, this killed two of my repositories
+and I had to change each manually from scratch again.
 
 
-> OK Now working through the example shows that my logic was wrong. I
-> guess thats what defence of ideas is about - proving it and my idea
-> was wrong. I apologise for wasting everybody's time!
-> 
-> However this does show an application can't cheat by specifying the
-> wrong packet size which the spec worries about. Maybe my working
-> through this helps resolve this a little...
+Arnaldo, what do you think is best ? I think it would be ideal if there was a consistent
+tree, that would save a lot of work. 
 
-This is not quite right.  Applications might be able to cause *transient* 
-unfairness (in a purely packet-based implementation) by switching to a larger 
-packet size after sending small packets for a while.  The unfairness is only 
-transient because, if the app keeps sending large packets, eventually the loss 
-event rate will catch up with the app's current behavior.
+What I could contribute to make this easier is to keep track of changes and merging (i.e.
+the grunt work) - I am pulling the latest netdev tree daily anyway. Would this help? I am
+not insinuating bypassing the revision process, but I am getting tired of rebasing. 
 
-Personally, I do not believe this transient unfairness is a critical issue. 
-Preliminary simulations showed apps didn't gain in the long run from doing 
-this.  None of the current discussion has changed my mind.  Some real 
-experiments could.
+Well I hope it won't stay like this forever ...
 
-Eddie
+
+
+PS: Ian, for a laugh I attach a script which I have been using a lot, it basically
+answers your question `is this upstream or not' - in colour :)
+
+--Boundary-00=_fVcPFwOshYleTDd
+Content-Type: application/x-shellscript;
+  name="is_patched_already.sh"
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment;
+	filename="is_patched_already.sh"
+
+#!/bin/sh
+#
+# usage: $0 <patch name>
+#
+# This script tries to answer whether a patch has already been applied or not.
+#
+function log() {
+  echo -e "\033[1;34;7m$@\033[m";
+}
+
+function ok() {
+  echo -e "\033[30;42m$@\033[m"; >&2
+}
+
+function not_ok() {
+  echo -e "\033[1;37;41m$@\033[m"; >&2
+
+}
+function die() {
+  echo -e "$@"
+  exit 1
+}
+
+# SCRIPT PROPER
+test $# -ge 1  || die "Usage: ${0##*/} patch-name(s)"
+test -d ./.git || die "${0##*/}: This script requires a .git repository"
+unset next
+
+for patch
+do
+  test -f $patch || die "\033[31mnot a file: $patch\033[m"
+  log "Trying  ${patch} ..."
+  if git-apply --check < "$patch"
+  then 
+    ok "${patch##*/} has not been applied on this code and applies cleanly"
+    continue
+  fi
+  echo -e "\033[1mtrying REVERSE -R ...\033[m"
+  if git-apply -R --check < "$patch"
+  then
+    not_ok "${patch##*/} has been applied"
+  else
+    not_ok "${patch##*/} does not patch cleanly on this code"
+  fi
+done
+
+--Boundary-00=_fVcPFwOshYleTDd--
