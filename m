@@ -1,57 +1,68 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 03 Oct 2006 19:54:41 +0000
-Subject: Re: PACKET_SIZE option and congestion control on variable-length packets
-Message-Id: <5640c7e00610031254q6ad01599ic5e0a88cb433f1ea@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 24 Oct 2006 14:01:05 +0000
+Subject: [PATCH 14/17] [DCCP]: Fix logfile overflow by Ian McDonald
+Message-Id: <200610241501.05986@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200610021108.57676@strip-the-willow>
-In-Reply-To: <200610021108.57676@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 10/4/06, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> On 10/3/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> > |  > Strategy
-> > |  > ----------
-> > |  > 1/ Remove the PACKET_SIZE socket options as they don't help with the problem;
-> > |  >     I have therefore updated Ian's patch to be used standalone [attached].
-> > |
-> > |  NAK this patch. At present it just sets s to be 256 bytes where the
-> > |  spec says to use the MSS. My patch is not perfect but it is better
-> > |  than this as it allows you to set the size where you can't at present,
-> > |  nor with this patch.
-> > Oops, this is going into an entirely wrong direction! The posting is not about patches,
-> > it presented a strategy for discussion, and sums up an extract of the reading I have been
-> > stuck with for a couple of days.
->
-> You are posting onto a development list with a patch. Of course I am
-> going to discuss the patch. If you had posted to the discussion
-> without the patch my answer would have been very different!
->
-My apologies to you on this. I have just worked through my ideas in
-another thread and proved myself wrong.
+This bug-fix is a re-sent from today, the patch is by Ian McDonald
+and the original commit message is:
 
-> > 1) The real problem is not in patches - RFC 4340..2 are elusive and in parts outright wrong
-> >    about assumptions on the packet size. Substantial evidence that for instance using MSS
-> >    as fixed `s' is detrimental was provided in the last posting.
->
-> Agree 100% as you can see in my other posting. I think packet size/sec
-> is better for CCID3 but not allowed.
->
-> > 2) Weighted average was introduced as a strategy to resolve this in an implementable format.
->
-> Agree this is better.
->
-By my calculations you don't need to do this now as it calculates the
-correct packet sending rate. Would be easy to verify but I don't have
-my equipment available right now or the time.
+This patch fixes data being spewed into the logs continually. As the code
+stood if there was a large queue and long delays timeo would go down to
+zero and never get reset.
 
--- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+This fixes it by resetting timeo. Put constant into header as well.
+
+Signed-off-by: Gerrit Renker  <gerrit@erg.abdn.ac.uk>
+------------------------------------------------------------------------------
+
+ net/dccp/dccp.h   |    2 ++
+ net/dccp/output.c |    8 +++++---
+ 2 files changed, 7 insertions(+), 3 deletions(-)
+
+------------------------------------------------------------------------------
+
+diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
+index f294b89..ab0e5b1 100644
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -61,6 +61,8 @@ #define DCCP_RESOURCE_PROBE_INTERVAL ((u
+ 
+ #define DCCP_RTO_MAX ((unsigned)(120 * HZ)) /* FIXME: using TCP value */
+ 
++#define DCCP_XMIT_TIMEO 30000 /* Time/msecs for blocking transmit per packet */
++
+ /* is seq1 < seq2 ? */
+ static inline int before48(const u64 seq1, const u64 seq2)
+ {
+diff --git a/net/dccp/output.c b/net/dccp/output.c
+index 728255b..1478ace 100644
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -249,8 +249,8 @@ void dccp_write_xmit(struct sock *sk, in
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct sk_buff *skb;
+-	long timeo = 30000; 	/* If a packet is taking longer than 2 secs
+-				   we have other issues */
++	long timeo = DCCP_XMIT_TIMEO; 	/* If a packet is taking longer than
++					   this we have other issues */
+ 
+ 	while ((skb = skb_peek(&sk->sk_write_queue))) {
+ 		int err = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb,
+@@ -261,8 +261,10 @@ void dccp_write_xmit(struct sock *sk, in
+ 				sk_reset_timer(sk, &dp->dccps_xmit_timer,
+ 						msecs_to_jiffies(err)+jiffies);
+ 				break;
+-			} else
++			} else {
+ 				err = dccp_wait_for_ccid(sk, skb, &timeo);
++				timeo = DCCP_XMIT_TIMEO;
++			}
+ 			if (err) {
+ 				printk(KERN_CRIT "%s:err at dccp_wait_for_ccid"
+ 						 " %d\n", __FUNCTION__, err);
