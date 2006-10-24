@@ -1,164 +1,60 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 25 Oct 2006 15:51:40 +0000
-Subject: Re: [PATCH 7/17] [DCCP]: Simplify jump labels in dccp_v{4,6}_rcv
-Message-Id: <200610251651.40865@strip-the-willow>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="Boundary-00=_Mg4PFCKc/bSbYnM"
+Date: Tue, 24 Oct 2006 13:59:20 +0000
+Subject: [PATCH 3/17] [DCCPv6]: FIXME for missing IPV6_PKTOPTIONS handling
+Message-Id: <200610241459.20543@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200610241459.52912@strip-the-willow>
-In-Reply-To: <200610241459.52912@strip-the-willow>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
---Boundary-00=_Mg4PFCKc/bSbYnM
-Content-Type: text/plain;
-  charset="us-ascii"
-Content-Transfer-Encoding: 7bit
-Content-Disposition: inline
+[DCCPv6]: Add a FIXME for missing IPV6_PKTOPTIONS
 
-I have verified this patch again and discovered a stupid mistake/bug
-in the posting:
-	* control goes from: no_dccp_socket: => discard_and_relse: => sock_put(sk)
-	* BOOM! (no socket)
+This refers to the possible memory leak pointed out in
+http://www.mail-archive.com/dccp@vger.kernel.org/msg00574.html,
+fixed by David Miller in 
+http://www.mail-archive.com/netdev@vger.kernel.org/msg24881.html
 
-I therefore re-send the corrected patch, put it online as
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/07a_1_simplify_vX_rcv.diff
+and adds a FIXME to point out where code is missing.
 
-Apart from the bug fix, the patch is now
-	* much smaller therefore easier to read/review
-	* effectively boils down to format changes / removal of do_time_wait label
+Signed-off-by: Gerrit Renker  <gerrit@erg.abdn.ac.uk>
+------------------------------------------------------------------------------
 
-I have updated the repository on http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/,
-all other patches have been refreshed relative to this one.
+ net/dccp/ipv6.c |    8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
 
-Gerrit
+------------------------------------------------------------------------------
 
-
-
---Boundary-00=_Mg4PFCKc/bSbYnM
-Content-Type: text/x-diff;
-  charset="us-ascii";
-  name="07a_1_simplify_vX_rcv.diff"
-Content-Transfer-Encoding: 7bit
-Content-Disposition: attachment;
-	filename="07a_1_simplify_vX_rcv.diff"
-
-[DCCP]: Simplify jump labels in dccp_v{4,6}_rcv
-
-This is a code simplification and was singled out from the
-DCCPv6 Oops patch on
-http://www.mail-archive.com/dccp@vger.kernel.org/msg00600.html
-
-It mainly makes the code consistent between ipv{4,6}.c for the functions
-        dccp_v4_rcv
-        dccp_v6_rcv
-and removes the do_time_wait label to simplify code somewhat.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-
----
- net/dccp/ipv4.c |   17 +++++------------
- net/dccp/ipv6.c |   24 +++++++++++-------------
- 2 files changed, 16 insertions(+), 25 deletions(-)
-
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -910,8 +910,7 @@ static int dccp_v4_rcv(struct sk_buff *s
- 		dccp_pr_debug_cat("\n");
- 	} else {
- 		DCCP_SKB_CB(skb)->dccpd_ack_seq = dccp_hdr_ack_seq(skb);
--		dccp_pr_debug_cat(", ack=%llu\n",
--				  (unsigned long long)
-+		dccp_pr_debug_cat(", ack=%llu\n", (unsigned long long)
- 				  DCCP_SKB_CB(skb)->dccpd_ack_seq);
- 	}
- 
-@@ -940,11 +939,10 @@ static int dccp_v4_rcv(struct sk_buff *s
- 	 *		Generate Reset(No Connection) unless P.type == Reset
- 	 *		Drop packet and return
- 	 */
--	       
- 	if (sk->sk_state == DCCP_TIME_WAIT) {
--		dccp_pr_debug("sk->sk_state == DCCP_TIME_WAIT: "
--			      "do_time_wait\n");
--                goto do_time_wait;
-+		dccp_pr_debug("sk->sk_state == DCCP_TIME_WAIT: do_time_wait\n");
-+		inet_twsk_put(inet_twsk(sk));
-+		goto no_dccp_socket;
- 	}
- 
- 	if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb))
-@@ -968,17 +966,12 @@ no_dccp_socket:
- 	}
- 
- discard_it:
--	/* Discard frame. */
- 	kfree_skb(skb);
--	return 0;
-+	return ret;
- 
- discard_and_relse:
- 	sock_put(sk);
- 	goto discard_it;
--
--do_time_wait:
--	inet_twsk_put(inet_twsk(sk));
--	goto no_dccp_socket;
- }
- 
- static struct inet_connection_sock_af_ops dccp_ipv4_af_ops = {
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index eb0ff7a..64bf9e2 100644
 --- a/net/dccp/ipv6.c
 +++ b/net/dccp/ipv6.c
-@@ -1071,8 +1071,11 @@ static int dccp_v6_rcv(struct sk_buff **
- 	 *		Generate Reset(No Connection) unless P.type == Reset
- 	 *		Drop packet and return
+@@ -990,13 +990,17 @@ static int dccp_v6_do_rcv(struct sock *s
+ 	                                       --ANK (980728)
  	 */
--	if (sk == NULL)
-+	if (sk == NULL) {
-+		dccp_pr_debug("failed to look up flow ID in table and "
-+			      "get corresponding socket\n");
- 		goto no_dccp_socket;
-+	}
+ 	if (np->rxopt.all)
++	/*
++	 * FIXME: Add handling of IPV6_PKTOPTIONS skb. See the comments below
++	 *        (wrt ipv6_pktopions) and net/ipv6/tcp_ipv6.c for an example.
++	 */
+ 		opt_skb = skb_clone(skb, GFP_ATOMIC);
  
- 	/*
- 	 * Step 2:
-@@ -1080,8 +1083,11 @@ static int dccp_v6_rcv(struct sk_buff **
- 	 *		Generate Reset(No Connection) unless P.type == Reset
- 	 *		Drop packet and return
- 	 */
--	if (sk->sk_state == DCCP_TIME_WAIT)
--		goto do_time_wait;
-+	if (sk->sk_state == DCCP_TIME_WAIT) {
-+		dccp_pr_debug("sk->sk_state == DCCP_TIME_WAIT: do_time_wait\n");
-+		inet_twsk_put(inet_twsk(sk));
-+		goto no_dccp_socket;
-+	}
- 
- 	if (!xfrm6_policy_check(sk, XFRM_POLICY_IN, skb))
- 		goto discard_and_relse;
-@@ -1101,22 +1107,14 @@ no_dccp_socket:
- 					DCCP_RESET_CODE_NO_CONNECTION;
- 		dccp_v6_ctl_send_reset(skb);
+ 	if (sk->sk_state = DCCP_OPEN) { /* Fast path */
+ 		if (dccp_rcv_established(sk, skb, dccp_hdr(skb), skb->len))
+ 			goto reset;
+ 		if (opt_skb) {
+-			/* This is where we would goto ipv6_pktoptions. */
++			/* XXX This is where we would goto ipv6_pktoptions. */
+ 			__kfree_skb(opt_skb);
+ 		}
+ 		return 0;
+@@ -1024,7 +1028,7 @@ static int dccp_v6_do_rcv(struct sock *s
+ 	if (dccp_rcv_state_process(sk, skb, dccp_hdr(skb), skb->len))
+ 		goto reset;
+ 	if (opt_skb) {
+-		/* This is where we would goto ipv6_pktoptions. */
++		/* XXX This is where we would goto ipv6_pktoptions. */
+ 		__kfree_skb(opt_skb);
  	}
--discard_it:
--
--	/*
--	 *	Discard frame
--	 */
- 
-+discard_it:
- 	kfree_skb(skb);
--	return 0;
-+	return ret;
- 
- discard_and_relse:
- 	sock_put(sk);
- 	goto discard_it;
--
--do_time_wait:
--	inet_twsk_put(inet_twsk(sk));
--	goto no_dccp_socket;
- }
- 
- static struct inet_connection_sock_af_ops dccp_ipv6_af_ops = {
+ 	return 0;
 
---Boundary-00=_Mg4PFCKc/bSbYnM--
