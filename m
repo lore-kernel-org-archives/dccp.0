@@ -1,210 +1,201 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 12 Oct 2006 11:02:13 +0000
-Subject: Re: [Patch 3/3]: dccp: resolve putative recursive lock
-Message-Id: <200610121202.13793@strip-the-willow>
+From: "Arnaldo Carvalho de Melo" <acme@mandriva.com>
+Date: Tue, 24 Oct 2006 03:18:33 +0000
+Subject: [PATCH 1/1] net/dccp: update references to standards
+Message-Id: <39e6f6c70610232018u1321deb0j81aca199bc570a96@mail.gmail.com>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="----=_Part_1536_272363.1161659913309"
 List-Id: <dccp.vger.kernel.org>
-References: <200610111627.06571@strip-the-willow>
-In-Reply-To: <200610111627.06571@strip-the-willow>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Please do not use the previous version. An updated
-version is below: in the previous posting, a statement
-(skb->dev = NULL) was missing. 
+------=_Part_1536_272363.1161659913309
+Content-Type: text/plain; charset=ISO-8859-1; format=flowed
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
 
-I have decided not to use an inlined function, since 
- * the code is applicable only to the special case where
-   a child socket is created while the lock is held on the
-   parent, i.e. single-level locking. 
- * this means that the use of enums as pointed out earlier
-   by Ingo Molnar does not seem necessary
- * this case and its conditions are special and are intended
-   to aid the useful locking validator do its job better
-   
-This patch also adds some minor formatting changes which 
-simplify the code and align the v4/v6 counterparts.
+On 10/24/06, Arnaldo Carvalho de Melo <arnaldo.melo@gmail.com> wrote:
+> On 10/23/06, Arnaldo Carvalho de Melo <arnaldo.melo@gmail.com> wrote:
+> > On 10/23/06, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
+> > > On 9/23/06, Arnaldo Carvalho de Melo <arnaldo.melo@gmail.com> wrote:
+> > > > On 9/14/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> > > > > Sorry kmail garbled this, clean text below.
+> > > > >
+> > > > > - Gerrit
+> > > >
+> > > > Applied, thanks
+> > > >
+> > > > - Arnaldo
+> > >
+> > > I haven't seen this and others upstream yet after a month. I know you
+> > > are flat out Arnaldo but just wondering whether this is an oversight
+> > > as you said it was applied and somewhere along the line it seems to
+> > > have gone to /dev/null
+> >
+> > Not an oversight, its just that this one is not a plain code bugfix so
+> > I deferred it for later, if Dave thinks this is OK even being just a
+> > comment fix, he could just go ahead and merge it, ok with me :-)
+>
+> I had even applied it to my old net-2.6.19 tree, Dave if you think its ok just
+> pull from:
+>
+> master.kernel.org/pub/linux/kernel/git/acme/net-2.6.19.git
+>
+> just a sec, lets see if it applies on top of latest Linus tree...
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
+Not really, hell breaks loose, I think it was cloned from a DaveM's
+net-2.6.19 tree that was later rebased, so attached goes the cset,
+I've tested and it applies without problems.
 
- ipv4.c |   42 ++++++++++++++++++++++++++----------------
- ipv6.c |   51 +++++++++++++++++++++++++++++++++------------------
- 2 files changed, 59 insertions(+), 34 deletions(-)
+David, please consider applying,
 
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index 7e746c4..6866496 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -881,6 +881,7 @@ static int dccp_v4_rcv(struct sk_buff *s
- {
- 	const struct dccp_hdr *dh;
- 	struct sock *sk;
-+	int ret = 0;
- 
- 	/* Step 1: Check header basics: */
- 
-@@ -913,8 +914,7 @@ static int dccp_v4_rcv(struct sk_buff *s
- 		dccp_pr_debug_cat("\n");
- 	} else {
- 		DCCP_SKB_CB(skb)->dccpd_ack_seq = dccp_hdr_ack_seq(skb);
--		dccp_pr_debug_cat(", ack=%llu\n",
--				  (unsigned long long)
-+		dccp_pr_debug_cat(", ack=%llu\n", (unsigned long long)
- 				  DCCP_SKB_CB(skb)->dccpd_ack_seq);
- 	}
- 
-@@ -943,18 +943,36 @@ static int dccp_v4_rcv(struct sk_buff *s
- 	 *		Generate Reset(No Connection) unless P.type = Reset
- 	 *		Drop packet and return
- 	 */
--	       
- 	if (sk->sk_state = DCCP_TIME_WAIT) {
- 		dccp_pr_debug("sk->sk_state = DCCP_TIME_WAIT: "
- 			      "do_time_wait\n");
--                goto do_time_wait;
-+		inet_twsk_put(inet_twsk(sk));
-+		goto no_dccp_socket;
- 	}
- 
- 	if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb))
- 		goto discard_and_relse;
- 	nf_reset(skb);
- 
--	return sk_receive_skb(sk, skb);
-+	if (sk_filter(sk, skb))
-+		goto discard_and_relse;
-+
-+	skb->dev = NULL;
-+
-+	bh_lock_sock_nested(sk);    /* sk might be cloned later */
-+	if (!sock_owned_by_user(sk)) {
-+		/*
-+		 * lock semantics stolen from sk_receive_skb
-+		 */
-+		mutex_acquire(&sk->sk_lock.dep_map, 0, 1, _RET_IP_);
-+		ret = dccp_v4_do_rcv(sk, skb);
-+		mutex_release(&sk->sk_lock.dep_map, 1, _RET_IP_);
-+	} else
-+		sk_add_backlog(sk, skb);
-+	bh_unlock_sock(sk);
-+
-+	sock_put(sk);
-+	return ret? -1 : 0;
- 
- no_dccp_socket:
- 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
-@@ -969,19 +987,11 @@ no_dccp_socket:
- 					DCCP_RESET_CODE_NO_CONNECTION;
- 		dccp_v4_ctl_send_reset(skb);
- 	}
--
--discard_it:
--	/* Discard frame. */
--	kfree_skb(skb);
--	return 0;
--
- discard_and_relse:
- 	sock_put(sk);
--	goto discard_it;
--
--do_time_wait:
--	inet_twsk_put(inet_twsk(sk));
--	goto no_dccp_socket;
-+discard_it:
-+	kfree_skb(skb);
-+	return ret;
- }
- 
- static struct inet_connection_sock_af_ops dccp_ipv4_af_ops = {
-diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
-index 7171a78..5450b85 100644
---- a/net/dccp/ipv6.c
-+++ b/net/dccp/ipv6.c
-@@ -1037,6 +1037,7 @@ static int dccp_v6_rcv(struct sk_buff **
- 	const struct dccp_hdr *dh;
- 	struct sk_buff *skb = *pskb;
- 	struct sock *sk;
-+	int ret = 0;
- 
- 	/* Step 1: Check header basics: */
- 
-@@ -1065,8 +1066,11 @@ static int dccp_v6_rcv(struct sk_buff **
- 	 *		Generate Reset(No Connection) unless P.type = Reset
- 	 *		Drop packet and return
- 	 */
--	if (sk = NULL)
-+	if (sk = NULL) {
-+		dccp_pr_debug("failed to look up flow ID in table and "
-+			      "get corresponding socket\n");
- 		goto no_dccp_socket;
-+	}
- 
- 	/*
- 	 * Step 2:
-@@ -1074,13 +1078,35 @@ static int dccp_v6_rcv(struct sk_buff **
- 	 *		Generate Reset(No Connection) unless P.type = Reset
- 	 *		Drop packet and return
- 	 */
--	if (sk->sk_state = DCCP_TIME_WAIT)
--		goto do_time_wait;
-+	if (sk->sk_state = DCCP_TIME_WAIT) {
-+		dccp_pr_debug("sk->sk_state = DCCP_TIME_WAIT: "
-+			      "do_time_wait\n");
-+		inet_twsk_put(inet_twsk(sk));
-+		goto no_dccp_socket;
-+	}
- 
- 	if (!xfrm6_policy_check(sk, XFRM_POLICY_IN, skb))
- 		goto discard_and_relse;
- 
--	return sk_receive_skb(sk, skb) ? -1 : 0;
-+	if (sk_filter(sk, skb))
-+		goto discard_and_relse;
-+
-+	skb->dev = NULL;
-+
-+	bh_lock_sock_nested(sk);    /* sk might be cloned later */
-+	if (!sock_owned_by_user(sk)) {
-+		/*
-+		 * lock semantics stolen from sk_receive_skb
-+		 */
-+		mutex_acquire(&sk->sk_lock.dep_map, 0, 1, _RET_IP_);
-+		ret = dccp_v6_do_rcv(sk, skb);
-+		mutex_release(&sk->sk_lock.dep_map, 1, _RET_IP_);
-+	} else
-+		sk_add_backlog(sk, skb);
-+	bh_unlock_sock(sk);
-+
-+	sock_put(sk);
-+	return ret? -1 : 0;
- 
- no_dccp_socket:
- 	if (!xfrm6_policy_check(NULL, XFRM_POLICY_IN, skb))
-@@ -1095,22 +1121,11 @@ no_dccp_socket:
- 					DCCP_RESET_CODE_NO_CONNECTION;
- 		dccp_v6_ctl_send_reset(skb);
- 	}
--discard_it:
--
--	/*
--	 *	Discard frame
--	 */
--
--	kfree_skb(skb);
--	return 0;
--
- discard_and_relse:
- 	sock_put(sk);
--	goto discard_it;
--
--do_time_wait:
--	inet_twsk_put(inet_twsk(sk));
--	goto no_dccp_socket;
-+discard_it:
-+	kfree_skb(skb);
-+	return ret;
- }
- 
- static struct inet_connection_sock_af_ops dccp_ipv6_af_ops = {
+Thanks,
+
+- Arnaldo
+
+------=_Part_1536_272363.1161659913309
+Content-Type: text/x-patch; 
+	name=git-2d0b9680dc82d7ac99bb9ee21808292d63193a7f.patch; 
+	charset=ANSI_X3.4-1968
+Content-Transfer-Encoding: base64
+X-Attachment-Id: f_etnq8943
+Content-Disposition: attachment; filename="git-2d0b9680dc82d7ac99bb9ee21808292d63193a7f.patch"
+
+RnJvbTogR2Vycml0IFJlbmtlciA8Z2Vycml0QGVyZy5hYmRuLmFjLnVrPgpEYXRlOiBUaHUsIDE0
+IFNlcCAyMDA2IDE1OjQ5OjMzICswMDAwICgrMDEwMCkKU3ViamVjdDogW0RDQ1BdOiBVcGRhdGUg
+ZG9jdW1lbnRhdGlvbiByZWZlcmVuY2VzLgpYLUdpdC1Vcmw6IGh0dHA6Ly93d3cua2VybmVsLm9y
+Zy9naXQvP3A9bGludXgva2VybmVsL2dpdC9hY21lL25ldC0yLjYuMTkuZ2l0O2E9Y29tbWl0ZGlm
+ZjtoPTJkMGI5NjgwZGM4MmQ3YWM5OWJiOWVlMjE4MDgyOTJkNjMxOTNhN2YKCltEQ0NQXTogVXBk
+YXRlIGRvY3VtZW50YXRpb24gcmVmZXJlbmNlcy4KClVwZGF0ZXMgdGhlIHJlZmVyZW5jZXMgdG8g
+c3BlYyBkb2N1bWVudHMgdGhyb3VnaG91dCB0aGUgY29kZSwgdGFraW5nIGludG8KYWNjb3VudCB0
+aGF0CgoqIHRoZSBEQ0NQLCBDQ0lEIDIsIGFuZCBDQ0lEIDMgZHJhZnRzIGFsbCBiZWNhbWUgUkZD
+cyBpbiBNYXJjaCB0aGlzIHllYXIKCiogUkZDIDEwNjMgd2FzIG9ic29sZXRlZCBieSBSRkMgMTE5
+MQoKKiBkcmFmdC1pZXRmLXRjcGltcGwtcG10dWQtMHgudHh0IHdhcyBwdWJsaXNoZWQgYXMgYW4g
+SW5mb3JtYXRpb25hbAogIFJGQywgUkZDIDI5MjMgb24gMjAwMC0wOS0yMi4KCkFsbCByZWZlcmVu
+Y2VzIHZlcmlmaWVkLgoKU2lnbmVkLW9mZi1ieTogR2Vycml0IFJlbmtlciA8Z2Vycml0QGVyZy5h
+YmRuLmFjLnVrPgpTaWduZWQtb2ZmLWJ5OiBBcm5hbGRvIENhcnZhbGhvIGRlIE1lbG8gPGFjbWVA
+bWFuZHJpdmEuY29tPgotLS0KCi0tLSBhL25ldC9kY2NwL0tjb25maWcKKysrIGIvbmV0L2RjY3Av
+S2NvbmZpZwpAQCAtNCwxNSArNCwxNSBAQCBtZW51ICJEQ0NQIENvbmZpZ3VyYXRpb24gKEVYUEVS
+SU1FTlRBTCkiCiBjb25maWcgSVBfRENDUAogCXRyaXN0YXRlICJUaGUgRENDUCBQcm90b2NvbCAo
+RVhQRVJJTUVOVEFMKSIKIAktLS1oZWxwLS0tCi0JICBEYXRhZ3JhbSBDb25nZXN0aW9uIENvbnRy
+b2wgUHJvdG9jb2wKKwkgIERhdGFncmFtIENvbmdlc3Rpb24gQ29udHJvbCBQcm90b2NvbCAoUkZD
+IDQzNDApCiAKLQkgIEZyb20gZHJhZnQtaWV0Zi1kY2NwLXNwZWMtMTEgPGh0dHA6Ly93d3cuaWNp
+ci5vcmcva29obGVyL2RjcC9kcmFmdC1pZXRmLWRjY3Atc3BlYy0xMS50eHQ+LgorCSAgRnJvbSBo
+dHRwOi8vd3d3LmlldGYub3JnL3JmYy9yZmM0MzQwLnR4dDoKIAogCSAgVGhlIERhdGFncmFtIENv
+bmdlc3Rpb24gQ29udHJvbCBQcm90b2NvbCAoRENDUCkgaXMgYSB0cmFuc3BvcnQKIAkgIHByb3Rv
+Y29sIHRoYXQgaW1wbGVtZW50cyBiaWRpcmVjdGlvbmFsLCB1bmljYXN0IGNvbm5lY3Rpb25zIG9m
+CiAJICBjb25nZXN0aW9uLWNvbnRyb2xsZWQsIHVucmVsaWFibGUgZGF0YWdyYW1zLiBJdCBzaG91
+bGQgYmUgc3VpdGFibGUKIAkgIGZvciB1c2UgYnkgYXBwbGljYXRpb25zIHN1Y2ggYXMgc3RyZWFt
+aW5nIG1lZGlhLCBJbnRlcm5ldCB0ZWxlcGhvbnksCi0JICBhbmQgb24tbGluZSBnYW1lcworCSAg
+YW5kIG9uLWxpbmUgZ2FtZXMuCiAKIAkgIFRvIGNvbXBpbGUgdGhpcyBwcm90b2NvbCBzdXBwb3J0
+IGFzIGEgbW9kdWxlLCBjaG9vc2UgTSBoZXJlOiB0aGUKIAkgIG1vZHVsZSB3aWxsIGJlIGNhbGxl
+ZCBkY2NwLgotLS0gYS9uZXQvZGNjcC9hY2t2ZWMuYworKysgYi9uZXQvZGNjcC9hY2t2ZWMuYwpA
+QCAtMTEzLDcgKzExMyw3IEBAIGludCBkY2NwX2luc2VydF9vcHRpb25fYWNrdmVjKHN0cnVjdCBz
+b2MKIAogCW1lbWNweSh0bywgZnJvbSwgbGVuKTsKIAkvKgotCSAqCUZyb20gZHJhZnQtaWV0Zi1k
+Y2NwLXNwZWMtMTEudHh0OgorCSAqCUZyb20gUkZDIDQzNDAsIEEuMjoKIAkgKgogCSAqCUZvciBl
+YWNoIGFja25vd2xlZGdlbWVudCBpdCBzZW5kcywgdGhlIEhDLVJlY2VpdmVyIHdpbGwgYWRkIGFu
+CiAJICoJYWNrbm93bGVkZ2VtZW50IHJlY29yZC4gIGFja19zZXFubyB3aWxsIGVxdWFsIHRoZSBI
+Qy1SZWNlaXZlcgpAQCAtMjI0LDcgKzIyNCw3IEBAIHN0YXRpYyBpbmxpbmUgaW50IGRjY3BfYWNr
+dmVjX3NldF9idWZfaGUKIH0KIAogLyoKLSAqIEltcGxlbWVudHMgdGhlIGRyYWZ0LWlldGYtZGNj
+cC1zcGVjLTExLnR4dCBBcHBlbmRpeCBBCisgKiBJbXBsZW1lbnRzIHRoZSBSRkMgNDM0MCwgQXBw
+ZW5kaXggQQogICovCiBpbnQgZGNjcF9hY2t2ZWNfYWRkKHN0cnVjdCBkY2NwX2Fja3ZlYyAqYXYs
+IGNvbnN0IHN0cnVjdCBzb2NrICpzaywKIAkJICAgIGNvbnN0IHU2NCBhY2tubywgY29uc3QgdTgg
+c3RhdGUpCkBAIC0yMzcsNyArMjM3LDcgQEAgaW50IGRjY3BfYWNrdmVjX2FkZChzdHJ1Y3QgZGNj
+cF9hY2t2ZWMgKgogCSAqIFdlIG1heSB3ZWxsIGRlY2lkZSB0byBkbyBidWZmZXIgY29tcHJlc3Np
+b24sIGV0YywgYnV0IGZvciBub3cgbGV0cwogCSAqIGp1c3QgZHJvcC4KIAkgKgotCSAqIEZyb20g
+QXBwZW5kaXggQToKKwkgKiBGcm9tIEFwcGVuZGl4IEEuMS4xIChgTmV3IFBhY2tldHMnKToKIAkg
+KgogCSAqCU9mIGNvdXJzZSwgdGhlIGNpcmN1bGFyIGJ1ZmZlciBtYXkgb3ZlcmZsb3csIGVpdGhl
+ciB3aGVuIHRoZQogCSAqCUhDLVNlbmRlciBpcyBzZW5kaW5nIGRhdGEgYXQgYSB2ZXJ5IGhpZ2gg
+cmF0ZSwgd2hlbiB0aGUKQEAgLTI3NCw5ICsyNzQsOSBAQCBpbnQgZGNjcF9hY2t2ZWNfYWRkKHN0
+cnVjdCBkY2NwX2Fja3ZlYyAqCiAJCS8qCiAJCSAqIEEuMS4yLiAgT2xkIFBhY2tldHMKIAkJICoK
+LQkJICoJV2hlbiBhIHBhY2tldCB3aXRoIFNlcXVlbmNlIE51bWJlciBTIGFycml2ZXMsIGFuZAot
+CQkgKglTIDw9IGJ1Zl9hY2tubywgdGhlIEhDLVJlY2VpdmVyIHdpbGwgc2NhbiB0aGUgdGFibGUK
+LQkJICoJZm9yIHRoZSBieXRlIGNvcnJlc3BvbmRpbmcgdG8gUy4gKEluZGV4aW5nIHN0cnVjdHVy
+ZXMKKwkJICoJV2hlbiBhIHBhY2tldCB3aXRoIFNlcXVlbmNlIE51bWJlciBTIDw9IGJ1Zl9hY2tu
+bworCQkgKglhcnJpdmVzLCB0aGUgSEMtUmVjZWl2ZXIgd2lsbCBzY2FuIHRoZSB0YWJsZSBmb3IK
+KwkJICoJdGhlIGJ5dGUgY29ycmVzcG9uZGluZyB0byBTLiAoSW5kZXhpbmcgc3RydWN0dXJlcwog
+CQkgKgljb3VsZCByZWR1Y2UgdGhlIGNvbXBsZXhpdHkgb2YgdGhpcyBzY2FuLikKIAkJICovCiAJ
+CXU2NCBkZWx0YSA9IGRjY3BfZGVsdGFfc2Vxbm8oYWNrbm8sIGF2LT5kY2NwYXZfYnVmX2Fja25v
+KTsKLS0tIGEvbmV0L2RjY3AvYWNrdmVjLmgKKysrIGIvbmV0L2RjY3AvYWNrdmVjLmgKQEAgLTI4
+LDggKzI4LDcgQEAKIAogLyoqIHN0cnVjdCBkY2NwX2Fja3ZlYyAtIGFjayB2ZWN0b3IKICAqCi0g
+KiBUaGlzIGRhdGEgc3RydWN0dXJlIGlzIHRoZSBvbmUgZGVmaW5lZCBpbiB0aGUgRENDUCBkcmFm
+dAotICogQXBwZW5kaXggQS4KKyAqIFRoaXMgZGF0YSBzdHJ1Y3R1cmUgaXMgdGhlIG9uZSBkZWZp
+bmVkIGluIFJGQyA0MzQwLCBBcHBlbmRpeCBBLgogICoKICAqIEBkY2NwYXZfYnVmX2hlYWQgLSBj
+aXJjdWxhciBidWZmZXIgaGVhZAogICogQGRjY3Bhdl9idWZfdGFpbCAtIGNpcmN1bGFyIGJ1ZmZl
+ciB0YWlsCi0tLSBhL25ldC9kY2NwL2NjaWRzL0tjb25maWcKKysrIGIvbmV0L2RjY3AvY2NpZHMv
+S2NvbmZpZwpAQCAtMjIsMTEgKzIyLDExIEBAIGNvbmZpZyBJUF9EQ0NQX0NDSUQyCiAJICBmb3Ig
+bG9zdCBwYWNrZXRzLCB3b3VsZCBwcmVmZXIgQ0NJRCAyIHRvIENDSUQgMy4gIE9uLWxpbmUgZ2Ft
+ZXMgbWF5CiAJICBhbHNvIHByZWZlciBDQ0lEIDIuCiAKLQkgIENDSUQgMiBpcyBmdXJ0aGVyIGRl
+c2NyaWJlZCBpbjoKLQkgIGh0dHA6Ly93d3cuaWNpci5vcmcva29obGVyL2RjY3AvZHJhZnQtaWV0
+Zi1kY2NwLWNjaWQyLTEwLnR4dAorCSAgQ0NJRCAyIGlzIGZ1cnRoZXIgZGVzY3JpYmVkIGluIFJG
+QyA0MzQxLAorCSAgaHR0cDovL3d3dy5pZXRmLm9yZy9yZmMvcmZjNDM0MS50eHQKIAotCSAgVGhp
+cyB0ZXh0IHdhcyBleHRyYWN0ZWQgZnJvbToKLQkgIGh0dHA6Ly93d3cuaWNpci5vcmcva29obGVy
+L2RjY3AvZHJhZnQtaWV0Zi1kY2NwLXNwZWMtMTMudHh0CisJICBUaGlzIHRleHQgd2FzIGV4dHJh
+Y3RlZCBmcm9tIFJGQyA0MzQwIChzZWMuIDEwLjEpLAorCSAgaHR0cDovL3d3dy5pZXRmLm9yZy9y
+ZmMvcmZjNDM0MC50eHQKIAogCSAgSWYgaW4gZG91YnQsIHNheSBNLgogCkBAIC01MywxNSArNTMs
+MTQgQEAgY29uZmlnIElQX0RDQ1BfQ0NJRDMKIAkgIHN1aXRhYmxlIHRoYW4gQ0NJRCAyIGZvciBh
+cHBsaWNhdGlvbnMgc3VjaCBzdHJlYW1pbmcgbWVkaWEgd2hlcmUgYQogCSAgcmVsYXRpdmVseSBz
+bW9vdGggc2VuZGluZyByYXRlIGlzIG9mIGltcG9ydGFuY2UuCiAKLQkgIENDSUQgMyBpcyBmdXJ0
+aGVyIGRlc2NyaWJlZCBpbjoKLQotCSAgaHR0cDovL3d3dy5pY2lyLm9yZy9rb2hsZXIvZGNjcC9k
+cmFmdC1pZXRmLWRjY3AtY2NpZDMtMTEudHh0LgorCSAgQ0NJRCAzIGlzIGZ1cnRoZXIgZGVzY3Jp
+YmVkIGluIFJGQyA0MzQyLAorCSAgaHR0cDovL3d3dy5pZXRmLm9yZy9yZmMvcmZjNDM0Mi50eHQK
+IAogCSAgVGhlIFRGUkMgY29uZ2VzdGlvbiBjb250cm9sIGFsZ29yaXRobXMgd2VyZSBpbml0aWFs
+bHkgZGVzY3JpYmVkIGluCiAJICBSRkMgMzQ0OC4KIAotCSAgVGhpcyB0ZXh0IHdhcyBleHRyYWN0
+ZWQgZnJvbToKLQkgIGh0dHA6Ly93d3cuaWNpci5vcmcva29obGVyL2RjY3AvZHJhZnQtaWV0Zi1k
+Y2NwLXNwZWMtMTMudHh0CisJICBUaGlzIHRleHQgd2FzIGV4dHJhY3RlZCBmcm9tIFJGQyA0MzQw
+IChzZWMuIDEwLjIpLAorCSAgaHR0cDovL3d3dy5pZXRmLm9yZy9yZmMvcmZjNDM0MC50eHQKIAkg
+IAogCSAgSWYgaW4gZG91YnQsIHNheSBNLgogCi0tLSBhL25ldC9kY2NwL2NjaWRzL2NjaWQyLmMK
+KysrIGIvbmV0L2RjY3AvY2NpZHMvY2NpZDIuYwpAQCAtMjMsNyArMjMsNyBAQAogICovCiAKIC8q
+Ci0gKiBUaGlzIGltcGxlbWVudGF0aW9uIHNob3VsZCBmb2xsb3c6IGRyYWZ0LWlldGYtZGNjcC1j
+Y2lkMi0xMC50eHQKKyAqIFRoaXMgaW1wbGVtZW50YXRpb24gc2hvdWxkIGZvbGxvdyBSRkMgNDM0
+MQogICoKICAqIEJVR1M6CiAgKiAtIHNlcXVlbmNlIG51bWJlciB3cmFwcGluZwotLS0gYS9uZXQv
+ZGNjcC9jY2lkcy9jY2lkMy5jCisrKyBiL25ldC9kY2NwL2NjaWRzL2NjaWQzLmMKQEAgLTM3OSw4
+ICszNzksNyBAQCBzdGF0aWMgdm9pZCBjY2lkM19oY190eF9wYWNrZXRfc2VudChzdHJ1CiAJCXBh
+Y2tldC0+ZGNjcGh0eF9zZXFubyAgPSBkcC0+ZGNjcHNfZ3NzOwogCQkvKgogCQkgKiBDaGVjayBp
+ZiB3aW5fY291bnQgaGF2ZSBjaGFuZ2VkCi0JCSAqIEFsZ29yaXRobSBpbiAiOC4xLiBXaW5kb3cg
+Q291bnRlciBWYWx1ZXIiIGluCi0JCSAqIGRyYWZ0LWlldGYtZGNjcC1jY2lkMy0xMS50eHQKKwkJ
+ICogQWxnb3JpdGhtIGluICI4LjEuIFdpbmRvdyBDb3VudGVyIFZhbHVlIiBpbiBSRkMgNDM0Mi4K
+IAkJICovCiAJCXF1YXJ0ZXJfcnR0ID0gdGltZXZhbF9kZWx0YSgmbm93LCAmaGN0eC0+Y2NpZDNo
+Y3R4X3RfbGFzdF93aW5fY291bnQpOwogCQlpZiAobGlrZWx5KGhjdHgtPmNjaWQzaGN0eF9ydHQg
+PiA4KSkKLS0tIGEvbmV0L2RjY3AvZGNjcC5oCisrKyBiL25ldC9kY2NwL2RjY3AuaApAQCAtNTAs
+NyArNTAsNyBAQCBleHRlcm4gdm9pZCBkY2NwX3RpbWVfd2FpdChzdHJ1Y3Qgc29jayAqCiAjZGVm
+aW5lIERDQ1BfVElNRVdBSVRfTEVOICg2MCAqIEhaKSAvKiBob3cgbG9uZyB0byB3YWl0IHRvIGRl
+c3Ryb3kgVElNRS1XQUlUCiAJCQkJICAgICAqIHN0YXRlLCBhYm91dCA2MCBzZWNvbmRzICovCiAK
+LS8qIGRyYWZ0LWlldGYtZGNjcC1zcGVjLTExLnR4dCBpbml0aWFsIFJUTyB2YWx1ZSAqLworLyog
+UkZDIDExMjIsIDQuMi4zLjEgaW5pdGlhbCBSVE8gdmFsdWUgKi8KICNkZWZpbmUgRENDUF9USU1F
+T1VUX0lOSVQgKCh1bnNpZ25lZCkoMyAqIEhaKSkKIAogLyogTWF4aW1hbCBpbnRlcnZhbCBiZXR3
+ZWVuIHByb2JlcyBmb3IgbG9jYWwgcmVzb3VyY2VzLiAgKi8KLS0tIGEvbmV0L2RjY3AvaW5wdXQu
+YworKysgYi9uZXQvZGNjcC9pbnB1dC5jCkBAIC0yMTYsMTEgKzIxNiwxMSBAQCBzZW5kX3N5bmM6
+CiAJCWRjY3Bfc2VuZF9zeW5jKHNrLCBEQ0NQX1NLQl9DQihza2IpLT5kY2NwZF9zZXEsCiAJCQkg
+ICAgICAgRENDUF9QS1RfU1lOQ0FDSyk7CiAJCS8qCi0JCSAqIEZyb20gdGhlIGRyYWZ0OgorCQkg
+KiBGcm9tIFJGQyA0MzQwLCBzZWMuIDUuNwogCQkgKgogCQkgKiBBcyB3aXRoIERDQ1AtQWNrIHBh
+Y2tldHMsIERDQ1AtU3luYyBhbmQgRENDUC1TeW5jQWNrIHBhY2tldHMKIAkJICogTUFZIGhhdmUg
+bm9uLXplcm8tbGVuZ3RoIGFwcGxpY2F0aW9uIGRhdGEgYXJlYXMsIHdob3NlCi0JCSAqIGNvbnRl
+bnRzICogcmVjZWl2ZXJzIE1VU1QgaWdub3JlLgorCQkgKiBjb250ZW50cyByZWNlaXZlcnMgTVVT
+VCBpZ25vcmUuCiAJCSAqLwogCQlnb3RvIGRpc2NhcmQ7CiAJfQotLS0gYS9uZXQvZGNjcC9pcHY0
+LmMKKysrIGIvbmV0L2RjY3AvaXB2NC5jCkBAIC0xODMsNyArMTgzLDcgQEAgc3RhdGljIGlubGlu
+ZSB2b2lkIGRjY3BfZG9fcG10dV9kaXNjb3ZlcgogCQlkY2NwX3N5bmNfbXNzKHNrLCBtdHUpOwog
+CiAJCS8qCi0JCSAqIEZyb206IGRyYWZ0LWlldGYtZGNjcC1zcGVjLTExLnR4dAorCQkgKiBGcm9t
+IFJGQyA0MzQwLCBzZWMuIDE0LjE6CiAJCSAqCiAJCSAqCURDQ1AtU3luYyBwYWNrZXRzIGFyZSB0
+aGUgYmVzdCBjaG9pY2UgZm9yIHVwd2FyZAogCQkgKglwcm9iaW5nLCBzaW5jZSBEQ0NQLVN5bmMg
+cHJvYmVzIGRvIG5vdCByaXNrIGFwcGxpY2F0aW9uCkBAIC03MzEsNyArNzMxLDcgQEAgc3RhdGlj
+IHZvaWQgZGNjcF92NF9jdGxfc2VuZF9yZXNldChzdHJ1YwogCWRjY3BfaGRyX3Jlc2V0KHNrYikt
+PmRjY3BoX3Jlc2V0X2NvZGUgPQogCQkJCURDQ1BfU0tCX0NCKHJ4c2tiKS0+ZGNjcGRfcmVzZXRf
+Y29kZTsKIAotCS8qIFNlZSAiOC4zLjEuIEFibm9ybWFsIFRlcm1pbmF0aW9uIiBpbiBkcmFmdC1p
+ZXRmLWRjY3Atc3BlYy0xMSAqLworCS8qIFNlZSAiOC4zLjEuIEFibm9ybWFsIFRlcm1pbmF0aW9u
+IiBpbiBSRkMgNDM0MCAqLwogCXNlcW5vID0gMDsKIAlpZiAoRENDUF9TS0JfQ0Iocnhza2IpLT5k
+Y2NwZF9hY2tfc2VxICE9IERDQ1BfUEtUX1dJVEhPVVRfQUNLX1NFUSkKIAkJZGNjcF9zZXRfc2Vx
+bm8oJnNlcW5vLCBEQ0NQX1NLQl9DQihyeHNrYiktPmRjY3BkX2Fja19zZXEgKyAxKTsKLS0tIGEv
+bmV0L2RjY3AvaXB2Ni5jCisrKyBiL25ldC9kY2NwL2lwdjYuYwpAQCAtNTUwLDcgKzU1MCw3IEBA
+IHN0YXRpYyB2b2lkIGRjY3BfdjZfY3RsX3NlbmRfcmVzZXQoc3RydWMKIAlkY2NwX2hkcl9yZXNl
+dChza2IpLT5kY2NwaF9yZXNldF9jb2RlID0KIAkJCQlEQ0NQX1NLQl9DQihyeHNrYiktPmRjY3Bk
+X3Jlc2V0X2NvZGU7CiAKLQkvKiBTZWUgIjguMy4xLiBBYm5vcm1hbCBUZXJtaW5hdGlvbiIgaW4g
+ZHJhZnQtaWV0Zi1kY2NwLXNwZWMtMTEgKi8KKwkvKiBTZWUgIjguMy4xLiBBYm5vcm1hbCBUZXJt
+aW5hdGlvbiIgaW4gUkZDIDQzNDAgKi8KIAlzZXFubyA9IDA7CiAJaWYgKERDQ1BfU0tCX0NCKHJ4
+c2tiKS0+ZGNjcGRfYWNrX3NlcSAhPSBEQ0NQX1BLVF9XSVRIT1VUX0FDS19TRVEpCiAJCWRjY3Bf
+c2V0X3NlcW5vKCZzZXFubywgRENDUF9TS0JfQ0Iocnhza2IpLT5kY2NwZF9hY2tfc2VxICsgMSk7
+Ci0tLSBhL25ldC9kY2NwL29wdGlvbnMuYworKysgYi9uZXQvZGNjcC9vcHRpb25zLmMKQEAgLTIx
+NSw3ICsyMTUsNyBAQCBpbnQgZGNjcF9wYXJzZV9vcHRpb25zKHN0cnVjdCBzb2NrICpzaywgCiAJ
+CQkJICAgICAgZWxhcHNlZF90aW1lKTsKIAkJCWJyZWFrOwogCQkJLyoKLQkJCSAqIEZyb20gZHJh
+ZnQtaWV0Zi1kY2NwLXNwZWMtMTEudHh0OgorCQkJICogRnJvbSBSRkMgNDM0MCwgc2VjLiAxMC4z
+OgogCQkJICoKIAkJCSAqCU9wdGlvbiBudW1iZXJzIDEyOCB0aHJvdWdoIDE5MSBhcmUgZm9yCiAJ
+CQkgKglvcHRpb25zIHNlbnQgZnJvbSB0aGUgSEMtU2VuZGVyIHRvIHRoZQo=
+------=_Part_1536_272363.1161659913309--
