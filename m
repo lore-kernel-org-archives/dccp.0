@@ -1,275 +1,213 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 24 Oct 2006 14:00:18 +0000
-Subject: [PATCH 10/17] [DCCP]: calling dccp_v{4,6}_reqsk_send_ack is a BUG
-Message-Id: <200610241500.19032@strip-the-willow>
+Date: Tue, 24 Oct 2006 14:01:15 +0000
+Subject: [PATCH 15/17] [DCCP]: tidy up dccp_v{4,6}_conn_request
+Message-Id: <200610241501.15330@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: calling dccp_v{4,6}_reqsk_send_ack is a BUG
+[DCCP]: tidy up dccp_v{4,6}_conn_request
 
-This patch removes two functions, the send_ack functions of request_sock, w=
-hich are not called/used
-by the DCCP code. It is correct that these functions are not called, below =
-is a justification why
-calling these functions (on a passive socket in the LISTEN/RESPOND state) w=
-ould mean a DCCP protocol
-violation.
+This is a code simplification which removes reduplicated code
+and instead concentrates shared code.
 
+Detailed Changes:
+-----------------
+ * dccp_v6_init_sequence includes the code from dccp_v4_init_sequence
+    --moved dccp_v4_init_sequence into header file
+    --inlined dccp_v6_init_sequence
 
-A) bACKground: using request_sock in TCP:
------------------------------------------
-        req->rsk_ops->send_ack is called only once, in tcp_check_req() of n=
-et/ipv4/tcp_minisocks.c
-        This single case deals with a socket in the SYN-RECEIVED state; RFC=
- 793 on page 69 describes
-        the case for SYN-RECEIVED and other states: "If an incoming segment=
- is not acceptable, an
-        acknowledgment should be sent in reply (unless the RST bit is set, =
-if so drop the segment
-        and return):
-                       <SEQ=3DSND.NXT><ACK=3DRCV.NXT><CTL=ACK>"
-     =20
-        ( SND.NXT =3D ISS + 1, RCV.NEXT =3D SEG.SEQ + 1 if SYN-RECEIVED was=
- entered from LISTEN)
+ * tidied up dccp_v{4,6}_conn_request
+    --struct dccp_sock dp is not used in any place (removed)
+    --moved generic code into openreq_init
 
-       This is referenced by the following code segment:
-     =20
-        if (paws_reject || !tcp_in_window(...)) {
-                /* Out of window: send ACK and drop. */
-                if (!(flg & TCP_FLAG_RST))
-                        req->rsk_ops->send_ack(skb, req);
-                /* ... */
-                return NULL;
-        }
-       =20
-        This is the _only_ occurrence where rsk_ops->send_ack() is called f=
-or TCP.
+ * added dccp_parse_options(...) in dccp_v6_conn_request()
+    --> this resolves a FIXME
 
-B) The Problem: protocol constraints of DCCP:
----------------------------------------------
-        (1) rsk_ops->send_ack is called _nowhere_ throughout the DCCP code =
-(grep confirms)
-        (2) This is correct, due to the following:
-                (a) RFC 4340, sec. 8.5, step 3: The only acceptable packets=
- in LISTEN state
-                    are DCCP-Request or packets with a valid InitCookie opt=
-ion (InitCookie
-                    is an optional, not mandatory, protocol feature). Only =
-if such a packet
-                    arrives, RESPOND is entered after sending a DCCP-Respon=
-se.=20
-                    Then,  in step 11, receiving any packet other than DCCP=
--Request, will
-                    trigger the transition to OPEN (`Established') =3D> the=
- request_sock
-                    will become a full socket here.=20
-                (b) DCCP uses the Sync where TCP would use an ACK - in the =
-case of
-                    sequence-invalid packets (RFC 4340, 7.5.4). This howeve=
-r is already handled
-                    by calling dccp_send_sync in dccp_check_seqno(),__dcp_r=
-cv_established(),=20
-                    dccp_rcv_state_process(), dccp_rcv_closereq().=20
-               =20
-c) Conclusion:
---------------
-        In DCCP the function pointer send_ack of struct request_sock_ops is=
- not necessary,
-        and calling it would mean a protocol violation. The DCCP code is co=
-rrect in this regard
-        in that it does not call the send_ack virtual function pointer, but=
- the existence of two
-        functions - which are never called and are not necessary - is highl=
-y confusing.
-        Therefore, the attached patch replaces the functions with a verbose=
- message (if debugging
-        is enabled), and otherwise flags a BUG().=20
-        This solution preserves the generic structure of the request_sock w=
-hile making sure that
-        RFC 4340 is not violated by the implementation.
+ * tidied up openreq_init()
+    --removed second argument (never used)
+    --set the default sequence window there (generic code, is not AF-dependent)
+    --removed FIXME regarding filling-in options: it seems that all sensible
+      options are already filled in; so this note seems unnecessary.
 
 
 Signed-off-by: Gerrit Renker  <gerrit@erg.abdn.ac.uk>
----------------------------------------------------------------------------=
----
+------------------------------------------------------------------------------
 
- net/dccp/dccp.h |    5 ++++
- net/dccp/ipv4.c |   48 -----------------------------------------------
- net/dccp/ipv6.c |   57 ---------------------------------------------------=
------
- 3 files changed, 7 insertions(+), 103 deletions(-)
+ net/dccp/dccp.h |   18 ++++++++++++------
+ net/dccp/ipv4.c |   20 +++-----------------
+ net/dccp/ipv6.c |   15 +++++----------
+ 3 files changed, 20 insertions(+), 33 deletions(-)
 
----------------------------------------------------------------------------=
----
+------------------------------------------------------------------------------
 
 diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index f294b89..646a0c3 100644
+index f9fbc9c..a0e4e4f 100644
 --- a/net/dccp/dccp.h
 +++ b/net/dccp/dccp.h
-@@ -130,6 +130,11 @@ extern int  dccp_retransmit_skb(struct s
-=20
- extern void dccp_send_ack(struct sock *sk);
- extern void dccp_send_delayed_ack(struct sock *sk);
-+static inline void dccp_reqsk_send_ack(struct sk_buff *s,struct request_so=
-ck *r)
+@@ -13,6 +13,7 @@ #define _DCCP_H
+  */
+ 
+ #include <linux/dccp.h>
++#include <linux/random.h>
+ #include <net/snmp.h>
+ #include <net/sock.h>
+ #include <net/tcp.h>
+@@ -158,16 +159,13 @@ extern void dccp_set_state(struct sock *
+ extern void dccp_done(struct sock *sk);
+ 
+ static inline void dccp_openreq_init(struct request_sock *req,
+-				     struct dccp_sock *dp,
+ 				     struct sk_buff *skb)
+ {
+-	/*
+-	 * FIXME: fill in the other req fields from the DCCP options
+-	 * received
+-	 */
++	extern int  dccp_feat_default_sequence_window;
++
+ 	inet_rsk(req)->rmt_port = dccp_hdr(skb)->dccph_sport;
+ 	inet_rsk(req)->acked	= 0;
+-	req->rcv_wnd = 0;
++	req->rcv_wnd		= dccp_feat_default_sequence_window;
+ }
+ 
+ extern int dccp_v4_conn_request(struct sock *sk, struct sk_buff *skb);
+@@ -282,6 +280,14 @@ static inline int dccp_packet_without_ac
+ #define DCCP_MAX_SEQNO ((((u64)1) << 48) - 1)
+ #define DCCP_PKT_WITHOUT_ACK_SEQ (DCCP_MAX_SEQNO << 2)
+ 
++static inline __u32 dccp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
 +{
-+       BUG();          /* ACK packets are never sent in LISTEN/RESPOND sta=
-te */
++	return secure_dccp_sequence_number(skb->nh.iph->daddr,
++					   skb->nh.iph->saddr,
++					   dccp_hdr(skb)->dccph_dport,
++					   dccp_hdr(skb)->dccph_sport);
 +}
 +
- extern void dccp_send_sync(struct sock *sk, const u64 seq,
- 			   const enum dccp_pkt_type pkt_type);
-=20
+ static inline void dccp_set_seqno(u64 *seqno, u64 value)
+ {
+ 	if (value > DCCP_MAX_SEQNO)
 diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index 7690c83..89b7306 100644
+index a6cc844..cf8af58 100644
 --- a/net/dccp/ipv4.c
 +++ b/net/dccp/ipv4.c
-@@ -193,52 +193,6 @@ static inline void dccp_do_pmtu_discover
- 	} /* else let the usual retransmit timer handle it */
- }
-=20
--static void dccp_v4_reqsk_send_ack(struct sk_buff *rxskb,
--				   struct request_sock *req)
+@@ -14,7 +14,6 @@ #include <linux/dccp.h>
+ #include <linux/icmp.h>
+ #include <linux/module.h>
+ #include <linux/skbuff.h>
+-#include <linux/random.h>
+ 
+ #include <net/icmp.h>
+ #include <net/inet_common.h>
+@@ -360,15 +359,6 @@ void dccp_v4_send_check(struct sock *sk,
+ 
+ EXPORT_SYMBOL_GPL(dccp_v4_send_check);
+ 
+-static inline u64 dccp_v4_init_sequence(const struct sock *sk,
+-					const struct sk_buff *skb)
 -{
--	int err;
--	struct dccp_hdr *rxdh =3D dccp_hdr(rxskb), *dh;
--	const u32 dccp_hdr_ack_len =3D sizeof(struct dccp_hdr) +
--				     sizeof(struct dccp_hdr_ext) +
--				     sizeof(struct dccp_hdr_ack_bits);
--	struct sk_buff *skb;
--
--	if (((struct rtable *)rxskb->dst)->rt_type !=3D RTN_LOCAL)
--		return;
--
--	skb =3D alloc_skb(dccp_v4_ctl_socket->sk->sk_prot->max_header, GFP_ATOMIC=
-);
--	if (skb =3D NULL)
--		return;
--
--	/* Reserve space for headers. */
--	skb_reserve(skb, dccp_v4_ctl_socket->sk->sk_prot->max_header);
--	skb->dst =3D dst_clone(rxskb->dst);
--
--	dh =3D dccp_zeroed_hdr(skb, dccp_hdr_ack_len);
--
--	/* Build DCCP header and checksum it. */
--	dh->dccph_type	   =3D DCCP_PKT_ACK;
--	dh->dccph_sport	   =3D rxdh->dccph_dport;
--	dh->dccph_dport	   =3D rxdh->dccph_sport;
--	dh->dccph_doff	   =3D dccp_hdr_ack_len / 4;
--	dh->dccph_x	   =3D 1;
--
--	dccp_hdr_set_seq(dh, DCCP_SKB_CB(rxskb)->dccpd_ack_seq);
--	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb),
--			 DCCP_SKB_CB(rxskb)->dccpd_seq);
--
--	bh_lock_sock(dccp_v4_ctl_socket->sk);
--	err =3D ip_build_and_send_pkt(skb, dccp_v4_ctl_socket->sk,
--				    rxskb->nh.iph->daddr,
--				    rxskb->nh.iph->saddr, NULL);
--	bh_unlock_sock(dccp_v4_ctl_socket->sk);
--
--	if (err =3D NET_XMIT_CN || err =3D 0) {
--		DCCP_INC_STATS_BH(DCCP_MIB_OUTSEGS);
--		DCCP_INC_STATS_BH(DCCP_MIB_OUTRSTS);
--	}
+-	return secure_dccp_sequence_number(skb->nh.iph->daddr,
+-					   skb->nh.iph->saddr,
+-					   dccp_hdr(skb)->dccph_dport,
+-					   dccp_hdr(skb)->dccph_sport);
 -}
 -
- static int dccp_v4_send_response(struct sock *sk, struct request_sock *req,
- 				 struct dst_entry *dst)
+ /*
+  * The three way handshake has completed - we got a valid ACK or DATAACK -
+  * now create the new socket.
+@@ -636,11 +626,8 @@ static struct request_sock_ops dccp_requ
+ int dccp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
  {
-@@ -1032,7 +986,7 @@ static struct request_sock_ops dccp_requ
- 	.family		=3D PF_INET,
- 	.obj_size	=3D sizeof(struct dccp_request_sock),
- 	.rtx_syn_ack	=3D dccp_v4_send_response,
--	.send_ack	=3D dccp_v4_reqsk_send_ack,
-+	.send_ack	=3D dccp_reqsk_send_ack,
- 	.destructor	=3D dccp_v4_reqsk_destructor,
- 	.send_reset	=3D dccp_v4_ctl_send_reset,
- };
+ 	struct inet_request_sock *ireq;
+-	struct dccp_sock dp;
+ 	struct request_sock *req;
+ 	struct dccp_request_sock *dreq;
+-	const __be32 saddr = skb->nh.iph->saddr;
+-	const __be32 daddr = skb->nh.iph->daddr;
+  	const __be32 service = dccp_hdr_request(skb)->dccph_req_service;
+ 	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
+ 	__u8 reset_code = DCCP_RESET_CODE_TOO_BUSY;
+@@ -680,15 +667,14 @@ int dccp_v4_conn_request(struct sock *sk
+ 	if (dccp_parse_options(sk, skb))
+ 		goto drop_and_free;
+ 
+-	dccp_openreq_init(req, &dp, skb);
++	dccp_openreq_init(req, skb);
+ 
+ 	if (security_inet_conn_request(sk, skb, req))
+ 		goto drop_and_free;
+ 
+ 	ireq = inet_rsk(req);
+-	ireq->loc_addr = daddr;
+-	ireq->rmt_addr = saddr;
+-	req->rcv_wnd	= dccp_feat_default_sequence_window;
++	ireq->loc_addr	= skb->nh.iph->daddr;
++	ireq->rmt_addr	= skb->nh.iph->saddr;
+ 	ireq->opt	= NULL;
+ 
+ 	/*
 diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
-index 07e0b7f..07ac08d 100644
+index 432b9a0..c122703 100644
 --- a/net/dccp/ipv6.c
 +++ b/net/dccp/ipv6.c
-@@ -37,8 +37,6 @@ #include "feat.h"
- static struct socket *dccp_v6_ctl_socket;
-=20
- static void dccp_v6_ctl_send_reset(struct sk_buff *skb);
--static void dccp_v6_reqsk_send_ack(struct sk_buff *skb,
--				   struct request_sock *req);
- static void dccp_v6_send_check(struct sock *sk, int len, struct sk_buff *s=
-kb);
-=20
- static int dccp_v6_do_rcv(struct sock *sk, struct sk_buff *skb);
-@@ -493,7 +491,7 @@ static struct request_sock_ops dccp6_req
- 	.family		=3D AF_INET6,
- 	.obj_size	=3D sizeof(struct dccp6_request_sock),
- 	.rtx_syn_ack	=3D dccp_v6_send_response,
--	.send_ack	=3D dccp_v6_reqsk_send_ack,
-+	.send_ack	=3D dccp_reqsk_send_ack,
- 	.destructor	=3D dccp_v6_reqsk_destructor,
- 	.send_reset	=3D dccp_v6_ctl_send_reset,
- };
-@@ -582,59 +580,6 @@ static void dccp_v6_ctl_send_reset(struc
- 	kfree_skb(skb);
+@@ -13,7 +13,6 @@
+  */
+ 
+ #include <linux/module.h>
+-#include <linux/random.h>
+ #include <linux/xfrm.h>
+ 
+ #include <net/addrconf.h>
+@@ -66,7 +65,7 @@ static inline u16 dccp_v6_check(struct d
+ 	return csum_ipv6_magic(saddr, daddr, len, IPPROTO_DCCP, base);
  }
-=20
--static void dccp_v6_reqsk_send_ack(struct sk_buff *rxskb,
--				   struct request_sock *req)
--{
--	struct flowi fl;
--	struct dccp_hdr *rxdh =3D dccp_hdr(rxskb), *dh;
--	const u32 dccp_hdr_ack_len =3D sizeof(struct dccp_hdr) +
--				     sizeof(struct dccp_hdr_ext) +
--				     sizeof(struct dccp_hdr_ack_bits);
--	struct sk_buff *skb;
--
--	skb =3D alloc_skb(dccp_v6_ctl_socket->sk->sk_prot->max_header,
--			GFP_ATOMIC);
--	if (skb =3D NULL)
--		return;
--
--	skb_reserve(skb, dccp_v6_ctl_socket->sk->sk_prot->max_header);
--
--	dh =3D dccp_zeroed_hdr(skb, dccp_hdr_ack_len);
--
--	/* Build DCCP header and checksum it. */
--	dh->dccph_type	=3D DCCP_PKT_ACK;
--	dh->dccph_sport =3D rxdh->dccph_dport;
--	dh->dccph_dport =3D rxdh->dccph_sport;
--	dh->dccph_doff	=3D dccp_hdr_ack_len / 4;
--	dh->dccph_x	=3D 1;
--
--	dccp_hdr_set_seq(dh, DCCP_SKB_CB(rxskb)->dccpd_ack_seq);
--	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb),
--			 DCCP_SKB_CB(rxskb)->dccpd_seq);
--
--	memset(&fl, 0, sizeof(fl));
--	ipv6_addr_copy(&fl.fl6_dst, &rxskb->nh.ipv6h->saddr);
--	ipv6_addr_copy(&fl.fl6_src, &rxskb->nh.ipv6h->daddr);
--
--	/* FIXME: calculate checksum, IPv4 also should... */
--
--	fl.proto =3D IPPROTO_DCCP;
--	fl.oif =3D inet6_iif(rxskb);
--	fl.fl_ip_dport =3D dh->dccph_dport;
--	fl.fl_ip_sport =3D dh->dccph_sport;
--	security_req_classify_flow(req, &fl);
--
--	if (!ip6_dst_lookup(NULL, &skb->dst, &fl)) {
--		if (xfrm_lookup(&skb->dst, &fl, NULL, 0) >=3D 0) {
--			ip6_xmit(dccp_v6_ctl_socket->sk, skb, &fl, NULL, 0);
--			DCCP_INC_STATS_BH(DCCP_MIB_OUTSEGS);
--			return;
--		}
--	}
--
--	kfree_skb(skb);
--}
--
- static struct sock *dccp_v6_hnd_req(struct sock *sk,struct sk_buff *skb)
+ 
+-static __u32 dccp_v6_init_sequence(struct sock *sk, struct sk_buff *skb)
++static inline __u32 dccp_v6_init_sequence(struct sock *sk, struct sk_buff *skb)
  {
- 	const struct dccp_hdr *dh =3D dccp_hdr(skb);
+ 	const struct dccp_hdr *dh = dccp_hdr(skb);
+ 
+@@ -76,10 +75,7 @@ static __u32 dccp_v6_init_sequence(struc
+ 						    dh->dccph_dport,
+ 						    dh->dccph_sport);
+ 
+-	return secure_dccp_sequence_number(skb->nh.iph->daddr,
+-					   skb->nh.iph->saddr,
+-					   dh->dccph_dport,
+-					   dh->dccph_sport);
++	return dccp_v4_init_sequence(sk, skb);
+ }
+ 
+ static void dccp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
+@@ -427,7 +423,6 @@ static struct sock *dccp_v6_hnd_req(stru
+ 
+ static int dccp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
+ {
+-	struct dccp_sock dp;
+ 	struct request_sock *req;
+ 	struct dccp_request_sock *dreq;
+ 	struct inet6_request_sock *ireq6;
+@@ -459,9 +454,10 @@ static int dccp_v6_conn_request(struct s
+ 	if (req = NULL)
+ 		goto drop;
+ 
+-	/* FIXME: process options */
++	if (dccp_parse_options(sk, skb))
++		goto drop_and_free;
+ 
+-	dccp_openreq_init(req, &dp, skb);
++	dccp_openreq_init(req, skb);
+ 
+ 	if (security_inet_conn_request(sk, skb, req))
+ 		goto drop_and_free;
+@@ -469,7 +465,6 @@ static int dccp_v6_conn_request(struct s
+ 	ireq6 = inet6_rsk(req);
+ 	ipv6_addr_copy(&ireq6->rmt_addr, &skb->nh.ipv6h->saddr);
+ 	ipv6_addr_copy(&ireq6->loc_addr, &skb->nh.ipv6h->daddr);
+-	req->rcv_wnd	= dccp_feat_default_sequence_window;
+ 	ireq6->pktopts	= NULL;
+ 
+ 	if (ipv6_opt_accepted(sk, skb) ||
