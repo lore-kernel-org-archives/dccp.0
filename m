@@ -1,249 +1,339 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 24 Oct 2006 14:01:23 +0000
-Subject: [PATCH 16/17] [DCCP]: Update code comments for Step 2/3
-Message-Id: <200610241501.23442@strip-the-willow>
+Date: Tue, 24 Oct 2006 14:00:41 +0000
+Subject: [PATCH 11/17] [DCCPv4]: remove forward declarations in ipv4.c
+Message-Id: <200610241500.41433@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Update code comments for Step 2/3
+[DCCPv4]: remove forward declarations in ipv4.c
 
-Sorts out the comments for processing steps 2,3 in section 8.5 of RFC 4340.
-All comments have been updated against this document, and the reference to
-step 2 has been made consistent throughout the files.
+This relates to Arnaldo's announcement in 
+http://www.mail-archive.com/dccp@vger.kernel.org/msg00604.html
+
+Originally this had been part of the Oops fix and is a revised
+variant of 
+ http://www.mail-archive.com/dccp@vger.kernel.org/msg00598.html
+
+
+No code change, merely code reshuffling, with the particular
+objective of having all request_sock_ops close(r) together.
 
 
 Signed-off-by: Gerrit Renker  <gerrit@erg.abdn.ac.uk>
 ------------------------------------------------------------------------------
 
- net/dccp/input.c     |   39 +++++++++++++++++----------------------
- net/dccp/ipv4.c      |   44 ++++++++++++++++++++------------------------
- net/dccp/ipv6.c      |   37 +++++++++++++++++++++++++++++--------
- net/dccp/minisocks.c |   10 +++++-----
- 4 files changed, 71 insertions(+), 59 deletions(-)
+ net/dccp/ipv4.c |  265 +++++++++++++++++++++++++++-----------------------------
+ 1 file changed, 131 insertions(+), 134 deletions(-)
 
 ------------------------------------------------------------------------------
 
-diff --git a/net/dccp/input.c b/net/dccp/input.c
-index 1d24881..4024d2b 100644
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -431,29 +431,24 @@ int dccp_rcv_state_process(struct sock *
- 
- 	/*
- 	 *  Step 3: Process LISTEN state
--	 *  	(Continuing from dccp_v4_do_rcv and dccp_v6_do_rcv)
--	 *
- 	 *     If S.state = LISTEN,
--	 *	  If P.type = Request or P contains a valid Init Cookie
--	 *	  	option,
--	 *	     * Must scan the packet's options to check for an Init
--	 *		Cookie.  Only the Init Cookie is processed here,
--	 *		however; other options are processed in Step 8.  This
--	 *		scan need only be performed if the endpoint uses Init
--	 *		Cookies *
--	 *	     * Generate a new socket and switch to that socket *
--	 *	     Set S := new socket for this port pair
--	 *	     S.state = RESPOND
--	 *	     Choose S.ISS (initial seqno) or set from Init Cookie
--	 *	     Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookie
--	 *	     Continue with S.state = RESPOND
--	 *	     * A Response packet will be generated in Step 11 *
--	 *	  Otherwise,
--	 *	     Generate Reset(No Connection) unless P.type = Reset
--	 *	     Drop packet and return
--	 *
--	 * NOTE: the check for the packet types is done in
--	 *	 dccp_rcv_state_process
-+	 *	 If P.type = Request or P contains a valid Init Cookie option,
-+	 *	      (* Must scan the packet's options to check for Init
-+	 *		 Cookies.  Only Init Cookies are processed here,
-+	 *		 however; other options are processed in Step 8.  This
-+	 *		 scan need only be performed if the endpoint uses Init
-+	 *		 Cookies *)
-+	 *	      (* Generate a new socket and switch to that socket *)
-+	 *	      Set S := new socket for this port pair
-+	 *	      S.state = RESPOND
-+	 *	      Choose S.ISS (initial seqno) or set from Init Cookies
-+	 *	      Initialize S.GAR := S.ISS
-+	 *	      Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
-+	 *	      Continue with S.state = RESPOND
-+	 *	      (* A Response packet will be generated in Step 11 *)
-+	 *	 Otherwise,
-+	 *	      Generate Reset(No Connection) unless P.type = Reset
-+	 *	      Drop packet and return
- 	 */
- 	if (sk->sk_state = DCCP_LISTEN) {
- 		if (dh->dccph_type = DCCP_PKT_REQUEST) {
 diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index cf8af58..32d03e4 100644
+index 89b7306..a6cc844 100644
 --- a/net/dccp/ipv4.c
 +++ b/net/dccp/ipv4.c
-@@ -718,23 +718,23 @@ int dccp_v4_do_rcv(struct sock *sk, stru
- 	/*
- 	 *  Step 3: Process LISTEN state
- 	 *     If S.state = LISTEN,
--	 *	  If P.type = Request or P contains a valid Init Cookie
--	 *	  	option,
--	 *	     * Must scan the packet's options to check for an Init
--	 *		Cookie.  Only the Init Cookie is processed here,
--	 *		however; other options are processed in Step 8.  This
--	 *		scan need only be performed if the endpoint uses Init
--	 *		Cookies *
--	 *	     * Generate a new socket and switch to that socket *
--	 *	     Set S := new socket for this port pair
--	 *	     S.state = RESPOND
--	 *	     Choose S.ISS (initial seqno) or set from Init Cookie
--	 *	     Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookie
--	 *	     Continue with S.state = RESPOND
--	 *	     * A Response packet will be generated in Step 11 *
--	 *	  Otherwise,
--	 *	     Generate Reset(No Connection) unless P.type = Reset
--	 *	     Drop packet and return
-+	 *	 If P.type = Request or P contains a valid Init Cookie option,
-+	 *	      (* Must scan the packet's options to check for Init
-+	 *		 Cookies.  Only Init Cookies are processed here,
-+	 *		 however; other options are processed in Step 8.  This
-+	 *		 scan need only be performed if the endpoint uses Init
-+	 *		 Cookies *)
-+	 *	      (* Generate a new socket and switch to that socket *)
-+	 *	      Set S := new socket for this port pair
-+	 *	      S.state = RESPOND
-+	 *	      Choose S.ISS (initial seqno) or set from Init Cookies
-+	 *	      Initialize S.GAR := S.ISS
-+	 *	      Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
-+	 *	      Continue with S.state = RESPOND
-+	 *	      (* A Response packet will be generated in Step 11 *)
-+	 *	 Otherwise,
-+	 *	      Generate Reset(No Connection) unless P.type = Reset
-+	 *	      Drop packet and return
- 	 *
- 	 * NOTE: the check for the packet types is done in
- 	 *	 dccp_rcv_state_process
-@@ -872,13 +872,9 @@ static int dccp_v4_rcv(struct sk_buff *s
- 			   skb->nh.iph->saddr, dh->dccph_sport,
- 			   skb->nh.iph->daddr, dh->dccph_dport,
- 			   inet_iif(skb));
+@@ -193,37 +193,6 @@ static inline void dccp_do_pmtu_discover
+ 	} /* else let the usual retransmit timer handle it */
+ }
+ 
+-static int dccp_v4_send_response(struct sock *sk, struct request_sock *req,
+-				 struct dst_entry *dst)
+-{
+-	int err = -1;
+-	struct sk_buff *skb;
+-
+-	/* First, grab a route. */
+-	
+-	if (dst = NULL && (dst = inet_csk_route_req(sk, req)) = NULL)
+-		goto out;
+-
+-	skb = dccp_make_response(sk, dst, req);
+-	if (skb != NULL) {
+-		const struct inet_request_sock *ireq = inet_rsk(req);
+-		struct dccp_hdr *dh = dccp_hdr(skb);
+-
+-		dh->dccph_checksum = dccp_v4_checksum(skb, ireq->loc_addr,
+-						      ireq->rmt_addr);
+-		memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
+-		err = ip_build_and_send_pkt(skb, sk, ireq->loc_addr,
+-					    ireq->rmt_addr,
+-					    ireq->opt);
+-		if (err = NET_XMIT_CN)
+-			err = 0;
+-	}
+-
+-out:
+-	dst_release(dst);
+-	return err;
+-}
+-
+ /*
+  * This routine is called by the ICMP module when it gets some sort of error
+  * condition. If err < 0 then the socket should be closed and the error
+@@ -400,95 +369,6 @@ static inline u64 dccp_v4_init_sequence(
+ 					   dccp_hdr(skb)->dccph_sport);
+ }
+ 
+-static struct request_sock_ops dccp_request_sock_ops;
+-
+-int dccp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
+-{
+-	struct inet_request_sock *ireq;
+-	struct dccp_sock dp;
+-	struct request_sock *req;
+-	struct dccp_request_sock *dreq;
+-	const __be32 saddr = skb->nh.iph->saddr;
+-	const __be32 daddr = skb->nh.iph->daddr;
+- 	const __be32 service = dccp_hdr_request(skb)->dccph_req_service;
+-	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
+-	__u8 reset_code = DCCP_RESET_CODE_TOO_BUSY;
+-
+-	/* Never answer to DCCP_PKT_REQUESTs send to broadcast or multicast */
+-	if (((struct rtable *)skb->dst)->rt_flags &
+-	    (RTCF_BROADCAST | RTCF_MULTICAST)) {
+-		reset_code = DCCP_RESET_CODE_NO_CONNECTION;
+-		goto drop;
+-	}
+-
+-	if (dccp_bad_service_code(sk, service)) {
+-		reset_code = DCCP_RESET_CODE_BAD_SERVICE_CODE;
+-		goto drop;
+- 	}
+-	/*
+-	 * TW buckets are converted to open requests without
+-	 * limitations, they conserve resources and peer is
+-	 * evidently real one.
+-	 */
+-	if (inet_csk_reqsk_queue_is_full(sk))
+-		goto drop;
+-
+-	/*
+-	 * Accept backlog is full. If we have already queued enough
+-	 * of warm entries in syn queue, drop request. It is better than
+-	 * clogging syn queue with openreqs with exponentially increasing
+-	 * timeout.
+-	 */
+-	if (sk_acceptq_is_full(sk) && inet_csk_reqsk_queue_young(sk) > 1)
+-		goto drop;
+-
+-	req = reqsk_alloc(&dccp_request_sock_ops);
+-	if (req = NULL)
+-		goto drop;
+-
+-	if (dccp_parse_options(sk, skb))
+-		goto drop_and_free;
+-
+-	dccp_openreq_init(req, &dp, skb);
+-
+-	if (security_inet_conn_request(sk, skb, req))
+-		goto drop_and_free;
+-
+-	ireq = inet_rsk(req);
+-	ireq->loc_addr = daddr;
+-	ireq->rmt_addr = saddr;
+-	req->rcv_wnd	= dccp_feat_default_sequence_window;
+-	ireq->opt	= NULL;
 -
 -	/* 
-+	/*
- 	 * Step 2:
--	 * 	If no socket ...
--	 *		Generate Reset(No Connection) unless P.type = Reset
--	 *		Drop packet and return
--	 */
-+	 * 	If no socket ...				      */
- 	if (sk = NULL) {
- 		dccp_pr_debug("failed to look up flow ID in table and "
- 			      "get corresponding socket\n");
-@@ -927,7 +923,7 @@ no_dccp_socket:
- 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
- 		goto discard_it;
- 	/*
--	 * Step 2:
-+	 * Step 2: If no socket ...
- 	 *		Generate Reset(No Connection) unless P.type = Reset
- 	 *		Drop packet and return
- 	 */
-diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
-index c122703..17ddd8b 100644
---- a/net/dccp/ipv6.c
-+++ b/net/dccp/ipv6.c
-@@ -483,10 +483,10 @@ static int dccp_v6_conn_request(struct s
- 	/*
- 	 * Step 3: Process LISTEN state
- 	 *
+-	 * Step 3: Process LISTEN state
+-	 *
 -	 * Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookie
-+	 *   Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
- 	 *
+-	 *
 -	 * In fact we defer setting S.GSR, S.SWL, S.SWH to
 -	 * dccp_create_openreq_child.
+-	 */
+-	dreq = dccp_rsk(req);
+-	dreq->dreq_isr	   = dcb->dccpd_seq;
+-	dreq->dreq_iss	   = dccp_v4_init_sequence(sk, skb);
+-	dreq->dreq_service = service;
+-
+-	if (dccp_v4_send_response(sk, req, NULL))
+-		goto drop_and_free;
+-
+-	inet_csk_reqsk_queue_hash_add(sk, req, DCCP_TIMEOUT_INIT);
+-	return 0;
+-
+-drop_and_free:
+-	reqsk_free(req);
+-drop:
+-	DCCP_INC_STATS_BH(DCCP_MIB_ATTEMPTFAILS);
+-	dcb->dccpd_reset_code = reset_code;
+-	return -1;
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_v4_conn_request);
+-
+ /*
+  * The three way handshake has completed - we got a valid ACK or DATAACK -
+  * now create the new socket.
+@@ -640,6 +520,42 @@ static struct dst_entry* dccp_v4_route_s
+ 	return &rt->u.dst;
+ }
+ 
++static int dccp_v4_send_response(struct sock *sk, struct request_sock *req,
++				 struct dst_entry *dst)
++{
++	int err = -1;
++	struct sk_buff *skb;
++
++	/* First, grab a route. */
++
++	if (dst = NULL && (dst = inet_csk_route_req(sk, req)) = NULL)
++		goto out;
++
++	skb = dccp_make_response(sk, dst, req);
++	if (skb != NULL) {
++		const struct inet_request_sock *ireq = inet_rsk(req);
++		struct dccp_hdr *dh = dccp_hdr(skb);
++
++		dh->dccph_checksum = dccp_v4_checksum(skb, ireq->loc_addr,
++						      ireq->rmt_addr);
++		memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
++		err = ip_build_and_send_pkt(skb, sk, ireq->loc_addr,
++					    ireq->rmt_addr,
++					    ireq->opt);
++		if (err = NET_XMIT_CN)
++			err = 0;
++	}
++
++out:
++	dst_release(dst);
++	return err;
++}
++
++static void dccp_v4_reqsk_destructor(struct request_sock *req)
++{
++	kfree(inet_rsk(req)->opt);
++}
++
+ static void dccp_v4_ctl_send_reset(struct sk_buff *rxskb)
+ {
+ 	int err;
+@@ -708,6 +624,101 @@ out:
+ 	 dst_release(dst);
+ }
+ 
++static struct request_sock_ops dccp_request_sock_ops = {
++	.family		= PF_INET,
++	.obj_size	= sizeof(struct dccp_request_sock),
++	.rtx_syn_ack	= dccp_v4_send_response,
++	.send_ack	= dccp_reqsk_send_ack,
++	.destructor	= dccp_v4_reqsk_destructor,
++	.send_reset	= dccp_v4_ctl_send_reset,
++};
++
++int dccp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
++{
++	struct inet_request_sock *ireq;
++	struct dccp_sock dp;
++	struct request_sock *req;
++	struct dccp_request_sock *dreq;
++	const __be32 saddr = skb->nh.iph->saddr;
++	const __be32 daddr = skb->nh.iph->daddr;
++ 	const __be32 service = dccp_hdr_request(skb)->dccph_req_service;
++	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
++	__u8 reset_code = DCCP_RESET_CODE_TOO_BUSY;
++
++	/* Never answer to DCCP_PKT_REQUESTs send to broadcast or multicast */
++	if (((struct rtable *)skb->dst)->rt_flags &
++	    (RTCF_BROADCAST | RTCF_MULTICAST)) {
++		reset_code = DCCP_RESET_CODE_NO_CONNECTION;
++		goto drop;
++	}
++
++	if (dccp_bad_service_code(sk, service)) {
++		reset_code = DCCP_RESET_CODE_BAD_SERVICE_CODE;
++		goto drop;
++ 	}
++	/*
++	 * TW buckets are converted to open requests without
++	 * limitations, they conserve resources and peer is
++	 * evidently real one.
++	 */
++	if (inet_csk_reqsk_queue_is_full(sk))
++		goto drop;
++
++	/*
++	 * Accept backlog is full. If we have already queued enough
++	 * of warm entries in syn queue, drop request. It is better than
++	 * clogging syn queue with openreqs with exponentially increasing
++	 * timeout.
++	 */
++	if (sk_acceptq_is_full(sk) && inet_csk_reqsk_queue_young(sk) > 1)
++		goto drop;
++
++	req = reqsk_alloc(&dccp_request_sock_ops);
++	if (req = NULL)
++		goto drop;
++
++	if (dccp_parse_options(sk, skb))
++		goto drop_and_free;
++
++	dccp_openreq_init(req, &dp, skb);
++
++	if (security_inet_conn_request(sk, skb, req))
++		goto drop_and_free;
++
++	ireq = inet_rsk(req);
++	ireq->loc_addr = daddr;
++	ireq->rmt_addr = saddr;
++	req->rcv_wnd	= dccp_feat_default_sequence_window;
++	ireq->opt	= NULL;
++
++	/*
++	 * Step 3: Process LISTEN state
++	 *
++	 *   Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
++	 *
 +	 *   In fact we defer setting S.GSR, S.SWL, S.SWH to
 +	 *   dccp_create_openreq_child.
- 	 */
- 	dreq = dccp_rsk(req);
- 	dreq->dreq_isr	   = dcb->dccpd_seq;
-@@ -756,6 +756,30 @@ static int dccp_v6_do_rcv(struct sock *s
- 		return 0;
- 	}
- 
-+	/*
-+	 *  Step 3: Process LISTEN state
-+	 *     If S.state = LISTEN,
-+	 *	 If P.type = Request or P contains a valid Init Cookie option,
-+	 *	      (* Must scan the packet's options to check for Init
-+	 *		 Cookies.  Only Init Cookies are processed here,
-+	 *		 however; other options are processed in Step 8.  This
-+	 *		 scan need only be performed if the endpoint uses Init
-+	 *		 Cookies *)
-+	 *	      (* Generate a new socket and switch to that socket *)
-+	 *	      Set S := new socket for this port pair
-+	 *	      S.state = RESPOND
-+	 *	      Choose S.ISS (initial seqno) or set from Init Cookies
-+	 *	      Initialize S.GAR := S.ISS
-+	 *	      Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
-+	 *	      Continue with S.state = RESPOND
-+	 *	      (* A Response packet will be generated in Step 11 *)
-+	 *	 Otherwise,
-+	 *	      Generate Reset(No Connection) unless P.type = Reset
-+	 *	      Drop packet and return
-+	 *
-+	 * NOTE: the check for the packet types is done in
-+	 *	 dccp_rcv_state_process
 +	 */
- 	if (sk->sk_state = DCCP_LISTEN) {
- 		struct sock *nsk = dccp_v6_hnd_req(sk, skb);
++	dreq = dccp_rsk(req);
++	dreq->dreq_isr	   = dcb->dccpd_seq;
++	dreq->dreq_iss	   = dccp_v4_init_sequence(sk, skb);
++	dreq->dreq_service = service;
++
++	if (dccp_v4_send_response(sk, req, NULL))
++		goto drop_and_free;
++
++	inet_csk_reqsk_queue_hash_add(sk, req, DCCP_TIMEOUT_INIT);
++	return 0;
++
++drop_and_free:
++	reqsk_free(req);
++drop:
++	DCCP_INC_STATS_BH(DCCP_MIB_ATTEMPTFAILS);
++	dcb->dccpd_reset_code = reset_code;
++	return -1;
++}
++EXPORT_SYMBOL_GPL(dccp_v4_conn_request);
++
+ int dccp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct dccp_hdr *dh = dccp_hdr(skb);
+@@ -977,20 +988,6 @@ static int dccp_v4_init_sock(struct sock
+ 	return err;
+ }
  
-@@ -822,10 +846,7 @@ static int dccp_v6_rcv(struct sk_buff **
- 			    inet6_iif(skb));
- 	/*
- 	 * Step 2:
--	 * 	If no socket ...
--	 *		Generate Reset(No Connection) unless P.type = Reset
--	 *		Drop packet and return
--	 */
-+	 * 	If no socket ...				      */
- 	if (sk = NULL) {
- 		dccp_pr_debug("failed to look up flow ID in table and "
- 			      "get corresponding socket\n");
-@@ -870,7 +891,7 @@ no_dccp_socket:
- 	if (!xfrm6_policy_check(NULL, XFRM_POLICY_IN, skb))
- 		goto discard_it;
- 	/*
--	 * Step 2:
-+	 * Step 2: If no socket ...
- 	 *		Generate Reset(No Connection) unless P.type = Reset
- 	 *		Drop packet and return
- 	 */
-diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
-index 9045438..75fa479 100644
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -97,8 +97,8 @@ struct sock *dccp_create_openreq_child(s
- 	/*
- 	 * Step 3: Process LISTEN state
- 	 *
--	 * // Generate a new socket and switch to that socket
--	 * Set S := new socket for this port pair
-+	 *   (* Generate a new socket and switch to that socket *)
-+	 *   Set S := new socket for this port pair
- 	 */
- 	struct sock *newsk = inet_csk_clone(sk, req, GFP_ATOMIC);
- 
-@@ -147,9 +147,9 @@ out_free:
- 		/*
- 		 * Step 3: Process LISTEN state
- 		 *
--		 *	Choose S.ISS (initial seqno) or set from Init Cookie
--		 *	Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init
--		 *	Cookie
-+		 *    Choose S.ISS (initial seqno) or set from Init Cookies
-+		 *    Initialize S.GAR := S.ISS
-+		 *    Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
- 		 */
- 
- 		/* See dccp_v4_conn_request */
+-static void dccp_v4_reqsk_destructor(struct request_sock *req)
+-{
+-	kfree(inet_rsk(req)->opt);
+-}
+-
+-static struct request_sock_ops dccp_request_sock_ops = {
+-	.family		= PF_INET,
+-	.obj_size	= sizeof(struct dccp_request_sock),
+-	.rtx_syn_ack	= dccp_v4_send_response,
+-	.send_ack	= dccp_reqsk_send_ack,
+-	.destructor	= dccp_v4_reqsk_destructor,
+-	.send_reset	= dccp_v4_ctl_send_reset,
+-};
+-
+ static struct timewait_sock_ops dccp_timewait_sock_ops = {
+ 	.twsk_obj_size	= sizeof(struct inet_timewait_sock),
+ };
 
 
+	
