@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 26 Oct 2006 01:02:20 +0000
+From: Hagen Paul Pfeifer <hagen@jauu.net>
+Date: Thu, 26 Oct 2006 01:02:33 +0000
 Subject: Re: mmap
-Message-Id: <5640c7e00610251802t3a476782kc0ef621fed65cddf@mail.gmail.com>
+Message-Id: <20061026010233.GA28679@c3po.0xdef.net>
 List-Id: <dccp.vger.kernel.org>
 References: <92b224de0610251748j1bb6f094q4099d47e236ecd8@mail.gmail.com>
 In-Reply-To: <92b224de0610251748j1bb6f094q4099d47e236ecd8@mail.gmail.com>
@@ -10,29 +10,25 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 10/26/06, Sudharsan Rangarajan <sudharsan.r@gmail.com> wrote:
-> Hi everyone,
-> I would like to look at the mmap implementation for dccp.  I looked at
-> http://wlug.org.nz/DCCP to get the source, but cant seem to find it!
-> Can someone please help?
->
-> Thanks,
-> Sudharsan
+* Sudharsan Rangarajan | 2006-10-25 17:48:41 [-0700]:
 
-It's at http://research.wand.net.nz/software/dccp.php
+>Hi everyone,
+>I would like to look at the mmap implementation for dccp.  I looked at
+>http://wlug.org.nz/DCCP to get the source, but cant seem to find it!
+>Can someone please help?
 
-If you have questions then ask me although it's been a while since I
-looked at the code.
+DCCP-Sockets implement no mmap operations, ENODEV is returned if you use it!
 
-It is not part of the kernel, but feel free to pick the mmap parts out
-and put them forward for merging!
+Take a look at you kernel-sources for dccp implementation details:
+e.g. /usr/src/linux-2.6/net/dccp/*
 
-Ian
+>Thanks,
+>Sudharsan
+
+HGN
+
+
 -- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+In the manual it said: 'For use with Windows95, 98, or better.' So I 
+installed LINUX...
+unbekannter User
