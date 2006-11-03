@@ -1,266 +1,77 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 27 Nov 2006 18:49:51 +0000
-Subject: [PATCH 1/3]: Document boundaries and limits of TFRC lookup table
-Message-Id: <200611271849.51953@strip-the-willow>
+Date: Fri, 03 Nov 2006 14:32:16 +0000
+Subject: [PATCH 1/6] dccp: The return of Unload Hack
+Message-Id: <200611031432.17083@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Document boundaries and limits of TFRC lookup table
+[DCCP]: The return of Unload Hack
 
-This adds documentation for the TCP Reno throughput equation which is at
-the heart of the TFRC sending rate / loss rate calculations.  
-It spells out precisely how the values were determined and what they mean.
-The equations were derived through reverse engineering and found to be
-fully accurate (verified using test programs).
+At present it is not possible to unload any of the dccp_ipv{4,6} modules -
+not even with force.
 
-As a result of this,
-   * the pre- and BUG conditions were simplified
-   * warnings were added to highlight unsatisfactory resolution
-   * the reverse-lookup code was not consistent with the index generation
-     (returns ctr, but should really return (ctr + 1)); this caused an 
-     average error of about 1.12% - fixed
-   * more warnings against error cases in reverse-lookup
-   * adds warnings in both functions against values which are below the
-     resolution (0.0001) of the lookup table, since this results in 
-     exponentially-growing errors
-   * the reverse-lookup code now differentiates between a genuine `p=0'
-     and a `low p' due to unsufficient table granularity (with warning msg)
+The reason is that the control socket is not released at module exit; this known
+problem had been fixed up to 2.6.17-rc1 by a solution known as the Unload Hack.
+
+This patch resolves the problem by releasing the control sockets for the v4/v6
+modules in the module exit function. [ The test whether ctl_sock != NULL has
+been deleted since __sock_create (via inet_csk_ctl_sock_create) returns an
+error code different from 0 whenever sock != NULL. ]
+
+There may be more elegant solutions, but this one is simple and  works.
+An `under construction' warning is added, that it is currently not advisable
+to unload the dccp_ipv{4,6} modules.
+
+Note: This solution mirrors the one in SCTP, which can also only be ejected
+      using rmmod --force: maybe there is room for a generic solution to both,
+      since the key problem in both is in releasing the control socket.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/lib/tfrc_equation.c |  172 +++++++++++++++++++++----------------
- 1 file changed, 100 insertions(+), 72 deletions(-)
+ net/dccp/ipv4.c |    5 +++++
+ net/dccp/ipv6.c |    2 ++
+ 2 files changed, 7 insertions(+)
 
---- a/net/dccp/ccids/lib/tfrc_equation.c
-+++ b/net/dccp/ccids/lib/tfrc_equation.c
-@@ -18,10 +18,57 @@
- #include "tfrc.h"
+
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -1065,6 +1065,7 @@ static int __init dccp_v4_init(void)
+ 				       SOCK_DCCP, IPPROTO_DCCP);
+ 	if (err)
+ 		goto out_unregister_protosw;
++	__unsafe(THIS_MODULE);		/* due to unload hack in dccp_v4_exit */
+ out:
+ 	return err;
+ out_unregister_protosw:
+@@ -1077,6 +1078,10 @@ out_proto_unregister:
  
- #define TFRC_CALC_X_ARRSIZE 500
-+#define TFRC_CALC_X_SPLIT   50000	/* 0.05 * 1000000, details below */
-+#define TFRC_SMALLEST_P	    TFRC_CALC_X_SPLIT/TFRC_CALC_X_ARRSIZE
- 
--#define TFRC_CALC_X_SPLIT 50000
--/* equivalent to 0.05 */
-+/*
-+  TFRC TCP Reno Throughput Equation Lookup Table for f(p)
- 
-+  The following two-column lookup table implements part of the TCP throughput
-+  equation from [RFC 3448, sec. 3.1]. As described in section 8 of that paper,
-+  it can be presented in the following format:
-+
-+        	     s
-+	X_calc =  ---------
-+	     	   R * f(p)
-+
-+  where s is the packet size in bytes, R the current RTT estimate, p the
-+  current estimate of the loss rate, and f(p) is given for 0 < p <= 1 by:
-+
-+	f(p) =  sqrt(2*p/3) + 12 * sqrt(3*p/8) *  (p + 32*p^3)
-+
-+  Since this is kernel code, floating-point arithmetic is avoided in favour of
-+  integer arithmetic. This means that nearly all fractional parameters are
-+  scaled by 1000000:
-+  	* the parameters p and R
-+	* the return result f(p)
-+  The lookup table therefore actually tabulates the following function g(q):
-+
-+  	g(q) = 1000000 * f(q/1000000)
-+
-+  Hence, when p <= 1, q must be less than or equal to 1000000. To achieve finer
-+  granularity for the practically more relevant case of small values of p (up to
-+  5%), the second column is used; the first one ranges up to 100%.  This split
-+  corresponds to the value of q = TFRC_CALC_X_SPLIT. At the same time this also
-+  determines the smallest resolution TFRC_SMALLEST_P.
-+
-+  The entire table is generated by:
-+	for(i=0; i < TFRC_CALC_X_ARRSIZE; i++) {
-+		lookup[i][0] = g((i+1) * 1000000/TFRC_CALC_X_ARRSIZE);
-+		lookup[i][1] = g((i+1) * TFRC_CALC_X_SPLIT/TFRC_CALC_X_ARRSIZE);
-+	}
-+
-+  With the given configuration, we have, with M =TFRC_CALC_X_ARRSIZE-1,
-+    lookup[0][0] = g(1000000/TFRC_CALC_X_ARRSIZE) = 1000000 * f(0.2%)
-+    lookup[M][0] = g(1000000)			  = 1000000 * f(100%)
-+    lookup[0][1] = g(TFRC_SMALLEST_P)		  = 1000000 * f(0.01%)
-+    lookup[M][1] = g(TFRC_CALC_X_SPLIT)		  = 1000000 * f(5%)
-+
-+  In summary, the two columns represent f(p) for the following ranges:
-+   * The first column is for   0.002  <= p <= 1.0
-+   * The second column is for  0.0001 <= p <= 0.05
-+  Where the columns overlap, the second (finer-grained) is given preference.
-+ */
- static const u32 tfrc_calc_x_lookup[TFRC_CALC_X_ARRSIZE][2] = {
- 	{     37172,   8172 },
- 	{     53499,  11567 },
-@@ -525,116 +572,97 @@ static const u32 tfrc_calc_x_lookup[TFRC
- 	{ 243315981, 271305 }
- };
- 
--/* Calculate the send rate as per section 3.1 of RFC3448
-- 
--Returns send rate in bytes per second
--
--Integer maths and lookups are used as not allowed floating point in kernel
--
--The function for Xcalc as per section 3.1 of RFC3448 is:
--
--X =                            s
--     -------------------------------------------------------------
--     R*sqrt(2*b*p/3) + (t_RTO * (3*sqrt(3*b*p/8) * p * (1+32*p^2)))
--
--where 
--X is the trasmit rate in bytes/second
--s is the packet size in bytes
--R is the round trip time in seconds
--p is the loss event rate, between 0 and 1.0, of the number of loss events 
--  as a fraction of the number of packets transmitted
--t_RTO is the TCP retransmission timeout value in seconds
--b is the number of packets acknowledged by a single TCP acknowledgement
--
--we can assume that b = 1 and t_RTO is 4 * R. With this the equation becomes:
--
--X =                            s
--     -----------------------------------------------------------------------
--     R * sqrt(2 * p / 3) + (12 * R * (sqrt(3 * p / 8) * p * (1 + 32 * p^2)))
--
--
--which we can break down into:
--
--X =     s
--     --------
--     R * f(p)
--
--where f(p) = sqrt(2 * p / 3) + (12 * sqrt(3 * p / 8) * p * (1 + 32 * p * p))
--
--Function parameters:
--s - bytes
--R - RTT in usecs
--p - loss rate (decimal fraction multiplied by 1,000,000)
--
--Returns Xcalc in bytes per second
--
--DON'T alter this code unless you run test cases against it as the code
--has been manipulated to stop underflow/overlow.
--
--*/
-+/**
-+ * tfrc_calc_x - Calculate the send rate as per section 3.1 of RFC3448
-+ *
-+ *  @s: packet size          in bytes
-+ *  @R: RTT                  scaled by 1000000   (i.e., microseconds)
-+ *  @p: loss ratio estimate  scaled by 1000000
-+ *  Returns X_calc           in bytes per second (not scaled).
-+ *
-+ * NOTE: DO NOT alter this code unless you run test cases against it,
-+ *       as the code has been optimized to stop underflow/overflow.
-+ */
- u32 tfrc_calc_x(u16 s, u32 R, u32 p)
+ static void __exit dccp_v4_exit(void)
  {
- 	int index;
- 	u32 f;
- 	u64 tmp1, tmp2;
++	/* FIXME: Unload Hack - must release control socket to unload.
++	 * There should be a better solution to release the control socket,
++	 * until this is resolved, please keep the above __unsafe warning. */
++	sock_release(dccp_v4_ctl_socket);
+ 	inet_unregister_protosw(&dccp_v4_protosw);
+ 	inet_del_protocol(&dccp_v4_protocol, IPPROTO_DCCP);
+ 	proto_unregister(&dccp_v4_prot);
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -1237,6 +1237,7 @@ static int __init dccp_v6_init(void)
+ 				       SOCK_DCCP, IPPROTO_DCCP);
+ 	if (err != 0)
+ 		goto out_unregister_protosw;
++	__unsafe(THIS_MODULE);		/* due to unload hack in dccp_v6_exit */
+ out:
+ 	return err;
+ out_unregister_protosw:
+@@ -1249,6 +1250,7 @@ out_unregister_proto:
  
--	DCCP_BUG_ON(R = 0);	/* RTT can't be zero or else divide by zero */
--
--	if (p < TFRC_CALC_X_SPLIT)
--		index = (p / (TFRC_CALC_X_SPLIT / TFRC_CALC_X_ARRSIZE)) - 1;
--	else
--		index = (p / (1000000 / TFRC_CALC_X_ARRSIZE)) - 1;
-+	/* check against invalid parameters and divide-by-zero   */
-+	DCCP_BUG_ON(p >  1000000);	/* p must not exceed 100%   */
-+	DCCP_BUG_ON(p = 0);		/* f(0) = 0, divide by zero */
-+	if(R = 0) {			/* possible  divide by zero */
-+		DCCP_CRIT("WARNING: RTT is 0, returning maximum X_calc.");
-+		return ~0U;
-+	}
-+
-+	if (p <= TFRC_CALC_X_SPLIT) 	{	      /* 0.0000 < p <= 0.05   */
-+		if (p < TFRC_SMALLEST_P) {	      /* 0.0000 < p <  0.0001 */
-+			DCCP_WARN("Value of p (%d) below resolution. "
-+				  "Substituting %d\n", p, TFRC_SMALLEST_P);
-+			index = 0;
-+		} else 				      /* 0.0001 <= p <= 0.05  */
-+			index =  p/TFRC_SMALLEST_P - 1;
- 
--	if (index < 0)
--		/* p should be 0 unless there is a bug in my code */
--		index = 0;
-+ 		f = tfrc_calc_x_lookup[index][1];
- 
--	BUG_ON(index >= TFRC_CALC_X_ARRSIZE);
-+	} else {	 			      /* 0.05   <  p <= 1.00  */
-+		index = p/(1000000/TFRC_CALC_X_ARRSIZE) - 1;
- 
--	if (p >= TFRC_CALC_X_SPLIT)
- 		f = tfrc_calc_x_lookup[index][0];
--	else
--		f = tfrc_calc_x_lookup[index][1];
-+	}
- 
-+	/* The following computes X = s/(R*f(p)) in bytes per second. Since f(p)
-+	 * and R are both scaled by 1000000, we need to multiply by 1000000^2.
-+	 * => DO NOT alter this unless you test against overflow on 32 bit   */
- 	tmp1 = ((u64)s * 100000000);
- 	tmp2 = ((u64)R * (u64)f);
- 	do_div(tmp2, 10000);
- 	do_div(tmp1, tmp2); 
--	/* Don't alter above math unless you test due to overflow on 32 bit */
- 
- 	return (u32)tmp1; 
- }
- 
- EXPORT_SYMBOL_GPL(tfrc_calc_x);
- 
--/*
-- * args: fvalue - function value to match
-- * returns: p closest to that value
-+/**
-+ *  tfrc_calc_x_reverse_lookup  -  try to find p given f(p)
-+ *  @fvalue: function value to match, scaled by 1000000
-  *
-- * both fvalue and p are multiplied by 1,000,000 to use ints
-+ *  Returns closest match for p, also scaled by 1000000
-  */
- u32 tfrc_calc_x_reverse_lookup(u32 fvalue)
+ static void __exit dccp_v6_exit(void)
  {
- 	int ctr = 0;
- 	int small;
- 
--	if (fvalue < tfrc_calc_x_lookup[0][1])
-+	if (fvalue = 0)	/* f(p) = 0  <=> p = 0 */
- 		return 0;
- 
-+	/* Error cases. */
-+	if (fvalue < tfrc_calc_x_lookup[0][1]) {
-+		DCCP_WARN("fvalue %d smaller than resolution\n", fvalue);
-+		return tfrc_calc_x_lookup[0][1];
-+	}
-+	if (fvalue > tfrc_calc_x_lookup[TFRC_CALC_X_ARRSIZE - 1][0]) {
-+		DCCP_WARN("fvalue %d exceeds bounds!\n", fvalue);
-+		return 1000000;
-+	}
-+
- 	if (fvalue <= tfrc_calc_x_lookup[TFRC_CALC_X_ARRSIZE - 1][1])
- 		small = 1;
--	else if (fvalue > tfrc_calc_x_lookup[TFRC_CALC_X_ARRSIZE - 1][0])
--		return 1000000;
- 	else
- 		small = 0;
- 
-+
- 	while (fvalue > tfrc_calc_x_lookup[ctr][small])
- 		ctr++;
- 
- 	if (small)
--		return TFRC_CALC_X_SPLIT * ctr / TFRC_CALC_X_ARRSIZE;
-+		return (ctr + 1) * TFRC_CALC_X_SPLIT/TFRC_CALC_X_ARRSIZE;
- 	else
--		return 1000000 * ctr / TFRC_CALC_X_ARRSIZE;
-+		return (ctr + 1) * 1000000/TFRC_CALC_X_ARRSIZE;
- }
- 
- EXPORT_SYMBOL_GPL(tfrc_calc_x_reverse_lookup);
++	sock_release(dccp_v6_ctl_socket);  /* FIXME: see note in dccp_v4_exit */
+ 	inet6_del_protocol(&dccp_v6_protocol, IPPROTO_DCCP);
+ 	inet6_unregister_protosw(&dccp_v6_protosw);
+ 	proto_unregister(&dccp_v6_prot);
