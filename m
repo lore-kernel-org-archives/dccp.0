@@ -1,30 +1,23 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 27 Nov 2006 10:16:14 +0000
-Subject: Re: [PATCH v2 - RESEND]: [CCID 3]: Track RX/TX packet size `s' using moving-average
-Message-Id: <200611271016.15575@strip-the-willow>
+From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
+Date: Fri, 10 Nov 2006 13:55:08 +0000
+Subject: Re: [PATCH] dccp: remove module exit functions
+Message-Id: <39e6f6c70611100555u6e2a4e0fq8dba12557f40139b@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <39e6f6c70611260959g57f43067p979cb308123f1c5b@mail.gmail.com>
-In-Reply-To: <39e6f6c70611260959g57f43067p979cb308123f1c5b@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting Arnaldo Carvalho de Melo:
-|  On 11/23/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-|  
-|  > @@ -1022,6 +1047,9 @@ static void ccid3_hc_rx_packet_recv(stru
-|  >         if (DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK)
-|  >                 return;
-|  >
-|  > +       payload_size = skb->len - dccp_hdr(skb)->dccph_doff * 4;
-|  
-|  Should't we use (skb->len - dccp_hdr_len(skb)) to take into account
-|  the different DCCP packet size header lengths? We can get payload in
-|  other kinds of packets than just DATA, and even on DATAACK we should
-|  not compute the sizeof(struct dccp_hdr_ack_bits) bytes into the
-|  payload, no?
-It would do the same. The above code is in the receiver side, dccph_doff*4 gives 
-the header length including options. So for calculating the payload size it is not
-necessary (although it is possible that payload_size = 0).
-Or did you mean to swap the above statements?
+On 11/10/06, James Morris <jmorris@namei.org> wrote:
+> The dccp ipv4 & ipv6 modules cannot be unloaded, as their control sockets
+> each maintain a couple of module references.  So, it seems like a good
+> idea to just remove the module exit functions completely.
+>
+> Please review.
+
+Well, I have a patch in the DCCP backlog that uses it, ressurecting
+the unload hack, for development purposes being able to destroy the
+control sockets allowing module removal is something the DCCP
+developers want :)
+
+- Arnaldo
