@@ -1,25 +1,21 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Tue, 28 Nov 2006 01:08:55 +0000
-Subject: Re: [PATCHES 0/3][DCCP]: further ccid3 work
-Message-Id: <20061128010854.GA4029@mandriva.com>
+Date: Fri, 10 Nov 2006 15:25:41 +0000
+Subject: [PATCH 0/10] DCCP patch queue merging
+Message-Id: <20061110152541.GD23311@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20061127223531.GA11605@mandriva.com>
-In-Reply-To: <20061127223531.GA11605@mandriva.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Mon, Nov 27, 2006 at 05:04:59PM -0800, David Miller wrote:
-> From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-> Date: Mon, 27 Nov 2006 20:35:32 -0200
-> 
-> > 	Please consider pulling from:
-> > 
-> > master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.20.git
-> 
-> All looks good, pulled and pushed out, thanks a lot Arnaldo.
+Hi David,
 
-Thanks dude, it has been a good day I'd say :-)
+	Please consider pulling from:
+
+master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.20.git
+
+	This is the first stab at merging the patch queue maintained
+by Gerrit while I was busy, thanks Gerrit! I'll go over the other
+patches RSN.
 
 - Arnaldo
