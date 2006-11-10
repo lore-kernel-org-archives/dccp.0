@@ -1,114 +1,235 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 27 Nov 2006 18:49:59 +0000
-Subject: [PATCH 2/3]: Avoid masking of low-resolution errors
-Message-Id: <200611271849.59609@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Fri, 10 Nov 2006 22:45:50 +0000
+Subject: [PATCH 2/3][DCCP]: Update code comments for Step 2/3
+Message-Id: <20061110224549.GV23311@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Avoid masking of low-resolution errors
+Sorts out the comments for processing steps 2,3 in section 8.5 of RFC 4340.
+All comments have been updated against this document, and the reference to step
+2 has been made consistent throughout the files.
 
- This patch makes handling of all TFRC table lookup resolution errors local
- to the TFRC library and removes such checks/warnings from calling code. 
-
- A warning message is printed out whenever the value of `p' is so small that
- it falls below the resolution of the lookup table. 
-
-
-Justification: 
---------------
- The TFRC code uses a lookup table which has a bounded resolution.
- The lowest possible value of the loss event rate `p' which can be
- resolved is currently 0.0001.  Substituting this lower threshold for
- p when p is less than 0.0001 results in a huge, exponentially-growing
- error.  Currently the solution is to use an (arbitrary) value
-     TFRC_SMALLEST_P  =   40 * 1E-6   =   0.00004
- and to consider all values below this value as `virtually zero'.  Due to
- the exponentially growing resolution error, this is not a good idea, since
- it hides the fact that the table can not resolve practically occurring cases.
- Furthermore, at p = TFRC_SMALLEST_P, the error is still as large as 58.1%!
-
- The first half to resolve this problem has been implemented in the previous patch,
- which will print warning messages whenever p is less than the given minimal resolution.
- If such messages are observed, it is a better solution to take this as an indication
- that the lookup table needs to be re-engineered (which is trivial to do, the table
- can be computed using a tiny C program).
-
-Detailed Changelog:
--------------------
- This patch therefore completes the protection against masking table-lookup resolution
- errors by 
-   * not substituting 0 if the value can not be resolved
-   * not using an arbitrary threshold such as TFRC_SMALLEST_P
-   * makes handling all TFRC resolution errors local to the TFRC library
-   * removes unnecessary test whether X_calc is 'infinity' due to p=0 -- this condition
-     is already caught by tfrc_calc_x() 
-   * remove setting ccid3hctx_p = TFRC_SMALLEST_P in ccid3_hc_tx_packet_recv since this
-     is now done by the TFRC library
-   * updated BUG_ON test in ccid3_hc_tx_no_feedback_timer to take into account that p now
-     is either 0 (and then X_calc is irrelevant), or it is > 0; since the handling of
-     TFRC_SMALLEST_P is now taken care of in the tfrc library
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/ccid3.c |   18 ++++--------------
- net/dccp/ccids/ccid3.h |    2 --
- 2 files changed, 4 insertions(+), 16 deletions(-)
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -137,8 +137,7 @@ static void ccid3_hc_tx_update_x(struct 
+------------------------------------------------------------------------------
+
+ input.c     |   38 +++++++++++++++++---------------------
+ ipv4.c      |   38 ++++++++++++++++++--------------------
+ ipv6.c      |   33 ++++++++++++++++++++++++++++-----
+ minisocks.c |   10 +++++-----
+ 4 files changed, 68 insertions(+), 51 deletions(-)
+
+------------------------------------------------------------------------------
+
+diff --git a/net/dccp/input.c b/net/dccp/input.c
+index 1d24881..97ccdc3 100644
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -431,29 +431,25 @@ int dccp_rcv_state_process(struct sock *
  
- 	DCCP_BUG_ON(hctx->ccid3hctx_rtt = 0);
+ 	/*
+ 	 *  Step 3: Process LISTEN state
+-	 *  	(Continuing from dccp_v4_do_rcv and dccp_v6_do_rcv)
+ 	 *
+ 	 *     If S.state = LISTEN,
+-	 *	  If P.type = Request or P contains a valid Init Cookie
+-	 *	  	option,
+-	 *	     * Must scan the packet's options to check for an Init
+-	 *		Cookie.  Only the Init Cookie is processed here,
+-	 *		however; other options are processed in Step 8.  This
+-	 *		scan need only be performed if the endpoint uses Init
+-	 *		Cookies *
+-	 *	     * Generate a new socket and switch to that socket *
+-	 *	     Set S := new socket for this port pair
+-	 *	     S.state = RESPOND
+-	 *	     Choose S.ISS (initial seqno) or set from Init Cookie
+-	 *	     Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookie
+-	 *	     Continue with S.state = RESPOND
+-	 *	     * A Response packet will be generated in Step 11 *
+-	 *	  Otherwise,
+-	 *	     Generate Reset(No Connection) unless P.type = Reset
+-	 *	     Drop packet and return
+-	 *
+-	 * NOTE: the check for the packet types is done in
+-	 *	 dccp_rcv_state_process
++	 *	 If P.type = Request or P contains a valid Init Cookie option,
++	 *	      (* Must scan the packet's options to check for Init
++	 *		 Cookies.  Only Init Cookies are processed here,
++	 *		 however; other options are processed in Step 8.  This
++	 *		 scan need only be performed if the endpoint uses Init
++	 *		 Cookies *)
++	 *	      (* Generate a new socket and switch to that socket *)
++	 *	      Set S := new socket for this port pair
++	 *	      S.state = RESPOND
++	 *	      Choose S.ISS (initial seqno) or set from Init Cookies
++	 *	      Initialize S.GAR := S.ISS
++	 *	      Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init
++	 *	      Cookies Continue with S.state = RESPOND
++	 *	      (* A Response packet will be generated in Step 11 *)
++	 *	 Otherwise,
++	 *	      Generate Reset(No Connection) unless P.type = Reset
++	 *	      Drop packet and return
+ 	 */
+ 	if (sk->sk_state = DCCP_LISTEN) {
+ 		if (dh->dccph_type = DCCP_PKT_REQUEST) {
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index d75ce8c..91bffaa 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -729,24 +729,23 @@ int dccp_v4_do_rcv(struct sock *sk, stru
  
--	/* To avoid large error in calcX */
--	if (hctx->ccid3hctx_p >= TFRC_SMALLEST_P) {
-+	if (hctx->ccid3hctx_p > 0) {
- 		hctx->ccid3hctx_x_calc = tfrc_calc_x(hctx->ccid3hctx_s,
- 						     hctx->ccid3hctx_rtt,
- 						     hctx->ccid3hctx_p);
-@@ -230,12 +229,10 @@ static void ccid3_hc_tx_no_feedback_time
- 			 *  Else
- 			 *    X_recv = X_calc / 4;
- 			 */
--			BUG_ON(hctx->ccid3hctx_p >= TFRC_SMALLEST_P &&
-+			BUG_ON(hctx->ccid3hctx_p > 0 &&
- 			       hctx->ccid3hctx_x_calc = 0);
+ 	/*
+ 	 *  Step 3: Process LISTEN state
+-	 *     If S.state = LISTEN,
+-	 *	  If P.type = Request or P contains a valid Init Cookie
+-	 *	  	option,
+-	 *	     * Must scan the packet's options to check for an Init
+-	 *		Cookie.  Only the Init Cookie is processed here,
+-	 *		however; other options are processed in Step 8.  This
+-	 *		scan need only be performed if the endpoint uses Init
+-	 *		Cookies *
+-	 *	     * Generate a new socket and switch to that socket *
+-	 *	     Set S := new socket for this port pair
+-	 *	     S.state = RESPOND
+-	 *	     Choose S.ISS (initial seqno) or set from Init Cookie
+-	 *	     Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookie
+-	 *	     Continue with S.state = RESPOND
+-	 *	     * A Response packet will be generated in Step 11 *
+-	 *	  Otherwise,
+-	 *	     Generate Reset(No Connection) unless P.type = Reset
+-	 *	     Drop packet and return
++	 *	 If P.type = Request or P contains a valid Init Cookie option,
++	 *	      (* Must scan the packet's options to check for Init
++	 *		 Cookies.  Only Init Cookies are processed here,
++	 *		 however; other options are processed in Step 8.  This
++	 *		 scan need only be performed if the endpoint uses Init
++	 *		 Cookies *)
++	 *	      (* Generate a new socket and switch to that socket *)
++	 *	      Set S := new socket for this port pair
++	 *	      S.state = RESPOND
++	 *	      Choose S.ISS (initial seqno) or set from Init Cookies
++	 *	      Initialize S.GAR := S.ISS
++	 *	      Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
++	 *	      Continue with S.state = RESPOND
++	 *	      (* A Response packet will be generated in Step 11 *)
++	 *	 Otherwise,
++	 *	      Generate Reset(No Connection) unless P.type = Reset
++	 *	      Drop packet and return
+ 	 *
+ 	 * NOTE: the check for the packet types is done in
+ 	 *	 dccp_rcv_state_process
+@@ -887,8 +886,6 @@ static int dccp_v4_rcv(struct sk_buff *s
+ 	/* 
+ 	 * Step 2:
+ 	 * 	If no socket ...
+-	 *		Generate Reset(No Connection) unless P.type = Reset
+-	 *		Drop packet and return
+ 	 */
+ 	if (sk = NULL) {
+ 		dccp_pr_debug("failed to look up flow ID in table and "
+@@ -919,6 +916,7 @@ no_dccp_socket:
+ 		goto discard_it;
+ 	/*
+ 	 * Step 2:
++	 * 	If no socket ...
+ 	 *		Generate Reset(No Connection) unless P.type = Reset
+ 	 *		Drop packet and return
+ 	 */
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index c5f28ab..91d22a3 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -487,10 +487,10 @@ static int dccp_v6_conn_request(struct s
+ 	/*
+ 	 * Step 3: Process LISTEN state
+ 	 *
+-	 * Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookie
++	 *   Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookie
+ 	 *
+-	 * In fact we defer setting S.GSR, S.SWL, S.SWH to
+-	 * dccp_create_openreq_child.
++	 *   In fact we defer setting S.GSR, S.SWL, S.SWH to
++	 *   dccp_create_openreq_child.
+ 	 */
+ 	dreq = dccp_rsk(req);
+ 	dreq->dreq_isr	   = dcb->dccpd_seq;
+@@ -760,6 +760,30 @@ static int dccp_v6_do_rcv(struct sock *s
+ 		return 0;
+ 	}
  
--			/* check also if p is zero -> x_calc is infinity? */
--			if (hctx->ccid3hctx_p < TFRC_SMALLEST_P ||
--			    hctx->ccid3hctx_x_calc > 2 * hctx->ccid3hctx_x_recv)
-+			if (hctx->ccid3hctx_x_calc > 2 * hctx->ccid3hctx_x_recv)
- 				hctx->ccid3hctx_x_recv = max_t(u32, hctx->ccid3hctx_x_recv / 2,
- 								    hctx->ccid3hctx_s / (2 * TFRC_t_mbi));
- 			else
-@@ -457,16 +454,9 @@ static void ccid3_hc_tx_packet_recv(stru
- 		/* Update loss event rate */
- 		if (pinv = ~0 || pinv = 0)
- 			hctx->ccid3hctx_p = 0;
--		else {
-+		else
- 			hctx->ccid3hctx_p = 1000000 / pinv;
++	/*
++	 *  Step 3: Process LISTEN state
++	 *     If S.state = LISTEN,
++	 *	 If P.type = Request or P contains a valid Init Cookie option,
++	 *	      (* Must scan the packet's options to check for Init
++	 *		 Cookies.  Only Init Cookies are processed here,
++	 *		 however; other options are processed in Step 8.  This
++	 *		 scan need only be performed if the endpoint uses Init
++	 *		 Cookies *)
++	 *	      (* Generate a new socket and switch to that socket *)
++	 *	      Set S := new socket for this port pair
++	 *	      S.state = RESPOND
++	 *	      Choose S.ISS (initial seqno) or set from Init Cookies
++	 *	      Initialize S.GAR := S.ISS
++	 *	      Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
++	 *	      Continue with S.state = RESPOND
++	 *	      (* A Response packet will be generated in Step 11 *)
++	 *	 Otherwise,
++	 *	      Generate Reset(No Connection) unless P.type = Reset
++	 *	      Drop packet and return
++	 *
++	 * NOTE: the check for the packet types is done in
++	 *	 dccp_rcv_state_process
++	 */
+ 	if (sk->sk_state = DCCP_LISTEN) {
+ 		struct sock *nsk = dccp_v6_hnd_req(sk, skb);
  
--			if (hctx->ccid3hctx_p < TFRC_SMALLEST_P) {
--				hctx->ccid3hctx_p = TFRC_SMALLEST_P;
--				ccid3_pr_debug("%s, sk=%p, Smallest p used!\n",
--					       dccp_role(sk), sk);
--			}
--		}
--
- 		/* Calculate new round trip sample by
- 		 * 	R_sample = (t_now - t_recvdata) - t_delay
- 		 * t_recvdata is taken from packet history        */
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -51,8 +51,6 @@
- /* Parameter t_mbi from [RFC 3448, 4.3]: backoff interval in seconds */
- #define TFRC_t_mbi		   64
+@@ -826,8 +850,6 @@ static int dccp_v6_rcv(struct sk_buff **
+ 	/*
+ 	 * Step 2:
+ 	 * 	If no socket ...
+-	 *		Generate Reset(No Connection) unless P.type = Reset
+-	 *		Drop packet and return
+ 	 */
+ 	if (sk = NULL) {
+ 		dccp_pr_debug("failed to look up flow ID in table and "
+@@ -857,6 +879,7 @@ no_dccp_socket:
+ 		goto discard_it;
+ 	/*
+ 	 * Step 2:
++	 * 	If no socket ...
+ 	 *		Generate Reset(No Connection) unless P.type = Reset
+ 	 *		Drop packet and return
+ 	 */
+diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
+index 0f228ab..d3de696 100644
+--- a/net/dccp/minisocks.c
++++ b/net/dccp/minisocks.c
+@@ -98,8 +98,8 @@ struct sock *dccp_create_openreq_child(s
+ 	/*
+ 	 * Step 3: Process LISTEN state
+ 	 *
+-	 * // Generate a new socket and switch to that socket
+-	 * Set S := new socket for this port pair
++	 *   (* Generate a new socket and switch to that socket *)
++	 *   Set S := new socket for this port pair
+ 	 */
+ 	struct sock *newsk = inet_csk_clone(sk, req, GFP_ATOMIC);
  
--#define TFRC_SMALLEST_P		   40
--
- enum ccid3_options {
- 	TFRC_OPT_LOSS_EVENT_RATE = 192,
- 	TFRC_OPT_LOSS_INTERVALS	 = 193,
+@@ -148,9 +148,9 @@ out_free:
+ 		/*
+ 		 * Step 3: Process LISTEN state
+ 		 *
+-		 *	Choose S.ISS (initial seqno) or set from Init Cookie
+-		 *	Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init
+-		 *	Cookie
++		 *    Choose S.ISS (initial seqno) or set from Init Cookies
++		 *    Initialize S.GAR := S.ISS
++		 *    Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
+ 		 */
+ 
+ 		/* See dccp_v4_conn_request */
