@@ -1,82 +1,134 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Mon, 27 Nov 2006 14:45:29 +0000
-Subject: [PATCH 2/8] [DCCP] ccid3: Simplify control flow in the calculation of t_ipi
-Message-Id: <20061127144528.GM11605@mandriva.com>
+Date: Fri, 10 Nov 2006 15:28:04 +0000
+Subject: [PATCH 4/10][DCCP]: Simplify jump labels in dccp_v{4,6}_rcv
+Message-Id: <20061110152803.GH23311@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch performs a simplifying (performance) optimisation:
+This is a code simplification and was singled out from the
+DCCPv6 Oops patch on
+http://www.mail-archive.com/dccp@vger.kernel.org/msg00600.html
 
- In each call of the inline function ccid3_calc_new_t_ipi(), the state is
- tested against TFRC_SSTATE_NO_FBACK. This is expensive when the function
- is called very often. A simpler solution, implemented by this patch, is
- to adapt the control flow.
+It mainly makes the code consistent between ipv{4,6}.c for the functions
+        dccp_v4_rcv
+        dccp_v6_rcv
+and removes the do_time_wait label to simplify code somewhat.
 
-Background:
------------
- Upon sender initialisation, the values of t_ipi, t_nom = t_0, delta, as
- well as the initial packet sending rate, are all constants [RFC 3448, 4.2].
- Until feedback arrives, these values are not changed. Hence it is not necessary
- to recalculate t_ipi, t_nom, delta until the first feedback has arrived, i.e.
- as long as the state TFRC_SSTATE_NO_FBACK persists.
-
-Justification:
---------------
- ccid3_calc_new_t_ipi() is called only in two places:
-
-   * in ccid3_hc_tx_packet_recv(); here the state is never TFRC_SSTATE_NO_FBACK, due to
-	if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
-		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
-		/* ... */
-   * in ccid3_hc_tx_packet_sent()
-
- => Only in the second case, the state might be TFRC_SSTATE_NO_FBACK and this only
-     during the initial phase of a connection.
-
-Solution:
----------
- This patch avoids such a recalculation by a simple change of control flow in
- ccid3_hc_tx_packet_sent(). As a consequence, ccid3_calc_new_t_ipi() is never called in
- the state TFRC_SSTATE_NO_FBACK, hence the test against this state can safely be removed.
- Additionally, a comment at the begin of this function is removed.
+Commiter note: fixed up a compile problem, trivial.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
----
- net/dccp/ccids/ccid3.c |   10 +++-------
- 1 files changed, 3 insertions(+), 7 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index d7b688e..df88c54 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -103,13 +103,7 @@ static void ccid3_hc_tx_set_state(struct
- /* Calculate new t_ipi (inter packet interval) by t_ipi = s / X_inst */
- static inline void ccid3_calc_new_t_ipi(struct ccid3_hc_tx_sock *hctx)
- {
--	/*
--	 * If no feedback spec says t_ipi is 1 second (set elsewhere and then
--	 * doubles after every no feedback timer (separate function)
--	 */
--	if (hctx->ccid3hctx_state != TFRC_SSTATE_NO_FBACK)
--		hctx->ccid3hctx_t_ipi = usecs_div(hctx->ccid3hctx_s,
--						  hctx->ccid3hctx_x);
-+	hctx->ccid3hctx_t_ipi = usecs_div(hctx->ccid3hctx_s, hctx->ccid3hctx_x);
+------------------------------------------------------------------------------
+
+ ipv4.c |   15 ++++-----------
+ ipv6.c |   22 ++++++++++------------
+ 2 files changed, 14 insertions(+), 23 deletions(-)
+
+------------------------------------------------------------------------------
+
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index ce8eed3..7107885 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -910,8 +910,7 @@ static int dccp_v4_rcv(struct sk_buff *s
+ 		dccp_pr_debug_cat("\n");
+ 	} else {
+ 		DCCP_SKB_CB(skb)->dccpd_ack_seq = dccp_hdr_ack_seq(skb);
+-		dccp_pr_debug_cat(", ack=%llu\n",
+-				  (unsigned long long)
++		dccp_pr_debug_cat(", ack=%llu\n", (unsigned long long)
+ 				  DCCP_SKB_CB(skb)->dccpd_ack_seq);
+ 	}
+ 
+@@ -940,11 +939,10 @@ static int dccp_v4_rcv(struct sk_buff *s
+ 	 *		Generate Reset(No Connection) unless P.type = Reset
+ 	 *		Drop packet and return
+ 	 */
+-	       
+ 	if (sk->sk_state = DCCP_TIME_WAIT) {
+-		dccp_pr_debug("sk->sk_state = DCCP_TIME_WAIT: "
+-			      "do_time_wait\n");
+-                goto do_time_wait;
++		dccp_pr_debug("sk->sk_state = DCCP_TIME_WAIT: do_time_wait\n");
++		inet_twsk_put(inet_twsk(sk));
++		goto no_dccp_socket;
+ 	}
+ 
+ 	if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb))
+@@ -968,17 +966,12 @@ no_dccp_socket:
+ 	}
+ 
+ discard_it:
+-	/* Discard frame. */
+ 	kfree_skb(skb);
+ 	return 0;
+ 
+ discard_and_relse:
+ 	sock_put(sk);
+ 	goto discard_it;
+-
+-do_time_wait:
+-	inet_twsk_put(inet_twsk(sk));
+-	goto no_dccp_socket;
  }
  
- /* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
-@@ -395,6 +389,8 @@ static void ccid3_hc_tx_packet_sent(stru
- 				  "as a data packet",  dccp_role(sk));
- 		return;
- 	case TFRC_SSTATE_NO_FBACK:
-+		/* t_nom, t_ipi, delta do not change until feedback arrives */
-+		return;
- 	case TFRC_SSTATE_FBACK:
- 		if (len > 0) {
- 			timeval_sub_usecs(&hctx->ccid3hctx_t_nom,
--- 
-1.4.2.1.g3d5c
-
+ static struct inet_connection_sock_af_ops dccp_ipv4_af_ops = {
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index a4e1dd9..96a2480 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -1071,8 +1071,11 @@ static int dccp_v6_rcv(struct sk_buff **
+ 	 *		Generate Reset(No Connection) unless P.type = Reset
+ 	 *		Drop packet and return
+ 	 */
+-	if (sk = NULL)
++	if (sk = NULL) {
++		dccp_pr_debug("failed to look up flow ID in table and "
++			      "get corresponding socket\n");
+ 		goto no_dccp_socket;
++	}
+ 
+ 	/*
+ 	 * Step 2:
+@@ -1080,8 +1083,11 @@ static int dccp_v6_rcv(struct sk_buff **
+ 	 *		Generate Reset(No Connection) unless P.type = Reset
+ 	 *		Drop packet and return
+ 	 */
+-	if (sk->sk_state = DCCP_TIME_WAIT)
+-		goto do_time_wait;
++	if (sk->sk_state = DCCP_TIME_WAIT) {
++		dccp_pr_debug("sk->sk_state = DCCP_TIME_WAIT: do_time_wait\n");
++		inet_twsk_put(inet_twsk(sk));
++		goto no_dccp_socket;
++	}
+ 
+ 	if (!xfrm6_policy_check(sk, XFRM_POLICY_IN, skb))
+ 		goto discard_and_relse;
+@@ -1101,22 +1107,14 @@ no_dccp_socket:
+ 					DCCP_RESET_CODE_NO_CONNECTION;
+ 		dccp_v6_ctl_send_reset(skb);
+ 	}
+-discard_it:
+-
+-	/*
+-	 *	Discard frame
+-	 */
+ 
++discard_it:
+ 	kfree_skb(skb);
+ 	return 0;
+ 
+ discard_and_relse:
+ 	sock_put(sk);
+ 	goto discard_it;
+-
+-do_time_wait:
+-	inet_twsk_put(inet_twsk(sk));
+-	goto no_dccp_socket;
+ }
+ 
+ static struct inet_connection_sock_af_ops dccp_ipv6_af_ops = {
