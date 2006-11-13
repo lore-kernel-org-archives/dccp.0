@@ -1,45 +1,100 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Tue, 14 Nov 2006 16:00:24 +0000
-Subject: [PATCH 5/5][DCCP] ACKVEC: Optimization - Do not traverse records if none will be found
-Message-Id: <20061114160023.GG6903@mandriva.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 13 Nov 2006 13:27:38 +0000
+Subject: [PATCH 2/7]: Increment sequence numbers on retransmitted Response packets
+Message-Id: <200611131327.38900@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Do not traverse the list of ack vector records [proportional to window size]
-when we know we will not find what we are looking for.  This is especially
-useful because ack vectors are checked twice:
-1) Upon parsing of options.
-2) Upon notification of a new ack.
+[DCCP]: Increment sequence numbers on retransmitted Response packets
 
-All of the work will occur during check #1.  Therefore, when check #2 is
-performed, no new work will be done.  This is now "detected" and there is no
-performance hit when doing #2.
+Problem:
+--------
+  If DCCP B receives a retransmitted Request from DCCP A (with an
+  increased sequence number), DCCP A sends one or more Responses 
+  without incrementing A's sent sequence number.
 
-Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+  This problem was first identified thanks to  Vladimir M. in 
+  http://www.mail-archive.com/dccp@vger.kernel.org/msg00570.html
+
+RFC 4340 says:
+ * sec. 4.2: "Every DCCP packet increments the sequence number,
+              whether or not it contains application data."
+ * sec. 7  : "Even DCCP-Ack and DCCP-Sync packets, and other 
+              packets that don't carry user data, increment the
+              Sequence Number. [...] retransmissions, such as 
+              retransmissions of DCCP-Request packets, also increment
+              the Sequence Number."  
+Cause:
+------
+The cause is that make_response keeps the ISS on each retransmission; only 
+Responses to retransmitted Requests have ISS incremented in dccp_check_req(),
+keep-alive Responses triggered via dccp_response_timer() retain initial ISS.
+
+Solution:
+---------
+This patch uses the unused `acked' field in the inet_request_sock() associated
+with the connection request: to remember whether an incoming Request has already
+been ack(nowledg)ed by way of sending a Response. 
+This helps to distinguish initial from retransmitted Responses, and is used to 
+increment the sequence numbers accordingly.
+
+In addition, to protect against Request floods, the number of
+retransmissions is also incremented when sending further Responses in
+reply to retransmitted (i.e., non-initial) Requests.
+
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+---
+ net/dccp/minisocks.c |   16 +++++++++-------
+ net/dccp/output.c    |    4 ++++
+ 2 files changed, 13 insertions(+), 7 deletions(-)
 
-------------------------------------------------------------------------------
-
- ackvec.c |    3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
-
-------------------------------------------------------------------------------
-
-diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-index 0c54b89..bd20a2c 100644
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -383,7 +383,8 @@ void dccp_ackvec_check_rcv_ackno(struct 
- 				      (unsigned long long)avr->dccpavr_ack_ackno);
- 			dccp_ackvec_throw_record(av, avr);
- 			break;
--		}
-+		} else if (avr->dccpavr_ack_seqno > ackno)
-+			break; /* old news */
- 	}
- }
+--- a/net/dccp/minisocks.c
++++ b/net/dccp/minisocks.c
+@@ -196,15 +196,17 @@ struct sock *dccp_check_req(struct sock 
  
+ 	/* Check for retransmitted REQUEST */
+ 	if (dccp_hdr(skb)->dccph_type = DCCP_PKT_REQUEST) {
+-		if (after48(DCCP_SKB_CB(skb)->dccpd_seq,
+-			    dccp_rsk(req)->dreq_isr)) {
+-			struct dccp_request_sock *dreq = dccp_rsk(req);
++		struct dccp_request_sock *dreq = dccp_rsk(req);
+ 
++		if (after48(DCCP_SKB_CB(skb)->dccpd_seq, dreq->dreq_isr)) {
+ 			dccp_pr_debug("Retransmitted REQUEST\n");
+-			/* Send another RESPONSE packet */
+-			dccp_set_seqno(&dreq->dreq_iss, dreq->dreq_iss + 1);
+-			dccp_set_seqno(&dreq->dreq_isr,
+-				       DCCP_SKB_CB(skb)->dccpd_seq);
++			dreq->dreq_isr = DCCP_SKB_CB(skb)->dccpd_seq;
++			/*
++			 * Send another RESPONSE packet
++			 * To protect against Request floods, increment retrans
++			 * counter (backoff, monitored by dccp_response_timer).
++			 */
++			req->retrans++;
+ 			req->rsk_ops->rtx_syn_ack(sk, req, NULL);
+ 		}
+ 		/* Network Duplicate, discard packet */
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -323,6 +323,8 @@ struct sk_buff *dccp_make_response(struc
+ 	skb->dst = dst_clone(dst);
+ 
+ 	dreq = dccp_rsk(req);
++	if (inet_rsk(req)->acked)	/* increase ISS upon retransmission */
++		dccp_inc_seqno(&dreq->dreq_iss);
+ 	DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_RESPONSE;
+ 	DCCP_SKB_CB(skb)->dccpd_seq  = dreq->dreq_iss;
+ 
+@@ -346,6 +348,8 @@ struct sk_buff *dccp_make_response(struc
+ 
+ 	dccp_csum_outgoing(skb);
+ 
++	/* We use `acked' to remember that a Response was already sent. */
++	inet_rsk(req)->acked = 1;
+ 	DCCP_INC_STATS(DCCP_MIB_OUTSEGS);
+ 	return skb;
+ }
