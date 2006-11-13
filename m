@@ -1,373 +1,187 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Tue, 14 Nov 2006 15:59:19 +0000
-Subject: [PATCH 3/5][DCCP]: Make feature negotiation more readable
-Message-Id: <20061114155918.GE6903@mandriva.com>
+Date: Mon, 13 Nov 2006 15:42:50 +0000
+Subject: [PATCH 4/7][DCCP]: Introduce a consistent naming scheme for sysctls
+Message-Id: <20061113154249.GI6947@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch replaces cryptic feature negotiation messages of type
+In order to make their function clearer and obtain a consistent naming
+scheme to identify sysctls, all existing DCCP sysctls have been prefixed
+with `sysctl_dccp', following the same convention as used by TCP.
 
-Oct 31 15:42:20 kernel: dccp_feat_change: feat change type2 feat=1
-Oct 31 15:42:21 kernel: dccp_feat_change: feat change type4 feat=1
-Oct 31 15:42:21 kernel: dccp_feat_change: feat change type2 feat=5
+Feature-specific sysctls retain the `feat' in the middle, although the
+`default' has been dropped, since it is obvious from use.
 
-into ones of type:
-
-Nov  2 13:54:45 kernel: dccp_feat_change: ChangeL(CCID (1), 3)
-Nov  2 13:54:45 kernel: dccp_feat_change: ChangeR(CCID (1), 3)
-Nov  2 13:54:45 kernel: dccp_feat_change: ChangeL(Ack Ratio (5), 2)
-
-Also,
-	* completed the feature number list wrt RFC 4340 sec. 6.4
-	* annotating which ones have been implemented so far
-	* implemented rudimentary sanity checking in feat.c (FIXMEs)
-	* some minor fixes
-
-Commiter note: uninlined dccp_feat_name and dccp_feat_typename, for
-               consistency with dccp_{state,packet}_name, that, BTW,
-               should be compiled only if CONFIG_IP_DCCP_DEBUG is
-               selected, leaving this to another cset tho. Also
-               shortened dccp_feat_negotiation_debug to dccp_feat_debug.
+Also removed a duplicate `dccp_feat_default_sequence_window' in ipv4.c.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
 ------------------------------------------------------------------------------
 
- include/linux/dccp.h |   25 ++++++----
- net/dccp/feat.c      |  116 +++++++++++++++++++++++++++++++++++++++------------
- net/dccp/feat.h      |   41 +++++++++++++++++-
- net/dccp/options.c   |    4 +
- 4 files changed, 145 insertions(+), 41 deletions(-)
+ dccp.h      |   12 ++++++------
+ ipv4.c      |    1 -
+ minisocks.c |    2 +-
+ options.c   |   26 +++++++++++++-------------
+ sysctl.c    |   24 ++++++++++++------------
+ 5 files changed, 32 insertions(+), 33 deletions(-)
 
 ------------------------------------------------------------------------------
 
-diff --git a/include/linux/dccp.h b/include/linux/dccp.h
-index 0502dfa..696319e 100644
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -175,18 +175,21 @@ enum {
- 	DCCPC_CCID3 = 3,
- };
+diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
+index e7b9607..363fa52 100644
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -68,12 +68,12 @@ #define DCCP_XMIT_TIMEO 30000 /* Time/ms
+ extern int  sysctl_dccp_request_retries;
+ extern int  sysctl_dccp_retries1;
+ extern int  sysctl_dccp_retries2;
+-extern int  dccp_feat_default_sequence_window;
+-extern int  dccp_feat_default_rx_ccid;
+-extern int  dccp_feat_default_tx_ccid;
+-extern int  dccp_feat_default_ack_ratio;
+-extern int  dccp_feat_default_send_ack_vector;
+-extern int  dccp_feat_default_send_ndp_count;
++extern int  sysctl_dccp_feat_sequence_window;
++extern int  sysctl_dccp_feat_rx_ccid;
++extern int  sysctl_dccp_feat_tx_ccid;
++extern int  sysctl_dccp_feat_ack_ratio;
++extern int  sysctl_dccp_feat_send_ack_vector;
++extern int  sysctl_dccp_feat_send_ndp_count;
  
--/* DCCP features */
--enum {
--	DCCPF_RESERVED = 0,
--	DCCPF_CCID = 1,
--	DCCPF_SEQUENCE_WINDOW = 3,
--	DCCPF_ACK_RATIO = 5,
--	DCCPF_SEND_ACK_VECTOR = 6,
--	DCCPF_SEND_NDP_COUNT = 7,
-+/* DCCP features (RFC 4340 section 6.4) */
-+ enum {
-+ 	DCCPF_RESERVED = 0,
-+ 	DCCPF_CCID = 1,
-+	DCCPF_SHORT_SEQNOS = 2,		/* XXX: not yet implemented */
-+ 	DCCPF_SEQUENCE_WINDOW = 3,
-+	DCCPF_ECN_INCAPABLE = 4,	/* XXX: not yet implemented */
-+ 	DCCPF_ACK_RATIO = 5,
-+ 	DCCPF_SEND_ACK_VECTOR = 6,
-+ 	DCCPF_SEND_NDP_COUNT = 7,
- 	DCCPF_MIN_CSUM_COVER = 8,
--	/* 10-127 reserved */
--	DCCPF_MIN_CCID_SPECIFIC = 128,
--	DCCPF_MAX_CCID_SPECIFIC = 255,
-+	DCCPF_DATA_CHECKSUM = 9,	/* XXX: not yet implemented */
-+ 	/* 10-127 reserved */
-+ 	DCCPF_MIN_CCID_SPECIFIC = 128,
-+ 	DCCPF_MAX_CCID_SPECIFIC = 255,
- };
+ /* is seq1 < seq2 ? */
+ static inline int before48(const u64 seq1, const u64 seq2)
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 4961120..84c0540 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -651,7 +651,6 @@ int dccp_v4_conn_request(struct sock *sk
+ 	ireq = inet_rsk(req);
+ 	ireq->loc_addr = skb->nh.iph->daddr;
+ 	ireq->rmt_addr = skb->nh.iph->saddr;
+-	req->rcv_wnd	= dccp_feat_default_sequence_window;
+ 	ireq->opt	= NULL;
  
- /* this structure is argument to DCCP_SOCKOPT_CHANGE_X */
-diff --git a/net/dccp/feat.c b/net/dccp/feat.c
-index a1b0682..12cde2f 100644
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -12,7 +12,6 @@
- 
- #include <linux/module.h>
- 
--#include "dccp.h"
- #include "ccid.h"
- #include "feat.h"
- 
-@@ -23,9 +22,17 @@ int dccp_feat_change(struct dccp_minisoc
+ 	/* 
+diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
+index 5b2773e..0c49733 100644
+--- a/net/dccp/minisocks.c
++++ b/net/dccp/minisocks.c
+@@ -300,7 +300,7 @@ void dccp_reqsk_init(struct request_sock
  {
- 	struct dccp_opt_pend *opt;
- 
--	dccp_pr_debug("feat change type=%d feat=%d\n", type, feature);
-+	dccp_feat_debug(type, feature, *val);
- 
--	/* XXX sanity check feat change request */
-+	if (!dccp_feat_is_valid_type(type)) {
-+		pr_info("option type %d invalid in negotiation\n", type);
-+		return 1;
-+	}
-+	if (!dccp_feat_is_valid_length(type, feature, len)) {
-+		pr_info("invalid length %d\n", len);
-+		return 1;
-+	}
-+	/* XXX add further sanity checks */
- 
- 	/* check if that feature is already being negotiated */
- 	list_for_each_entry(opt, &dmsk->dccpms_pending, dccpop_node) {
-@@ -95,14 +102,14 @@ static int dccp_feat_update_ccid(struct 
- /* XXX taking only u8 vals */
- static int dccp_feat_update(struct sock *sk, u8 type, u8 feat, u8 val)
- {
--	dccp_pr_debug("changing [%d] feat %d to %d\n", type, feat, val);
-+	dccp_feat_debug(type, feat, val);
- 
- 	switch (feat) {
- 	case DCCPF_CCID:
- 		return dccp_feat_update_ccid(sk, type, val);
- 	default:
--		dccp_pr_debug("IMPLEMENT changing [%d] feat %d to %d\n",
--			      type, feat, val);
-+		dccp_pr_debug("UNIMPLEMENTED: %s(%d, ...)\n",
-+			      dccp_feat_typename(type), feat);
- 		break;
- 	}
- 	return 0;
-@@ -265,10 +272,10 @@ static int dccp_feat_nn(struct sock *sk,
- 	u8 *copy;
- 	int rc;
- 
--	/* NN features must be change L */
--	if (type = DCCPO_CHANGE_R) {
--		dccp_pr_debug("received CHANGE_R %d for NN feat %d\n",
--			      type, feature);
-+	/* NN features must be Change L (sec. 6.3.2) */
-+	if (type != DCCPO_CHANGE_L) {
-+		dccp_pr_debug("received %s for NN feature %d\n",
-+				dccp_feat_typename(type), feature);
- 		return -EFAULT;
- 	}
- 
-@@ -299,7 +306,8 @@ static int dccp_feat_nn(struct sock *sk,
- 		return rc;
- 	}
- 
--	dccp_pr_debug("Confirming NN feature %d (val=%d)\n", feature, *copy);
-+	dccp_feat_debug(type, feature, *copy);
-+
- 	list_add_tail(&opt->dccpop_node, &dmsk->dccpms_conf);
- 
- 	return 0;
-@@ -318,14 +326,19 @@ static void dccp_feat_empty_confirm(stru
- 		return;
- 	}
- 
--	opt->dccpop_type = type = DCCPO_CHANGE_L ? DCCPO_CONFIRM_R :
--						    DCCPO_CONFIRM_L;
-+	switch (type) {
-+	case DCCPO_CHANGE_L: opt->dccpop_type = DCCPO_CONFIRM_R; break;
-+	case DCCPO_CHANGE_R: opt->dccpop_type = DCCPO_CONFIRM_L; break;
-+	default: 	     pr_info("invalid type %d\n", type); return;
-+
-+	}
- 	opt->dccpop_feat = feature;
- 	opt->dccpop_val	 = NULL;
- 	opt->dccpop_len	 = 0;
- 
- 	/* change feature */
--	dccp_pr_debug("Empty confirm feature %d type %d\n", feature, type);
-+	dccp_pr_debug("Empty %s(%d)\n", dccp_feat_typename(type), feature);
-+
- 	list_add_tail(&opt->dccpop_node, &dmsk->dccpms_conf);
+ 	inet_rsk(req)->rmt_port = dccp_hdr(skb)->dccph_sport;
+ 	inet_rsk(req)->acked	= 0;
+-	req->rcv_wnd		= dccp_feat_default_sequence_window;
++	req->rcv_wnd		= sysctl_dccp_feat_sequence_window;
  }
  
-@@ -359,7 +372,7 @@ int dccp_feat_change_recv(struct sock *s
- {
- 	int rc;
- 
--	dccp_pr_debug("got feat change type=%d feat=%d\n", type, feature);
-+	dccp_feat_debug(type, feature, *val);
- 
- 	/* figure out if it's SP or NN feature */
- 	switch (feature) {
-@@ -375,6 +388,8 @@ int dccp_feat_change_recv(struct sock *s
- 
- 	/* XXX implement other features */
- 	default:
-+		dccp_pr_debug("UNIMPLEMENTED: not handling %s(%d, ...)\n",
-+			      dccp_feat_typename(type), feature);
- 		rc = -EFAULT;
- 		break;
- 	}
-@@ -403,20 +418,27 @@ int dccp_feat_confirm_recv(struct sock *
- 	u8 t;
- 	struct dccp_opt_pend *opt;
- 	struct dccp_minisock *dmsk = dccp_msk(sk);
--	int rc = 1;
-+	int found = 0;
- 	int all_confirmed = 1;
- 
--	dccp_pr_debug("got feat confirm type=%d feat=%d\n", type, feature);
--
--	/* XXX sanity check type & feat */
-+	dccp_feat_debug(type, feature, *val);
- 
- 	/* locate our change request */
--	t = type = DCCPO_CONFIRM_L ? DCCPO_CHANGE_R : DCCPO_CHANGE_L;
-+	switch (type) {
-+	case DCCPO_CONFIRM_L: t = DCCPO_CHANGE_R; break;
-+	case DCCPO_CONFIRM_R: t = DCCPO_CHANGE_L; break;
-+	default: 	      pr_info("invalid type %d\n", type);
-+			      return 1;
-+
-+	}
-+	/* XXX sanity check feature value */
- 
- 	list_for_each_entry(opt, &dmsk->dccpms_pending, dccpop_node) {
- 		if (!opt->dccpop_conf && opt->dccpop_type = t &&
- 		    opt->dccpop_feat = feature) {
--			/* we found it */
-+			found = 1;
-+			dccp_pr_debug("feature %d found\n", opt->dccpop_feat);
-+
- 			/* XXX do sanity check */
- 
- 			opt->dccpop_conf = 1;
-@@ -425,9 +447,7 @@ int dccp_feat_confirm_recv(struct sock *
- 			dccp_feat_update(sk, opt->dccpop_type,
- 					 opt->dccpop_feat, *val);
- 
--			dccp_pr_debug("feat %d type %d confirmed %d\n",
--				      feature, type, *val);
--			rc = 0;
-+			/* XXX check the return value of dccp_feat_update */
- 			break;
- 		}
- 
-@@ -446,9 +466,9 @@ int dccp_feat_confirm_recv(struct sock *
- 		inet_csk_clear_xmit_timer(sk, ICSK_TIME_RETRANS);
- 	}
- 
--	if (rc)
--		dccp_pr_debug("feat %d type %d never requested\n",
--			      feature, type);
-+	if (!found)
-+		dccp_pr_debug("%s(%d, ...) never requested\n",
-+			      dccp_feat_typename(type), feature);
- 	return 0;
- }
- 
-@@ -583,3 +603,45 @@ out:
- }
- 
- EXPORT_SYMBOL_GPL(dccp_feat_init);
-+
-+#ifdef CONFIG_IP_DCCP_DEBUG
-+const char *dccp_feat_typename(const u8 type)
-+{
-+	switch(type) {
-+	case DCCPO_CHANGE_L:  return("ChangeL");
-+	case DCCPO_CONFIRM_L: return("ConfirmL");
-+	case DCCPO_CHANGE_R:  return("ChangeR");
-+	case DCCPO_CONFIRM_R: return("ConfirmR");
-+	/* the following case must not appear in feature negotation  */
-+	default: 	      dccp_pr_debug("unknown type %d [BUG!]\n", type);
-+	}
-+	return NULL;
-+}
-+
-+EXPORT_SYMBOL_GPL(dccp_feat_typename);
-+
-+const char *dccp_feat_name(const u8 feat)
-+{
-+	static const char *feature_names[] = {
-+		[DCCPF_RESERVED]	= "Reserved",
-+		[DCCPF_CCID]		= "CCID",
-+		[DCCPF_SHORT_SEQNOS]	= "Allow Short Seqnos",
-+		[DCCPF_SEQUENCE_WINDOW]	= "Sequence Window",
-+		[DCCPF_ECN_INCAPABLE]	= "ECN Incapable",
-+		[DCCPF_ACK_RATIO]	= "Ack Ratio",
-+		[DCCPF_SEND_ACK_VECTOR]	= "Send ACK Vector",
-+		[DCCPF_SEND_NDP_COUNT]	= "Send NDP Count",
-+		[DCCPF_MIN_CSUM_COVER]	= "Min. Csum Coverage",
-+		[DCCPF_DATA_CHECKSUM]	= "Send Data Checksum",
-+	};
-+	if (feat >= DCCPF_MIN_CCID_SPECIFIC)
-+		return "CCID-specific";
-+
-+	if (dccp_feat_is_reserved(feat))
-+		return feature_names[DCCPF_RESERVED];
-+
-+	return feature_names[feat];
-+}
-+
-+EXPORT_SYMBOL_GPL(dccp_feat_name);
-+#endif /* CONFIG_IP_DCCP_DEBUG */
-diff --git a/net/dccp/feat.h b/net/dccp/feat.h
-index 6048373..2c373ad 100644
---- a/net/dccp/feat.h
-+++ b/net/dccp/feat.h
-@@ -12,9 +12,46 @@ #define _DCCP_FEAT_H
-  */
- 
- #include <linux/types.h>
-+#include "dccp.h"
- 
--struct sock;
--struct dccp_minisock;
-+static inline int dccp_feat_is_valid_length(u8 type, u8 feature, u8 len)
-+{
-+	/* sec. 6.1: Confirm has at least length 3,
-+	 * sec. 6.2: Change  has at least length 4 */
-+	if (len < 3)
-+		return 1;
-+	if (len < 4  && (type = DCCPO_CHANGE_L || type = DCCPO_CHANGE_R))
-+		return 1;
-+	/* XXX: add per-feature length validation (sec. 6.6.8) */
-+	return 0;
-+}
-+
-+static inline int dccp_feat_is_reserved(const u8 feat)
-+{
-+	return (feat > DCCPF_DATA_CHECKSUM &&
-+		feat < DCCPF_MIN_CCID_SPECIFIC) ||
-+	        feat = DCCPF_RESERVED;
-+}
-+
-+/* feature negotiation knows only these four option types (RFC 4340, sec. 6) */
-+static inline int dccp_feat_is_valid_type(const u8 optnum)
-+{
-+	return optnum >= DCCPO_CHANGE_L && optnum <= DCCPO_CONFIRM_R;
-+
-+}
-+
-+#ifdef CONFIG_IP_DCCP_DEBUG
-+extern const char *dccp_feat_typename(const u8 type);
-+extern const char *dccp_feat_name(const u8 feat);
-+
-+static inline void dccp_feat_debug(const u8 type, const u8 feat, const u8 val)
-+{
-+	dccp_pr_debug("%s(%s (%d), %d)\n", dccp_feat_typename(type),
-+					   dccp_feat_name(feat), feat, val);
-+}
-+#else
-+#define dccp_feat_debug(type, feat, val)
-+#endif /* CONFIG_IP_DCCP_DEBUG */
- 
- extern int  dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
- 			     u8 *val, u8 len, gfp_t gfp);
+ EXPORT_SYMBOL_GPL(dccp_reqsk_init);
 diff --git a/net/dccp/options.c b/net/dccp/options.c
-index 121e794..2d0ef27 100644
+index fb0db1f..121e794 100644
 --- a/net/dccp/options.c
 +++ b/net/dccp/options.c
-@@ -465,8 +465,10 @@ static int dccp_insert_feat_opt(struct s
+@@ -22,23 +22,23 @@ #include "ccid.h"
+ #include "dccp.h"
+ #include "feat.h"
  
- 	if (len)
- 		memcpy(to, val, len);
--	dccp_pr_debug("option %d feat %d len %d\n", type, feat, len);
+-int dccp_feat_default_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
+-int dccp_feat_default_rx_ccid	      = DCCPF_INITIAL_CCID;
+-int dccp_feat_default_tx_ccid	      = DCCPF_INITIAL_CCID;
+-int dccp_feat_default_ack_ratio	      = DCCPF_INITIAL_ACK_RATIO;
+-int dccp_feat_default_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
+-int dccp_feat_default_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
++int sysctl_dccp_feat_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
++int sysctl_dccp_feat_rx_ccid	      = DCCPF_INITIAL_CCID;
++int sysctl_dccp_feat_tx_ccid	      = DCCPF_INITIAL_CCID;
++int sysctl_dccp_feat_ack_ratio	      = DCCPF_INITIAL_ACK_RATIO;
++int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
++int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
  
-+	dccp_pr_debug("%s(%s (%d), ...), length %d\n",
-+		      dccp_feat_typename(type),
-+		      dccp_feat_name(feat), feat, len);
- 	return 0;
+-EXPORT_SYMBOL_GPL(dccp_feat_default_sequence_window);
++EXPORT_SYMBOL_GPL(sysctl_dccp_feat_sequence_window);
+ 
+ void dccp_minisock_init(struct dccp_minisock *dmsk)
+ {
+-	dmsk->dccpms_sequence_window = dccp_feat_default_sequence_window;
+-	dmsk->dccpms_rx_ccid	     = dccp_feat_default_rx_ccid;
+-	dmsk->dccpms_tx_ccid	     = dccp_feat_default_tx_ccid;
+-	dmsk->dccpms_ack_ratio	     = dccp_feat_default_ack_ratio;
+-	dmsk->dccpms_send_ack_vector = dccp_feat_default_send_ack_vector;
+-	dmsk->dccpms_send_ndp_count  = dccp_feat_default_send_ndp_count;
++	dmsk->dccpms_sequence_window = sysctl_dccp_feat_sequence_window;
++	dmsk->dccpms_rx_ccid	     = sysctl_dccp_feat_rx_ccid;
++	dmsk->dccpms_tx_ccid	     = sysctl_dccp_feat_tx_ccid;
++	dmsk->dccpms_ack_ratio	     = sysctl_dccp_feat_ack_ratio;
++	dmsk->dccpms_send_ack_vector = sysctl_dccp_feat_send_ack_vector;
++	dmsk->dccpms_send_ndp_count  = sysctl_dccp_feat_send_ndp_count;
  }
  
+ static u32 dccp_decode_value_var(const unsigned char *bf, const u8 len)
+diff --git a/net/dccp/sysctl.c b/net/dccp/sysctl.c
+index 7b09f21..8b62061 100644
+--- a/net/dccp/sysctl.c
++++ b/net/dccp/sysctl.c
+@@ -22,48 +22,48 @@ static struct ctl_table dccp_default_tab
+ 	{
+ 		.ctl_name	= NET_DCCP_DEFAULT_SEQ_WINDOW,
+ 		.procname	= "seq_window",
+-		.data		= &dccp_feat_default_sequence_window,
+-		.maxlen		= sizeof(dccp_feat_default_sequence_window),
++		.data		= &sysctl_dccp_feat_sequence_window,
++		.maxlen		= sizeof(sysctl_dccp_feat_sequence_window),
+ 		.mode		= 0644,
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+ 		.ctl_name	= NET_DCCP_DEFAULT_RX_CCID,
+ 		.procname	= "rx_ccid",
+-		.data		= &dccp_feat_default_rx_ccid,
+-		.maxlen		= sizeof(dccp_feat_default_rx_ccid),
++		.data		= &sysctl_dccp_feat_rx_ccid,
++		.maxlen		= sizeof(sysctl_dccp_feat_rx_ccid),
+ 		.mode		= 0644,
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+ 		.ctl_name	= NET_DCCP_DEFAULT_TX_CCID,
+ 		.procname	= "tx_ccid",
+-		.data		= &dccp_feat_default_tx_ccid,
+-		.maxlen		= sizeof(dccp_feat_default_tx_ccid),
++		.data		= &sysctl_dccp_feat_tx_ccid,
++		.maxlen		= sizeof(sysctl_dccp_feat_tx_ccid),
+ 		.mode		= 0644,
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+ 		.ctl_name	= NET_DCCP_DEFAULT_ACK_RATIO,
+ 		.procname	= "ack_ratio",
+-		.data		= &dccp_feat_default_ack_ratio,
+-		.maxlen		= sizeof(dccp_feat_default_ack_ratio),
++		.data		= &sysctl_dccp_feat_ack_ratio,
++		.maxlen		= sizeof(sysctl_dccp_feat_ack_ratio),
+ 		.mode		= 0644,
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+ 		.ctl_name	= NET_DCCP_DEFAULT_SEND_ACKVEC,
+ 		.procname	= "send_ackvec",
+-		.data		= &dccp_feat_default_send_ack_vector,
+-		.maxlen		= sizeof(dccp_feat_default_send_ack_vector),
++		.data		= &sysctl_dccp_feat_send_ack_vector,
++		.maxlen		= sizeof(sysctl_dccp_feat_send_ack_vector),
+ 		.mode		= 0644,
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+ 		.ctl_name	= NET_DCCP_DEFAULT_SEND_NDP,
+ 		.procname	= "send_ndp",
+-		.data		= &dccp_feat_default_send_ndp_count,
+-		.maxlen		= sizeof(dccp_feat_default_send_ndp_count),
++		.data		= &sysctl_dccp_feat_send_ndp_count,
++		.maxlen		= sizeof(sysctl_dccp_feat_send_ndp_count),
+ 		.mode		= 0644,
+ 		.proc_handler	= proc_dointvec,
+ 	},
