@@ -1,53 +1,152 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 03 Nov 2006 14:31:46 +0000
-Subject: [PATCH 0/6]: Debugging & partial checksum support
-Message-Id: <200611031431.46644@strip-the-willow>
+Date: Mon, 13 Nov 2006 13:27:59 +0000
+Subject: [PATCH 5/7]: Remove forward declarations in timer.c
+Message-Id: <200611131328.00094@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Five patches to support debugging, one to introduce partial checksumming.
+[DCCP]: Remove forward declarations in timer.c
 
-Patch 1: re-introduces the Unload Hack (back by popular demand)
-	 Without this patch it is currently not possible to unload
-	 dccp_ipv{4,6}, not even with force. 
-         The solution is simple, to make this more elaborate is a
-	 non-trivial problem which is mainly of interest for 
-	 developing where `no unloading' is a real nuisance.
+This removes 3 forward declarations by reordering 2 functions.
 
-Patch 2: resolves the problem that debugging only works when 
-	 compiling DCCP as modules, and provides some generic macros
+No code change at all.
 
-Patch 3: introduces a debugging configuration option for CCID 3
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+---
+ net/dccp/timer.c |  110 ++++++++++++++++++++++++++-----------------------------
+ 1 file changed, 53 insertions(+), 57 deletions(-)
 
-Patch 4: makes dccp_feat_change output a bit more readable - the output
-         is like the description of feature negotiation in the RFC,
-         which makes it easier to see what is going on. I have also added
-         a few sanity checks - eventually this code needs some more care
-         and attention.
-
-Patch 5: cleanups, no code changes. Was split from patch 6 to make the
-         latter easier to read, recognizing that many changes do not have
-         to do with partial checksums.
-
-Patch 6: Introduces DCCP partial checksumming support. This includes
-	 socket options, receive processing and updates to checksumming
-	 routines; it excludes the Min Checksum Feature and sending
-	 data dropped options (but there are annotations where this is
-	 missing, so do feel free and go ahead).
-
-All patches apply on top of one another, I have just pushed them on top of
-         http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/
-
-The mapping is:
-
-Patch 1: http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/09a_release_ctl_socket_at_exit.diff
-Patch 2: http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/09b_tidy_up_config_debug.diff
-Patch 3: http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/09c_add_ccid3_debug.diff
-Patch 4: http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/09d_add_verbose_feat_output.diff
-Patch 5: http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/10a_miscellaneous_tidy_ups.diff
-Patch 6: http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/10b_partial_csum.diff
-
--- Gerrit
+--- a/net/dccp/timer.c
++++ b/net/dccp/timer.c
+@@ -20,16 +20,6 @@ int  sysctl_dccp_request_retries	__read_
+ int  sysctl_dccp_retries1		__read_mostly = TCP_RETR1;
+ int  sysctl_dccp_retries2		__read_mostly = TCP_RETR2;
+ 
+-static void dccp_write_timer(unsigned long data);
+-static void dccp_keepalive_timer(unsigned long data);
+-static void dccp_delack_timer(unsigned long data);
+-
+-void dccp_init_xmit_timers(struct sock *sk)
+-{
+-	inet_csk_init_xmit_timers(sk, &dccp_write_timer, &dccp_delack_timer,
+-				  &dccp_keepalive_timer);
+-}
+-
+ static void dccp_write_err(struct sock *sk)
+ {
+ 	sk->sk_err = sk->sk_err_soft ? : ETIMEDOUT;
+@@ -90,53 +80,6 @@ static int dccp_write_timeout(struct soc
+ 	return 0;
+ }
+ 
+-/* This is the same as tcp_delack_timer, sans prequeue & mem_reclaim stuff */
+-static void dccp_delack_timer(unsigned long data)
+-{
+-	struct sock *sk = (struct sock *)data;
+-	struct inet_connection_sock *icsk = inet_csk(sk);
+-
+-	bh_lock_sock(sk);
+-	if (sock_owned_by_user(sk)) {
+-		/* Try again later. */
+-		icsk->icsk_ack.blocked = 1;
+-		NET_INC_STATS_BH(LINUX_MIB_DELAYEDACKLOCKED);
+-		sk_reset_timer(sk, &icsk->icsk_delack_timer,
+-			       jiffies + TCP_DELACK_MIN);
+-		goto out;
+-	}
+-
+-	if (sk->sk_state = DCCP_CLOSED ||
+-	    !(icsk->icsk_ack.pending & ICSK_ACK_TIMER))
+-		goto out;
+-	if (time_after(icsk->icsk_ack.timeout, jiffies)) {
+-		sk_reset_timer(sk, &icsk->icsk_delack_timer,
+-			       icsk->icsk_ack.timeout);
+-		goto out;
+-	}
+-
+-	icsk->icsk_ack.pending &= ~ICSK_ACK_TIMER;
+-
+-	if (inet_csk_ack_scheduled(sk)) {
+-		if (!icsk->icsk_ack.pingpong) {
+-			/* Delayed ACK missed: inflate ATO. */
+-			icsk->icsk_ack.ato = min(icsk->icsk_ack.ato << 1,
+-						 icsk->icsk_rto);
+-		} else {
+-			/* Delayed ACK missed: leave pingpong mode and
+-			 * deflate ATO.
+-			 */
+-			icsk->icsk_ack.pingpong = 0;
+-			icsk->icsk_ack.ato = TCP_ATO_MIN;
+-		}
+-		dccp_send_ack(sk);
+-		NET_INC_STATS_BH(LINUX_MIB_DELAYEDACKS);
+-	}
+-out:
+-	bh_unlock_sock(sk);
+-	sock_put(sk);
+-}
+-
+ /*
+  *	The DCCP retransmit timer.
+  */
+@@ -270,3 +213,56 @@ out:
+ 	bh_unlock_sock(sk);
+ 	sock_put(sk);
+ }
++
++/* This is the same as tcp_delack_timer, sans prequeue & mem_reclaim stuff */
++static void dccp_delack_timer(unsigned long data)
++{
++	struct sock *sk = (struct sock *)data;
++	struct inet_connection_sock *icsk = inet_csk(sk);
++
++	bh_lock_sock(sk);
++	if (sock_owned_by_user(sk)) {
++		/* Try again later. */
++		icsk->icsk_ack.blocked = 1;
++		NET_INC_STATS_BH(LINUX_MIB_DELAYEDACKLOCKED);
++		sk_reset_timer(sk, &icsk->icsk_delack_timer,
++			       jiffies + TCP_DELACK_MIN);
++		goto out;
++	}
++
++	if (sk->sk_state = DCCP_CLOSED ||
++	    !(icsk->icsk_ack.pending & ICSK_ACK_TIMER))
++		goto out;
++	if (time_after(icsk->icsk_ack.timeout, jiffies)) {
++		sk_reset_timer(sk, &icsk->icsk_delack_timer,
++			       icsk->icsk_ack.timeout);
++		goto out;
++	}
++
++	icsk->icsk_ack.pending &= ~ICSK_ACK_TIMER;
++
++	if (inet_csk_ack_scheduled(sk)) {
++		if (!icsk->icsk_ack.pingpong) {
++			/* Delayed ACK missed: inflate ATO. */
++			icsk->icsk_ack.ato = min(icsk->icsk_ack.ato << 1,
++						 icsk->icsk_rto);
++		} else {
++			/* Delayed ACK missed: leave pingpong mode and
++			 * deflate ATO.
++			 */
++			icsk->icsk_ack.pingpong = 0;
++			icsk->icsk_ack.ato = TCP_ATO_MIN;
++		}
++		dccp_send_ack(sk);
++		NET_INC_STATS_BH(LINUX_MIB_DELAYEDACKS);
++	}
++out:
++	bh_unlock_sock(sk);
++	sock_put(sk);
++}
++
++void dccp_init_xmit_timers(struct sock *sk)
++{
++	inet_csk_init_xmit_timers(sk, &dccp_write_timer, &dccp_delack_timer,
++				  &dccp_keepalive_timer);
++}
