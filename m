@@ -1,55 +1,156 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Fri, 10 Nov 2006 15:26:40 +0000
-Subject: [PATCH 1/10][DCCP]: set safe upper bound for option length
-Message-Id: <20061110152640.GE23311@mandriva.com>
+Date: Mon, 13 Nov 2006 15:43:09 +0000
+Subject: [PATCH 5/7][DCCP]: Remove forward declarations in timer.c
+Message-Id: <20061113154308.GJ6947@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is a re-send from
-http://www.mail-archive.com/dccp@vger.kernel.org/msg00553.html
+This removes 3 forward declarations by reordering 2 functions.
 
-It is the same patch as before, but I have built in Arnaldo's suggestions
-pointed out in that posting.
+No code change at all.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
 ------------------------------------------------------------------------------
 
- dccp.h |   18 ++++++++++++------
- 1 file changed, 12 insertions(+), 6 deletions(-)
+ timer.c |  110 ++++++++++++++++++++++++++++++----------------------------------
+ 1 file changed, 53 insertions(+), 57 deletions(-)
 
 ------------------------------------------------------------------------------
 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 272e858..9f00dd8 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -40,12 +40,18 @@ extern void dccp_tw_deschedule(struct in
+diff --git a/net/dccp/timer.c b/net/dccp/timer.c
+index 7b3f16e..e8f519e 100644
+--- a/net/dccp/timer.c
++++ b/net/dccp/timer.c
+@@ -20,16 +20,6 @@ int  sysctl_dccp_request_retries	__read_
+ int  sysctl_dccp_retries1		__read_mostly = TCP_RETR1;
+ int  sysctl_dccp_retries2		__read_mostly = TCP_RETR2;
  
- extern void dccp_time_wait(struct sock *sk, int state, int timeo);
- 
--/* FIXME: Right size this */
--#define DCCP_MAX_OPT_LEN 128
+-static void dccp_write_timer(unsigned long data);
+-static void dccp_keepalive_timer(unsigned long data);
+-static void dccp_delack_timer(unsigned long data);
 -
--#define DCCP_MAX_PACKET_HDR 32
+-void dccp_init_xmit_timers(struct sock *sk)
+-{
+-	inet_csk_init_xmit_timers(sk, &dccp_write_timer, &dccp_delack_timer,
+-				  &dccp_keepalive_timer);
+-}
 -
--#define MAX_DCCP_HEADER  (DCCP_MAX_PACKET_HDR + DCCP_MAX_OPT_LEN + MAX_HEADER)
-+/*
-+ *  Set safe upper bounds for header and option length. Since Data Offset is 8
-+ *  bits (RFC 4340, sec. 5.1), the total header length can never be more than
-+ *  4 * 255 = 1020 bytes. The largest possible header length is 28 bytes (X=1):
-+ *    - DCCP-Response with ACK Subheader and 4 bytes of Service code      OR
-+ *    - DCCP-Reset    with ACK Subheader and 4 bytes of Reset Code fields
-+ *  Hence a safe upper bound for the maximum option length is 1020-28 = 992
-+ */
-+#define MAX_DCCP_SPECIFIC_HEADER (255 * sizeof(int))
-+#define DCCP_MAX_PACKET_HDR 28
-+#define DCCP_MAX_OPT_LEN (MAX_DCCP_SPECIFIC_HEADER - DCCP_MAX_PACKET_HDR)
-+#define MAX_DCCP_HEADER (MAX_DCCP_SPECIFIC_HEADER + MAX_HEADER)
+ static void dccp_write_err(struct sock *sk)
+ {
+ 	sk->sk_err = sk->sk_err_soft ? : ETIMEDOUT;
+@@ -90,53 +80,6 @@ static int dccp_write_timeout(struct soc
+ 	return 0;
+ }
  
- #define DCCP_TIMEWAIT_LEN (60 * HZ) /* how long to wait to destroy TIME-WAIT
- 				     * state, about 60 seconds */
+-/* This is the same as tcp_delack_timer, sans prequeue & mem_reclaim stuff */
+-static void dccp_delack_timer(unsigned long data)
+-{
+-	struct sock *sk = (struct sock *)data;
+-	struct inet_connection_sock *icsk = inet_csk(sk);
+-
+-	bh_lock_sock(sk);
+-	if (sock_owned_by_user(sk)) {
+-		/* Try again later. */
+-		icsk->icsk_ack.blocked = 1;
+-		NET_INC_STATS_BH(LINUX_MIB_DELAYEDACKLOCKED);
+-		sk_reset_timer(sk, &icsk->icsk_delack_timer,
+-			       jiffies + TCP_DELACK_MIN);
+-		goto out;
+-	}
+-
+-	if (sk->sk_state = DCCP_CLOSED ||
+-	    !(icsk->icsk_ack.pending & ICSK_ACK_TIMER))
+-		goto out;
+-	if (time_after(icsk->icsk_ack.timeout, jiffies)) {
+-		sk_reset_timer(sk, &icsk->icsk_delack_timer,
+-			       icsk->icsk_ack.timeout);
+-		goto out;
+-	}
+-
+-	icsk->icsk_ack.pending &= ~ICSK_ACK_TIMER;
+-
+-	if (inet_csk_ack_scheduled(sk)) {
+-		if (!icsk->icsk_ack.pingpong) {
+-			/* Delayed ACK missed: inflate ATO. */
+-			icsk->icsk_ack.ato = min(icsk->icsk_ack.ato << 1,
+-						 icsk->icsk_rto);
+-		} else {
+-			/* Delayed ACK missed: leave pingpong mode and
+-			 * deflate ATO.
+-			 */
+-			icsk->icsk_ack.pingpong = 0;
+-			icsk->icsk_ack.ato = TCP_ATO_MIN;
+-		}
+-		dccp_send_ack(sk);
+-		NET_INC_STATS_BH(LINUX_MIB_DELAYEDACKS);
+-	}
+-out:
+-	bh_unlock_sock(sk);
+-	sock_put(sk);
+-}
+-
+ /*
+  *	The DCCP retransmit timer.
+  */
+@@ -270,3 +213,56 @@ out:
+ 	bh_unlock_sock(sk);
+ 	sock_put(sk);
+ }
++
++/* This is the same as tcp_delack_timer, sans prequeue & mem_reclaim stuff */
++static void dccp_delack_timer(unsigned long data)
++{
++	struct sock *sk = (struct sock *)data;
++	struct inet_connection_sock *icsk = inet_csk(sk);
++
++	bh_lock_sock(sk);
++	if (sock_owned_by_user(sk)) {
++		/* Try again later. */
++		icsk->icsk_ack.blocked = 1;
++		NET_INC_STATS_BH(LINUX_MIB_DELAYEDACKLOCKED);
++		sk_reset_timer(sk, &icsk->icsk_delack_timer,
++			       jiffies + TCP_DELACK_MIN);
++		goto out;
++	}
++
++	if (sk->sk_state = DCCP_CLOSED ||
++	    !(icsk->icsk_ack.pending & ICSK_ACK_TIMER))
++		goto out;
++	if (time_after(icsk->icsk_ack.timeout, jiffies)) {
++		sk_reset_timer(sk, &icsk->icsk_delack_timer,
++			       icsk->icsk_ack.timeout);
++		goto out;
++	}
++
++	icsk->icsk_ack.pending &= ~ICSK_ACK_TIMER;
++
++	if (inet_csk_ack_scheduled(sk)) {
++		if (!icsk->icsk_ack.pingpong) {
++			/* Delayed ACK missed: inflate ATO. */
++			icsk->icsk_ack.ato = min(icsk->icsk_ack.ato << 1,
++						 icsk->icsk_rto);
++		} else {
++			/* Delayed ACK missed: leave pingpong mode and
++			 * deflate ATO.
++			 */
++			icsk->icsk_ack.pingpong = 0;
++			icsk->icsk_ack.ato = TCP_ATO_MIN;
++		}
++		dccp_send_ack(sk);
++		NET_INC_STATS_BH(LINUX_MIB_DELAYEDACKS);
++	}
++out:
++	bh_unlock_sock(sk);
++	sock_put(sk);
++}
++
++void dccp_init_xmit_timers(struct sock *sk)
++{
++	inet_csk_init_xmit_timers(sk, &dccp_write_timer, &dccp_delack_timer,
++				  &dccp_keepalive_timer);
++}
