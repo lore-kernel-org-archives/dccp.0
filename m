@@ -1,19 +1,17 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 13 Nov 2006 13:28:14 +0000
-Subject: [PATCH 6/7]: Remove redundant statements in init_sequence
-Message-Id: <200611131328.14443@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Mon, 13 Nov 2006 15:43:27 +0000
+Subject: [PATCH 6/7][DCCP]: Remove redundant statements in init_sequence (ISS)
+Message-Id: <20061113154326.GK6947@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Remove redundant statements in init_sequence (ISS)
-
 This patch removes the following redundancies:
 
  1) The test skb->protocol = htons(ETH_P_IPV6) in dccp_v6_init_sequence
-    is always true since 
+    is always true since
      * dccp_v6_conn_request() is the only calling function
      * dccp_v6_conn_request() redirects all skb's with ETH_P_IP to
        dccp_v4_conn_request()
@@ -28,12 +26,19 @@ By the way - are the `sport' / `dport' arguments in the right order?
 I have made them consistent among calls but they seem to be in the
 reverse order.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>    
----
- net/dccp/ipv4.c |    5 ++---
- net/dccp/ipv6.c |   20 ++++++--------------
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+
+------------------------------------------------------------------------------
+
+ ipv4.c |    5 ++---
+ ipv6.c |   20 ++++++--------------
  2 files changed, 8 insertions(+), 17 deletions(-)
 
+------------------------------------------------------------------------------
+
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 84c0540..b56a2fa 100644
 --- a/net/dccp/ipv4.c
 +++ b/net/dccp/ipv4.c
 @@ -366,8 +366,7 @@ void dccp_v4_send_check(struct sock *sk,
@@ -46,7 +51,7 @@ Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
  {
  	return secure_dccp_sequence_number(skb->nh.iph->daddr,
  					   skb->nh.iph->saddr,
-@@ -660,7 +659,7 @@ int dccp_v4_conn_request(struct sock *sk
+@@ -663,7 +662,7 @@ int dccp_v4_conn_request(struct sock *sk
  	 */
  	dreq = dccp_rsk(req);
  	dreq->dreq_isr	   = dcb->dccpd_seq;
@@ -55,6 +60,8 @@ Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
  	dreq->dreq_service = service;
  
  	if (dccp_v4_send_response(sk, req, NULL))
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index 339cc6a..ec9ed9a 100644
 --- a/net/dccp/ipv6.c
 +++ b/net/dccp/ipv6.c
 @@ -76,20 +76,12 @@ static inline void dccp_v6_send_check(st
@@ -83,7 +90,7 @@ Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
  }
  
  static void dccp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
-@@ -488,7 +480,7 @@ static int dccp_v6_conn_request(struct s
+@@ -491,7 +483,7 @@ static int dccp_v6_conn_request(struct s
  	 */
  	dreq = dccp_rsk(req);
  	dreq->dreq_isr	   = dcb->dccpd_seq;
