@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Sun, 12 Nov 2006 00:36:48 +0000
+From: Paul Moore <paul.moore@hp.com>
+Date: Mon, 13 Nov 2006 20:44:43 +0000
 Subject: Re: [PATCH RFC] SELinux support for DCCP
-Message-Id: <39e6f6c70611111636p2d919bafj9189ba9473f7c95a@mail.gmail.com>
+Message-Id: <4558D93B.9030003@hp.com>
 List-Id: <dccp.vger.kernel.org>
 References: <XMMS.LNX.4.64.0611110203540.25507@d.namei>
 In-Reply-To: <XMMS.LNX.4.64.0611110203540.25507@d.namei>
@@ -10,28 +10,44 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/11/06, James Morris <jmorris@namei.org> wrote:
-> Btw, I couldn't find anything to test DCCPv6 with (GNU netcat somehow
-> lacks IPv6 support), so wrote some simple apps to do this:
->
-> http://namei.org/misc/dccp/
+James Morris wrote:
+> This patch implements SELinux kernel support for DCCP 
+> (http://linux-net.osdl.org/index.php/DCCP), which is similar in operation 
+> to TCP in terms of connected state between peers.
+> 
+> The SELinux support for DCCP is thus modeled on existing handling of TCP.
+> 
+> A new DCCP socket class is introduced, to allow protocol differentation.  
+> The permissions for this class inherit all of the socket permissions, as 
+> well as the current TCP permissions (node_bind, name_bind etc). IPv4 and 
+> IPv6 are supported, although labeled networking is not, at this stage.
+> 
+> Patches for SELinux userspace are at:
+> http://people.redhat.com/jmorris/selinux/dccp/user/
+> 
+> I've performed some basic testing, and it seems to be working as expected.  
+> Adding policy support is similar to TCP, the only real difference being 
+> that it's a different protocol.
+> 
+> The kernel patch is included below, please review.
+> 
+> Signed-off-by: James Morris <jmorris@namei.org>
 
-Thanks for the new test apps, you can find some more here:
+Acked-by: Paul Moore <paul.moore@hp.com>
 
-http://linux-net.osdl.org/index.php/DCCP
+Based on my simple understanding of DCCP it looks okay to me, i.e. all the
+relevant things we do for TCP seem to be done now for DCCP.  Also, I don't think
+adding labeled networking support should be all that difficult; basically we
+would need to do the following (can anyone think of anything else?):
 
-And in:
+1. Add the security_inet_conn_established() hook to the DCCP code path (if it
+isn't there already, need to check) so that the last part of the DCCP handshake
+is caught by the LSM.
+2. Add the DCCP socket class to the SELinux NetLabel code.
 
-http://linux-net.osdl.org/index.php/DCCP#TODO_.26_testing
+The patch should be pretty small, in fact I'll volunteer to submit the code once
+this patch makes it's way into the net-2.6.20 tree.
 
-You can find a pointer to a ttcp mucho patched to support  IPv6 with
-DCCP, TCP & UDP.
-Ian has it here:
-
-http://wand.net.nz/~iam4/dccp/ttcp_acme.c
-
-Or you can get the latest one I store here:
-
-http://vger.kernel.org/~acme/dccp/ttcp.c
-
-- Arnaldo
+-- 
+paul moore
+linux security @ hp
