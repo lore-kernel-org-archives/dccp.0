@@ -1,38 +1,47 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 30 Nov 2006 20:02:35 +0000
-Subject: [BUGS] Two bugs found
-Message-Id: <5640c7e00611301202t34643e2fndb0d782569f04dc5@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Tue, 14 Nov 2006 15:58:42 +0000
+Subject: [PATCH 2/5][DCCPv6]: Resolve conditional build problem
+Message-Id: <20061114155841.GD6903@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Folks,
+Resolves the problem that if IPv6 was configured `y' and DCCP `m' then
+dccp_ipv6 was not built as a module. With this change, dccp_ipv6 is built
+as a module whenever DCCP *OR* IPv6 are configured as modules; it will be
+built-in only if both DCCP = `y' and IPV6 = `y'.
 
-To let you know of two bugs I've observed in my logs (in case others
-see easy answers):
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 
-Bug 1 - always with RESET packet and note P.seqno!
-Nov 22 15:38:23 localhost kernel: [65275.357482] DCCP: Step 6 failed
-for RESET packet, (LSWL(319010713595) <= P.seqno(10) <S.SWH(319010721094)) and (P.ackno exists or LAWL(931392870355) <P.ackno(931392870591) <= S.AWH(931392870597), sending SYNC...
-Nov 22 15:38:28 localhost kernel: [65280.194139] printk: 139 messages
-suppressed.
-Nov 22 15:38:28 localhost kernel: [65280.194179] DCCP: Step 6 failed
-for RESET packet, (LSWL(319010713595) <= P.seqno(10) <S.SWH(319010721094)) and (P.ackno exists or LAWL(931392870355) <P.ackno(931392870755) <= S.AWH(931392870761), sending SYNC...
-Nov 22 15:38:33 localhost kernel: [65285.209823] printk: 181 messages
-suppressed.
-Nov 22 15:38:33 localhost kernel: [65285.209863] DCCP: Step 6 failed
-for RESET packet, (LSWL(319010713595) <= P.seqno(24) <S.SWH(319010721094)) and (P.ackno exists or LAWL(931392870355) <P.ackno(931392870962) <= S.AWH(931392870968), sending SYNC...
+------------------------------------------------------------------------------
 
-Bug 2:
-Pretty sure this is to do with tx_bufferig and closing out a connection.
-Nov 22 15:45:31 localhost kernel: [65702.725265] KERNEL: assertion
-(skb_queue_empty(&sk->sk_write_queue)) failed at net/core/stream.c
-(276)
+ Makefile |    8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+------------------------------------------------------------------------------
+
+diff --git a/net/dccp/Makefile b/net/dccp/Makefile
+index 17ed99c..f4f8793 100644
+--- a/net/dccp/Makefile
++++ b/net/dccp/Makefile
+@@ -1,13 +1,13 @@
+-obj-$(CONFIG_IPV6) += dccp_ipv6.o
+-
+-dccp_ipv6-y := ipv6.o
+-
+ obj-$(CONFIG_IP_DCCP) += dccp.o dccp_ipv4.o
+ 
+ dccp-y := ccid.o feat.o input.o minisocks.o options.o output.o proto.o timer.o
+ 
+ dccp_ipv4-y := ipv4.o
+ 
++# build dccp_ipv6 as module whenever either IPv6 or DCCP is a module
++obj-$(subst y,$(CONFIG_IP_DCCP),$(CONFIG_IPV6)) += dccp_ipv6.o
++dccp_ipv6-y := ipv6.o
++
+ dccp-$(CONFIG_IP_DCCP_ACKVEC) += ackvec.o
+ 
+ obj-$(CONFIG_INET_DCCP_DIAG) += dccp_diag.o
