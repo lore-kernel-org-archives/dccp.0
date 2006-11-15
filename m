@@ -1,42 +1,34 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 30 Nov 2006 13:37:22 +0000
-Subject: Re: DCCP CCID 3 bug
-Message-Id: <200611301337.22692@strip-the-willow>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Wed, 15 Nov 2006 21:39:08 +0000
+Subject: [RFC PATCH 2/2]: DCCP Introduce tx queue limits
+Message-Id: <200611161039.10804.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  > BTW, I am using CCID3.
-|  
-|  Ok, now to the next troubleshooting test: can you please try using
-|  CCID2? That way we can isolate the problem, is it CCID3 specific?
-|  CCID2? Core? Something else?
+This puts a limit on transmit queue length and sends back EAGAIN if the
+buffer is full.
 
-Yes, please do send all kinds of debug information which you encounter to the list; 
-this makes tracking down the errors much simpler. 
-
-Both CCID 2 and CCID 3 now have debugging options, 
-
- CONFIG_IP_DCCP_CCID2_DEBUG=y
- CONFIG_IP_DCCP_CCID3_DEBUG=y
-
-but in order to get debugging output, these must be explicitly set via module parameter. 
-This can be automated. 
-
-If you paste the following into a file /etc/modutils/options,
-
-# options for DCCP
-options dccp            dccp_debug=1
-options dccp_ccid2      ccid2_debug=1
-options dccp_ccid3      ccid3_debug=1
-# EOF
-
-and run `update-modules' [alternatively: paste the above at the end of /etc/modules.conf ]
-
-The same options should also be placed into a file /etc/modprobe.d/options (if you are running modprobe);
-or alternatively into  /etc/modprobe.conf (man 5 modprobe.conf).
-
-This all is important, much helpful output (e.g. DCCP_BUG(...)) depends on having debugging enabled.
-
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index b9d6e7e..4056308 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -634,6 +634,14 @@ int dccp_sendmsg(struct kiocb *iocb, str
+ 		return -EMSGSIZE;
+ 
+ 	lock_sock(sk);
++
++	if (sysctl_dccp_tx_qlen && 
++	   (sk->sk_write_queue.qlen >= sysctl_dccp_tx_qlen)) {
++		/* if sysctl_dccp_tx_qlen = 0 then unlimited tx queue */
++		rc = -EAGAIN;
++		goto out_release;
++	}
++
+ 	timeo = sock_sndtimeo(sk, noblock);
+ 
+ 	/*
