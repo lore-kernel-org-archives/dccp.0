@@ -1,116 +1,67 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 13 Nov 2006 13:28:06 +0000
-Subject: [PATCH 7/7]: Choose a genuine initial DCCPv6 sequence number
-Message-Id: <200611131328.06727@strip-the-willow>
+Date: Wed, 15 Nov 2006 14:47:51 +0000
+Subject: CCID3: dead code in  ccid3_hc_rx_packet_recv?
+Message-Id: <200611151447.51245@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCPv6]: Choose a genuine initial sequence number
+While working on the promised EWMA patch for CCID 3 packet sizes, I stumbled over two things
+and can make no sense of a bit of CCID 3 Receive code:
 
-This 
-	* resolves a FIXME - DCCPv6 connections started all with 
-	  an initial sequence number of 1;
-	* provides a redirection `secure_dccpv6_sequence_number'
-	  in case the init_sequence_v6 code should be updated later;
-	* concentrates the update of S.GAR into dccp_connect_init();
-	* removes a duplicate dccp_update_gss() in ipv4.c;
-	* uses inet->dport instead of usin->sin_port, due to the
-	  following assignment in dccp_v4_connect():
- 		inet->dport = usin->sin_port;
+	1) ccid3_hc_rx_sock maintains a real-timer RTT counter ccid3hcrx_rtt
+           which is an alias for a TFRC structure defined in <linux/tfrc.h>
+	2) ccid3_hc_rx_packet_recv (detailed below) updates this, but leaves the variable
+           `win_count = packet->dccphrx_ccval;'  entirely untouched after initialisation
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ipv4.c   |    9 ++-------
- net/dccp/ipv6.c   |   28 ++++++++++++++++------------
- net/dccp/output.c |    6 +++++-
- 3 files changed, 23 insertions(+), 20 deletions(-)
+It may be that ... ?
+	* this is because a real-time counter as opposed to the 4-digit window value
+          counter affords better reliability (but then win_count should be removed)
+	* this stems from the original TFRC code and might need update
+        
 
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -113,13 +113,8 @@ int dccp_v4_connect(struct sock *sk, str
- 	/* OK, now commit destination to socket.  */
- 	sk_setup_caps(sk, &rt->u.dst);
- 
--	dp->dccps_gar -		dp->dccps_iss = secure_dccp_sequence_number(inet->saddr,
--							    inet->daddr,
--							    inet->sport,
--							    usin->sin_port);
--	dccp_update_gss(sk, dp->dccps_iss);
--
-+	dp->dccps_iss = secure_dccp_sequence_number(inet->saddr, inet->daddr,
-+						    inet->sport, inet->dport);
- 	inet->id = dp->dccps_iss ^ jiffies;
- 
- 	err = dccp_connect(sk);
---- a/net/dccp/ipv6.c
-+++ b/net/dccp/ipv6.c
-@@ -76,12 +76,19 @@ static inline void dccp_v6_send_check(st
- 	dh->dccph_checksum = dccp_v6_csum_finish(skb, &np->saddr, &np->daddr);
- }
- 
--static inline __u32 dccp_v6_init_sequence(const struct sk_buff *skb)
-+static inline __u32 secure_dccpv6_sequence_number(__u32 *saddr, __u32 *daddr,
-+				   		  __u16 sport, __u16 dport   )
- {
--	return secure_tcpv6_sequence_number(skb->nh.ipv6h->daddr.s6_addr32,
--					    skb->nh.ipv6h->saddr.s6_addr32,
--					    dccp_hdr(skb)->dccph_dport,
--					    dccp_hdr(skb)->dccph_sport     );
-+	return secure_tcpv6_sequence_number(saddr, daddr, sport, dport);
-+}
-+
-+static inline __u32 dccp_v6_init_sequence(struct sk_buff *skb)
-+{
-+	return secure_dccpv6_sequence_number(skb->nh.ipv6h->daddr.s6_addr32,
-+					     skb->nh.ipv6h->saddr.s6_addr32,
-+					     dccp_hdr(skb)->dccph_dport,
-+					     dccp_hdr(skb)->dccph_sport     );
-+
- }
- 
- static void dccp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
-@@ -1078,13 +1085,10 @@ static int dccp_v6_connect(struct sock *
- 	err = inet6_hash_connect(&dccp_death_row, sk);
- 	if (err)
- 		goto late_failure;
--	/* FIXME */
--#if 0
--	dp->dccps_gar = secure_dccp_v6_sequence_number(np->saddr.s6_addr32,
--						       np->daddr.s6_addr32,
--						       inet->sport,
--						       inet->dport);
--#endif
-+
-+	dp->dccps_iss = secure_dccpv6_sequence_number(np->saddr.s6_addr32,
-+						      np->daddr.s6_addr32,
-+						      inet->sport, inet->dport);
- 	err = dccp_connect(sk);
- 	if (err)
- 		goto late_failure;
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -439,7 +439,6 @@ static inline void dccp_connect_init(str
- 	
- 	dccp_sync_mss(sk, dst_mtu(dst));
- 
--	dccp_update_gss(sk, dp->dccps_iss);
-  	/*
- 	 * SWL and AWL are initially adjusted so that they are not less than
- 	 * the initial Sequence Numbers received and sent, respectively:
-@@ -448,8 +447,13 @@ static inline void dccp_connect_init(str
- 	 * These adjustments MUST be applied only at the beginning of the
- 	 * connection.
-  	 */
-+	dccp_update_gss(sk, dp->dccps_iss);
- 	dccp_set_seqno(&dp->dccps_awl, max48(dp->dccps_awl, dp->dccps_iss));
- 
-+	/* S.GAR - greatest valid acknowledgement number received on a non-Sync;
-+	 *         initialized to S.ISS (sec. 8.5)                            */
-+	dp->dccps_gar = dp->dccps_iss;
-+
- 	icsk->icsk_retransmits = 0;
- 	init_timer(&dp->dccps_xmit_timer);
- 	dp->dccps_xmit_timer.data = (unsigned long)sk;
+I'd be glad for clarification about this code:
+
+
+static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
+{
+	/* ... */
+	switch (DCCP_SKB_CB(skb)->dccpd_type) {
+	case DCCP_PKT_ACK:
+		if (hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA)
+			return;
+	case DCCP_PKT_DATAACK:
+		/* ... */
+		rtt_prev = hcrx->ccid3hcrx_rtt;
+		/* ... */
+		r_sample = timeval_usecs(&now);
+		t_elapsed = opt_recv->dccpor_elapsed_time * 10;
+
+		/* 
+                   after updating r_sample with regard to t_elapsed ... 
+                   => The code that now follows is identical with ccid3_hc_tx_packet_recv
+		       --is this a leftover ?
+		       --should it not rather update the sending structure (ccid3hctx_rtt)
+		   => why not use win_count ??
+                 */
+
+		if (hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA)
+			hcrx->ccid3hcrx_rtt = r_sample;
+		else
+			hcrx->ccid3hcrx_rtt = (hcrx->ccid3hcrx_rtt * 9) / 10 +
+					      r_sample / 10;
+		/* ... */
+		break;
+	case DCCP_PKT_DATA:
+		break;
+	default: /* We're not interested in other packet types, move along */
+		return;
+	}
+	/* ... */
+
+	win_count = packet->dccphrx_ccval; /* XXX this is the only place `win_count' appears */
+
+	/* ... */
+}	
