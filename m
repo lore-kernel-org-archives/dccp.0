@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Thu, 16 Nov 2006 01:24:46 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 16 Nov 2006 16:53:08 +0000
 Subject: Re: [RFC-RESEND] [PATCH]: use explicit enums for CCID 3 states
-Message-Id: <39e6f6c70611151724t2f988d56leac123be9f2e827b@mail.gmail.com>
+Message-Id: <200611161653.09002@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200611151859.19282@strip-the-willow>
 In-Reply-To: <200611151859.19282@strip-the-willow>
@@ -10,58 +10,47 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/15/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Hi Arnaldo,
->
-> thank you for the link @-)
->
-> |  > The following is the revised patch with three macros added, I liked the
-> |  > DCCP_BUG_ON():
-> |
-> |  will look into that barring social life that is taking me so much time
-> |  that I should be working on DCCP :-P :-) Well, at least its not "Real
-> |  Work (tm)" :-)
-> I really hope you can get some quality time - there should be funding for all the
-> good work you are putting into this.
+Hi Arnaldo,
 
-Thanks, Mandriva allows me to work part time on what I think is
-important, barring when there is some important customer project, that
-was the case for at least 6 months this year, when I mostly
-disappeared from my kernel projects.
+|  Thanks, applied.
+many thanks for applying this; it was sooner as expected and I think it would
+be good to tidy this up and make it consistent throughout the code. Since I initiated this,
+I feel a bit obliged to improve this.
 
-> I have made a terrible mess of the previous patch (with the warn semantics,
-> it would not have worked correctly). I have tested it and below is what I
-> had intended, but was too tired to get clear.
+In particular, I have thought about the following scheme which divides warning messages into
+two (plus debug) categories
 
-:-)
+a) GRADE 1: Severe Protocol/Internal Faults
+            This includes 
+		* violated pre- / postconditions, 
+		* illegal states
+		* malfunctioning (something is NULL)
+   I think these messages should not be rate-limited and, catching up on the discussion,
+   should dump the stack after the warning message. 
 
-Seems ok now:
+b) GRADE 2: Plain Misbehaviour
+		* out-of-memory messages
+		* Request floods
+		* protocol violations (wrong message/option format)
 
-[acme@newtoy net-2.6.20]$ codiff --verbose /tmp/ccid3.o.before /tmp/ccid3.o.enum
-/pub/scm/linux/kernel/git/acme/net-2.6.20/net/dccp/ccids/ccid3.c:
-  struct ccid3_hc_tx_sock       |   +0
-    ccid3hctx_state;
-     from: u8                    /*    30(0)     1(0) */
-     to:   enum ccid3_hc_tx_states /*    28(8)     4(8) */
-  struct ccid3_hc_rx_sock       |   +0
-    ccid3hcrx_state:8;
-     from: u64                   /*    16(36)     8(8) */
-     to:   enum ccid3_hc_rx_states /*    16(0)     4(8) */
-    ccid3hcrx_ccval_last_counter:4;
-     from: u64                   /*    16(32)     8(4) */
-     to:   u64                   /*    16(40)     8(4) */
- 2 structs changed
-  ccid3_hc_rx_set_state         |  -28
-  ccid3_hc_rx_send_feedback     |  +26
-  ccid3_hc_rx_init              |  -11
-  ccid3_hc_tx_no_feedback_timer |  +32
-  ccid3_hc_tx_packet_recv       |  +32
-  ccid3_hc_rx_packet_recv       |  -16
-  ccid3_hc_rx_get_info          |   -4
-  ccid3_hc_tx_send_packet       |  +27
-  ccid3_hc_tx_packet_sent       |  +32
- 9 functions changed, 149 bytes added, 59 bytes removed
+To make this consistent, I would like input whether the following is ok with you:
 
-Thanks, applied.
+	1) use DCCP_BUG for all Grade 1 type of messages, i.e. it would replace 
+		* BUG()
+		* WARN_ON() (of course with the appropriate message)
+		* all sections using 'printk(KERN_CRIT ... ); dump_stack()'
 
-- Arnaldo
+	2) either keep the LIMIT_NETDEBUG(KERN_WARNING ... ) for Grade 2 or
+           put it into a macro which would add the __FUNCTION__ thing to it
+ 	   
+The point is that, if it is done consistently, (1) can later be replaced with the more
+conventional BUG() or WARN_ON() once everyone is sure that the code behaves exactly as it shoulds.
+For the moment, as Ian has pointed out, bringing the machine to a grinding halt for every little
+problem is probably too much of a nuisance (in the same vein, I would really like to suggest the
+return of Unload Hack :0).
+
+If you are ok with this basic scheme, I shall set about and tidy things up, otherwise please let
+me know what the constraints should be with regard to warning/bug messages.
+
+Best,
+Gerrit
