@@ -1,187 +1,86 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Mon, 13 Nov 2006 15:42:50 +0000
-Subject: [PATCH 4/7][DCCP]: Introduce a consistent naming scheme for sysctls
-Message-Id: <20061113154249.GI6947@mandriva.com>
+Date: Thu, 16 Nov 2006 16:33:58 +0000
+Subject: [PATCH 3/3][DCCP] CCID2: Code optimizations
+Message-Id: <20061116163357.GE5195@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-In order to make their function clearer and obtain a consistent naming
-scheme to identify sysctls, all existing DCCP sysctls have been prefixed
-with `sysctl_dccp', following the same convention as used by TCP.
+These are code optimizations which are relevant when dealing with large
+windows.  They are not coded the way I would like to, but they do the job for
+the short-term.  This patch should be more neat.
 
-Feature-specific sysctls retain the `feat' in the middle, although the
-`default' has been dropped, since it is obvious from use.
+Commiter note: Changed the seqno comparisions to use {after,before}48 to handle
+               wrapping.
 
-Also removed a duplicate `dccp_feat_default_sequence_window' in ipv4.c.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+---
+ net/dccp/ccids/ccid2.c |   22 ++++++++++++++++++++--
+ net/dccp/ccids/ccid2.h |    1 +
+ 2 files changed, 21 insertions(+), 2 deletions(-)
 
-------------------------------------------------------------------------------
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 162032b..6533cb2 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -619,7 +619,17 @@ static void ccid2_hc_tx_packet_recv(stru
+ 	}
+ 
+ 	ackno = DCCP_SKB_CB(skb)->dccpd_ack_seq;
+-	seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
++	if (after48(ackno, hctx->ccid2hctx_high_ack))
++		hctx->ccid2hctx_high_ack = ackno;
++
++	seqp = hctx->ccid2hctx_seqt;
++	while (before48(seqp->ccid2s_seq, ackno)) {
++		seqp = seqp->ccid2s_next;
++		if (seqp = hctx->ccid2hctx_seqh) {
++			seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
++			break;
++		}
++	}
+ 
+ 	/* If in slow-start, cwnd can increase at most Ack Ratio / 2 packets for
+ 	 * this single ack.  I round up.
+@@ -697,7 +707,14 @@ static void ccid2_hc_tx_packet_recv(stru
+ 	/* The state about what is acked should be correct now
+ 	 * Check for NUMDUPACK
+ 	 */
+-	seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
++	seqp = hctx->ccid2hctx_seqt;
++	while (before48(seqp->ccid2s_seq, hctx->ccid2hctx_high_ack)) {
++		seqp = seqp->ccid2s_next;
++		if (seqp = hctx->ccid2hctx_seqh) {
++			seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
++			break;
++		}
++	}
+ 	done = 0;
+ 	while (1) {
+ 		if (seqp->ccid2s_acked) {
+@@ -771,6 +788,7 @@ static int ccid2_hc_tx_init(struct ccid 
+ 	hctx->ccid2hctx_lastrtt  = 0;
+ 	hctx->ccid2hctx_rpdupack = -1;
+ 	hctx->ccid2hctx_last_cong = jiffies;
++	hctx->ccid2hctx_high_ack = 0;
+ 
+ 	hctx->ccid2hctx_rtotimer.function = &ccid2_hc_tx_rto_expire;
+ 	hctx->ccid2hctx_rtotimer.data	  = (unsigned long)sk;
+diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
+index 5b2ef4a..a97a899 100644
+--- a/net/dccp/ccids/ccid2.h
++++ b/net/dccp/ccids/ccid2.h
+@@ -72,6 +72,7 @@ struct ccid2_hc_tx_sock {
+ 	int			ccid2hctx_rpdupack;
+ 	int			ccid2hctx_sendwait;
+ 	unsigned long		ccid2hctx_last_cong;
++	u64			ccid2hctx_high_ack;
+ };
+ 
+ struct ccid2_hc_rx_sock {
+-- 
+1.4.2.1.g3d5c
 
- dccp.h      |   12 ++++++------
- ipv4.c      |    1 -
- minisocks.c |    2 +-
- options.c   |   26 +++++++++++++-------------
- sysctl.c    |   24 ++++++++++++------------
- 5 files changed, 32 insertions(+), 33 deletions(-)
-
-------------------------------------------------------------------------------
-
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index e7b9607..363fa52 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -68,12 +68,12 @@ #define DCCP_XMIT_TIMEO 30000 /* Time/ms
- extern int  sysctl_dccp_request_retries;
- extern int  sysctl_dccp_retries1;
- extern int  sysctl_dccp_retries2;
--extern int  dccp_feat_default_sequence_window;
--extern int  dccp_feat_default_rx_ccid;
--extern int  dccp_feat_default_tx_ccid;
--extern int  dccp_feat_default_ack_ratio;
--extern int  dccp_feat_default_send_ack_vector;
--extern int  dccp_feat_default_send_ndp_count;
-+extern int  sysctl_dccp_feat_sequence_window;
-+extern int  sysctl_dccp_feat_rx_ccid;
-+extern int  sysctl_dccp_feat_tx_ccid;
-+extern int  sysctl_dccp_feat_ack_ratio;
-+extern int  sysctl_dccp_feat_send_ack_vector;
-+extern int  sysctl_dccp_feat_send_ndp_count;
- 
- /* is seq1 < seq2 ? */
- static inline int before48(const u64 seq1, const u64 seq2)
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index 4961120..84c0540 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -651,7 +651,6 @@ int dccp_v4_conn_request(struct sock *sk
- 	ireq = inet_rsk(req);
- 	ireq->loc_addr = skb->nh.iph->daddr;
- 	ireq->rmt_addr = skb->nh.iph->saddr;
--	req->rcv_wnd	= dccp_feat_default_sequence_window;
- 	ireq->opt	= NULL;
- 
- 	/* 
-diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
-index 5b2773e..0c49733 100644
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -300,7 +300,7 @@ void dccp_reqsk_init(struct request_sock
- {
- 	inet_rsk(req)->rmt_port = dccp_hdr(skb)->dccph_sport;
- 	inet_rsk(req)->acked	= 0;
--	req->rcv_wnd		= dccp_feat_default_sequence_window;
-+	req->rcv_wnd		= sysctl_dccp_feat_sequence_window;
- }
- 
- EXPORT_SYMBOL_GPL(dccp_reqsk_init);
-diff --git a/net/dccp/options.c b/net/dccp/options.c
-index fb0db1f..121e794 100644
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -22,23 +22,23 @@ #include "ccid.h"
- #include "dccp.h"
- #include "feat.h"
- 
--int dccp_feat_default_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
--int dccp_feat_default_rx_ccid	      = DCCPF_INITIAL_CCID;
--int dccp_feat_default_tx_ccid	      = DCCPF_INITIAL_CCID;
--int dccp_feat_default_ack_ratio	      = DCCPF_INITIAL_ACK_RATIO;
--int dccp_feat_default_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
--int dccp_feat_default_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
-+int sysctl_dccp_feat_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
-+int sysctl_dccp_feat_rx_ccid	      = DCCPF_INITIAL_CCID;
-+int sysctl_dccp_feat_tx_ccid	      = DCCPF_INITIAL_CCID;
-+int sysctl_dccp_feat_ack_ratio	      = DCCPF_INITIAL_ACK_RATIO;
-+int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
-+int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
- 
--EXPORT_SYMBOL_GPL(dccp_feat_default_sequence_window);
-+EXPORT_SYMBOL_GPL(sysctl_dccp_feat_sequence_window);
- 
- void dccp_minisock_init(struct dccp_minisock *dmsk)
- {
--	dmsk->dccpms_sequence_window = dccp_feat_default_sequence_window;
--	dmsk->dccpms_rx_ccid	     = dccp_feat_default_rx_ccid;
--	dmsk->dccpms_tx_ccid	     = dccp_feat_default_tx_ccid;
--	dmsk->dccpms_ack_ratio	     = dccp_feat_default_ack_ratio;
--	dmsk->dccpms_send_ack_vector = dccp_feat_default_send_ack_vector;
--	dmsk->dccpms_send_ndp_count  = dccp_feat_default_send_ndp_count;
-+	dmsk->dccpms_sequence_window = sysctl_dccp_feat_sequence_window;
-+	dmsk->dccpms_rx_ccid	     = sysctl_dccp_feat_rx_ccid;
-+	dmsk->dccpms_tx_ccid	     = sysctl_dccp_feat_tx_ccid;
-+	dmsk->dccpms_ack_ratio	     = sysctl_dccp_feat_ack_ratio;
-+	dmsk->dccpms_send_ack_vector = sysctl_dccp_feat_send_ack_vector;
-+	dmsk->dccpms_send_ndp_count  = sysctl_dccp_feat_send_ndp_count;
- }
- 
- static u32 dccp_decode_value_var(const unsigned char *bf, const u8 len)
-diff --git a/net/dccp/sysctl.c b/net/dccp/sysctl.c
-index 7b09f21..8b62061 100644
---- a/net/dccp/sysctl.c
-+++ b/net/dccp/sysctl.c
-@@ -22,48 +22,48 @@ static struct ctl_table dccp_default_tab
- 	{
- 		.ctl_name	= NET_DCCP_DEFAULT_SEQ_WINDOW,
- 		.procname	= "seq_window",
--		.data		= &dccp_feat_default_sequence_window,
--		.maxlen		= sizeof(dccp_feat_default_sequence_window),
-+		.data		= &sysctl_dccp_feat_sequence_window,
-+		.maxlen		= sizeof(sysctl_dccp_feat_sequence_window),
- 		.mode		= 0644,
- 		.proc_handler	= proc_dointvec,
- 	},
- 	{
- 		.ctl_name	= NET_DCCP_DEFAULT_RX_CCID,
- 		.procname	= "rx_ccid",
--		.data		= &dccp_feat_default_rx_ccid,
--		.maxlen		= sizeof(dccp_feat_default_rx_ccid),
-+		.data		= &sysctl_dccp_feat_rx_ccid,
-+		.maxlen		= sizeof(sysctl_dccp_feat_rx_ccid),
- 		.mode		= 0644,
- 		.proc_handler	= proc_dointvec,
- 	},
- 	{
- 		.ctl_name	= NET_DCCP_DEFAULT_TX_CCID,
- 		.procname	= "tx_ccid",
--		.data		= &dccp_feat_default_tx_ccid,
--		.maxlen		= sizeof(dccp_feat_default_tx_ccid),
-+		.data		= &sysctl_dccp_feat_tx_ccid,
-+		.maxlen		= sizeof(sysctl_dccp_feat_tx_ccid),
- 		.mode		= 0644,
- 		.proc_handler	= proc_dointvec,
- 	},
- 	{
- 		.ctl_name	= NET_DCCP_DEFAULT_ACK_RATIO,
- 		.procname	= "ack_ratio",
--		.data		= &dccp_feat_default_ack_ratio,
--		.maxlen		= sizeof(dccp_feat_default_ack_ratio),
-+		.data		= &sysctl_dccp_feat_ack_ratio,
-+		.maxlen		= sizeof(sysctl_dccp_feat_ack_ratio),
- 		.mode		= 0644,
- 		.proc_handler	= proc_dointvec,
- 	},
- 	{
- 		.ctl_name	= NET_DCCP_DEFAULT_SEND_ACKVEC,
- 		.procname	= "send_ackvec",
--		.data		= &dccp_feat_default_send_ack_vector,
--		.maxlen		= sizeof(dccp_feat_default_send_ack_vector),
-+		.data		= &sysctl_dccp_feat_send_ack_vector,
-+		.maxlen		= sizeof(sysctl_dccp_feat_send_ack_vector),
- 		.mode		= 0644,
- 		.proc_handler	= proc_dointvec,
- 	},
- 	{
- 		.ctl_name	= NET_DCCP_DEFAULT_SEND_NDP,
- 		.procname	= "send_ndp",
--		.data		= &dccp_feat_default_send_ndp_count,
--		.maxlen		= sizeof(dccp_feat_default_send_ndp_count),
-+		.data		= &sysctl_dccp_feat_send_ndp_count,
-+		.maxlen		= sizeof(sysctl_dccp_feat_send_ndp_count),
- 		.mode		= 0644,
- 		.proc_handler	= proc_dointvec,
- 	},
