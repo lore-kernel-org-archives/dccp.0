@@ -1,36 +1,33 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 29 Nov 2006 22:13:30 +0000
-Subject: Revised iperf patch
-Message-Id: <5640c7e00611291413x69e6b2cawb65af02152954d5c@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Thu, 16 Nov 2006 16:32:42 +0000
+Subject: [PATCH 1/3][DCCP]: One NET_INC_STATS() could be NET_INC_STATS_BH in dccp_v4_err()
+Message-Id: <20061116163241.GC5195@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Folks,
+Spotted by Eric Dumazet in tcp_v4_rcv().
 
-I have revised the iperf patch I maintain to work with latest DCCP
-Linux codebase. (basically coping with EAGAIN)
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+---
+ net/dccp/ipv4.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-As a reminder this also allows setting of TCP congestion control method also.
-
-Can someone update the iperf webpage as this points to an outdated patch.
-
-Patch is at:
-http://wand.net.nz/~iam4/software/congestion-iperf-2.0.2-2.diff
-
-For dccp users I have also updated my DCCP page a little at:
-http://wand.net.nz/~iam4/dccp/
-
-Regards,
-
-Ian
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 6bca719..a20eb71 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -244,7 +244,7 @@ static void dccp_v4_err(struct sk_buff *
+ 	seq = dccp_hdr_seq(skb);
+ 	if (sk->sk_state != DCCP_LISTEN &&
+ 	    !between48(seq, dp->dccps_swl, dp->dccps_swh)) {
+-		NET_INC_STATS(LINUX_MIB_OUTOFWINDOWICMPS);
++		NET_INC_STATS_BH(LINUX_MIB_OUTOFWINDOWICMPS);
+ 		goto out;
+ 	}
+ 
 -- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+1.4.2.1.g3d5c
+
