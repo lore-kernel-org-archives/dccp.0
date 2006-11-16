@@ -1,53 +1,64 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 20 Nov 2006 16:05:20 +0000
-Subject: [PATCH 0/2] [RESEND/UPDATE]: Message Scheme, McDonald Patches
-Message-Id: <200611201605.20853@strip-the-willow>
+Date: Thu, 16 Nov 2006 17:12:34 +0000
+Subject: Re: message scheme / Unload Hack
+Message-Id: <200611161712.35070@strip-the-willow>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="Boundary-00=_DwJXFFY6duonpmP"
 List-Id: <dccp.vger.kernel.org>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This set contains
-	* an update of  my patches from Friday
-	* Ian's patches
+--Boundary-00=_DwJXFFY6duonpmP
+Content-Type: text/plain;
+  charset="iso-8859-1"
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
+
+|  Using a DCCP_ prefix for BUG(), BUG_ON(), WARN_ON() and a new WARN()
+|  with the difference being none would panic the machine, but warn, in
+|  some cases ratelimited, seems to be the way to go, later, as you
+|  suggests, we just remove the prefix.
+I will take this into consideration and work on that until tomorrow.
+
+  
+|  > For the moment, as Ian has pointed out, bringing the machine to a grinding halt for every little
+|  > problem is probably too much of a nuisance (in the same vein, I would really like to suggest the
+|  > return of Unload Hack :0).
+|  
+|  I'll look at what to do to avoid allowing the removal while there are
+|  TW sockets on the death row :-)
+I had meant to look into what David said about socket references, but my knowledge of module internals
+is probably not so great (but intended to catch up on this).
+Currently all modules have to be ejected in some order (ccids ->  dccp_ipv6 -> dccp_ipv4 -> dccp); 
+I attach the script which I am using for unloading, this doesn't solve the Unload Hack, but has been useful. 
+
+Gerrit
 
 
-1) Reason for update
---------------------
-   The whole point of the message-macro scheme was to allow an easier migration later on
-   to the well-known counterparts BUG(), WARN_ON(), BUG_ON(). These however issue a panic
-   which stops the machine. Now, patch xx/7 sent in the last batch replaced BUG/BUG_ON with
-   the DCCP counterparts. This is *not* a good idea, since these tests are in places where
-   continuing would mean entering an undefined state. I therefore retract the said patch
-   and have updated the others as pointed out below.
 
+--Boundary-00=_DwJXFFY6duonpmP
+Content-Type: application/x-perl;
+  name="dccp_module_unload_script.pl"
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment;
+	filename="dccp_module_unload_script.pl"
 
-2) What changes:
-----------------
-	* Patch 1      (Ian's tx_qlen patch) remains as 9z.
-	* Patch 2      (message scheme) will be re-sent as one patch (10a) instead of 7 single ones
-	* Patch 3      (socket annotations) will be re-sent as second patch (10b)
-	* Patch 4..6   are Ian's patches from Sunday and are not re-sent, but simply and shamelessly 
-                       stacked them on top of all other patches as 11a .. 11c   
-                                   
+#!/usr/bin/perl
+# 
+# Script to unload DCCP modules (e.g. after compiling new ones)
 
-3) Detailed breakdown of changes with regard to the earlier cset
-----------------------------------------------------------------
-Patch 2:        Simplifications for ccid3.c 
-              - remains as  before
+@ARGV = qw#/proc/modules#;
 
-Patch 3:      - CHANGED:
-	      - removed superfluous DCCP_WARN_ON  (no point using a DCCP_XX wrapper)
-Patch 4:      - Migration towards DCCP_BUG{,_ON}() 
-	      - RETRACTED: due to reasons above
-Patch 5:      - Migration towards DCCP_WARN_ON();
-	      - RETRACTED: DCCP_BUG_ON is the same as WARN_ON, so not necessary
-              - remainder of Patch 4/5; replaces unconditional BUG_ON(1) / WARN_ON(1)
+# create a topological order among the modules
+# the `dccp' module comes last, after dccp_ipv4, dccp_ipv6, ...
+sub by_dependency {
+	return ($a !~ m#(ccid|ipv6|ipv4|dccp)#);
+}
 
-Patch 6:      - remains as before
-Patch 7:      - remains as before
+while(<>) { push(@module_list, $1) if (m#^(dccp\S*)\s+#) }
 
-Patch 8:      - done the FIXMes
+for (sort by_dependency @module_list) {
+	system "rmmod -v $_ " .  ((m#ipv#)? "-f" : "");
+	$? == 0 || die "some problems unloading $_\n";
+}
 
--- Gerrit
+--Boundary-00=_DwJXFFY6duonpmP--
