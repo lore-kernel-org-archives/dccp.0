@@ -1,86 +1,110 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Thu, 16 Nov 2006 16:33:58 +0000
-Subject: [PATCH 3/3][DCCP] CCID2: Code optimizations
-Message-Id: <20061116163357.GE5195@mandriva.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 17 Nov 2006 18:03:02 +0000
+Subject: [PATCH 5/7]: Migration to DCCP_WARN_ON
+Message-Id: <200611171803.02312@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-These are code optimizations which are relevant when dealing with large
-windows.  They are not coded the way I would like to, but they do the job for
-the short-term.  This patch should be more neat.
+[DCCP]: Use DCCP_WARN_ON
 
-Commiter note: Changed the seqno comparisions to use {after,before}48 to handle
-               wrapping.
+This patch replaces the built-in WARN_ON with the more
+informative DCCP_WARN_ON; same principle as preceding patch.
 
-Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid2.c |   22 ++++++++++++++++++++--
- net/dccp/ccids/ccid2.h |    1 +
- 2 files changed, 21 insertions(+), 2 deletions(-)
+ net/dccp/ackvec.c      |    2 +-
+ net/dccp/ccids/ccid2.c |    2 +-
+ net/dccp/ccids/ccid3.c |    4 ++--
+ net/dccp/feat.c        |    3 ++-
+ net/dccp/output.c      |    4 ++--
+ net/dccp/proto.c       |    2 +-
+ 6 files changed, 9 insertions(+), 8 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index 162032b..6533cb2 100644
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -40,7 +40,7 @@ static void dccp_ackvec_record_delete(st
+ 	if (unlikely(avr = NULL))
+ 		return;
+ 	/* Check if deleting a linked record */
+-	WARN_ON(!list_empty(&avr->dccpavr_node));
++	DCCP_WARN_ON(!list_empty(&avr->dccpavr_node));
+ 	kmem_cache_free(dccp_ackvec_record_slab, avr);
+ }
+ 
 --- a/net/dccp/ccids/ccid2.c
 +++ b/net/dccp/ccids/ccid2.c
-@@ -619,7 +619,17 @@ static void ccid2_hc_tx_packet_recv(stru
+@@ -177,7 +177,7 @@ static void ccid2_change_l_ack_ratio(str
  	}
  
- 	ackno = DCCP_SKB_CB(skb)->dccpd_ack_seq;
--	seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
-+	if (after48(ackno, hctx->ccid2hctx_high_ack))
-+		hctx->ccid2hctx_high_ack = ackno;
-+
-+	seqp = hctx->ccid2hctx_seqt;
-+	while (before48(seqp->ccid2s_seq, ackno)) {
-+		seqp = seqp->ccid2s_next;
-+		if (seqp = hctx->ccid2hctx_seqh) {
-+			seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
-+			break;
-+		}
-+	}
+ 	ccid2_pr_debug("changing local ack ratio to %d\n", val);
+-	WARN_ON(val <= 0);
++	DCCP_WARN_ON(val <= 0);
+ 	dp->dccps_l_ack_ratio = val;
+ }
  
- 	/* If in slow-start, cwnd can increase at most Ack Ratio / 2 packets for
- 	 * this single ack.  I round up.
-@@ -697,7 +707,14 @@ static void ccid2_hc_tx_packet_recv(stru
- 	/* The state about what is acked should be correct now
- 	 * Check for NUMDUPACK
- 	 */
--	seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
-+	seqp = hctx->ccid2hctx_seqt;
-+	while (before48(seqp->ccid2s_seq, hctx->ccid2hctx_high_ack)) {
-+		seqp = seqp->ccid2s_next;
-+		if (seqp = hctx->ccid2hctx_seqh) {
-+			seqp = hctx->ccid2hctx_seqh->ccid2s_prev;
-+			break;
-+		}
-+	}
- 	done = 0;
- 	while (1) {
- 		if (seqp->ccid2s_acked) {
-@@ -771,6 +788,7 @@ static int ccid2_hc_tx_init(struct ccid 
- 	hctx->ccid2hctx_lastrtt  = 0;
- 	hctx->ccid2hctx_rpdupack = -1;
- 	hctx->ccid2hctx_last_cong = jiffies;
-+	hctx->ccid2hctx_high_ack = 0;
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -96,7 +96,7 @@ static void ccid3_hc_tx_set_state(struct
+ 	ccid3_pr_debug("%s(%p) %-8.8s -> %s\n",
+ 		       dccp_role(sk), sk, ccid3_tx_state_name(oldstate),
+ 		       ccid3_tx_state_name(state));
+-	WARN_ON(state = oldstate);
++	DCCP_WARN_ON(state = oldstate);
+ 	hctx->ccid3hctx_state = state;
+ }
  
- 	hctx->ccid2hctx_rtotimer.function = &ccid2_hc_tx_rto_expire;
- 	hctx->ccid2hctx_rtotimer.data	  = (unsigned long)sk;
-diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
-index 5b2ef4a..a97a899 100644
---- a/net/dccp/ccids/ccid2.h
-+++ b/net/dccp/ccids/ccid2.h
-@@ -72,6 +72,7 @@ struct ccid2_hc_tx_sock {
- 	int			ccid2hctx_rpdupack;
- 	int			ccid2hctx_sendwait;
- 	unsigned long		ccid2hctx_last_cong;
-+	u64			ccid2hctx_high_ack;
- };
+@@ -692,7 +692,7 @@ static void ccid3_hc_rx_set_state(struct
+ 	ccid3_pr_debug("%s(%p) %-8.8s -> %s\n",
+ 		       dccp_role(sk), sk, ccid3_rx_state_name(oldstate),
+ 		       ccid3_rx_state_name(state));
+-	WARN_ON(state = oldstate);
++	DCCP_WARN_ON(state = oldstate);
+ 	hcrx->ccid3hcrx_state = state;
+ }
  
- struct ccid2_hc_rx_sock {
--- 
-1.4.2.1.g3d5c
-
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -169,7 +169,8 @@ static int dccp_feat_reconcile(struct so
+ 			break;
+ 
+ 		default:
+-			WARN_ON(1); /* XXX implement res */
++			DCCP_BUG("Fell through, feat=%d", opt->dccpop_feat);
++			/* XXX implement res */
+ 			return -EFAULT;
+ 		}
+ 
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -29,7 +29,7 @@ static inline void dccp_event_ack_sent(s
+ static void dccp_skb_entail(struct sock *sk, struct sk_buff *skb)
+ {
+ 	skb_set_owner_w(skb, sk);
+-	WARN_ON(sk->sk_send_head);
++	DCCP_WARN_ON(sk->sk_send_head);
+ 	sk->sk_send_head = skb;
+ }
+ 
+@@ -76,7 +76,7 @@ static int dccp_transmit_skb(struct sock
+ 			 * Only data packets should come through with skb->sk
+ 			 * set.
+ 			 */
+-			WARN_ON(skb->sk);
++			DCCP_WARN_ON(skb->sk);
+ 			skb_set_owner_w(skb, sk);
+ 			break;
+ 		}
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -62,7 +62,7 @@ void dccp_set_state(struct sock *sk, con
+ 	dccp_pr_debug("%s(%p) %-10.10s -> %s\n",
+ 		      dccp_role(sk), sk,
+ 		      dccp_state_name(oldstate), dccp_state_name(state));
+-	WARN_ON(state = oldstate);
++	DCCP_WARN_ON(state = oldstate);
+ 
+ 	switch (state) {
+ 	case DCCP_OPEN:
