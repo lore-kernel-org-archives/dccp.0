@@ -1,123 +1,107 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Mon, 27 Nov 2006 14:44:52 +0000
-Subject: [PATCH 1/8] [DCCP] ccid3: Fix bug in calculation of first t_nom and first t_ipi
-Message-Id: <20061127144451.GL11605@mandriva.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 17 Nov 2006 15:56:59 +0000
+Subject: [PATCH 1/7]: Set TX Queue Length Bounds via Sysctl
+Message-Id: <200611171557.00062@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Problem:
---------
- Currently the inter-packet-interval for the first packet is set to 500msec instead
- of the 1 second specified in RFC 3448 (detailed derivation below).
- Furthermore t_ipi is added twice to t_now instead of just once.
+[DCCP]: Set TX Queue Length Bounds via Sysctl
 
-Solution:
----------
- This patch
-	* sets the initial value of t_ipi to 1 second, as per [RFC 3448, 4.2]
-	* simplifies the initial setting of t_ipi and t_delta through a case analysis
+Previously the transmit queue was unbounded. 
 
-Detailed Derivation:
---------------------
- When the first CCID 3 packet is sent in ccid3_hc_tx_send_packet, t_ipi is set to
+This patch by Ian McDonald
+	* puts a limit on transmit queue length 
+	  and sends back EAGAIN if the buffer is full
+	* sets the TX queue length to a sensible default
+	* implements tx buffer sysctls for DCCP
 
-		hctx->ccid3hctx_t_ipi = TFRC_INITIAL_IPI;
 
- which is USEC_PER_SEC / 4 = 250 msec. This is then added twice to t_0, due to:
-
-	case TFRC_SSTATE_NO_SENT:
-		// ...
-		/* Set nominal send time for initial packet */
-		hctx->ccid3hctx_t_nom = now;
-		timeval_add_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
-		rc = 0;
-		break;
-	// ...
-	/* Can we send? if so add options and add to packet history */
-	if (rc = 0) {
-		// ...
-		timeval_add_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
-	}
-
- As a result, t_1 = t_0 + t_ipi = t_now + t_ipi
-                  = t_0 + 500msec
-
- This contradicts RFC 3448, due to the following requirements:
-
-  a) Section 4.2, "Sender Initialization"
-     "the value of X[/s] is set to 1 packet/second [...] The
-      initial values for R (RTT) and t_RTO are undefined"
-
-  b) Section 4.5, "Preventing Oscillations
-     R_sqmean is undefined since R is undefined
-     Therefore, X_init = X
-
-  c) Section 4.6, "Scheduling of Packet Transmissions"
-
-     t_ipi = X_init / s = 1 second
-
- A further simplification is possible for the initial `delta' value, which is
- defined in [RFC 3448, section 4.6] as
-
- 	t_delta = min(t_ipi/2, t_gran/2)
-
- t_gran/2 here is TFRC_OPSYS_HALF_TIME_GRAN = USEC_PER_SEC / (2 * HZ).
- Since Linux always schedules with a higher granularity than 1 second,
- the initial value of t_delta is thus simply
-
- 	t_delta = min(USEC_PER_SEC / 2 , USEC_PER_SEC / (2 * HZ))
- 	        =  USEC_PER_SEC / (2 * HZ)
-
- Lastly, TFRC_INITIAL_IPI is not referenced anywhere else and can thus be removed.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid3.c |   11 ++++++-----
- net/dccp/ccids/ccid3.h |    2 --
- 2 files changed, 6 insertions(+), 7 deletions(-)
+ Documentation/networking/dccp.txt |    4 ++++
+ include/linux/sysctl.h            |    1 +
+ net/dccp/dccp.h                   |    1 +
+ net/dccp/proto.c                  |   10 ++++++++++
+ net/dccp/sysctl.c                 |    9 +++++++++
+ 5 files changed, 25 insertions(+)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index fb21f2d..d7b688e 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -298,13 +298,14 @@ static int ccid3_hc_tx_send_packet(struc
- 		hctx->ccid3hctx_last_win_count	 = 0;
- 		hctx->ccid3hctx_t_last_win_count = now;
- 		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_NO_FBACK);
--		hctx->ccid3hctx_t_ipi = TFRC_INITIAL_IPI;
+--- a/Documentation/networking/dccp.txt
++++ b/Documentation/networking/dccp.txt
+@@ -104,6 +104,10 @@ rx_ccid = 2
+ seq_window = 100
+ 	The initial sequence window (sec. 7.5.2).
  
--		/* Set nominal send time for initial packet */
-+		/* First timeout, according to [RFC 3448, 4.2], is 1 second */
-+		hctx->ccid3hctx_t_ipi = USEC_PER_SEC;
-+		/* Initial delta: minimum of 0.5 sec and t_gran/2 */
-+		hctx->ccid3hctx_delta = TFRC_OPSYS_HALF_TIME_GRAN;
++tx_qlen = 5
++	The size of the transmit buffer in packets. A value of 0 corresponds
++	to an unbounded transmit buffer.
 +
-+		/* Set t_0 for initial packet */
- 		hctx->ccid3hctx_t_nom = now;
--		timeval_add_usecs(&hctx->ccid3hctx_t_nom,
--				  hctx->ccid3hctx_t_ipi);
--		ccid3_calc_new_delta(hctx);
- 		rc = 0;
- 		break;
- 	case TFRC_SSTATE_NO_FBACK:
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index e2e43c1..4621652 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -49,8 +49,6 @@ #define TFRC_MAX_PACKET_SIZE	65535
- /* Two seconds as per CCID3 spec */
- #define TFRC_INITIAL_TIMEOUT	   (2 * USEC_PER_SEC)
+ Notes
+ == 
+--- a/include/linux/sysctl.h
++++ b/include/linux/sysctl.h
+@@ -617,6 +617,7 @@ enum {
+ 	NET_DCCP_DEFAULT_REQ_RETRIES = 7,
+ 	NET_DCCP_DEFAULT_RETRIES1    = 8,
+ 	NET_DCCP_DEFAULT_RETRIES2    = 9,
++	NET_DCCP_DEFAULT_TX_QLEN     = 10,
+ };
  
--#define TFRC_INITIAL_IPI	   (USEC_PER_SEC / 4)
--
- /* In usecs - half the scheduling granularity as per RFC3448 4.6 */
- #define TFRC_OPSYS_HALF_TIME_GRAN  (USEC_PER_SEC / (2 * HZ))
+ /* /proc/sys/net/ipx */
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -87,6 +87,7 @@ extern int  sysctl_dccp_feat_tx_ccid;
+ extern int  sysctl_dccp_feat_ack_ratio;
+ extern int  sysctl_dccp_feat_send_ack_vector;
+ extern int  sysctl_dccp_feat_send_ndp_count;
++extern int  sysctl_dccp_tx_qlen;
  
--- 
-1.4.2.1.g3d5c
-
+ /* is seq1 < seq2 ? */
+ static inline int before48(const u64 seq1, const u64 seq2)
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -52,6 +52,9 @@ struct inet_hashinfo __cacheline_aligned
+ 
+ EXPORT_SYMBOL_GPL(dccp_hashinfo);
+ 
++/* the maximum queue length for tx in packets. 0 is no limit */
++int sysctl_dccp_tx_qlen 	__read_mostly = 5;
++
+ void dccp_set_state(struct sock *sk, const int state)
+ {
+ 	const int oldstate = sk->sk_state;
+@@ -645,6 +648,13 @@ int dccp_sendmsg(struct kiocb *iocb, str
+ 		return -EMSGSIZE;
+ 
+ 	lock_sock(sk);
++
++	if (sysctl_dccp_tx_qlen &&
++	    (sk->sk_write_queue.qlen >= sysctl_dccp_tx_qlen)) {
++		rc = -EAGAIN;
++		goto out_release;
++	}
++
+ 	timeo = sock_sndtimeo(sk, noblock);
+ 
+ 	/*
+--- a/net/dccp/sysctl.c
++++ b/net/dccp/sysctl.c
+@@ -91,6 +91,15 @@ static struct ctl_table dccp_default_tab
+ 		.mode		= 0644,
+ 		.proc_handler	= proc_dointvec,
+ 	},
++	{
++		.ctl_name	= NET_DCCP_DEFAULT_TX_QLEN,
++		.procname	= "tx_qlen",
++		.data		= &sysctl_dccp_tx_qlen,
++		.maxlen		= sizeof(sysctl_dccp_tx_qlen),
++		.mode		= 0644,
++		.proc_handler	= proc_dointvec,
++	},
++
+ 	{ .ctl_name = 0, }
+ };
+ 
