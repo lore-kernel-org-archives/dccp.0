@@ -1,99 +1,53 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Tue, 28 Nov 2006 21:58:32 +0000
-Subject: [PATCH 4/7] [DCCP]: Tidy up unused structures
-Message-Id: <20061128215831.GM19882@mandriva.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 20 Nov 2006 16:05:20 +0000
+Subject: [PATCH 0/2] [RESEND/UPDATE]: Message Scheme, McDonald Patches
+Message-Id: <200611201605.20853@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This removes and cleans up unused variables and structures which have become
-unnecessary following the introduction of the EWMA patch to automatically track
-the CCID 3 receiver/sender packet sizes `s'.
+This set contains
+	* an update of  my patches from Friday
+	* Ian's patches
 
-It deprecates the PACKET_SIZE socket option by returning an error code and
-printing a deprecation warning if an application tries to read or write this
-socket option.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
----
- include/linux/dccp.h   |    4 +---
- net/dccp/ccids/ccid3.h |    4 ----
- net/dccp/proto.c       |    8 ++++----
- 3 files changed, 5 insertions(+), 11 deletions(-)
+1) Reason for update
+--------------------
+   The whole point of the message-macro scheme was to allow an easier migration later on
+   to the well-known counterparts BUG(), WARN_ON(), BUG_ON(). These however issue a panic
+   which stops the machine. Now, patch xx/7 sent in the last batch replaced BUG/BUG_ON with
+   the DCCP counterparts. This is *not* a good idea, since these tests are in places where
+   continuing would mean entering an undefined state. I therefore retract the said patch
+   and have updated the others as pointed out below.
 
-diff --git a/include/linux/dccp.h b/include/linux/dccp.h
-index 72cc355..ed6cc89 100644
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -200,7 +200,7 @@ struct dccp_so_feat {
- };
- 
- /* DCCP socket options */
--#define DCCP_SOCKOPT_PACKET_SIZE	1
-+#define DCCP_SOCKOPT_PACKET_SIZE	1 /* XXX deprecated, without effect */
- #define DCCP_SOCKOPT_SERVICE		2
- #define DCCP_SOCKOPT_CHANGE_L		3
- #define DCCP_SOCKOPT_CHANGE_R		4
-@@ -460,7 +460,6 @@ struct dccp_ackvec;
-  * @dccps_service_list - second .. last service code on passive socket
-  * @dccps_timestamp_time - time of latest TIMESTAMP option
-  * @dccps_timestamp_echo - latest timestamp received on a TIMESTAMP option
-- * @dccps_packet_size - Set thru setsockopt
-  * @dccps_l_ack_ratio -
-  * @dccps_r_ack_ratio -
-  * @dccps_pcslen - sender   partial checksum coverage (via sockopt)
-@@ -495,7 +494,6 @@ struct dccp_sock {
- 	struct dccp_service_list	*dccps_service_list;
- 	struct timeval			dccps_timestamp_time;
- 	__u32				dccps_timestamp_echo;
--	__u32				dccps_packet_size;
- 	__u16				dccps_l_ack_ratio;
- 	__u16				dccps_r_ack_ratio;
- 	__u16				dccps_pcslen;
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index 9709217..dbb8844 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -42,10 +42,6 @@ #include <linux/types.h>
- #include <linux/tfrc.h>
- #include "../ccid.h"
- 
--#define TFRC_MIN_PACKET_SIZE	   16
--#define TFRC_STD_PACKET_SIZE	  256
--#define TFRC_MAX_PACKET_SIZE	65535
--
- /* Two seconds as per RFC 3448 4.2 */
- #define TFRC_INITIAL_TIMEOUT	   (2 * USEC_PER_SEC)
- 
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 3c44d50..2604e34 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -470,7 +470,8 @@ static int do_dccp_setsockopt(struct soc
- 	lock_sock(sk);
- 	switch (optname) {
- 	case DCCP_SOCKOPT_PACKET_SIZE:
--		dp->dccps_packet_size = val;
-+		DCCP_WARN("sockopt(PACKET_SIZE) is deprecated: fix your app\n");
-+		err = -EINVAL;
- 		break;
- 	case DCCP_SOCKOPT_CHANGE_L:
- 		if (optlen != sizeof(struct dccp_so_feat))
-@@ -581,9 +582,8 @@ static int do_dccp_getsockopt(struct soc
- 
- 	switch (optname) {
- 	case DCCP_SOCKOPT_PACKET_SIZE:
--		val = dp->dccps_packet_size;
--		len = sizeof(dp->dccps_packet_size);
--		break;
-+		DCCP_WARN("sockopt(PACKET_SIZE) is deprecated: fix your app\n");
-+		return -EINVAL;
- 	case DCCP_SOCKOPT_SERVICE:
- 		return dccp_getsockopt_service(sk, len,
- 					       (__be32 __user *)optval, optlen);
--- 
-1.4.2.1.g3d5c
 
+2) What changes:
+----------------
+	* Patch 1      (Ian's tx_qlen patch) remains as 9z.
+	* Patch 2      (message scheme) will be re-sent as one patch (10a) instead of 7 single ones
+	* Patch 3      (socket annotations) will be re-sent as second patch (10b)
+	* Patch 4..6   are Ian's patches from Sunday and are not re-sent, but simply and shamelessly 
+                       stacked them on top of all other patches as 11a .. 11c   
+                                   
+
+3) Detailed breakdown of changes with regard to the earlier cset
+----------------------------------------------------------------
+Patch 2:        Simplifications for ccid3.c 
+              - remains as  before
+
+Patch 3:      - CHANGED:
+	      - removed superfluous DCCP_WARN_ON  (no point using a DCCP_XX wrapper)
+Patch 4:      - Migration towards DCCP_BUG{,_ON}() 
+	      - RETRACTED: due to reasons above
+Patch 5:      - Migration towards DCCP_WARN_ON();
+	      - RETRACTED: DCCP_BUG_ON is the same as WARN_ON, so not necessary
+              - remainder of Patch 4/5; replaces unconditional BUG_ON(1) / WARN_ON(1)
+
+Patch 6:      - remains as before
+Patch 7:      - remains as before
+
+Patch 8:      - done the FIXMes
+
+-- Gerrit
