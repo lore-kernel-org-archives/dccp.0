@@ -1,132 +1,42 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Mon, 20 Nov 2006 20:56:45 +0000
-Subject: [PATCH 6/9] [CCID 3]: Add annotations for socket structures
-Message-Id: <20061120205645.GG5246@mandriva.com>
+Date: Mon, 20 Nov 2006 20:58:10 +0000
+Subject: [PATCH 9/9] [DCCP] CCID3: Remove non-referenced variable
+Message-Id: <20061120205810.GJ5246@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This adds documentation to the CCID 3 rx/tx socket fields, plus some
-minor re-formatting.
+This removes a non-referenced variable.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid3.h |   90 +++++++++++++++++++++++++++++-------------------
- 1 files changed, 55 insertions(+), 35 deletions(-)
+ net/dccp/ccids/ccid3.c |    3 ---
+ 1 files changed, 0 insertions(+), 3 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index c122e75..e2e43c1 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -81,26 +81,28 @@ enum ccid3_hc_tx_states {
- 	TFRC_SSTATE_TERM,
- };
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 4eada51..fb21f2d 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -965,7 +965,6 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	const struct dccp_options_received *opt_recv;
+ 	struct dccp_rx_hist_entry *packet;
+ 	struct timeval now;
+-	u8 win_count;
+ 	u32 p_prev, rtt_prev, r_sample, t_elapsed;
+ 	int loss;
  
--/** struct ccid3_hc_tx_sock - CCID3 sender half connection sock
-+/** struct ccid3_hc_tx_sock - CCID3 sender half-connection socket
-  *
--  * @ccid3hctx_state - Sender state
--  * @ccid3hctx_x - Current sending rate
--  * @ccid3hctx_x_recv - Receive rate
--  * @ccid3hctx_x_calc - Calculated send (?) rate
--  * @ccid3hctx_s - Packet size
--  * @ccid3hctx_rtt - Estimate of current round trip time in usecs
--  * @@ccid3hctx_p - Current loss event rate (0-1) scaled by 1000000
--  * @ccid3hctx_last_win_count - Last window counter sent
--  * @ccid3hctx_t_last_win_count - Timestamp of earliest packet
--  * 				  with last_win_count value sent
--  * @ccid3hctx_no_feedback_timer - Handle to no feedback timer
--  * @ccid3hctx_idle - FIXME
--  * @ccid3hctx_t_ld - Time last doubled during slow start
--  * @ccid3hctx_t_nom - Nominal send time of next packet
--  * @ccid3hctx_t_ipi - Interpacket (send) interval
--  * @ccid3hctx_delta - Send timer delta
--  * @ccid3hctx_hist - Packet history
--  */
-+ * @ccid3hctx_x - Current sending rate
-+ * @ccid3hctx_x_recv - Receive rate
-+ * @ccid3hctx_x_calc - Calculated send rate (RFC 3448, 3.1)
-+ * @ccid3hctx_rtt - Estimate of current round trip time in usecs
-+ * @ccid3hctx_p - Current loss event rate (0-1) scaled by 1000000
-+ * @ccid3hctx_s - Packet size
-+ * @ccid3hctx_t_rto - Retransmission Timeout (RFC 3448, 3.1)
-+ * @ccid3hctx_t_ipi - Interpacket (send) interval (RFC 3448, 4.6)
-+ * @ccid3hctx_state - Sender state, one of %ccid3_hc_tx_states
-+ * @ccid3hctx_last_win_count - Last window counter sent
-+ * @ccid3hctx_t_last_win_count - Timestamp of earliest packet
-+ * 				 with last_win_count value sent
-+ * @ccid3hctx_no_feedback_timer - Handle to no feedback timer
-+ * @ccid3hctx_idle - Flag indicating that sender is idling
-+ * @ccid3hctx_t_ld - Time last doubled during slow start
-+ * @ccid3hctx_t_nom - Nominal send time of next packet
-+ * @ccid3hctx_delta - Send timer delta
-+ * @ccid3hctx_hist - Packet history
-+ * @ccid3hctx_options_received - Parsed set of retrieved options
-+ */
- struct ccid3_hc_tx_sock {
- 	struct tfrc_tx_info		ccid3hctx_tfrc;
- #define ccid3hctx_x			ccid3hctx_tfrc.tfrctx_x
-@@ -130,23 +132,41 @@ enum ccid3_hc_rx_states {
- 	TFRC_RSTATE_TERM    = 127,
- };
+@@ -1017,8 +1016,6 @@ static void ccid3_hc_rx_packet_recv(stru
+ 		return;
+ 	}
  
-+/** struct ccid3_hc_rx_sock - CCID3 receiver half-connection socket
-+ *
-+ *  @ccid3hcrx_x_recv  -  Receiver estimate of send rate (RFC 3448 4.3)
-+ *  @ccid3hcrx_rtt  -  Receiver estimate of rtt (non-standard)
-+ *  @ccid3hcrx_p  -  current loss event rate (RFC 3448 5.4)
-+ *  @ccid3hcrx_seqno_nonloss  -  Last received non-loss sequence number
-+ *  @ccid3hcrx_ccval_nonloss  -  Last received non-loss Window CCVal
-+ *  @ccid3hcrx_ccval_last_counter  -  Tracks window counter (RFC 4342, 8.1)
-+ *  @ccid3hcrx_state  -  receiver state, one of %ccid3_hc_rx_states
-+ *  @ccid3hcrx_bytes_recv  -  Total sum of DCCP payload bytes
-+ *  @ccid3hcrx_tstamp_last_feedback  -  Time at which last feedback was sent
-+ *  @ccid3hcrx_tstamp_last_ack  -  Time at which last feedback was sent
-+ *  @ccid3hcrx_hist  -  Packet history
-+ *  @ccid3hcrx_li_hist  -  Loss Interval History
-+ *  @ccid3hcrx_s  -  Received packet size in bytes
-+ *  @ccid3hcrx_pinv  -  Inverse of Loss Event Rate (RFC 4342, sec. 8.5)
-+ *  @ccid3hcrx_elapsed_time  -  Time since packet reception
-+ */
- struct ccid3_hc_rx_sock {
--	struct tfrc_rx_info	ccid3hcrx_tfrc;
--#define ccid3hcrx_x_recv	ccid3hcrx_tfrc.tfrcrx_x_recv
--#define ccid3hcrx_rtt		ccid3hcrx_tfrc.tfrcrx_rtt
--#define ccid3hcrx_p		ccid3hcrx_tfrc.tfrcrx_p
--  	u64			ccid3hcrx_seqno_nonloss:48,
--				ccid3hcrx_ccval_nonloss:4,
--				ccid3hcrx_ccval_last_counter:4;
--	enum ccid3_hc_rx_states	ccid3hcrx_state:8;
--  	u32			ccid3hcrx_bytes_recv;
--  	struct timeval		ccid3hcrx_tstamp_last_feedback;
--  	struct timeval		ccid3hcrx_tstamp_last_ack;
--	struct list_head	ccid3hcrx_hist;
--	struct list_head	ccid3hcrx_li_hist;
--  	u16			ccid3hcrx_s;
--  	u32			ccid3hcrx_pinv;
--  	u32			ccid3hcrx_elapsed_time;
-+	struct tfrc_rx_info		ccid3hcrx_tfrc;
-+#define ccid3hcrx_x_recv		ccid3hcrx_tfrc.tfrcrx_x_recv
-+#define ccid3hcrx_rtt			ccid3hcrx_tfrc.tfrcrx_rtt
-+#define ccid3hcrx_p			ccid3hcrx_tfrc.tfrcrx_p
-+  	u64				ccid3hcrx_seqno_nonloss:48,
-+					ccid3hcrx_ccval_nonloss:4,
-+					ccid3hcrx_ccval_last_counter:4;
-+	enum ccid3_hc_rx_states		ccid3hcrx_state:8;
-+  	u32				ccid3hcrx_bytes_recv;
-+  	struct timeval			ccid3hcrx_tstamp_last_feedback;
-+  	struct timeval			ccid3hcrx_tstamp_last_ack;
-+	struct list_head		ccid3hcrx_hist;
-+	struct list_head		ccid3hcrx_li_hist;
-+  	u16				ccid3hcrx_s;
-+  	u32				ccid3hcrx_pinv;
-+  	u32				ccid3hcrx_elapsed_time;
- };
+-	win_count = packet->dccphrx_ccval;
+-
+ 	loss = ccid3_hc_rx_detect_loss(sk, packet);
  
- static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
+ 	if (DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK)
 -- 
 1.4.2.1.g3d5c
 
