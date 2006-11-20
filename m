@@ -1,52 +1,64 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 27 Nov 2006 11:17:44 +0000
-Subject: Re: NAK Re: [PATCH 4/10]: Consolidate timer resets
-Message-Id: <200611271117.44403@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Mon, 20 Nov 2006 20:57:48 +0000
+Subject: [PATCH 8/9] [DCCP]: Update Documentation
+Message-Id: <20061120205748.GI5246@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
-References: <5640c7e00611261243k34ef8d72m7e8462e461f1e71@mail.gmail.com>
-In-Reply-To: <5640c7e00611261243k34ef8d72m7e8462e461f1e71@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Ian,
+This patch just updates DCCP documentation a bit.
 
-thank you for checking this. RFC 3448 is contradictory, since step (3)
-of section 4.3 instructs to use R which is undefined by section 4.2.
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+---
+ Documentation/networking/dccp.txt |   23 ++++++++---------------
+ 1 files changed, 8 insertions(+), 15 deletions(-)
+
+diff --git a/Documentation/networking/dccp.txt b/Documentation/networking/dccp.txt
+index c2328c8..1910d09 100644
+--- a/Documentation/networking/dccp.txt
++++ b/Documentation/networking/dccp.txt
+@@ -19,21 +19,17 @@ for real time and multimedia traffic.
  
-Please see below.
+ It has a base protocol and pluggable congestion control IDs (CCIDs).
+ 
+-It is at draft RFC status and the homepage for DCCP as a protocol is at:
+-	http://www.icir.org/kohler/dcp/
++It is at experimental RFC status and the homepage for DCCP as a protocol is at:
++	http://www.read.cs.ucla.edu/dccp/
+ 
+ Missing features
+ ========
+ 
+ The DCCP implementation does not currently have all the features that are in
+-the draft RFC.
++the RFC.
+ 
+-In particular the following are missing:
+-- CCID2 support
+-- feature negotiation
+-
+-When testing against other implementations it appears that elapsed time
+-options are not coded compliant to the specification.
++The known bugs are at:
++	http://linux-net.osdl.org/index.php/TODO#DCCP
+ 
+ Socket options
+ =======
+@@ -107,9 +103,6 @@ seq_window = 100
+ Notes
+ == 
+-SELinux does not yet have support for DCCP. You will need to turn it off or
+-else you will get EACCES.
+-
+-DCCP does not travel through NAT successfully at present. This is because
+-the checksum covers the psuedo-header as per TCP and UDP. It should be
+-relatively trivial to add Linux NAT support for DCCP.
++DCCP does not travel through NAT successfully at present on many boxes. This is
++because the checksum covers the psuedo-header as per TCP and UDP. Linux NAT
++support for DCCP has been added.
+-- 
+1.4.2.1.g3d5c
 
-|  On 11/25/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-|  > [CCID 3]: Consolidate timer resets
-|  >
-|  > The specification in [RFC 3448, 4.4, step (3)] is impossible to
-|  > implement: when no feedback has been received, the value of RTT
-|  > is undefined as per [RFC 3448, 4.2]. Hence we can not set the
-|  > timeout value to max(4*R, 2*s/X) as step (3) suggests.
-|  >
-|  > The most reasonable solution is to remain at the initial timeout
-|  > value of 2 seconds, as per [RFC 3448, 4.2] - until an estimate
-|  > for R has been computed.
-|  
-|  But RFC4342 says:
-|  If the sender hasn't
-|     received a feedback packet from the receiver when the nofeedback
-|     timer expires, then the sender halves its allowed sending rate.  The
-|     allowed sending rate is never reduced below one packet per 64
-|     seconds.  Note that not all acknowledgements are considered feedback
-|     packets, since feedback packets must contain valid Loss Intervals,
-|     Elapsed Time, and Receive Rate options.
-|  
-|     If the sender never receives a feedback packet from the receiver, and
-|     as a consequence never gets to set the allowed sending rate to one
-|     packet per RTT, then the sending rate is left at its initial rate of
-|     one packet per second, with the nofeedback timer expiring after two
-|     seconds.
-I see - so this gives some evidence that if we don't get any feedback, we leave
-the timeout of the nofeedback timer at the (initial) value of 2 seconds.
-This means that the commit message and comments I provided were wrong, while
-the patch actually does the right thing with regard to the above. I will
-resend an updated patch.
-
-Gerrit
