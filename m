@@ -1,32 +1,29 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Sun, 26 Nov 2006 18:42:50 +0000
-Subject: Re: [PATCH 4/10]: Consolidate timer resets
-Message-Id: <39e6f6c70611261042m56b0912fy32c6b46f397de8ed@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 21 Nov 2006 15:44:54 +0000
+Subject: [PATCH 0/6]: CCID 3: packet scheduling and packet size EWMA patch
+Message-Id: <200611211544.54258@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200611241619.34008@strip-the-willow>
-In-Reply-To: <200611241619.34008@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/24/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [CCID 3]: Consolidate timer resets
->
-> The specification in [RFC 3448, 4.4, step (3)] is impossible to
-> implement: when no feedback has been received, the value of RTT
-> is undefined as per [RFC 3448, 4.2]. Hence we can not set the
-> timeout value to max(4*R, 2*s/X) as step (3) suggests.
->
-> The most reasonable solution is to remain at the initial timeout
-> value of 2 seconds, as per [RFC 3448, 4.2] - until an estimate
-> for R has been computed.
->
-> The patch also consolidates handling timer restart by adding
-> an appropriate jump label and initialising the timeout value.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+This change set contains the promised exponential moving average patch for
+the CCID 3 packet size `s' plus a few other improvements.
 
-Thanks, applied.
+Patch 1: Fixes a bug in calculation of first t_nom and first t_ipi
+Patch 2: Simplifies control flow in the calculation of t_ipi
+Patch 3: Fixes a problem in calculation of scheduled packet transmission
+Patch 4: Simplifies ccid3_hc_tx_send_packet (also reads easier afterwards)
+         --> here I have a question:
+             return type of this function is `int', if return value > 0
+             it means a delay in milliseconds. Is there any point converting
+             the function to one returning type long or is it always certain
+             that the return value is small enough that this doesn't matter?
+Patch 5: The EWMA patch for packet size `s'
+Patch 6: Tidies up left-overs from patch 5
 
-- Arnaldo
+
+Regards,
+
+Gerrit
