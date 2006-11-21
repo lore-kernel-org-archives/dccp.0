@@ -1,29 +1,31 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 21 Nov 2006 15:44:54 +0000
-Subject: [PATCH 0/6]: CCID 3: packet scheduling and packet size EWMA patch
-Message-Id: <200611211544.54258@strip-the-willow>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Tue, 21 Nov 2006 17:23:37 +0000
+Subject: Re: [PATCH 0/6]: CCID 3: packet scheduling and packet size EWMA patch
+Message-Id: <5640c7e00611210923paba3e08t7aedc02f82ce91cd@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <200611211544.54258@strip-the-willow>
+In-Reply-To: <200611211544.54258@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This change set contains the promised exponential moving average patch for
-the CCID 3 packet size `s' plus a few other improvements.
+> Patch 4: Simplifies ccid3_hc_tx_send_packet (also reads easier afterwards)
+>          --> here I have a question:
+>              return type of this function is `int', if return value > 0
+>              it means a delay in milliseconds. Is there any point converting
+>              the function to one returning type long or is it always certain
+>              that the return value is small enough that this doesn't matter?
 
-Patch 1: Fixes a bug in calculation of first t_nom and first t_ipi
-Patch 2: Simplifies control flow in the calculation of t_ipi
-Patch 3: Fixes a problem in calculation of scheduled packet transmission
-Patch 4: Simplifies ccid3_hc_tx_send_packet (also reads easier afterwards)
-         --> here I have a question:
-             return type of this function is `int', if return value > 0
-             it means a delay in milliseconds. Is there any point converting
-             the function to one returning type long or is it always certain
-             that the return value is small enough that this doesn't matter?
-Patch 5: The EWMA patch for packet size `s'
-Patch 6: Tidies up left-overs from patch 5
+The spec says you must send a packet at least once every 64 seconds so
+it should be no higher than 64000 which is well within range of int.
 
-
-Regards,
-
-Gerrit
+Ian
+-- 
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
