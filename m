@@ -1,103 +1,191 @@
-From: Lars Eggert <lars.eggert@netlab.nec.de>
-Date: Thu, 30 Nov 2006 22:07:37 +0000
-Subject: Re: [PATCH] [DCCP]: Use higher timeout value for nofeedback timer
-Message-Id: <E2BD0F03-80EE-4719-B948-19F2E5B1362B@netlab.nec.de>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="Apple-Mail-46--213819164"
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 21 Nov 2006 15:45:39 +0000
+Subject: [PATCH 5/6]: Track RX/TX packet size `s' using moving-average
+Message-Id: <200611211545.40156@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200611301318.46685@strip-the-willow>
-In-Reply-To: <200611301318.46685@strip-the-willow>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-
---Apple-Mail-46--213819164
-Content-Transfer-Encoding: 7bit
-Content-Type: text/plain;
-	charset=US-ASCII;
-	delsp=yes;
-	format=flowed
-
-On Nov 30, 2006, at 11:13, Ian McDonald wrote:
-> This patch provides a configuration option to set the bound for the
-> nofeedback timer, using as default the TCP RTO timeout of 1 second.
-
-The default TCP RTO is 3 seconds (RFC 2988). Linux is apparently not  
-conformant to that RFC?
-
-Lars
+[CCID 3]: Track RX/TX packet size `s' using moving-average
 
 
---Apple-Mail-46--213819164
-Content-Transfer-Encoding: base64
-Content-Type: application/pkcs7-signature;
-	name=smime.p7s
-Content-Disposition: attachment;
-	filename=smime.p7s
+Problem:
+--------
+ Currently, the receiver/sender packet size `s' of the TCP throughput
+ equation [RFC 3448, 3.1] has to be communicated manually via socket options
+ to the CCID 3 module. This has been discussed on dccp@vger, see e.g.
+ http://www.mail-archive.com/dccp@vger.kernel.org/msg00582.html
 
-MIAGCSqGSIb3DQEHAqCAMIACAQExCzAJBgUrDgMCGgUAMIAGCSqGSIb3DQEHAQAAoIIKZDCCAwEw
-ggJqoAMCAQICEBCR/semQl5bz/x3jtiU02YwDQYJKoZIhvcNAQEFBQAwYjELMAkGA1UEBhMCWkEx
-JTAjBgNVBAoTHFRoYXd0ZSBDb25zdWx0aW5nIChQdHkpIEx0ZC4xLDAqBgNVBAMTI1RoYXd0ZSBQ
-ZXJzb25hbCBGcmVlbWFpbCBJc3N1aW5nIENBMB4XDTA2MDgxNjA5MTU0NloXDTA3MDgxNjA5MTU0
-NlowYDEPMA0GA1UEBBMGRWdnZXJ0MQ0wCwYDVQQqEwRMYXJzMRQwEgYDVQQDEwtMYXJzIEVnZ2Vy
-dDEoMCYGCSqGSIb3DQEJARYZbGFycy5lZ2dlcnRAbmV0bGFiLm5lYy5kZTCCASIwDQYJKoZIhvcN
-AQEBBQADggEPADCCAQoCggEBAL/+LXyqufw8ApYnCU24cnZ/H9S7ro4zZYeCqcyFqhwJpTcM8/yX
-6Ms+16d2EtIceQS8Bas3GAUR+xfq0QI5dt8uIKM1Uy4trk8AAO0dh23+QTLw7toloArVngGIhUhC
-OTpVRR1bYfJTwPVpSAY43mbGhSGhwiu5035yKdYJezNWOXmuIO+lvXcD36hc5cU6AzRJkj0LYaFd
-WHjbfwzGmT7MO60p/7hT+aTv5xvTl/mcwslvm+KhKmJjoMYfSOF99xvuJE/rB7Ho3g6wDoeB2Tip
-44Qq8CPmOHtCXzh/tF/bYo+OHStkPTzgPfOuNDMxa0/gAPEyELNL0Eh1/hC2TeMCAwEAAaM2MDQw
-JAYDVR0RBB0wG4EZbGFycy5lZ2dlcnRAbmV0bGFiLm5lYy5kZTAMBgNVHRMBAf8EAjAAMA0GCSqG
-SIb3DQEBBQUAA4GBAHdaTI5TM5wV+LG2WW+CMEmxEyNhaRu3oca9T31HjbfHzvhVJe2fzKt1xBSo
-+hhCg0qKVFuE7yKxDH975Csq9jVvJJj3oL29RQjPnc3CgQqlMFJKHdJgterPQ+ZiCp05S9rbMhRl
-1zxB/x+GvnDFHsXu19gA2dlynrdWN/G1BVWJMIIDPzCCAqigAwIBAgIBDTANBgkqhkiG9w0BAQUF
-ADCB0TELMAkGA1UEBhMCWkExFTATBgNVBAgTDFdlc3Rlcm4gQ2FwZTESMBAGA1UEBxMJQ2FwZSBU
-b3duMRowGAYDVQQKExFUaGF3dGUgQ29uc3VsdGluZzEoMCYGA1UECxMfQ2VydGlmaWNhdGlvbiBT
-ZXJ2aWNlcyBEaXZpc2lvbjEkMCIGA1UEAxMbVGhhd3RlIFBlcnNvbmFsIEZyZWVtYWlsIENBMSsw
-KQYJKoZIhvcNAQkBFhxwZXJzb25hbC1mcmVlbWFpbEB0aGF3dGUuY29tMB4XDTAzMDcxNzAwMDAw
-MFoXDTEzMDcxNjIzNTk1OVowYjELMAkGA1UEBhMCWkExJTAjBgNVBAoTHFRoYXd0ZSBDb25zdWx0
-aW5nIChQdHkpIEx0ZC4xLDAqBgNVBAMTI1RoYXd0ZSBQZXJzb25hbCBGcmVlbWFpbCBJc3N1aW5n
-IENBMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDEpjxVc1X7TrnKmVoeaMB1BHCd3+n/ox7s
-vc31W/Iadr1/DDph8r9RzgHU5VAKMNcCY1osiRVwjt3J8CuFWqo/cVbLrzwLB+fxH5E2JCoTzyvV
-84J3PQO+K/67GD4Hv0CAAmTXp6a7n2XRxSpUhQ9IBH+nttE8YQRAHmQZcmC3+wIDAQABo4GUMIGR
-MBIGA1UdEwEB/wQIMAYBAf8CAQAwQwYDVR0fBDwwOjA4oDagNIYyaHR0cDovL2NybC50aGF3dGUu
-Y29tL1RoYXd0ZVBlcnNvbmFsRnJlZW1haWxDQS5jcmwwCwYDVR0PBAQDAgEGMCkGA1UdEQQiMCCk
-HjAcMRowGAYDVQQDExFQcml2YXRlTGFiZWwyLTEzODANBgkqhkiG9w0BAQUFAAOBgQBIjNFQg+oL
-LswNo2asZw9/r6y+whehQ5aUnX9MIbj4Nh+qLZ82L8D0HFAgk3A8/a3hYWLD2ToZfoSxmRsAxRoL
-gnSeJVCUYsfbJ3FXJY3dqZw5jowgT2Vfldr394fWxghOrvbqNOUQGls1TXfjViF4gtwhGTXeJLHT
-HUb/XV9lTzCCBBgwggOBoAMCAQICAQAwDQYJKoZIhvcNAQEFBQAwgb8xCzAJBgNVBAYTAkRFMRww
-GgYDVQQIFBNCYWRlbi1Xw3VlcnR0ZW1iZXJnMRMwEQYDVQQHEwpIZWlkZWxiZXJnMRcwFQYDVQQK
-Ew5ORUMgRXVyb3BlIEx0ZDEdMBsGA1UECxMUTmV0d29yayBMYWJvcmF0b3JpZXMxGzAZBgNVBAMT
-EmtvYmUubmV0bGFiLm5lYy5kZTEoMCYGCSqGSIb3DQEJARYZbGFycy5lZ2dlcnRAbmV0bGFiLm5l
-Yy5kZTAeFw0wNDA2MTgxMTUzMDhaFw0wOTA2MTcxMTUzMDhaMIG/MQswCQYDVQQGEwJERTEcMBoG
-A1UECBQTQmFkZW4tV8N1ZXJ0dGVtYmVyZzETMBEGA1UEBxMKSGVpZGVsYmVyZzEXMBUGA1UEChMO
-TkVDIEV1cm9wZSBMdGQxHTAbBgNVBAsTFE5ldHdvcmsgTGFib3JhdG9yaWVzMRswGQYDVQQDExJr
-b2JlLm5ldGxhYi5uZWMuZGUxKDAmBgkqhkiG9w0BCQEWGWxhcnMuZWdnZXJ0QG5ldGxhYi5uZWMu
-ZGUwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALQ5DCwTzpGu3RmzQY4KxiaQak/BwIW9Wk6K
-Mg+/V0aiWvlrz7uFdICBGVTKhyWr3F+GxRPCVTWqS9VEPf9A59DI9TFCS3FtraSx+w8ApQei8idb
-J0Lqu8tTz2O1gYR2dELID5wQH9dxIANt3bP39crgDZzGYxCJilcimFhADEgHAgMBAAGjggEgMIIB
-HDAdBgNVHQ4EFgQU6Hsv16oYecCFsl07g9gtjPEJo00wgewGA1UdIwSB5DCB4YAU6Hsv16oYecCF
-sl07g9gtjPEJo02hgcWkgcIwgb8xCzAJBgNVBAYTAkRFMRwwGgYDVQQIFBNCYWRlbi1Xw3VlcnR0
-ZW1iZXJnMRMwEQYDVQQHEwpIZWlkZWxiZXJnMRcwFQYDVQQKEw5ORUMgRXVyb3BlIEx0ZDEdMBsG
-A1UECxMUTmV0d29yayBMYWJvcmF0b3JpZXMxGzAZBgNVBAMTEmtvYmUubmV0bGFiLm5lYy5kZTEo
-MCYGCSqGSIb3DQEJARYZbGFycy5lZ2dlcnRAbmV0bGFiLm5lYy5kZYIBADAMBgNVHRMEBTADAQH/
-MA0GCSqGSIb3DQEBBQUAA4GBAJfoil3cAX3cUPMFrDdlW9DPMK/+QY8EHPOsnefm77h5CmmY6J+G
-5Ydl9vyHxL76Opyg8cZWOOU/k9oVv7AvQ1GmIFqVFyWKQPfEhj+EWjEnUAcI7QDN8XER+U7XRvj6
-yYysFgm2Tl30QCGvmESCgYIztCKMG2cLBkEosj2kWBbXMYIDsjCCA64CAQEwdjBiMQswCQYDVQQG
-EwJaQTElMCMGA1UEChMcVGhhd3RlIENvbnN1bHRpbmcgKFB0eSkgTHRkLjEsMCoGA1UEAxMjVGhh
-d3RlIFBlcnNvbmFsIEZyZWVtYWlsIElzc3VpbmcgQ0ECEBCR/semQl5bz/x3jtiU02YwCQYFKw4D
-AhoFAKCCAhEwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMDYxMTMw
-MjIwNzM4WjAjBgkqhkiG9w0BCQQxFgQUUmOOMETaDSKbAFoJHGKNd6Z8hOMwgdYGCSsGAQQBgjcQ
-BDGByDCBxTCBvzELMAkGA1UEBhMCREUxHDAaBgNVBAgUE0JhZGVuLVfDdWVydHRlbWJlcmcxEzAR
-BgNVBAcTCkhlaWRlbGJlcmcxFzAVBgNVBAoTDk5FQyBFdXJvcGUgTHRkMR0wGwYDVQQLExROZXR3
-b3JrIExhYm9yYXRvcmllczEbMBkGA1UEAxMSa29iZS5uZXRsYWIubmVjLmRlMSgwJgYJKoZIhvcN
-AQkBFhlsYXJzLmVnZ2VydEBuZXRsYWIubmVjLmRlAgEAMIHYBgsqhkiG9w0BCRACCzGByKCBxTCB
-vzELMAkGA1UEBhMCREUxHDAaBgNVBAgUE0JhZGVuLVfDdWVydHRlbWJlcmcxEzARBgNVBAcTCkhl
-aWRlbGJlcmcxFzAVBgNVBAoTDk5FQyBFdXJvcGUgTHRkMR0wGwYDVQQLExROZXR3b3JrIExhYm9y
-YXRvcmllczEbMBkGA1UEAxMSa29iZS5uZXRsYWIubmVjLmRlMSgwJgYJKoZIhvcNAQkBFhlsYXJz
-LmVnZ2VydEBuZXRsYWIubmVjLmRlAgEAMA0GCSqGSIb3DQEBAQUABIIBAA97xDW9kNnEmSos13hW
-+g9c5gM61kZB7wOyX+FepvZQpavBdwrFXBtB+rhjbWYFChhOL3prnonTnk5NTum9VBNozeFeUC27
-pms0h/0dm2iksiTFrN7Zu6/OIznR+Ft+alKEDgYLHtGfqYGPP+EWIn4rh+evuHqu+rK31/g1K+RH
-a0pA34PZBu9HELjMIewVq4nfNMn9B0VpOEJbUdaPg8KJubsz+jFL1o6GPPKf/k5GMzpgDR1ty6O9
-GEQoOBTk7U2QgkhtYiHR0Fl7cgM6parevp/5MM5k80vBBr9+IjZhXT8nYrjtrgLME4oJIKUQSVn3
-mQoQ663mF+5z5xesRRcAAAAAAAA=
+Solution 
+--------
+ This patch implements automatically tracking the packet size `s', for receiver and
+ sender. Socket options to commmunicate the packet size are then no longer needed.
+ It implements the strategy presented on 
+       http://www.mail-archive.com/dccp@vger.kernel.org/msg00581.html
 
---Apple-Mail-46--213819164--
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+
+
+	 	J u s t i f i c a t i o n  [not meant as commit message]
+		============================
+
+ The packet size `s' is one of the main parameters of the TFRC mechanism. The TFRC sender uses
+ `s' in the (i) throughput equation, in the setting of the (ii) maximum receive rate, 
+ (iii) minimum sending rate, and (iv) the nofeedback timer;  the TFRC receiver `s' (aka segment
+  size) to  compute the initial loss history, after the first loss event. 
+ 
+ Hence using socket options to communicate `s' is error-prone whenever the user-space program
+ communicates values of `s' to the CCID 3 module that differ from the real value of `s';
+ ultimately such differences not only increase the possibility of error but can also decrease 
+ the performance. 
+ 
+ Using the mean value of the packet size is an accepted practice, supported e.g. by 
+  * RFC 4342, sec. 5.3:
+     "A CCID 3 implementation MAY calculate s as the segment size averaged over 
+      multiple round trip times [...]."
+ 
+  * RFC 3448, sec. 4.1:
+     "It should normally be safe to use an estimate of the mean packet size for s."
+
+  * draft-ietf-dccp-rfc3448bis-00.txt, sec. 
+    "[... ] where the segment size varies depending on the data, the sender MAY estimate
+     the segment size s as the average segment size over the last four loss intervals. The
+     sender MAY also estimate the average segment size over longer time intervals [...]."
+
+ This solution is robust: if packet sizes are varying, the moving average is a reliable
+ predictor of the (long-term) mean value; if packet sizes are fixed then s stays constant.
+
+ The solution uses DCCP payload packet sizes, i.e.  IP payload size minus DCCP Data Offset
+ value. This is consistent with the recommendations in RFC 4342, section 5.3: 
+     "Alternately, a CCID 3 implementation MAY use the Maximum Packet Size
+      to derive s.  In this case, s is set to the Maximum Segment Size
+      (MSS), the maximum size in bytes for the data segment, not including
+      the default DCCP and IP packet headers."
+ It is further consistent with the definition of MSS in RFC 879 and the use of payload size
+ as length value in the DCCP module.
+ [See also http://www.mail-archive.com/dccp@vger.kernel.org/msg00534.html ]
+
+---
+ net/dccp/ccids/ccid3.c |   48 +++++++++++++++++++++++++++++-------------------
+ 1 file changed, 29 insertions(+), 19 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -151,6 +151,18 @@ static void ccid3_hc_tx_update_x(struct 
+ 	}
+ }
+ 
++/*
++ * 	Track the mean packet size `s' (cf. RFC 4342, 5.3 and  RFC 3448, 4.1)
++ * 	@len: DCCP packet payload size in bytes
++ */
++static inline void ccid3_hc_tx_update_s(struct ccid3_hc_tx_sock *hctx, int len)
++{
++	DCCP_BUG_ON(len = 0);
++
++	hctx->ccid3hctx_s = (hctx->ccid3hctx_s = 0)?    len
++			  : (9 * hctx->ccid3hctx_s + len) / 10;
++}
++
+ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+ {
+ 	struct sock *sk = (struct sock *)data;
+@@ -347,6 +359,8 @@ static void ccid3_hc_tx_packet_sent(stru
+ 		unsigned long quarter_rtt;
+ 		struct dccp_tx_hist_entry *packet;
+ 
++		ccid3_hc_tx_update_s(hctx, len);
++
+ 		packet = dccp_tx_hist_head(&hctx->ccid3hctx_hist);
+ 		if (unlikely(packet = NULL)) {
+ 			DCCP_WARN("packet doesn't exist in history!\n");
+@@ -625,17 +639,9 @@ static int ccid3_hc_tx_parse_options(str
+ 
+ static int ccid3_hc_tx_init(struct ccid *ccid, struct sock *sk)
+ {
+-	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_tx_sock *hctx = ccid_priv(ccid);
+ 
+-	if (dp->dccps_packet_size >= TFRC_MIN_PACKET_SIZE &&
+-	    dp->dccps_packet_size <= TFRC_MAX_PACKET_SIZE)
+-		hctx->ccid3hctx_s = dp->dccps_packet_size;
+-	else
+-		hctx->ccid3hctx_s = TFRC_STD_PACKET_SIZE;
+-
+-	/* Set transmission rate to 1 packet per second */
+-	hctx->ccid3hctx_x     = hctx->ccid3hctx_s;
++	hctx->ccid3hctx_s     = 0;
+ 	hctx->ccid3hctx_t_rto = USEC_PER_SEC;
+ 	hctx->ccid3hctx_state = TFRC_SSTATE_NO_SENT;
+ 	INIT_LIST_HEAD(&hctx->ccid3hctx_hist);
+@@ -690,6 +696,14 @@ static void ccid3_hc_rx_set_state(struct
+ 	hcrx->ccid3hcrx_state = state;
+ }
+ 
++static inline void ccid3_hc_rx_update_s(struct ccid3_hc_rx_sock *hcrx, int len)
++{
++	DCCP_BUG_ON(len = 0);
++
++	hcrx->ccid3hcrx_s = (hcrx->ccid3hcrx_s = 0)?  len
++			  : (9 * hcrx->ccid3hcrx_s + len) / 10;
++}
++
+ static void ccid3_hc_rx_send_feedback(struct sock *sk)
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+@@ -966,7 +980,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	struct dccp_rx_hist_entry *packet;
+ 	struct timeval now;
+ 	u32 p_prev, rtt_prev, r_sample, t_elapsed;
+-	int loss;
++	int loss, payload_size;
+ 
+ 	BUG_ON(hcrx = NULL);
+ 
+@@ -1021,6 +1035,9 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	if (DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK)
+ 		return;
+ 
++	payload_size = skb->len - dccp_hdr(skb)->dccph_doff * 4;
++	ccid3_hc_rx_update_s(hcrx, payload_size);
++
+ 	switch (hcrx->ccid3hcrx_state) {
+ 	case TFRC_RSTATE_NO_DATA:
+ 		ccid3_pr_debug("%s, sk=%p(%s), skb=%p, sending initial "
+@@ -1031,8 +1048,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 		ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
+ 		return;
+ 	case TFRC_RSTATE_DATA:
+-		hcrx->ccid3hcrx_bytes_recv += skb->len -
+-					      dccp_hdr(skb)->dccph_doff * 4;
++		hcrx->ccid3hcrx_bytes_recv += payload_size;
+ 		if (loss)
+ 			break;
+ 
+@@ -1072,22 +1088,16 @@ static void ccid3_hc_rx_packet_recv(stru
+ 
+ static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
+ {
+-	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_rx_sock *hcrx = ccid_priv(ccid);
+ 
+ 	ccid3_pr_debug("%s, sk=%p\n", dccp_role(sk), sk);
+ 
+-	if (dp->dccps_packet_size >= TFRC_MIN_PACKET_SIZE &&
+-	    dp->dccps_packet_size <= TFRC_MAX_PACKET_SIZE)
+-		hcrx->ccid3hcrx_s = dp->dccps_packet_size;
+-	else
+-		hcrx->ccid3hcrx_s = TFRC_STD_PACKET_SIZE;
+-
+ 	hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA;
+ 	INIT_LIST_HEAD(&hcrx->ccid3hcrx_hist);
+ 	INIT_LIST_HEAD(&hcrx->ccid3hcrx_li_hist);
+ 	dccp_timestamp(sk, &hcrx->ccid3hcrx_tstamp_last_ack);
+ 	hcrx->ccid3hcrx_tstamp_last_feedback = hcrx->ccid3hcrx_tstamp_last_ack;
++	hcrx->ccid3hcrx_s   = 0;
+ 	hcrx->ccid3hcrx_rtt = 5000; /* XXX 5ms for now... */
+ 	return 0;
+ }
