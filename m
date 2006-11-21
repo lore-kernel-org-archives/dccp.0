@@ -1,69 +1,82 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Thu, 16 Nov 2006 16:57:33 +0000
-Subject: Re: [RFC-RESEND] [PATCH]: use explicit enums for CCID 3 states
-Message-Id: <39e6f6c70611160857q3b08b96exe638abc427bc8ef@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 21 Nov 2006 15:45:18 +0000
+Subject: [PATCH 2/6]: Simplify control flow in the calculation of t_ipi
+Message-Id: <200611211545.18544@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200611151859.19282@strip-the-willow>
-In-Reply-To: <200611151859.19282@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/16/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Hi Arnaldo,
->
-> |  Thanks, applied.
-> many thanks for applying this; it was sooner as expected and I think it would
-> be good to tidy this up and make it consistent throughout the code. Since I initiated this,
-> I feel a bit obliged to improve this.
+[CCID 3]: Simplify control flow in the calculation of t_ipi
 
-:)
 
-> In particular, I have thought about the following scheme which divides warning messages into
-> two (plus debug) categories
->
-> a) GRADE 1: Severe Protocol/Internal Faults
->             This includes
->                 * violated pre- / postconditions,
->                 * illegal states
->                 * malfunctioning (something is NULL)
->    I think these messages should not be rate-limited and, catching up on the discussion,
->    should dump the stack after the warning message.
->
-> b) GRADE 2: Plain Misbehaviour
->                 * out-of-memory messages
->                 * Request floods
->                 * protocol violations (wrong message/option format)
->
-> To make this consistent, I would like input whether the following is ok with you:
->
->         1) use DCCP_BUG for all Grade 1 type of messages, i.e. it would replace
->                 * BUG()
->                 * WARN_ON() (of course with the appropriate message)
->                 * all sections using 'printk(KERN_CRIT ... ); dump_stack()'
->
->         2) either keep the LIMIT_NETDEBUG(KERN_WARNING ... ) for Grade 2 or
->            put it into a macro which would add the __FUNCTION__ thing to it
->
-> The point is that, if it is done consistently, (1) can later be replaced with the more
-> conventional BUG() or WARN_ON() once everyone is sure that the code behaves exactly as it shoulds.
+This patch performs a simplifying (performance) optimisation:
 
-Using a DCCP_ prefix for BUG(), BUG_ON(), WARN_ON() and a new WARN()
-with the difference being none would panic the machine, but warn, in
-some cases ratelimited, seems to be the way to go, later, as you
-suggests, we just remove the prefix.
+ In each call of the inline function ccid3_calc_new_t_ipi(), the state is
+ tested against TFRC_SSTATE_NO_FBACK. This is expensive when the function
+ is called very often. A simpler solution, implemented by this patch, is
+ to adapt the control flow.
 
-> For the moment, as Ian has pointed out, bringing the machine to a grinding halt for every little
-> problem is probably too much of a nuisance (in the same vein, I would really like to suggest the
-> return of Unload Hack :0).
+Background:
+-----------
+ Upon sender initialisation, the values of t_ipi, t_nom = t_0, delta, as
+ well as the initial packet sending rate, are all constants [RFC 3448, 4.2].
+ Until feedback arrives, these values are not changed. Hence it is not necessary
+ to recalculate t_ipi, t_nom, delta until the first feedback has arrived, i.e.
+ as long as the state TFRC_SSTATE_NO_FBACK persists.
 
-I'll look at what to do to avoid allowing the removal while there are
-TW sockets on the death row :-)
+Justification:
+--------------
+ ccid3_calc_new_t_ipi() is called only in two places:
+ 
+   * in ccid3_hc_tx_packet_recv(); here the state is never TFRC_SSTATE_NO_FBACK, due to
+	if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
+		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
+		/* ... */
+   * in ccid3_hc_tx_packet_sent()
+	  
+ => Only in the second case, the state might be TFRC_SSTATE_NO_FBACK and this only 
+     during the initial phase of a connection.
 
-> If you are ok with this basic scheme, I shall set about and tidy things up, otherwise please let
-> me know what the constraints should be with regard to warning/bug messages.
->
-> Best,
-> Gerrit
->
+Solution:
+---------
+ This patch avoids such a recalculation by a simple change of control flow in 
+ ccid3_hc_tx_packet_sent(). As a consequence, ccid3_calc_new_t_ipi() is never called in 
+ the state TFRC_SSTATE_NO_FBACK, hence the test against this state can safely be removed. 
+
+ In addition, a problematic comment in ccid3_calc_new_t_ipi() was removed:
+   * the first part of the comment (initial t_ipi = 1 second) is correct
+   * the second part of the comment is not correct wrt. [RFC 3448, 4.4]
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |    2 ++
+ 1 file changed, 2 insertions(+)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -103,13 +103,7 @@ static void ccid3_hc_tx_set_state(struct
+ /* Calculate new t_ipi (inter packet interval) by t_ipi = s / X_inst */
+ static inline void ccid3_calc_new_t_ipi(struct ccid3_hc_tx_sock *hctx)
+ {
+-	/*
+-	 * If no feedback spec says t_ipi is 1 second (set elsewhere and then
+-	 * doubles after every no feedback timer (separate function)
+-	 */
+-	if (hctx->ccid3hctx_state != TFRC_SSTATE_NO_FBACK)
+-		hctx->ccid3hctx_t_ipi = usecs_div(hctx->ccid3hctx_s,
+-						  hctx->ccid3hctx_x);
++	hctx->ccid3hctx_t_ipi = usecs_div(hctx->ccid3hctx_s, hctx->ccid3hctx_x);
+ }
+ 
+ /* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
+@@ -394,6 +388,8 @@ static void ccid3_hc_tx_packet_sent(stru
+ 				  "as a data packet",  dccp_role(sk));
+ 		return;
+ 	case TFRC_SSTATE_NO_FBACK:
++		/* t_nom, t_ipi, delta do not change until feedback arrives */
++		return;
+ 	case TFRC_SSTATE_FBACK:
+ 		if (len > 0) {
+ 			timeval_sub_usecs(&hctx->ccid3hctx_t_nom,
