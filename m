@@ -1,31 +1,49 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 23 Nov 2006 09:46:59 +0000
+Date: Thu, 23 Nov 2006 11:59:43 +0000
 Subject: Re: [PATCH 3/6]: Fix calculation of t_ipi time of scheduled transmission
-Message-Id: <200611230946.59875@strip-the-willow>
+Message-Id: <200611231159.43164@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00611210945l39bc33f5q3ab38c0bba022c1a@mail.gmail.com>
 In-Reply-To: <5640c7e00611210945l39bc33f5q3ab38c0bba022c1a@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-|  Gerrit - I was not trying to cast dispersions on you at all. I just
-|  wanted some time to review it properly as I've spent a bit of time in
-|  this code and would like to review CCID3 changes before they merge.
-I understand this and this is the main reason why only send small, incremental patches; and
-strive to give a justification for each step. In this way it is easier to verify whether the
-changes actually improve the code or if they are not necessary. What I want to avoid is 
-messing up someone else's code.
+Quoting Ian McDonald:
+|  > + =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0* if (t_now > t_nom - delta)
+|  > + =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0* =A0 =A0 =A0 // send the packet now
+|  > + =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0* else
+|  > + =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0* =A0 =A0 =A0 // send the packet in (=
+t_nom - t_now) milliseconds.
+|  > + =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0*/
+|  > + =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (delay < hctx->ccid3hctx_delta)
+|  > + =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 rc =3D 0;
+|  > + =A0 =A0 =A0 =A0 =A0 =A0 =A0 else
+|  > + =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 rc =3D delay/1000L;
+| =20
+|  Shouldn't that last line be rc =3D (delay-hctx->ccid3hctx_delta)/1000 as
+|  you're not taking the delta into account on the else clause.
 
-|  >   => Since these bits are so similar, I would actually suggest to accommodate them in
-|  >       one function, since:
-|  >                 --t_ipi changes only if one of `s' or X_calc changes
-|  >                 --if `s' / X_calc remain unchanged after feedback, t_ipi remains as before
-|  >                 --t_delta depends on t_ipi
-|  >                 --the calculation of t_nom depends on t_ipi (as in the above snippets)
-|  >
-|  
-|  Agree.
-Since your last email I have spent some more time going through the standard documents; if you
-agree then it may be good to update - will review and prepare patches for review.
+The value of `delay' is the difference between t_nom =3D t_(i+1) and t_now:
+
+	delay =3D timeval_delta(&hctx->ccid3hctx_t_nom, &now);
+
+If this difference is less than delta (which includes the case when t_now is
+later than t_nom such that the difference is negative), then the packet is =
+sent now.
+
+If the difference is greater than delta then t_now < t_nom and the packet i=
+s too early
+to be sent; [RFC 3448, 4.6] says to reschedule in=20
+
+          t_ipi - (t_now - t_i) =3D t_ipi - (t_now - t_i) =3D (t_i + t_ipi)=
+ - t_now
+                                                        =3D t_(i+1)       -=
+ t_now
+                                                        =3D t_nom         -=
+ t_now
+
+Hence we can reuse the timeval_delta. Maybe the variable should be renamed =
+to highlight
+the fact that it is a time difference, but I quite liked `delay'.
