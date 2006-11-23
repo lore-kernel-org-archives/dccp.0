@@ -1,183 +1,201 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Tue, 28 Nov 2006 21:59:05 +0000
-Subject: [PATCH 6/7] [DCCP] ccid3: Larger initial windows
-Message-Id: <20061128215904.GO19882@mandriva.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 23 Nov 2006 14:53:06 +0000
+Subject: [PATCH v2 - RESEND]:  [CCID 3]: Track RX/TX packet size `s' using moving-average
+Message-Id: <200611231453.06708@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This implements the larger-initial-windows feature for CCID 3, as described in
-section 5 of RFC 4342. When the first feedback packet arrives, the sender can
-send up to 2..4 packets per RTT, instead of just one.
+I am resending this since I have checked this against possible cases and fixed 
+the following cases:
+	* the packet size `s' has to be seeded when the first packet is sent, since
+          several calculations later depend on `s'
+          This is now done, and an analysis has been added that this is safe.
 
-The patch further
- * reduces the number of timestamping calls by passing the timestamp value
-   (which is computed in one of the calling functions anyway) as argument
+	* It is perfectly ok and not a bug condition for a receiver to receive packets
+          with a zero packet size. I have therefore removed the BUG_ON conditions and
+          replaced them with ccid3_pr_debug messages - these can be switched off at will
 
- * renames one constant with a very long name into one which is shorter and
-   resembles the one in RFC 3448 (t_mbi)
+	* has been uploaded to replace the previous version on 
+          http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/12e_CCID3_packet_size_EWMA.diff
 
- * simplifies some of the min_t/max_t cases where both `x', `y' have the same
-   type
+--------------> Commit message <------------------------------------------------------
 
-Commiter note: renamed TFRC_t_mbi to TFRC_T_MBI, to follow Linux coding style.
+[CCID 3]: Track RX/TX packet size `s' using moving-average
+
+
+Problem:
+--------
+ Currently, the receiver/sender packet size `s' of the TCP throughput
+ equation [RFC 3448, 3.1] has to be communicated manually via socket options
+ to the CCID 3 module. This has been discussed on dccp@vger, see e.g.
+ http://www.mail-archive.com/dccp@vger.kernel.org/msg00582.html
+
+Solution 
+--------
+ This patch implements automatically tracking the packet size `s', for receiver and
+ sender. Socket options to commmunicate the packet size are then no longer needed.
+ It implements the strategy presented on 
+       http://www.mail-archive.com/dccp@vger.kernel.org/msg00581.html
+
+ 
+Assumptions:
+------------
+ Several other bits of code rely on the value of `s' being set. This patch has been verified to 
+ ensure that `s' is not unset (i.e. 0) when other functions try to use it:
+  * ccid3_hc_tx_send_packet only sends packets with a payload size > 0
+  * the `s' value is seeded upon first sending (state NO_SENT)
+  * the functions which access `s' are 
+	ccid3_hc_tx_no_feedback_timer  - safe, since first started at the time where `s' is seeded
+	ccid3_hc_tx_packet_recv        - safe, since this is after `s' has been seeded
+  	ccid3_calc_new_t_ipi           - safe, since first called after sending or upon feedback
+        ccid3_hc_tx_update_x           - safe, since first called upon feedback or within 
+	                                       ccid3_hc_tx_no_feedback_timer
+
+    --all apart from no_feedback_timer are safe since the first time that these are called is
+      when the first feedback arrives (i.e. after `s' bytes have been sent and s is not 0)
+    --ccid3_hc_tx_no_feedback_timer has an issue if 
+
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid3.c |   66 +++++++++++++++++++++++++-----------------------
- net/dccp/ccids/ccid3.h |    4 +--
- 2 files changed, 37 insertions(+), 33 deletions(-)
+ net/dccp/ccids/ccid3.c |   59 +++++++++++++++++++++++++++++++++----------------
+ 1 file changed, 40 insertions(+), 19 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 05513f3..aa5440e 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -128,7 +128,8 @@ static inline void ccid3_update_send_tim
-  *          X = max(min(2 * X, 2 * X_recv), s / R);
-  *          tld = now;
-  */ 
--static void ccid3_hc_tx_update_x(struct sock *sk)
-+static void ccid3_hc_tx_update_x(struct sock *sk, struct timeval *now)
-+
- {
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 	const __u32 old_x = hctx->ccid3hctx_x;
-@@ -138,23 +139,20 @@ static void ccid3_hc_tx_update_x(struct 
- 		hctx->ccid3hctx_x_calc = tfrc_calc_x(hctx->ccid3hctx_s,
- 						     hctx->ccid3hctx_rtt,
- 						     hctx->ccid3hctx_p);
--		hctx->ccid3hctx_x = max_t(u32, min_t(u32, hctx->ccid3hctx_x_calc,
--							  2 * hctx->ccid3hctx_x_recv),
--					       (hctx->ccid3hctx_s /
--					        TFRC_MAX_BACK_OFF_TIME));
--	} else {
--		struct timeval now;
-+		hctx->ccid3hctx_x = max_t(u32, min(hctx->ccid3hctx_x_calc,
-+						   hctx->ccid3hctx_x_recv * 2),
-+					       hctx->ccid3hctx_s / TFRC_T_MBI);
-+
-+	} else if (timeval_delta(now, &hctx->ccid3hctx_t_ld) >+							  hctx->ccid3hctx_rtt) {
-+		hctx->ccid3hctx_x = max(min(hctx->ccid3hctx_x_recv,
-+					    hctx->ccid3hctx_x      ) * 2,
-+					usecs_div(hctx->ccid3hctx_s,
-+					       	  hctx->ccid3hctx_rtt)   );
-+		hctx->ccid3hctx_t_ld = *now;
-+	} else
-+		ccid3_pr_debug("Not changing X\n");
- 
--		dccp_timestamp(sk, &now);
--	       	if (timeval_delta(&now, &hctx->ccid3hctx_t_ld) >-		    hctx->ccid3hctx_rtt) {
--			hctx->ccid3hctx_x = max_t(u32, min_t(u32, hctx->ccid3hctx_x_recv,
--								  hctx->ccid3hctx_x) * 2,
--						       usecs_div(hctx->ccid3hctx_s,
--							       	 hctx->ccid3hctx_rtt));
--			hctx->ccid3hctx_t_ld = now;
--		}
--	}
- 	if (hctx->ccid3hctx_x != old_x)
- 		ccid3_update_send_time(hctx);
+@@ -151,6 +151,24 @@ static void ccid3_hc_tx_update_x(struct 
+ 	}
  }
-@@ -196,12 +194,9 @@ static void ccid3_hc_tx_no_feedback_time
- 	
- 	switch (hctx->ccid3hctx_state) {
- 	case TFRC_SSTATE_NO_FBACK:
--		/* Halve send rate */
--		hctx->ccid3hctx_x /= 2;
--		if (hctx->ccid3hctx_x < (hctx->ccid3hctx_s /
--					 TFRC_MAX_BACK_OFF_TIME))
--			hctx->ccid3hctx_x = (hctx->ccid3hctx_s /
--					     TFRC_MAX_BACK_OFF_TIME);
-+		/* RFC 3448, 4.4: Halve send rate directly */
-+		hctx->ccid3hctx_x = min_t(u32, hctx->ccid3hctx_x / 2,
-+					       hctx->ccid3hctx_s / TFRC_T_MBI);
  
- 		ccid3_pr_debug("%s, sk=%p, state=%s, updated tx rate to %d "
- 			       "bytes/s\n",
-@@ -221,6 +216,8 @@ static void ccid3_hc_tx_no_feedback_time
- 		if (!hctx->ccid3hctx_idle ||
- 		    (hctx->ccid3hctx_x_recv > 		     4 * usecs_div(hctx->ccid3hctx_s, hctx->ccid3hctx_rtt))) {
-+			struct timeval now;
++/*
++ * 	Track the mean packet size `s' (cf. RFC 4342, 5.3 and  RFC 3448, 4.1)
++ * 	@len: DCCP packet payload size in bytes
++ */
++static inline void ccid3_hc_tx_update_s(struct ccid3_hc_tx_sock *hctx, int len)
++{
++	if(len = 0)
++		ccid3_pr_debug("Packet payload length is 0 - not updating\n");
++	else
++		hctx->ccid3hctx_s = (hctx->ccid3hctx_s = 0)?	len
++				  : (9 * hctx->ccid3hctx_s + len) / 10;
 +
- 			ccid3_pr_debug("%s, sk=%p, state=%s, not idle\n",
- 				       dccp_role(sk), sk,
- 				       ccid3_tx_state_name(hctx->ccid3hctx_state));
-@@ -238,12 +235,13 @@ static void ccid3_hc_tx_no_feedback_time
- 			if (hctx->ccid3hctx_p < TFRC_SMALLEST_P ||
- 			    hctx->ccid3hctx_x_calc > 2 * hctx->ccid3hctx_x_recv)
- 				hctx->ccid3hctx_x_recv = max_t(u32, hctx->ccid3hctx_x_recv / 2,
--								    hctx->ccid3hctx_s / (2 * TFRC_MAX_BACK_OFF_TIME));
-+								    hctx->ccid3hctx_s / (2 * TFRC_T_MBI));
- 			else
- 				hctx->ccid3hctx_x_recv = hctx->ccid3hctx_x_calc / 4;
- 
- 			/* Update sending rate */
--			ccid3_hc_tx_update_x(sk);
-+			dccp_timestamp(sk, &now);
-+			ccid3_hc_tx_update_x(sk, &now);
- 		}
- 		/*
- 		 * Schedule no feedback timer to expire in
-@@ -473,11 +471,21 @@ static void ccid3_hc_tx_packet_recv(stru
- 		 * q is a constant, RFC 3448 recomments 0.9
- 		 */
- 		if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
-+			/* Use Larger Initial Windows [RFC 4342, sec. 5]
-+			 * We deviate in that we use `s' instead of `MSS'. */
-+			u16 w_init = max(    4 * hctx->ccid3hctx_s,
-+					 max(2 * hctx->ccid3hctx_s, 4380));
-+			hctx->ccid3hctx_rtt  = r_sample;
-+			hctx->ccid3hctx_x    = usecs_div(w_init, r_sample);
-+			hctx->ccid3hctx_t_ld = now;
++	/* Note: We could do a potential optimisation here - when `s' changes,
++	         recalculate sending rate and consequently t_ipi, t_delta, and
++		 t_now. This is however non-standard, and the benefits are not
++		 clear, so it is currently left out.                          */
++}
 +
-+			ccid3_update_send_time(hctx);
- 			ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
--			hctx->ccid3hctx_rtt = r_sample;
--		} else
-+		} else {
- 			hctx->ccid3hctx_rtt = (hctx->ccid3hctx_rtt * 9) / 10 +
- 					      r_sample / 10;
-+			ccid3_hc_tx_update_x(sk, &now);
-+		}
+ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+ {
+ 	struct sock *sk = (struct sock *)data;
+@@ -297,6 +315,10 @@ static int ccid3_hc_tx_send_packet(struc
+ 		hctx->ccid3hctx_t_last_win_count = now;
+ 		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_NO_FBACK);
  
- 		ccid3_pr_debug("%s, sk=%p, New RTT estimate=%uus, "
- 			       "r_sample=%us\n", dccp_role(sk), sk,
-@@ -502,9 +510,6 @@ static void ccid3_hc_tx_packet_recv(stru
- 		/* unschedule no feedback timer */
- 		sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
++		/* Set initial sending rate to 1 packet per second */
++		ccid3_hc_tx_update_s(hctx, len);
++		hctx->ccid3hctx_x     = hctx->ccid3hctx_s;
++
+ 		/* First timeout, according to [RFC 3448, 4.2], is 1 second */
+ 		hctx->ccid3hctx_t_ipi = USEC_PER_SEC;
+ 		/* Initial delta: minimum of 0.5 sec and t_gran/2 */
+@@ -348,6 +370,8 @@ static void ccid3_hc_tx_packet_sent(stru
+ 		unsigned long quarter_rtt;
+ 		struct dccp_tx_hist_entry *packet;
  
--		/* Update sending rate (and likely t_ipi, t_nom, and delta) */
--		ccid3_hc_tx_update_x(sk);
++		ccid3_hc_tx_update_s(hctx, len);
++
+ 		packet = dccp_tx_hist_head(&hctx->ccid3hctx_hist);
+ 		if (unlikely(packet = NULL)) {
+ 			DCCP_WARN("packet doesn't exist in history!\n");
+@@ -626,17 +650,9 @@ static int ccid3_hc_tx_parse_options(str
+ 
+ static int ccid3_hc_tx_init(struct ccid *ccid, struct sock *sk)
+ {
+-	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_tx_sock *hctx = ccid_priv(ccid);
+ 
+-	if (dp->dccps_packet_size >= TFRC_MIN_PACKET_SIZE &&
+-	    dp->dccps_packet_size <= TFRC_MAX_PACKET_SIZE)
+-		hctx->ccid3hctx_s = dp->dccps_packet_size;
+-	else
+-		hctx->ccid3hctx_s = TFRC_STD_PACKET_SIZE;
 -
- 		/* remove all packets older than the one acked from history */
- 		dccp_tx_hist_purge_older(ccid3_tx_hist,
- 					 &hctx->ccid3hctx_hist, packet);
-@@ -514,7 +519,6 @@ static void ccid3_hc_tx_packet_recv(stru
- 		 */
- 		sk->sk_write_space(sk);
+-	/* Set transmission rate to 1 packet per second */
+-	hctx->ccid3hctx_x     = hctx->ccid3hctx_s;
++	hctx->ccid3hctx_s     = 0;
+ 	hctx->ccid3hctx_t_rto = USEC_PER_SEC;
+ 	hctx->ccid3hctx_state = TFRC_SSTATE_NO_SENT;
+ 	INIT_LIST_HEAD(&hctx->ccid3hctx_hist);
+@@ -691,6 +707,15 @@ static void ccid3_hc_rx_set_state(struct
+ 	hcrx->ccid3hcrx_state = state;
+ }
  
++static inline void ccid3_hc_rx_update_s(struct ccid3_hc_rx_sock *hcrx, int len)
++{
++	if(len = 0)		/* don't update on empty packets (e.g. ACKs) */
++		ccid3_pr_debug("Packet payload length is 0 - not updating\n");
++	else
++		hcrx->ccid3hcrx_s = (hcrx->ccid3hcrx_s = 0)?	len
++				  : (9 * hcrx->ccid3hcrx_s + len) / 10;
++}
++
+ static void ccid3_hc_rx_send_feedback(struct sock *sk)
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+@@ -967,7 +992,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	struct dccp_rx_hist_entry *packet;
+ 	struct timeval now;
+ 	u32 p_prev, rtt_prev, r_sample, t_elapsed;
+-	int loss;
++	int loss, payload_size;
+ 
+ 	BUG_ON(hcrx = NULL);
+ 
+@@ -1022,6 +1047,9 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	if (DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK)
+ 		return;
+ 
++	payload_size = skb->len - dccp_hdr(skb)->dccph_doff * 4;
++	ccid3_hc_rx_update_s(hcrx, payload_size);
++
+ 	switch (hcrx->ccid3hcrx_state) {
+ 	case TFRC_RSTATE_NO_DATA:
+ 		ccid3_pr_debug("%s, sk=%p(%s), skb=%p, sending initial "
+@@ -1032,8 +1060,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 		ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
+ 		return;
+ 	case TFRC_RSTATE_DATA:
+-		hcrx->ccid3hcrx_bytes_recv += skb->len -
+-					      dccp_hdr(skb)->dccph_doff * 4;
++		hcrx->ccid3hcrx_bytes_recv += payload_size;
+ 		if (loss)
+ 			break;
+ 
+@@ -1073,22 +1100,16 @@ static void ccid3_hc_rx_packet_recv(stru
+ 
+ static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
+ {
+-	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_rx_sock *hcrx = ccid_priv(ccid);
+ 
+ 	ccid3_pr_debug("%s, sk=%p\n", dccp_role(sk), sk);
+ 
+-	if (dp->dccps_packet_size >= TFRC_MIN_PACKET_SIZE &&
+-	    dp->dccps_packet_size <= TFRC_MAX_PACKET_SIZE)
+-		hcrx->ccid3hcrx_s = dp->dccps_packet_size;
+-	else
+-		hcrx->ccid3hcrx_s = TFRC_STD_PACKET_SIZE;
 -
- 		/* Update timeout interval. We use the alternative variant of
- 		 * [RFC 3448, 3.1] which sets the upper bound of t_rto to one
- 		 * second, as it is suggested for TCP (see RFC 2988, 2.4). */
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index dbb8844..27cb20a 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -48,8 +48,8 @@ #define TFRC_INITIAL_TIMEOUT	   (2 * USE
- /* In usecs - half the scheduling granularity as per RFC3448 4.6 */
- #define TFRC_OPSYS_HALF_TIME_GRAN  (USEC_PER_SEC / (2 * HZ))
- 
--/* In seconds */
--#define TFRC_MAX_BACK_OFF_TIME	   64
-+/* Parameter t_mbi from [RFC 3448, 4.3]: backoff interval in seconds */
-+#define TFRC_T_MBI		   64
- 
- #define TFRC_SMALLEST_P		   40
- 
--- 
-1.4.2.1.g3d5c
-
+ 	hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA;
+ 	INIT_LIST_HEAD(&hcrx->ccid3hcrx_hist);
+ 	INIT_LIST_HEAD(&hcrx->ccid3hcrx_li_hist);
+ 	dccp_timestamp(sk, &hcrx->ccid3hcrx_tstamp_last_ack);
+ 	hcrx->ccid3hcrx_tstamp_last_feedback = hcrx->ccid3hcrx_tstamp_last_ack;
++	hcrx->ccid3hcrx_s   = 0;
+ 	hcrx->ccid3hcrx_rtt = 5000; /* XXX 5ms for now... */
+ 	return 0;
+ }
