@@ -1,47 +1,105 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 30 Nov 2006 15:58:59 +0000
-Subject: Re: [BUG] CCID3 no longer works!
-Message-Id: <200611301558.59413@strip-the-willow>
+Date: Fri, 24 Nov 2006 16:20:18 +0000
+Subject: [PATCH 10/10]: Simplify dccp_rcv_state_process
+Message-Id: <200611241620.18283@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <5640c7e00611291504v60e06067h469e8c91293031c9@mail.gmail.com>
-In-Reply-To: <5640c7e00611291504v60e06067h469e8c91293031c9@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Ian McDonald wrote:
-|  Folks,
-|  
-|  I've started my testing and confirm what the other two have said on
-|  list. Using Acme net 2.6.20 tree as of about four hours ago basically
-|  I get no data transmitted. Works fine on my 2.6.19 modified tree.
-|  
-|  I'm using iperf as follows (using today's iperf patch)
-|  ian@jandi3:~$ iperf --protocol dccp -s -l 500
-|  ian@jandi1:~$ iperf --protocol dccp -c jandi3 -l 500 -t 20
-|  
-|  There are some clues at least on jandi3 log:
-|  Nov 30 11:57:49 localhost kernel: [  645.677995]
-|  ccid3_hc_tx_packet_recv: Illegal ACK received - no packet has been
-|  sent
-|  Nov 30 11:57:49 localhost kernel: [  645.678678]
-|  ccid3_hc_tx_packet_recv: Illegal ACK received - no packet has been
-|  sent
-|
-Many thanks for supplying the up-to-date iperf, it makes testing so much easier.
-After I had found that bug (see patch), I had
+[DCCP]: Simplify dccp_rcv_state_process
 
-$ iperf-2.0.2iperf --protocol dccp -s -l 1424
-------------------------------------------------------------
-Server listening on DCCP port 5001
- (default)
-------------------------------------------------------------
-[  4] local 139.133.209.176 port 5001 connected with 139.234.123.65 port 32911
-[  4]  0.0- 9.7 sec  74.3 MBytes  64.2 Mbits/sec
+This patch does not change the algorithm, it just simplifies control flow a bit.
 
+The main changes are:
+ * cleanup after dccp_rcv_request_sent_state_process is now done within that function,
+   not in dccp_rcv_state_process
+ * as a result the control flow in dccp_rcv_request becomes a bit simpler  
 
-Relief :-) !!
+Background:
+  The information as to whether an skb is (still) queued is passed
+  by dccp_rcv_state_process and some of the function it calls via the
+  return value.  A return value of 1 means that the calling function
+  (dccp_v{4,6}_do_rcv, possibly via dccp_child_process) needs to do some
+  post-processing (discard the datagram and send a reset).
 
-I could not trigger the bug you mention above. Are you using the standard davem kernel?
-If yes, further tests are necessary.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/input.c |   34 +++++++++++++++++-----------------
+ 1 file changed, 17 insertions(+), 17 deletions(-)
+
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -361,11 +361,11 @@ static int dccp_rcv_request_sent_state_p
+ 			 * schedule an ack here, as dccp_sendmsg does this for
+ 			 * us, also stated in the draft. -acme
+ 			 */
+-			__kfree_skb(skb);
+-			return 0;
+-		} 
+-		dccp_send_ack(sk);
+-		return -1;
++		} else
++			dccp_send_ack(sk);
++
++		__kfree_skb(skb);
++		return 0;
+ 	}
+ 
+ out_invalid_packet:
+@@ -418,13 +418,17 @@ static int dccp_rcv_respond_partopen_sta
+ 	return queued;
+ }
+ 
++/*
++ * returns
++ *    > 0: if skb is still queued and must be deleted later
++ *   = 0: if skb does not need any further processing
++ */
+ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+ 			   struct dccp_hdr *dh, unsigned len)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
+ 	const int old_state = sk->sk_state;
+-	int queued = 0;
+ 
+ 	/*
+ 	 *  Step 3: Process LISTEN state
+@@ -543,17 +547,15 @@ int dccp_rcv_state_process(struct sock *
+ 	case DCCP_REQUESTING:
+ 		/* FIXME: do congestion control initialization */
+ 
+-		queued = dccp_rcv_request_sent_state_process(sk, skb, dh, len);
+-		if (queued >= 0)
+-			return queued;
+-
+-		__kfree_skb(skb);
+-		return 0;
++		if (dccp_rcv_request_sent_state_process(sk, skb, dh, len))
++			return 1;
++		break;
+ 
+ 	case DCCP_RESPOND:
+ 	case DCCP_PARTOPEN:
+-		queued = dccp_rcv_respond_partopen_state_process(sk, skb,
+-								 dh, len);
++		if (dccp_rcv_respond_partopen_state_process(sk, skb,
++							    dh, len))
++			return 1;
+ 		break;
+ 	}
+ 
+@@ -567,10 +569,8 @@ int dccp_rcv_state_process(struct sock *
+ 		}
+ 	}
+ 
+-	if (!queued) { 
+ discard:
+-		__kfree_skb(skb);
+-	}
++	__kfree_skb(skb);
+ 	return 0;
+ }
+ 
