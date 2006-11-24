@@ -1,7 +1,7 @@
 From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 23 Nov 2006 17:50:32 +0000
+Date: Fri, 24 Nov 2006 22:14:58 +0000
 Subject: Re: [PATCH 3/6]: Fix calculation of t_ipi time of scheduled transmission
-Message-Id: <5640c7e00611230950o6c4fd8ablb564907d41cc8a5@mail.gmail.com>
+Message-Id: <5640c7e00611241414p46f4a955ud7ec8d9673b5bcc5@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00611210945l39bc33f5q3ab38c0bba022c1a@mail.gmail.com>
 In-Reply-To: <5640c7e00611210945l39bc33f5q3ab38c0bba022c1a@mail.gmail.com>
@@ -10,22 +10,29 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/23/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> |  Gerrit - I was not trying to cast dispersions on you at all. I just
-> |  wanted some time to review it properly as I've spent a bit of time in
-> |  this code and would like to review CCID3 changes before they merge.
-> I understand this and this is the main reason why only send small, incremental patches; and
-> strive to give a justification for each step. In this way it is easier to verify whether the
-> changes actually improve the code or if they are not necessary. What I want to avoid is
-> messing up someone else's code.
+> |  Shouldn't that last line be rc = (delay-hctx->ccid3hctx_delta)/1000 as
+> |  you're not taking the delta into account on the else clause.
 >
-Don't worry about that. The code is already a mess and needs some
-demessing I think :-)
+> The value of `delay' is the difference between t_nom = t_(i+1) and t_now:
+>
+>         delay = timeval_delta(&hctx->ccid3hctx_t_nom, &now);
+>
+> If this difference is less than delta (which includes the case when t_now is
+> later than t_nom such that the difference is negative), then the packet is sent now.
+>
+> If the difference is greater than delta then t_now < t_nom and the packet is too early
+> to be sent; [RFC 3448, 4.6] says to reschedule in
+>
+>           t_ipi - (t_now - t_i) = t_ipi - (t_now - t_i) = (t_i + t_ipi) - t_now
+>                                                         = t_(i+1)       - t_now
+>                                                         = t_nom         - t_now
+>
+> Hence we can reuse the timeval_delta. Maybe the variable should be renamed to highlight
+> the fact that it is a time difference, but I quite liked `delay'.
 
-> Since your last email I have spent some more time going through the standard documents; if you
-> agree then it may be good to update - will review and prepare patches for review.
+OK. Understand now.
 
-Of course - go ahead as I want DCCP to keep improving and geting better.
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 
 -- 
 Ian McDonald
