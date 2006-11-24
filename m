@@ -1,59 +1,32 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Thu, 23 Nov 2006 23:30:29 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 24 Nov 2006 10:05:34 +0000
 Subject: Re: [PATCH 6/6]: Tidy up unused structures
-Message-Id: <20061123233029.GA3369@mandriva.com>
+Message-Id: <200611241005.34519@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200611211545.46843@strip-the-willow>
 In-Reply-To: <200611211545.46843@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On Tue, Nov 21, 2006 at 03:45:46PM +0000, Gerrit Renker wrote:
-> [CCID 3]: Tidy up unused structures
-> 
-> This removes and cleans up unused variables and structures 
-> which have become unnecessary following the introduction of
-> the EWMA patch to automatically track the CCID 3 receiver/sender
-> packet sizes `s'.
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> ---
->  include/linux/dccp.h   |    3 ---
->  net/dccp/ccids/ccid3.h |    4 ----
->  net/dccp/proto.c       |    7 -------
->  3 files changed, 14 deletions(-)
-> 
-> --- a/include/linux/dccp.h
-> +++ b/include/linux/dccp.h
-> @@ -200,7 +200,6 @@ struct dccp_so_feat {
->  };
->  
->  /* DCCP socket options */
-> -#define DCCP_SOCKOPT_PACKET_SIZE	1
+Quoting Arnaldo Carvalho de Melo:
+|  > --- a/net/dccp/proto.c
+|  > +++ b/net/dccp/proto.c
+|  > @@ -469,9 +469,6 @@ static int do_dccp_setsockopt(struct soc
+|  > =A0
+|  > =A0=A0=A0=A0=A0=A0lock_sock(sk);
+|  > =A0=A0=A0=A0=A0=A0switch (optname) {
+|  > -=A0=A0=A0=A0=A0case DCCP_SOCKOPT_PACKET_SIZE:
+|  > -=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0dp->dccps_packet_size =3D val;
+|  > -=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0break;
+| =20
+|  ... printk(KERN_WARNING "setsockopt(PACKET_SIZE) is deprecated, "
+|  =A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=
+"fix your app\n");
+Many thanks for spotting this - I will update the patch and resubmit it.
+How bad to think what happens if 1 gets re-allocated and an old app tries
+to set it ... :-x
 
-Suggestion: just add a comment stating that DCCP_SOCKOPT_PACKET_SIZE is
-deprecated and ...
 
->  #define DCCP_SOCKOPT_SERVICE		2
-
-<SNIP>
-  
-> --- a/net/dccp/proto.c
-> +++ b/net/dccp/proto.c
-> @@ -469,9 +469,6 @@ static int do_dccp_setsockopt(struct soc
->  
->  	lock_sock(sk);
->  	switch (optname) {
-> -	case DCCP_SOCKOPT_PACKET_SIZE:
-> -		dp->dccps_packet_size = val;
-> -		break;
-
-... printk(KERN_WARNING "setsockopt(PACKET_SIZE) is deprecated, "
-			"fix your app\n");
-
-Its not like there are tons of apps using this interface, but I think
-that this is what we have to do in these cases.
-
-- Arnaldo
+Gerrit
