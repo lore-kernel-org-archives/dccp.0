@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Sun, 26 Nov 2006 19:13:01 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sun, 26 Nov 2006 20:52:50 +0000
 Subject: Re: [PATCH 9/10]: Add documentation for TFRC structures
-Message-Id: <39e6f6c70611261113j20716a48sd1bec60b762492e9@mail.gmail.com>
+Message-Id: <5640c7e00611261252n5455ca98xab266ca5cc0c87ed@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200611241620.11129@strip-the-willow>
 In-Reply-To: <200611241620.11129@strip-the-willow>
@@ -10,13 +10,15 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/24/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+On 11/25/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
 > [NET]: Add documentation for TFRC structures
 >
-> This adds documentation for the TFRC structure fields.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-
-Thanks, applied.
-
-- Arnaldo
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+-- 
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
