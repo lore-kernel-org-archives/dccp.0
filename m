@@ -1,72 +1,54 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Mon, 27 Nov 2006 14:46:25 +0000
-Subject: [PATCH 6/8] [DCCP] ccid3: Remove redundant statements in ccid3_hc_tx_packet_sent
-Message-Id: <20061127144625.GQ11605@mandriva.com>
+Date: Sun, 26 Nov 2006 03:18:15 +0000
+Subject: [PATCH 1/4] [DCCP] ackvec: Remove unused dccpav_ack_ptr field from dccp_ackvec
+Message-Id: <20061126031815.GB17851@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch removes a switch statement which is redundant since,
- * nothing is done in states TFRC_SSTATE_NO_SENT/TFRC_SSTATE_NO_FBACK
- * it is impossible that the function is called in the state TFRC_SSTATE_TERM, since
-       --the function is called, in dccp_write_xmit, after ccid3_hc_tx_send_packet
-       --if ccid3_hc_tx_send_packet is called in state TFRC_SSTATE_TERM, it returns
-         -EINVAL, which means that ccid3_hc_tx_packet_sent will not be called
-	 (compare dccp_write_xmit)
-       --> therefore, this case is logically impossible
- * the remaining state is TFRC_SSTATE_FBACK which conditionally updates t_ipi, t_nom,
-   and t_delta. This is a no-op, since
-       --t_ipi only changes when feedback is received
-       --however, when feedback arrives via ccid3_hc_tx_packet_recv, there is an identical
-         code block which performs the same set of operations
-       --performing the same set of operations again in ccid3_hc_tx_packet_sent therefore
-         does not change anything, since between the time of receiving the last feedback
-	 (and therefore update of t_ipi, t_nom, and t_delta), the value of t_ipi has not
-	 changed
-       --since t_ipi has not changed, the values of t_delta and t_nom also do not change,
-         they depend fully on t_ipi
+Commiter note: original patch was splitted.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid3.c |   21 ---------------------
- 1 files changed, 0 insertions(+), 21 deletions(-)
+ net/dccp/ackvec.c |    1 -
+ net/dccp/ackvec.h |    2 --
+ 2 files changed, 0 insertions(+), 3 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 62c3042..58f7cac 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -384,27 +384,6 @@ static void ccid3_hc_tx_packet_sent(stru
- 	} else
- 		ccid3_pr_debug("%s, sk=%p, seqno=%llu NOT inserted!\n",
- 			       dccp_role(sk), sk, dp->dccps_gss);
--
--	switch (hctx->ccid3hctx_state) {
--	case TFRC_SSTATE_NO_SENT:
--		/* fall through */
--	case TFRC_SSTATE_NO_FBACK:
--		/* t_nom, t_ipi, delta do not change until feedback arrives */
--		return;
--	case TFRC_SSTATE_FBACK:
--		if (len > 0) {
--			timeval_sub_usecs(&hctx->ccid3hctx_t_nom,
--				  hctx->ccid3hctx_t_ipi);
--			ccid3_calc_new_t_ipi(hctx);
--			ccid3_calc_new_delta(hctx);
--			timeval_add_usecs(&hctx->ccid3hctx_t_nom,
--					  hctx->ccid3hctx_t_ipi);
--		}
--		break;
--	case TFRC_SSTATE_TERM:
--		DCCP_BUG("Illegal %s state TERM, sk=%p", dccp_role(sk), sk);
--		break;
--	}
- }
- 
- static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
+index 1b4b60d..215355d 100644
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -141,7 +141,6 @@ struct dccp_ackvec *dccp_ackvec_alloc(co
+ 		av->dccpav_buf_head	= DCCP_MAX_ACKVEC_LEN - 1;
+ 		av->dccpav_buf_ackno	= DCCP_MAX_SEQNO + 1;
+ 		av->dccpav_buf_nonce = av->dccpav_buf_nonce = 0;
+-		av->dccpav_ack_ptr	= 0;
+ 		av->dccpav_time.tv_sec	= 0;
+ 		av->dccpav_time.tv_usec	= 0;
+ 		av->dccpav_vec_len	= 0;
+diff --git a/net/dccp/ackvec.h b/net/dccp/ackvec.h
+index cf8f20c..d6a58db 100644
+--- a/net/dccp/ackvec.h
++++ b/net/dccp/ackvec.h
+@@ -41,7 +41,6 @@ #define DCCP_ACKVEC_LEN_MASK		0x3F /* 00
+  * Ack Vectors it has recently sent. For each packet sent carrying an
+  * Ack Vector, it remembers four variables:
+  *
+- * @dccpav_ack_ptr - the value of buf_head at the time of acknowledgement.
+  * @dccpav_records - list of dccp_ackvec_record
+  * @dccpav_ack_nonce - the one-bit sum of the ECN Nonces for all State 0.
+  *
+@@ -53,7 +52,6 @@ struct dccp_ackvec {
+ 	struct list_head dccpav_records;
+ 	struct timeval	dccpav_time;
+ 	u8		dccpav_buf_head;
+-	u8		dccpav_ack_ptr;
+ 	u8		dccpav_vec_len;
+ 	u8		dccpav_buf_nonce;
+ 	u8		dccpav_ack_nonce;
 -- 
 1.4.2.1.g3d5c
 
