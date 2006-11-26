@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Fri, 24 Nov 2006 22:14:58 +0000
+From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
+Date: Sun, 26 Nov 2006 17:32:12 +0000
 Subject: Re: [PATCH 3/6]: Fix calculation of t_ipi time of scheduled transmission
-Message-Id: <5640c7e00611241414p46f4a955ud7ec8d9673b5bcc5@mail.gmail.com>
+Message-Id: <39e6f6c70611260932j5cde0d98q5012817b3a335edb@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00611210945l39bc33f5q3ab38c0bba022c1a@mail.gmail.com>
 In-Reply-To: <5640c7e00611210945l39bc33f5q3ab38c0bba022c1a@mail.gmail.com>
@@ -10,35 +10,33 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-> |  Shouldn't that last line be rc = (delay-hctx->ccid3hctx_delta)/1000 as
-> |  you're not taking the delta into account on the else clause.
+On 11/21/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [CCID 3]: Fix calculation of t_ipi time of scheduled transmission
 >
-> The value of `delay' is the difference between t_nom = t_(i+1) and t_now:
+> Problem:
+> --------
+>  Currently packet transmissions are not scheduled according to [RFC 3448, 4.6] and
+>  will, in the worst case, be sent later than necessary. If scheduled transmission
+>  requires using a delay, the current delay value is also larger as necessary.
 >
->         delay = timeval_delta(&hctx->ccid3hctx_t_nom, &now);
+> Solution:
+> ---------
+>  This patch fixes time and delay calculation for scheduling CCID 3 packets.
 >
-> If this difference is less than delta (which includes the case when t_now is
-> later than t_nom such that the difference is negative), then the packet is sent now.
 >
-> If the difference is greater than delta then t_now < t_nom and the packet is too early
-> to be sent; [RFC 3448, 4.6] says to reschedule in
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 >
->           t_ipi - (t_now - t_i) = t_ipi - (t_now - t_i) = (t_i + t_ipi) - t_now
->                                                         = t_(i+1)       - t_now
->                                                         = t_nom         - t_now
 >
-> Hence we can reuse the timeval_delta. Maybe the variable should be renamed to highlight
-> the fact that it is a time difference, but I quite liked `delay'.
+>
+>     D e t a i l e d   D e r i v a t i o n   [not meant as commit message]
 
-OK. Understand now.
+Gerrit,
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+       Why not use these valuable detailed derivations in the commit
+messages? I'm very much in favour of having them in the git logs,
+please let me know if you won't mind me doing that, no need to
+resubmit, I'd just remove the [] part.
 
--- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+Thanks a lot,
+
+- Arnaldo
