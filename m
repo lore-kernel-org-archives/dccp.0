@@ -1,100 +1,97 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 13 Nov 2006 13:27:38 +0000
-Subject: [PATCH 2/7]: Increment sequence numbers on retransmitted Response packets
-Message-Id: <200611131327.38900@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Sun, 26 Nov 2006 03:18:55 +0000
+Subject: [PATCH 3/4] [DCCP] ackvec: Split long ack vectors across multiple options
+Message-Id: <20061126031855.GD17851@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Increment sequence numbers on retransmitted Response packets
+Ack vectors grow proportional to the window size.  If an ack vector does not fit
+into a single option, it must be spread across multiple options.  This patch
+will allow for windows to grow larger.
 
-Problem:
---------
-  If DCCP B receives a retransmitted Request from DCCP A (with an
-  increased sequence number), DCCP A sends one or more Responses 
-  without incrementing A's sent sequence number.
+Committer note: Simplified the patch a bit, original algorithm kept.
 
-  This problem was first identified thanks to  Vladimir M. in 
-  http://www.mail-archive.com/dccp@vger.kernel.org/msg00570.html
-
-RFC 4340 says:
- * sec. 4.2: "Every DCCP packet increments the sequence number,
-              whether or not it contains application data."
- * sec. 7  : "Even DCCP-Ack and DCCP-Sync packets, and other 
-              packets that don't carry user data, increment the
-              Sequence Number. [...] retransmissions, such as 
-              retransmissions of DCCP-Request packets, also increment
-              the Sequence Number."  
-Cause:
-------
-The cause is that make_response keeps the ISS on each retransmission; only 
-Responses to retransmitted Requests have ISS incremented in dccp_check_req(),
-keep-alive Responses triggered via dccp_response_timer() retain initial ISS.
-
-Solution:
----------
-This patch uses the unused `acked' field in the inet_request_sock() associated
-with the connection request: to remember whether an incoming Request has already
-been ack(nowledg)ed by way of sending a Response. 
-This helps to distinguish initial from retransmitted Responses, and is used to 
-increment the sequence numbers accordingly.
-
-In addition, to protect against Request floods, the number of
-retransmissions is also incremented when sending further Responses in
-reply to retransmitted (i.e., non-initial) Requests.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/minisocks.c |   16 +++++++++-------
- net/dccp/output.c    |    4 ++++
- 2 files changed, 13 insertions(+), 7 deletions(-)
+ net/dccp/ackvec.c |   46 ++++++++++++++++++++++++++++++++--------------
+ 1 files changed, 32 insertions(+), 14 deletions(-)
 
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -196,15 +196,17 @@ struct sock *dccp_check_req(struct sock 
+diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
+index 41d34d1..bdf1bb7 100644
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -68,10 +68,15 @@ int dccp_insert_option_ackvec(struct soc
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
+-	int len = av->dccpav_vec_len + 2;
++	/* Figure out how many options do we need to represent the ackvec */
++	const u16 nr_opts = (av->dccpav_vec_len +
++			     DCCP_MAX_ACKVEC_OPT_LEN - 1) /
++			    DCCP_MAX_ACKVEC_OPT_LEN;
++	u16 len = av->dccpav_vec_len + 2 * nr_opts, i;
+ 	struct timeval now;
+ 	u32 elapsed_time;
+-	unsigned char *to, *from;
++	const unsigned char *tail, *from;
++	unsigned char *to;
+ 	struct dccp_ackvec_record *avr;
  
- 	/* Check for retransmitted REQUEST */
- 	if (dccp_hdr(skb)->dccph_type = DCCP_PKT_REQUEST) {
--		if (after48(DCCP_SKB_CB(skb)->dccpd_seq,
--			    dccp_rsk(req)->dreq_isr)) {
--			struct dccp_request_sock *dreq = dccp_rsk(req);
-+		struct dccp_request_sock *dreq = dccp_rsk(req);
+ 	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
+@@ -90,24 +95,37 @@ int dccp_insert_option_ackvec(struct soc
  
-+		if (after48(DCCP_SKB_CB(skb)->dccpd_seq, dreq->dreq_isr)) {
- 			dccp_pr_debug("Retransmitted REQUEST\n");
--			/* Send another RESPONSE packet */
--			dccp_set_seqno(&dreq->dreq_iss, dreq->dreq_iss + 1);
--			dccp_set_seqno(&dreq->dreq_isr,
--				       DCCP_SKB_CB(skb)->dccpd_seq);
-+			dreq->dreq_isr = DCCP_SKB_CB(skb)->dccpd_seq;
-+			/*
-+			 * Send another RESPONSE packet
-+			 * To protect against Request floods, increment retrans
-+			 * counter (backoff, monitored by dccp_response_timer).
-+			 */
-+			req->retrans++;
- 			req->rsk_ops->rtx_syn_ack(sk, req, NULL);
- 		}
- 		/* Network Duplicate, discard packet */
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -323,6 +323,8 @@ struct sk_buff *dccp_make_response(struc
- 	skb->dst = dst_clone(dst);
+ 	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
  
- 	dreq = dccp_rsk(req);
-+	if (inet_rsk(req)->acked)	/* increase ISS upon retransmission */
-+		dccp_inc_seqno(&dreq->dreq_iss);
- 	DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_RESPONSE;
- 	DCCP_SKB_CB(skb)->dccpd_seq  = dreq->dreq_iss;
+-	to    = skb_push(skb, len);
+-	*to++ = DCCPO_ACK_VECTOR_0;
+-	*to++ = len;
+-
++	to   = skb_push(skb, len);
+ 	len  = av->dccpav_vec_len;
+ 	from = av->dccpav_buf + av->dccpav_buf_head;
++	tail = av->dccpav_buf + DCCP_MAX_ACKVEC_LEN;
++
++	for (i = 0; i < nr_opts; ++i) {
++		int copylen = len;
++
++		if (len > DCCP_MAX_ACKVEC_OPT_LEN)
++			copylen = DCCP_MAX_ACKVEC_OPT_LEN;
  
-@@ -346,6 +348,8 @@ struct sk_buff *dccp_make_response(struc
+-	/* Check if buf_head wraps */
+-	if ((int)av->dccpav_buf_head + len > DCCP_MAX_ACKVEC_LEN) {
+-		const u32 tailsize = DCCP_MAX_ACKVEC_LEN - av->dccpav_buf_head;
++		*to++ = DCCPO_ACK_VECTOR_0;
++		*to++ = copylen + 2;
++
++		/* Check if buf_head wraps */
++		if (from + copylen > tail) {
++			const u16 tailsize = tail - from;
++
++			memcpy(to, from, tailsize);
++			to	+= tailsize;
++			len	-= tailsize;
++			copylen	-= tailsize;
++			from	= av->dccpav_buf;
++		}
  
- 	dccp_csum_outgoing(skb);
+-		memcpy(to, from, tailsize);
+-		to   += tailsize;
+-		len  -= tailsize;
+-		from = av->dccpav_buf;
++		memcpy(to, from, copylen);
++		from += copylen;
++		to   += copylen;
++		len  -= copylen;
+ 	}
  
-+	/* We use `acked' to remember that a Response was already sent. */
-+	inet_rsk(req)->acked = 1;
- 	DCCP_INC_STATS(DCCP_MIB_OUTSEGS);
- 	return skb;
- }
+-	memcpy(to, from, len);
+ 	/*
+ 	 *	From RFC 4340, A.2:
+ 	 *
+-- 
+1.4.2.1.g3d5c
+
