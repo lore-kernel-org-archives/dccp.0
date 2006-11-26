@@ -1,36 +1,47 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 24 Oct 2006 14:00:06 +0000
-Subject: [PATCH 9/17] [DCCP]: Add FIXME for tw_deschedule()
-Message-Id: <200610241500.06901@strip-the-willow>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sun, 26 Nov 2006 20:43:09 +0000
+Subject: NAK Re: [PATCH 4/10]: Consolidate timer resets
+Message-Id: <5640c7e00611261243k34ef8d72m7e8462e461f1e71@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Add FIXME for tw_deschedule()
+On 11/25/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [CCID 3]: Consolidate timer resets
+>
+> The specification in [RFC 3448, 4.4, step (3)] is impossible to
+> implement: when no feedback has been received, the value of RTT
+> is undefined as per [RFC 3448, 4.2]. Hence we can not set the
+> timeout value to max(4*R, 2*s/X) as step (3) suggests.
+>
+> The most reasonable solution is to remain at the initial timeout
+> value of 2 seconds, as per [RFC 3448, 4.2] - until an estimate
+> for R has been computed.
 
-This just adds a FIXME for a function which is not implemented (maybe it
-should be removed altogether, no code at all references it).
+But RFC4342 says:
+If the sender hasn't
+   received a feedback packet from the receiver when the nofeedback
+   timer expires, then the sender halves its allowed sending rate.  The
+   allowed sending rate is never reduced below one packet per 64
+   seconds.  Note that not all acknowledgements are considered feedback
+   packets, since feedback packets must contain valid Loss Intervals,
+   Elapsed Time, and Receive Rate options.
 
-Signed-off-by: Gerrit Renker  <gerrit@erg.abdn.ac.uk>
-------------------------------------------------------------------------------
-
- net/dccp/dccp.h |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
-
-------------------------------------------------------------------------------
-
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 8aa2697..f294b89 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -33,7 +33,7 @@ extern struct inet_hashinfo dccp_hashinf
- 
- extern atomic_t dccp_orphan_count;
- extern int dccp_tw_count;
--extern void dccp_tw_deschedule(struct inet_timewait_sock *tw);
-+extern void dccp_tw_deschedule(struct inet_timewait_sock *tw); /* FIXME: not implemented */
- 
- extern void dccp_time_wait(struct sock *sk, int state, int timeo);
- 
+   If the sender never receives a feedback packet from the receiver, and
+   as a consequence never gets to set the allowed sending rate to one
+   packet per RTT, then the sending rate is left at its initial rate of
+   one packet per second, with the nofeedback timer expiring after two
+   seconds.  The allowed sending rate is halved each time the nofeedback
+   timer expires.  Thus, if no feedback is received from the receiver,
+   the allowed sending rate is never above one packet per second and is
+   quickly reduced below one packet per second.
+-- 
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
