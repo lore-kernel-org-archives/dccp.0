@@ -1,34 +1,116 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 26 Nov 2006 03:19:10 +0000
-Subject: [PATCH 4/4] [DCCP] ccid2: Allow window to grow larger
-Message-Id: <20061126031909.GE17851@mandriva.com>
+Date: Mon, 27 Nov 2006 22:36:09 +0000
+Subject: [PATCH 3/3] [DCCP] ccid3: Consolidate handling of t_RTO
+Message-Id: <20061127223608.GD11605@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Now that we can stuff bigger ack vectors into options.
+This patch
+ * removes setting t_RTO in ccid3_hc_tx_init (per [RFC 3448, 4.2], t_RTO is
+   undefined until feedback has been received);
 
-Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+ * makes some trivial changes (updates of comments);
+
+ * performs a small optimisation by exploiting that the feedback timeout
+   uses the value of t_ipi. The way it is done is safe, because the timeouts
+   appear after the changes to t_ipi, ensuring that up-to-date values are used;
+
+ * in ccid3_hc_tx_packet_recv, moves the t_rto statement closer to the calculation
+   of the next_tmout. This makes the code clearer to read and is also safe, since
+   t_rto is not updated until the next call of ccid3_hc_tx_packet_recv, and is not
+   read by the functions called via ccid_wait_for_ccid();
+
+ * removes a `max' statement in sk_reset_timer, this is not needed since the timeout
+   value is always greater than 1E6 microseconds.
+
+ * adds `XXX'es to highlight that currently the nofeedback timer is set
+   in a non-standard way
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid2.h |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ net/dccp/ccids/ccid3.c |   29 ++++++++++++++---------------
+ 1 files changed, 14 insertions(+), 15 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
-index a97a899..ebd7949 100644
---- a/net/dccp/ccids/ccid2.h
-+++ b/net/dccp/ccids/ccid2.h
-@@ -35,7 +35,7 @@ struct ccid2_seq {
- 	struct ccid2_seq	*ccid2s_next;
- };
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 4342caf..f0ed67c 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -228,11 +228,10 @@ static void ccid3_hc_tx_no_feedback_time
+ 		}
+ 		/*
+ 		 * Schedule no feedback timer to expire in
+-		 * max(4 * R, 2 * s / X)
++		 * max(4 * t_RTO, 2 * s/X)  =  max(4 * t_RTO, 2 * t_ipi)
++		 * XXX This is non-standard, RFC 3448, 4.3 uses 4 * R
+ 		 */
+-		next_tmout = max_t(u32, hctx->ccid3hctx_t_rto, 
+-					2 * usecs_div(hctx->ccid3hctx_s,
+-						      hctx->ccid3hctx_x));
++		next_tmout = max(hctx->ccid3hctx_t_rto, 2*hctx->ccid3hctx_t_ipi);
+ 		break;
+ 	case TFRC_SSTATE_NO_SENT:
+ 		DCCP_BUG("Illegal %s state NO_SENT, sk=%p", dccp_role(sk), sk);
+@@ -460,10 +459,6 @@ static void ccid3_hc_tx_packet_recv(stru
+ 			       "r_sample=%us\n", dccp_role(sk), sk,
+ 			       hctx->ccid3hctx_rtt, r_sample);
  
--#define CCID2_SEQBUF_LEN 256
-+#define CCID2_SEQBUF_LEN 1024
- #define CCID2_SEQBUF_MAX 128
+-		/* Update timeout interval */
+-		hctx->ccid3hctx_t_rto = max_t(u32, 4 * hctx->ccid3hctx_rtt,
+-					      USEC_PER_SEC);
+-
+ 		/* Update receive rate */
+ 		hctx->ccid3hctx_x_recv = x_recv;/* X_recv in bytes per sec */
  
- /** struct ccid2_hc_tx_sock - CCID2 TX half connection
+@@ -491,17 +486,22 @@ static void ccid3_hc_tx_packet_recv(stru
+ 					 &hctx->ccid3hctx_hist, packet);
+ 		/*
+ 		 * As we have calculated new ipi, delta, t_nom it is possible that
+-		 * we now can send a packet, so wake up dccp_wait_for_ccids.
++		 * we now can send a packet, so wake up dccp_wait_for_ccid
+ 		 */
+ 		sk->sk_write_space(sk);
+ 
++
++		/* Update timeout interval. We use the alternative variant of
++		 * [RFC 3448, 3.1] which sets the upper bound of t_rto to one
++		 * second, as it is suggested for TCP (see RFC 2988, 2.4). */
++		hctx->ccid3hctx_t_rto = max_t(u32, 4 * hctx->ccid3hctx_rtt,
++					      	   USEC_PER_SEC            );
+ 		/*
+ 		 * Schedule no feedback timer to expire in
+-		 * max(4 * R, 2 * s / X)
++		 * max(4 * t_RTO, 2 * s/X)  =  max(4 * t_RTO, 2 * t_ipi)
++		 * XXX This is non-standard, RFC 3448, 4.3 uses 4 * R
+ 		 */
+-		next_tmout = max(hctx->ccid3hctx_t_rto,
+-				 2 * usecs_div(hctx->ccid3hctx_s,
+-					       hctx->ccid3hctx_x));
++		next_tmout = max(hctx->ccid3hctx_t_rto, 2*hctx->ccid3hctx_t_ipi);
+ 			
+ 		ccid3_pr_debug("%s, sk=%p, Scheduled no feedback timer to "
+ 			       "expire in %lu jiffies (%luus)\n",
+@@ -509,7 +509,7 @@ static void ccid3_hc_tx_packet_recv(stru
+ 			       usecs_to_jiffies(next_tmout), next_tmout); 
+ 
+ 		sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer, 
+-			       jiffies + max_t(u32, 1, usecs_to_jiffies(next_tmout)));
++				   jiffies + usecs_to_jiffies(next_tmout));
+ 
+ 		/* set idle flag */
+ 		hctx->ccid3hctx_idle = 1;   
+@@ -607,7 +607,6 @@ static int ccid3_hc_tx_init(struct ccid 
+ 
+ 	/* Set transmission rate to 1 packet per second */
+ 	hctx->ccid3hctx_x     = hctx->ccid3hctx_s;
+-	hctx->ccid3hctx_t_rto = USEC_PER_SEC;
+ 	hctx->ccid3hctx_state = TFRC_SSTATE_NO_SENT;
+ 	INIT_LIST_HEAD(&hctx->ccid3hctx_hist);
+ 
 -- 
 1.4.2.1.g3d5c
 
