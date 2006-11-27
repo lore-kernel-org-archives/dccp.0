@@ -1,114 +1,125 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Mon, 27 Nov 2006 14:45:55 +0000
-Subject: [PATCH 4/8] [DCCP] ccid3: Simplify control flow of ccid3_hc_tx_send_packet
-Message-Id: <20061127144555.GO11605@mandriva.com>
+Date: Mon, 27 Nov 2006 14:45:39 +0000
+Subject: [PATCH 3/8] [DCCP] ccid3: Fix calculation of t_ipi time of scheduled transmission
+Message-Id: <20061127144538.GN11605@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This makes some logically equivalent simplifications, by replacing
-rc - values plus goto's with direct return statements.
+Problem:
+--------
+ Currently packet transmissions are not scheduled according to [RFC 3448, 4.6] and
+ will, in the worst case, be sent later than necessary. If scheduled transmission
+ requires using a delay, the current delay value is also larger as necessary.
+
+Solution:
+---------
+ This patch fixes time and delay calculation for scheduling CCID 3 packets.
+
+    D e t a i l e d   D e r i v a t i o n
+    ==================
+Background:
+-----------
+ [RFC 3448, 4.6] specifies the scheduling of packet transmissions with regard to
+ scheduling granularity. The calculated sending time is called `nominal' sending
+ time t_nom. The initial sending time is called t_0. The first sending time is called
+ t_1 = t0 + t_ipi. From then on, successive sending times are calculated as
+
+          t_nom  =  t_(i+1)  =  t_i + t_ipi
+
+ This is illustrated by the ASCII-Art below:
+
+ |<-------------------- t_ipi ------------------->|
+
+ +------------------------------------------------+-----------------------
+ |                       |                        |
+ |                       |                        |
+ +------------------------------------------------+-----------------------
+ |            ^          |<------- t_delta ------>|
+ |            |          |                        |
+ t_i          t_now      t_nom - t_delta          t_nom = t_(i+1)
+
+              |<-----  t_ipi - (t_now - t_i)  --->|
+
+ Due to scheduling granularity, t_nom is not necessarily exactly the same as the
+ actual sending time, hence [RFC 3448, 4.6] introduced the following test:
+
+    t_delta = min(t_ipi/2, t_gran/2);      /* t_gran: scheduling granularity */
+
+    if (t_now > t_nom - t_delta)
+        // send the packet now
+    else
+        // send the packet in t_ipi - (t_now - t_i) microseconds
+
+ In the above illustration, t_now was too early for sending (`else' case).
+
+Current state:
+--------------
+ Currently the code determines nominal send times using the following pseudo-code:
+   delay_in_msec = -1/1000 * (t_now - t_nom - t_delta)
+                 =  1/1000 * (t_nom + t_delta - t_now)
+
+   if (delay_in_msec > 0)     /* equivalent to t_now <  t_nom + t_delta              */
+       return delay_in_msec;  /* i.e. reschedule in (t_nom -(t_now - t_delta))/1000  */
+   else                       /* whenever      t_now >= t_nom + t_delta              */
+       /* send packet now */
+
+ This means that currently
+
+    * the packet is sent now whenever t_now >= t_nom + t_delta
+      instead of                      t_now >  t_nom - t_delta
+      => this incurs a performance degradation, since 2*t_delta is spent unnecessarily
+
+    * the delay causes the packet to be rescheduled at the following point of time:
+           t_now + (t_nom + t_delta - t_now) = t_nom + t_delta
+      Hence again t_delta time units are not used.
+
+Solution:
+---------
+ The condition `if (t_now > t_nom - t_delta)' from [RFC 3448, 4.6] is equivalent with
+ the condition `if (t_nom - t_now < t_delta)' and the delay simplifies (cf. above figure):
+   t_ipi - (t_now - t_i)  =  t_i + t_ipi - t_now
+	                  =  t_nom - t_now
+ Thus we can twice use `t_nom - t_now', which is what the patch does.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid3.c |   40 ++++++++++++++++++----------------------
- 1 files changed, 18 insertions(+), 22 deletions(-)
+ net/dccp/ccids/ccid3.c |   18 +++++++++++++-----
+ 1 files changed, 13 insertions(+), 5 deletions(-)
 
 diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index fb1a5e8..2745d83 100644
+index df88c54..fb1a5e8 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -247,6 +247,12 @@ out:
- 	sock_put(sk);
- }
- 
-+/*
-+ * returns
-+ *   > 0: delay (in msecs) that should pass before actually sending
-+ *   = 0: can send immediately
-+ *   < 0: error condition; do not send packet
-+ */
- static int ccid3_hc_tx_send_packet(struct sock *sk,
- 				   struct sk_buff *skb, int len)
- {
-@@ -255,7 +261,6 @@ static int ccid3_hc_tx_send_packet(struc
- 	struct dccp_tx_hist_entry *new_packet;
- 	struct timeval now;
- 	long delay;
--	int rc = -ENOTCONN;
- 
- 	BUG_ON(hctx = NULL);
- 
-@@ -265,7 +270,7 @@ static int ccid3_hc_tx_send_packet(struc
- 	 * packets can have zero length, but why the comment about "pure ACK"?
- 	 */
- 	if (unlikely(len = 0))
--		goto out;
-+		return -ENOTCONN;
- 
- 	/* See if last packet allocated was not sent */
- 	new_packet = dccp_tx_hist_head(&hctx->ccid3hctx_hist);
-@@ -273,11 +278,10 @@ static int ccid3_hc_tx_send_packet(struc
- 		new_packet = dccp_tx_hist_entry_new(ccid3_tx_hist,
- 						    SLAB_ATOMIC);
- 
--		rc = -ENOBUFS;
- 		if (unlikely(new_packet = NULL)) {
- 			DCCP_WARN("%s, sk=%p, not enough mem to add to history,"
- 				  "send refused\n", dccp_role(sk), sk);
--			goto out;
-+			return -ENOBUFS;
- 		}
- 
- 		dccp_tx_hist_add_entry(&hctx->ccid3hctx_hist, new_packet);
-@@ -300,7 +304,6 @@ static int ccid3_hc_tx_send_packet(struc
- 
- 		/* Set t_0 for initial packet */
- 		hctx->ccid3hctx_t_nom = now;
--		rc = 0;
+@@ -304,11 +304,19 @@ static int ccid3_hc_tx_send_packet(struc
  		break;
  	case TFRC_SSTATE_NO_FBACK:
  	case TFRC_SSTATE_FBACK:
-@@ -313,28 +316,21 @@ static int ccid3_hc_tx_send_packet(struc
- 		 * else
- 		 *       // send the packet in (t_nom - t_now) milliseconds.
- 		 */
--		if (delay < hctx->ccid3hctx_delta)
--			rc = 0;
--		else
--			rc = delay/1000L;
-+		if (delay >= hctx->ccid3hctx_delta)
-+			return delay / 1000L;
+-		delay = (timeval_delta(&now, &hctx->ccid3hctx_t_nom) -
+-		         hctx->ccid3hctx_delta);
+-		delay /= -1000;
+-		/* divide by -1000 is to convert to ms and get sign right */
+-		rc = delay > 0 ? delay : 0;
++		delay = timeval_delta(&hctx->ccid3hctx_t_nom, &now);
++		/*
++		 * 	Scheduling of packet transmissions [RFC 3448, 4.6]
++		 *
++		 * if (t_now > t_nom - delta)
++		 *       // send the packet now
++		 * else
++		 *       // send the packet in (t_nom - t_now) milliseconds.
++		 */
++		if (delay < hctx->ccid3hctx_delta)
++			rc = 0;
++		else
++			rc = delay/1000L;
  		break;
  	case TFRC_SSTATE_TERM:
  		DCCP_BUG("Illegal %s state TERM, sk=%p", dccp_role(sk), sk);
--		rc = -EINVAL;
--		break;
-+		return -EINVAL;
- 	}
- 
--	/* Can we send? if so add options and add to packet history */
--	if (rc = 0) {
--		dp->dccps_hc_tx_insert_options = 1;
--		new_packet->dccphtx_ccval -			DCCP_SKB_CB(skb)->dccpd_ccval -				hctx->ccid3hctx_last_win_count;
--		timeval_add_usecs(&hctx->ccid3hctx_t_nom,
--				  hctx->ccid3hctx_t_ipi);
--	}
--out:
--	return rc;
-+	/* prepare to send now (add options etc.) */
-+	dp->dccps_hc_tx_insert_options = 1;
-+	new_packet->dccphtx_ccval = DCCP_SKB_CB(skb)->dccpd_ccval +				    hctx->ccid3hctx_last_win_count;
-+	timeval_add_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
-+
-+	return 0;
- }
- 
- static void ccid3_hc_tx_packet_sent(struct sock *sk, int more, int len)
 -- 
 1.4.2.1.g3d5c
 
