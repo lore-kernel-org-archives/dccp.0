@@ -1,184 +1,128 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 03 Nov 2006 14:31:55 +0000
-Subject: [PATCH 2/6] dccp: Enable debug messages also for static builds
-Message-Id: <200611031431.55343@strip-the-willow>
+Date: Mon, 27 Nov 2006 18:49:44 +0000
+Subject: [PATCH 0/3]:  TFRC documentation and updates
+Message-Id: <200611271849.44310@strip-the-willow>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="Boundary-00=_INzaFGboAKLnqgZ"
 List-Id: <dccp.vger.kernel.org>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: enable debug messages also for static kernel builds
+--Boundary-00=_INzaFGboAKLnqgZ
+Content-Type: text/plain;
+  charset="us-ascii"
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
+
+With the help of some test and verification programs, I have reverse-engineered
+how the TFRC lookup table is generated. The results of this were added as detailed
+documentation to the tfrc_equation.c file. 
+
+The work also has made possible a few improvements which are included in this patch set.
+A detailed analysis plus the test programs are online on 
+	http://www.erg.abdn.ac.uk/users/gerrit/dccp/tfrc_documentation/ 
 
 
-This fixes the following problem:
-  If DCCP (and CCIDs) is configured with one or more DEBUG options
-  and built statically, no debug output will be printed.
+Patch 1: This adds the documentation to tfrc_equation.c and
+	  * fixes a small bug in the reverse-lookup code which incurred an average
+            error of 1.12% (the bug was due to a missing '+ 1' in inverting the indices;
+            this was confirmed using one of the online test programs)  
+          * simplifies BUG conditions - if RTT = 0, the maximum = ~0U is now returned
+          * adds warnings in both functions when p goes below the resolution of the
+            table (the smallest possible value is 0.0001) 
 
 
-The patch:
-  * makes debugging (when configured) work both for static / module build
-  * provides generic debugging macros for use in other DCCP / CCID modules
-  * adds missing information about debug parameters to Kconfig
-  * performs some code tidy-up
+Patch 2:  Avoid masking resolution errors in table lookup
+          The lookup table can not resolve values of p smaller than 0.0001. I have checked
+          the error that results by substituting other values and it is not a good idea.
+          Attached is the calculation of the error when substituting f(0.0001) for values 
+          of p smaller than 0.0001. Both axes are logarithmic - the increase in error is thus
+          exponential. 
+          Warning messages to avoid `resolution underflow' have already been introduced in the
+          first patch; this patch continues this work by making all error handling local to the
+          TFRC library. If the warning messages accumulate, it is an indication that the lookup
+          table does not have suitable proportions and a larger one should be generated. 
 
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/Kconfig       |    3 +++
- net/dccp/ackvec.c      |   11 ++++-------
- net/dccp/ccids/Kconfig |   14 ++++++++++++--
- net/dccp/ccids/ccid2.c |   16 ++++++----------
- net/dccp/dccp.h        |   19 ++++++++++++-------
- 5 files changed, 37 insertions(+), 26 deletions(-)
+Patch 3: Use binary search in reverse lookup
+         This speeds up reverse lookups, exploiting the following feature:
+          The lookup table is sorted (since i < j => f(i) < f(j)). Currently, if every interval
+          is equally likely, the average number of iterations to reverse-lookup is 250. With bin
+          search this goes down to 8 or 9 (log2(500)), which is almost 30 times faster. I have
+          verified this also using tests.
 
 
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -19,15 +19,20 @@
- #include <net/tcp.h>
- #include "ackvec.h"
- 
-+#ifdef MODULE
-+#define DCCP_PRINTK(enable, fmt, args...)	do { if (enable)	     \
-+							printk(fmt, ##args); \
-+					 	} while(0)
-+#else
-+#define DCCP_PRINTK(enable, fmt, args...)	printk(fmt, ##args)
-+#endif
-+#define DCCP_PR_DEBUG(enable, fmt, a...)	DCCP_PRINTK(enable, KERN_DEBUG \
-+						  "%s: " fmt, __FUNCTION__, ##a)
-+
- #ifdef CONFIG_IP_DCCP_DEBUG
- extern int dccp_debug;
--
--#define dccp_pr_debug(format, a...) \
--	do { if (dccp_debug) \
--		printk(KERN_DEBUG "%s: " format, __FUNCTION__ , ##a); \
--	} while (0)
--#define dccp_pr_debug_cat(format, a...) do { if (dccp_debug) \
--					     printk(format, ##a); } while (0)
-+#define dccp_pr_debug(format, a...)	  DCCP_PR_DEBUG(dccp_debug, format, ##a)
-+#define dccp_pr_debug_cat(format, a...)   DCCP_PRINTK(dccp_debug, format, ##a)
- #else
- #define dccp_pr_debug(format, a...)
- #define dccp_pr_debug_cat(format, a...)
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -33,18 +33,11 @@
- #include "../dccp.h"
- #include "ccid2.h"
- 
--static int ccid2_debug;
- 
- #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
--#define ccid2_pr_debug(format, a...) \
--        do { if (ccid2_debug) \
--                printk(KERN_DEBUG "%s: " format, __FUNCTION__, ##a); \
--        } while (0)
--#else
--#define ccid2_pr_debug(format, a...)
--#endif
-+static int ccid2_debug;
-+#define ccid2_pr_debug(format, a...)	DCCP_PR_DEBUG(ccid2_debug, format, ##a)
- 
--#ifdef CONFIG_IP_DCCP_CCID2_DEBUG
- static void ccid2_hc_tx_check_sanity(const struct ccid2_hc_tx_sock *hctx)
- {
- 	int len = 0;
-@@ -86,7 +79,8 @@ static void ccid2_hc_tx_check_sanity(con
- 	BUG_ON(len != hctx->ccid2hctx_seqbufc * CCID2_SEQBUF_LEN);
- }
- #else
--#define ccid2_hc_tx_check_sanity(hctx) do {} while (0)
-+#define ccid2_pr_debug(format, a...)
-+#define ccid2_hc_tx_check_sanity(hctx)
- #endif
- 
- static int ccid2_hc_tx_alloc_seq(struct ccid2_hc_tx_sock *hctx, int num,
-@@ -841,8 +835,10 @@ static struct ccid_operations ccid2 = {
- 	.ccid_hc_rx_packet_recv	= ccid2_hc_rx_packet_recv,
- };
- 
-+#ifdef CONFIG_IP_DCCP_CCID2_DEBUG
- module_param(ccid2_debug, int, 0444);
- MODULE_PARM_DESC(ccid2_debug, "Enable debug messages");
-+#endif
- 
- static __init int ccid2_module_init(void)
- {
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -346,21 +346,18 @@ out_duplicate:
- #ifdef CONFIG_IP_DCCP_DEBUG
- void dccp_ackvector_print(const u64 ackno, const unsigned char *vector, int len)
- {
--	if (!dccp_debug)
--		return;
--
--	printk("ACK vector len=%d, ackno=%llu |", len,
--	       (unsigned long long)ackno);
-+	dccp_pr_debug_cat("ACK vector len=%d, ackno=%llu |", len,
-+			 		(unsigned long long)ackno);
- 
- 	while (len--) {
- 		const u8 state = (*vector & DCCP_ACKVEC_STATE_MASK) >> 6;
- 		const u8 rl = *vector & DCCP_ACKVEC_LEN_MASK;
- 
--		printk("%d,%d|", state, rl);
-+		dccp_pr_debug_cat("%d,%d|", state, rl);
- 		++vector;
- 	}
- 
--	printk("\n");
-+	dccp_pr_debug_cat("\n");
- }
- 
- void dccp_ackvec_print(const struct dccp_ackvec *av)
---- a/net/dccp/Kconfig
-+++ b/net/dccp/Kconfig
-@@ -38,6 +38,9 @@ config IP_DCCP_DEBUG
- 	---help---
- 	  Only use this if you're hacking DCCP.
- 
-+	  When compiling DCCP as a module, this debugging output can be toggled
-+	  by setting the parameter dccp_debug of the `dccp' module to 0 or 1.
-+
- 	  Just say N.
- 
- config NET_DCCPPROBE
---- a/net/dccp/ccids/Kconfig
-+++ b/net/dccp/ccids/Kconfig
-@@ -28,13 +28,20 @@ config IP_DCCP_CCID2
- 	  This text was extracted from RFC 4340 (sec. 10.1),
- 	  http://www.ietf.org/rfc/rfc4340.txt
- 
-+	  To compile this CCID as a module, choose M here: the module will be
-+	  called dccp_ccid2.
-+
- 	  If in doubt, say M.
- 
- config IP_DCCP_CCID2_DEBUG
--	  bool "CCID2 debug"
-+	  bool "CCID2 debugging messages"
- 	  depends on IP_DCCP_CCID2
- 	  ---help---
--	    Enable CCID2 debug messages.
-+	    Enable CCID2-specific debugging messages.
-+
-+	    When compiling CCID2 as a module, this debugging output can
-+	    additionally be toggled by setting the ccid2_debug module
-+	    parameter to 0 or 1.
- 
- 	    If in doubt, say N.
- 
-@@ -62,6 +69,9 @@ config IP_DCCP_CCID3
- 	  This text was extracted from RFC 4340 (sec. 10.2),
- 	  http://www.ietf.org/rfc/rfc4340.txt
- 	  
-+	  To compile this CCID as a module, choose M here: the module will be
-+	  called dccp_ccid3.
-+
- 	  If in doubt, say M.
- 
- config IP_DCCP_TFRC_LIB
+Gerrit
+
+--Boundary-00=_INzaFGboAKLnqgZ
+Content-Type: image/png;
+  name="tfrc_resolution-error_for_smallest_p.png"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+	filename="tfrc_resolution-error_for_smallest_p.png"
+
+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
+AElFTkSuQmCC
+
+--Boundary-00=_INzaFGboAKLnqgZ--
