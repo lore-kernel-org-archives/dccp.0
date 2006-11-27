@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Mon, 27 Nov 2006 18:34:41 +0000
-Subject: Re: [PATCH 1/6]: Fix bug in calculation of first t_nom and first t_ipi
-Message-Id: <39e6f6c70611271034o6b1db4c9o30cabafc5c5d2c2f@mail.gmail.com>
+From: Eddie Kohler <kohler@cs.ucla.edu>
+Date: Mon, 27 Nov 2006 19:36:35 +0000
+Subject: Re: [PATCH 1/6]: Fix bug in calculation of first t_nom and first
+Message-Id: <456B3E43.1020706@cs.ucla.edu>
 List-Id: <dccp.vger.kernel.org>
 References: <200611211545.07412@strip-the-willow>
 In-Reply-To: <200611211545.07412@strip-the-willow>
@@ -10,57 +10,74 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/27/06, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> > Therefore, let me put it very clearly: I am against implementing anything which is not stated in
-> > RFCs 3448, RFC 4340, RFC 4341, and RFC 4342. About the rest we might talk when the Linux implementation
-> > matches these RFCs, but before we have accomplished that: please stop sending feature requests or
-> > annotations which are not part of the publicly and IETF-approved RFCs. For these purposes, please
-> > use dccp@ietf instead.
->
-> I will throw in my opinion here. Linux is about experimenting with
-> ideas in many cases - that is the joy of it. People can and should
-> contribute whatever they want. They shouldn't be constrained by
-> anything.
+Gerrit:
 
-Agreed, and we've worked really hard in the last years for Linux to be
-a testbed for new ideas, look no further than the pluggable TCP
-congestion control and the DCCP CCID pluggable infrastructures, that
-we dream of unifying one day (look at
-http://darkircop.org/dccp/tcp/ to see Andrea's experimentation making
-DCCP use all the TCP congestion control algorithms).
+I am able to read code.  When I look at the existing Linux code and patches 
+for CCID 3, I see a lot of corner cases designed to handle the 
+TFRC_SSTATE_NO_FBACK state.
 
-> Eddie can suggest whatever he likes and I welcome it. That doesn't
-> mean it will get included though as it depends on coders. You don't
-> like his approach which is fine - it means that you won't code it. I
-> like the sounds of it but very time constrained so probably won't
-> unless it helps me solve a problem in my PhD. But someone else who is
-> motivated might go and do it.
+That state may not need to exist.  CCID 3 always has an RTT estimate, provided 
+by the request/response exchange.  Removing this state would improve the code. 
+  You think the state is required for standards compliance.  Well, the 
+standard's author is trying to tell you differently.  This is not about 
+"experimental" features, this is about interpretations of the core spec.  You 
+seem to think that only you can interpret the core spec correctly; this is not 
+so.  And if an erratum is published, following that erratum will be required 
+for "standards compliance".
 
-And as I said, go for it! If it needs changes on how the core
-interacts with CCIDs, I'd love to hear, I just understand Gerrit's
-worries as we all need a standards compliant DCCP implementation as a
-much longed for milestone.
+The "nominal packet size" is not "experimental" either, it is explicitly 
+allowed by the spec.
 
-> Linux isn't always RFC compliant either - ask Sally for example about
-> TCP.... (Although Linux is probably better than any other OS in RFC
-> compliance).
+Thanks for your work on DCCP, which I **really do appreciate**.  However, I 
+really do NOT appreciate your tone.
 
-Its just great that the RFC authors are taking part on the discussion,
-that way things like this are noticed and provide clues for further
-work on erratums and updates to the RFCs, we just don't want to trow
-all the effort they have put in writing the RFCs by not following it
-8-)
+Eddie
 
-> > I am sure we can work out a constructive way of dealing with your interests as well, but it is certainly
-> > not via the avenue of implementing feature requests which you state without contributing in work or in
-> > funding.
-> >
-> I agree that the main focus of Linux is "show me the code" and for
-> this to go in someone has to code. I also value Eddie making comments
-> and hope it continues.
 
-Heck, I was commenting with David Miller, Linux has come a long way,
-now the RFC authors are reviewing Linux kernel code, that is
-absolutely awesome and I sincerely _beg_ for this to continue :-)
-
-- Arnaldo
+Gerrit Renker wrote:
+> Quoting Eddie Kohler:
+> |  Hi Gerrit, Ian,
+> |  
+> |  I am not sure I am completely following this discussion, but there is one 
+> |  point I wanted to bring up.  DCCP senders DO have an estimate of the 
+> |  round-trip time even BEFORE the first feedback packet, namely from the 
+> |  Request-Response exchange.  RFC 4342 senders and receivers can use the RTT 
+> |  measured by the core DCCP protocol.  Reading over RFC 4342, this is extremely 
+> |  not clear (sorry), but it was our intention.  (Sally, this is right, yes?)  We 
+> |  will put together an erratum for the RFC Editor.
+> This is an experimental feature and also appears in draft-ietf-dccp-rfc3448bis-00.txt,
+> section 4.2:
+>     "If the sender does have a round trip sample when it is ready to
+>      first send data (e.g., from the SYN exchange or from a previous
+>      connection [RFC2140]), the initial transmit rate X is set to
+>      W_init/R, and tld is set to the current time."
+> 
+> However, this is a draft, still under revision and subject to further change. 
+> 
+> The Linux CCID 3 module is at present not even compliant with 3448 / 4342, and we are having
+> enough work getting that done. There is therefore at the moment little point in thinking
+> about what could be done and what should be done: what we are implementing is RFC 4342/3448, 
+> not more.
+> 
+> And if what is in the specification was not your intention, then this is certainly not our problem!
+> 
+> You are suggesting and requesting features for which there is no support currently in the RFCs
+> (see e.g. your earlier suggestion to re-introduce a socket option for packet sizes). 
+> 
+> What you are suggesting is helpful only for yourself as a writer of specifications, but it is not
+> helpful for those who have to implement these specifications. If we give in to suggestions which
+> are not documented by IETF-reviewed and IETF-approved standards documents, then we end up doing 
+> experimental work while the main target (a standards-compliant DCCP stack) is not even finished.
+> 
+> Therefore, let me put it very clearly: I am against implementing anything which is not stated in 
+> RFCs 3448, RFC 4340, RFC 4341, and RFC 4342. About the rest we might talk when the Linux implementation
+> matches these RFCs, but before we have accomplished that: please stop sending feature requests or
+> annotations which are not part of the publicly and IETF-approved RFCs. For these purposes, please
+> use dccp@ietf instead. 
+> 
+> I am sure we can work out a constructive way of dealing with your interests as well, but it is certainly
+> not via the avenue of implementing feature requests which you state without contributing in work or in
+> funding.
+> 
+> Gerrit
+> 
