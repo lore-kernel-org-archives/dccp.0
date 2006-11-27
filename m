@@ -1,7 +1,7 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 27 Nov 2006 18:25:16 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Mon, 27 Nov 2006 18:25:17 +0000
 Subject: Re: [PATCH 1/6]: Fix bug in calculation of first t_nom and first t_ipi
-Message-Id: <200611271825.17160@strip-the-willow>
+Message-Id: <5640c7e00611271025j21f62818gb9f606f1d67c15e@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200611211545.07412@strip-the-willow>
 In-Reply-To: <200611211545.07412@strip-the-willow>
@@ -10,26 +10,42 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  > |  I violently agree with Gerrit on this one, no one is preventing anyone
-|                          ^^^^^^^^^^
-|                          ^^^^^^^^^^
-Ouch - I was sure I had read `violently disagree'. Weierha ...
-|  > |  from doing experimental work, the infrastructure is there and if
-|  > |  changes are required for supporting different ways of the DCCP core
-|  > |  interacting with any new CCID (experimental or a standard) we'd love
-|  > |  to hear so as to work on making the Linux DCCP infrastructure as
-|  > |  useful as possible for the community at large.
-|  > |
-|  > I can not see your disagreement in this. The fact is that the Linux DCCP implementation currently is
-|  > not compliant with the RFCs and an implementation which only partially implements a standard is of
-|  > not much service to the community. Features which have not met the approval of public bodies such as
-|  > the IETF, on the other hand, serve the interest of only a few and not that of a larger community.
-|  
-|  Lemme reread what I've wrote... English is not my first language so I
-.... and it is not my first language either. I misread your email.
-     I had read it as `violently disagree'. Sorry for the mistake.
+> Therefore, let me put it very clearly: I am against implementing anything which is not stated in
+> RFCs 3448, RFC 4340, RFC 4341, and RFC 4342. About the rest we might talk when the Linux implementation
+> matches these RFCs, but before we have accomplished that: please stop sending feature requests or
+> annotations which are not part of the publicly and IETF-approved RFCs. For these purposes, please
+> use dccp@ietf instead.
 
-While at it, I think that the thanks and a big lot of kudos clearly goes to you - having provided basically
-the entire infrastructure on which DCCP currently rests.
+I will throw in my opinion here. Linux is about experimenting with
+ideas in many cases - that is the joy of it. People can and should
+contribute whatever they want. They shouldn't be constrained by
+anything.
 
-Gerrit
+Eddie can suggest whatever he likes and I welcome it. That doesn't
+mean it will get included though as it depends on coders. You don't
+like his approach which is fine - it means that you won't code it. I
+like the sounds of it but very time constrained so probably won't
+unless it helps me solve a problem in my PhD. But someone else who is
+motivated might go and do it.
+
+Linux isn't always RFC compliant either - ask Sally for example about
+TCP.... (Although Linux is probably better than any other OS in RFC
+compliance).
+>
+> I am sure we can work out a constructive way of dealing with your interests as well, but it is certainly
+> not via the avenue of implementing feature requests which you state without contributing in work or in
+> funding.
+>
+I agree that the main focus of Linux is "show me the code" and for
+this to go in someone has to code. I also value Eddie making comments
+and hope it continues.
+
+Ian
+-- 
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
