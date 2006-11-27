@@ -1,47 +1,121 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Tue, 14 Nov 2006 15:58:42 +0000
-Subject: [PATCH 2/5][DCCPv6]: Resolve conditional build problem
-Message-Id: <20061114155841.GD6903@mandriva.com>
+Date: Mon, 27 Nov 2006 22:36:00 +0000
+Subject: [PATCH 2/3] [DCCP] ccid3: Consistently update t_nom, t_ipi, t_delta
+Message-Id: <20061127223559.GC11605@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Resolves the problem that if IPv6 was configured `y' and DCCP `m' then
-dccp_ipv6 was not built as a module. With this change, dccp_ipv6 is built
-as a module whenever DCCP *OR* IPv6 are configured as modules; it will be
-built-in only if both DCCP = `y' and IPV6 = `y'.
+This patch:
+
+ * consolidates updating of parameters (t_nom, t_ipi, t_delta) which
+   need to be updated at the same time, since they are inter-dependent
+
+ * removes two inline functions which are no longer needed as a result of
+   the above consolidation
+
+ * resolves a FIXME regarding the re-calculation of t_ipi within the nofeedback
+   timer, in the state where no feedback has previously been received
+
+ * ties updating these parameters to updating the sending rate X, exploiting
+   that all three parameters in turn depend on X; and using a small optimisation
+   which can reduce the number of required instructions: only update the three
+   parameters when X really changes
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+---
+ net/dccp/ccids/ccid3.c |   38 +++++++++++++++++---------------------
+ 1 files changed, 17 insertions(+), 21 deletions(-)
 
-------------------------------------------------------------------------------
-
- Makefile |    8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
-
-------------------------------------------------------------------------------
-
-diff --git a/net/dccp/Makefile b/net/dccp/Makefile
-index 17ed99c..f4f8793 100644
---- a/net/dccp/Makefile
-+++ b/net/dccp/Makefile
-@@ -1,13 +1,13 @@
--obj-$(CONFIG_IPV6) += dccp_ipv6.o
--
--dccp_ipv6-y := ipv6.o
--
- obj-$(CONFIG_IP_DCCP) += dccp.o dccp_ipv4.o
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 9297fca..4342caf 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -100,19 +100,24 @@ static void ccid3_hc_tx_set_state(struct
+ 	hctx->ccid3hctx_state = state;
+ }
  
- dccp-y := ccid.o feat.o input.o minisocks.o options.o output.o proto.o timer.o
- 
- dccp_ipv4-y := ipv4.o
- 
-+# build dccp_ipv6 as module whenever either IPv6 or DCCP is a module
-+obj-$(subst y,$(CONFIG_IP_DCCP),$(CONFIG_IPV6)) += dccp_ipv6.o
-+dccp_ipv6-y := ipv6.o
+-/* Calculate new t_ipi (inter packet interval) by t_ipi = s / X_inst */
+-static inline void ccid3_calc_new_t_ipi(struct ccid3_hc_tx_sock *hctx)
++/*
++ * Recalculate scheduled nominal send time t_nom, inter-packet interval
++ * t_ipi, and delta value. Should be called after each change to X.
++ */
++static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
+ {
++	timeval_sub_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
 +
- dccp-$(CONFIG_IP_DCCP_ACKVEC) += ackvec.o
++	/* Calculate new t_ipi (inter packet interval) by t_ipi = s / X_inst */
+ 	hctx->ccid3hctx_t_ipi = usecs_div(hctx->ccid3hctx_s, hctx->ccid3hctx_x);
+-}
  
- obj-$(CONFIG_INET_DCCP_DIAG) += dccp_diag.o
+-/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
+-static inline void ccid3_calc_new_delta(struct ccid3_hc_tx_sock *hctx)
+-{
++	/* Update nominal send time with regard to the new t_ipi */
++	timeval_add_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
++
++	/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
+ 	hctx->ccid3hctx_delta = min_t(u32, hctx->ccid3hctx_t_ipi / 2,
+ 					   TFRC_OPSYS_HALF_TIME_GRAN);
+ }
+-
+ /*
+  * Update X by
+  *    If (p > 0)
+@@ -126,6 +131,7 @@ static inline void ccid3_calc_new_delta(
+ static void ccid3_hc_tx_update_x(struct sock *sk)
+ {
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
++	const __u32 old_x = hctx->ccid3hctx_x;
+ 
+ 	/* To avoid large error in calcX */
+ 	if (hctx->ccid3hctx_p >= TFRC_SMALLEST_P) {
+@@ -149,6 +155,8 @@ static void ccid3_hc_tx_update_x(struct 
+ 			hctx->ccid3hctx_t_ld = now;
+ 		}
+ 	}
++	if (hctx->ccid3hctx_x != old_x)
++		ccid3_update_send_time(hctx);
+ }
+ 
+ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+@@ -184,11 +192,7 @@ static void ccid3_hc_tx_no_feedback_time
+ 		/* The value of R is still undefined and so we can not recompute
+ 		 * the timout value. Keep initial value as per [RFC 4342, 5]. */
+ 		next_tmout = TFRC_INITIAL_TIMEOUT;
+-		/*
+-		 * FIXME - not sure above calculation is correct. See section
+-		 * 5 of CCID3 11 should adjust tx_t_ipi and double that to
+-		 * achieve it really
+-		 */
++		ccid3_update_send_time(hctx);
+ 		break;
+ 	case TFRC_SSTATE_FBACK:
+ 		/*
+@@ -479,17 +483,9 @@ static void ccid3_hc_tx_packet_recv(stru
+ 		/* unschedule no feedback timer */
+ 		sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
+ 
+-		/* Update sending rate */
++		/* Update sending rate (and likely t_ipi, t_nom, and delta) */
+ 		ccid3_hc_tx_update_x(sk);
+ 
+-		/* Update next send time */
+-		timeval_sub_usecs(&hctx->ccid3hctx_t_nom,
+-				  hctx->ccid3hctx_t_ipi);
+-		ccid3_calc_new_t_ipi(hctx);
+-		timeval_add_usecs(&hctx->ccid3hctx_t_nom,
+-				  hctx->ccid3hctx_t_ipi);
+-		ccid3_calc_new_delta(hctx);
+-
+ 		/* remove all packets older than the one acked from history */
+ 		dccp_tx_hist_purge_older(ccid3_tx_hist,
+ 					 &hctx->ccid3hctx_hist, packet);
+-- 
+1.4.2.1.g3d5c
+
