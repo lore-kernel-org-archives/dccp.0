@@ -1,33 +1,114 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Thu, 16 Nov 2006 16:32:42 +0000
-Subject: [PATCH 1/3][DCCP]: One NET_INC_STATS() could be NET_INC_STATS_BH in dccp_v4_err()
-Message-Id: <20061116163241.GC5195@mandriva.com>
+Date: Mon, 27 Nov 2006 14:45:55 +0000
+Subject: [PATCH 4/8] [DCCP] ccid3: Simplify control flow of ccid3_hc_tx_send_packet
+Message-Id: <20061127144555.GO11605@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Spotted by Eric Dumazet in tcp_v4_rcv().
+This makes some logically equivalent simplifications, by replacing
+rc - values plus goto's with direct return statements.
 
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ipv4.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ net/dccp/ccids/ccid3.c |   40 ++++++++++++++++++----------------------
+ 1 files changed, 18 insertions(+), 22 deletions(-)
 
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index 6bca719..a20eb71 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -244,7 +244,7 @@ static void dccp_v4_err(struct sk_buff *
- 	seq = dccp_hdr_seq(skb);
- 	if (sk->sk_state != DCCP_LISTEN &&
- 	    !between48(seq, dp->dccps_swl, dp->dccps_swh)) {
--		NET_INC_STATS(LINUX_MIB_OUTOFWINDOWICMPS);
-+		NET_INC_STATS_BH(LINUX_MIB_OUTOFWINDOWICMPS);
- 		goto out;
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index fb1a5e8..2745d83 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -247,6 +247,12 @@ out:
+ 	sock_put(sk);
+ }
+ 
++/*
++ * returns
++ *   > 0: delay (in msecs) that should pass before actually sending
++ *   = 0: can send immediately
++ *   < 0: error condition; do not send packet
++ */
+ static int ccid3_hc_tx_send_packet(struct sock *sk,
+ 				   struct sk_buff *skb, int len)
+ {
+@@ -255,7 +261,6 @@ static int ccid3_hc_tx_send_packet(struc
+ 	struct dccp_tx_hist_entry *new_packet;
+ 	struct timeval now;
+ 	long delay;
+-	int rc = -ENOTCONN;
+ 
+ 	BUG_ON(hctx = NULL);
+ 
+@@ -265,7 +270,7 @@ static int ccid3_hc_tx_send_packet(struc
+ 	 * packets can have zero length, but why the comment about "pure ACK"?
+ 	 */
+ 	if (unlikely(len = 0))
+-		goto out;
++		return -ENOTCONN;
+ 
+ 	/* See if last packet allocated was not sent */
+ 	new_packet = dccp_tx_hist_head(&hctx->ccid3hctx_hist);
+@@ -273,11 +278,10 @@ static int ccid3_hc_tx_send_packet(struc
+ 		new_packet = dccp_tx_hist_entry_new(ccid3_tx_hist,
+ 						    SLAB_ATOMIC);
+ 
+-		rc = -ENOBUFS;
+ 		if (unlikely(new_packet = NULL)) {
+ 			DCCP_WARN("%s, sk=%p, not enough mem to add to history,"
+ 				  "send refused\n", dccp_role(sk), sk);
+-			goto out;
++			return -ENOBUFS;
+ 		}
+ 
+ 		dccp_tx_hist_add_entry(&hctx->ccid3hctx_hist, new_packet);
+@@ -300,7 +304,6 @@ static int ccid3_hc_tx_send_packet(struc
+ 
+ 		/* Set t_0 for initial packet */
+ 		hctx->ccid3hctx_t_nom = now;
+-		rc = 0;
+ 		break;
+ 	case TFRC_SSTATE_NO_FBACK:
+ 	case TFRC_SSTATE_FBACK:
+@@ -313,28 +316,21 @@ static int ccid3_hc_tx_send_packet(struc
+ 		 * else
+ 		 *       // send the packet in (t_nom - t_now) milliseconds.
+ 		 */
+-		if (delay < hctx->ccid3hctx_delta)
+-			rc = 0;
+-		else
+-			rc = delay/1000L;
++		if (delay >= hctx->ccid3hctx_delta)
++			return delay / 1000L;
+ 		break;
+ 	case TFRC_SSTATE_TERM:
+ 		DCCP_BUG("Illegal %s state TERM, sk=%p", dccp_role(sk), sk);
+-		rc = -EINVAL;
+-		break;
++		return -EINVAL;
  	}
  
+-	/* Can we send? if so add options and add to packet history */
+-	if (rc = 0) {
+-		dp->dccps_hc_tx_insert_options = 1;
+-		new_packet->dccphtx_ccval -			DCCP_SKB_CB(skb)->dccpd_ccval -				hctx->ccid3hctx_last_win_count;
+-		timeval_add_usecs(&hctx->ccid3hctx_t_nom,
+-				  hctx->ccid3hctx_t_ipi);
+-	}
+-out:
+-	return rc;
++	/* prepare to send now (add options etc.) */
++	dp->dccps_hc_tx_insert_options = 1;
++	new_packet->dccphtx_ccval = DCCP_SKB_CB(skb)->dccpd_ccval +				    hctx->ccid3hctx_last_win_count;
++	timeval_add_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
++
++	return 0;
+ }
+ 
+ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more, int len)
 -- 
 1.4.2.1.g3d5c
 
