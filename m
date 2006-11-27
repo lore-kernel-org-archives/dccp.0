@@ -1,188 +1,101 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Mon, 20 Nov 2006 20:52:52 +0000
-Subject: [PATCH 2/9] [DCCP]: enable debug messages also for static builds
-Message-Id: <20061120205251.GC5246@mandriva.com>
+Date: Mon, 27 Nov 2006 22:35:50 +0000
+Subject: [PATCH 1/3] [DCCP] ccid3: Consolidate timer resets
+Message-Id: <20061127223549.GB11605@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch
-  * makes debugging (when configured) work both for static / module build
-  * provides generic debugging macros for use in other DCCP / CCID modules
-  * adds missing information about debug parameters to Kconfig
-  * performs some code tidy-up
+This patch concerns updating the value of the nofeedback timer when no feedback
+has been received so far.
 
+Since in this case the value of R is still undefined according to [RFC 3448,
+4.2], we can not perform step (3) of [RFC 3448, 4.3].  A clarification is
+provided in [RFC 4342, sec. 5], which states that in these cases the nofeedback
+timer (still) expires "after two seconds".
+
+Many thanks to Ian McDonald for pointing this out and providing the
+clarification.
+
+The patch
+  * implements [RFC 4342, sec. 5] with regard to the above case
+  * consolidates handling timer restart by
+	- adding an appropriate jump label and
+	- initialising the timeout value
+
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/Kconfig       |    3 +++
- net/dccp/ackvec.c      |   11 ++++-------
- net/dccp/ccids/Kconfig |   14 ++++++++++++--
- net/dccp/ccids/ccid2.c |   16 ++++++----------
- net/dccp/dccp.h        |   19 ++++++++++++-------
- 5 files changed, 37 insertions(+), 26 deletions(-)
+ net/dccp/ccids/ccid3.c |   18 +++++++++---------
+ net/dccp/ccids/ccid3.h |    2 +-
+ 2 files changed, 10 insertions(+), 10 deletions(-)
 
-diff --git a/net/dccp/Kconfig b/net/dccp/Kconfig
-index 2fc5e55..b8a68dd 100644
---- a/net/dccp/Kconfig
-+++ b/net/dccp/Kconfig
-@@ -38,6 +38,9 @@ config IP_DCCP_DEBUG
- 	---help---
- 	  Only use this if you're hacking DCCP.
- 
-+	  When compiling DCCP as a module, this debugging output can be toggled
-+	  by setting the parameter dccp_debug of the `dccp' module to 0 or 1.
-+
- 	  Just say N.
- 
- config NET_DCCPPROBE
-diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-index bd20a2c..d34badc 100644
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -318,21 +318,18 @@ out_duplicate:
- #ifdef CONFIG_IP_DCCP_DEBUG
- void dccp_ackvector_print(const u64 ackno, const unsigned char *vector, int len)
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 6777a7f..9297fca 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -154,16 +154,14 @@ static void ccid3_hc_tx_update_x(struct 
+ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
  {
--	if (!dccp_debug)
--		return;
--
--	printk("ACK vector len=%d, ackno=%llu |", len,
--	       (unsigned long long)ackno);
-+	dccp_pr_debug_cat("ACK vector len=%d, ackno=%llu |", len,
-+			 		(unsigned long long)ackno);
+ 	struct sock *sk = (struct sock *)data;
+-	unsigned long next_tmout = 0;
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
++	unsigned long next_tmout = USEC_PER_SEC / 5;
  
- 	while (len--) {
- 		const u8 state = (*vector & DCCP_ACKVEC_STATE_MASK) >> 6;
- 		const u8 rl = *vector & DCCP_ACKVEC_LEN_MASK;
- 
--		printk("%d,%d|", state, rl);
-+		dccp_pr_debug_cat("%d,%d|", state, rl);
- 		++vector;
+ 	bh_lock_sock(sk);
+ 	if (sock_owned_by_user(sk)) {
+ 		/* Try again later. */
+ 		/* XXX: set some sensible MIB */
+-		sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
+-			       jiffies + HZ / 5);
+-		goto out;
++		goto restart_timer;
  	}
  
--	printk("\n");
-+	dccp_pr_debug_cat("\n");
- }
+ 	ccid3_pr_debug("%s, sk=%p, state=%s\n", dccp_role(sk), sk,
+@@ -183,9 +181,9 @@ static void ccid3_hc_tx_no_feedback_time
+ 			       dccp_role(sk), sk,
+ 			       ccid3_tx_state_name(hctx->ccid3hctx_state),
+ 			       hctx->ccid3hctx_x);
+-		next_tmout = max_t(u32, 2 * usecs_div(hctx->ccid3hctx_s,
+-						      hctx->ccid3hctx_x),
+-					TFRC_INITIAL_TIMEOUT);
++		/* The value of R is still undefined and so we can not recompute
++		 * the timout value. Keep initial value as per [RFC 4342, 5]. */
++		next_tmout = TFRC_INITIAL_TIMEOUT;
+ 		/*
+ 		 * FIXME - not sure above calculation is correct. See section
+ 		 * 5 of CCID3 11 should adjust tx_t_ipi and double that to
+@@ -239,9 +237,11 @@ static void ccid3_hc_tx_no_feedback_time
+ 		goto out;
+ 	}
  
- void dccp_ackvec_print(const struct dccp_ackvec *av)
-diff --git a/net/dccp/ccids/Kconfig b/net/dccp/ccids/Kconfig
-index 8533dab..ba826d9 100644
---- a/net/dccp/ccids/Kconfig
-+++ b/net/dccp/ccids/Kconfig
-@@ -28,13 +28,20 @@ config IP_DCCP_CCID2
- 	  This text was extracted from RFC 4340 (sec. 10.1),
- 	  http://www.ietf.org/rfc/rfc4340.txt
- 
-+	  To compile this CCID as a module, choose M here: the module will be
-+	  called dccp_ccid2.
+-	sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer, 
+-		      jiffies + max_t(u32, 1, usecs_to_jiffies(next_tmout)));
+ 	hctx->ccid3hctx_idle = 1;
 +
- 	  If in doubt, say M.
++restart_timer:
++	sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
++		           jiffies + usecs_to_jiffies(next_tmout));
+ out:
+ 	bh_unlock_sock(sk);
+ 	sock_put(sk);
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index 4621652..9709217 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -46,7 +46,7 @@ #define TFRC_MIN_PACKET_SIZE	   16
+ #define TFRC_STD_PACKET_SIZE	  256
+ #define TFRC_MAX_PACKET_SIZE	65535
  
- config IP_DCCP_CCID2_DEBUG
--	  bool "CCID2 debug"
-+	  bool "CCID2 debugging messages"
- 	  depends on IP_DCCP_CCID2
- 	  ---help---
--	    Enable CCID2 debug messages.
-+	    Enable CCID2-specific debugging messages.
-+
-+	    When compiling CCID2 as a module, this debugging output can
-+	    additionally be toggled by setting the ccid2_debug module
-+	    parameter to 0 or 1.
+-/* Two seconds as per CCID3 spec */
++/* Two seconds as per RFC 3448 4.2 */
+ #define TFRC_INITIAL_TIMEOUT	   (2 * USEC_PER_SEC)
  
- 	    If in doubt, say N.
- 
-@@ -62,6 +69,9 @@ config IP_DCCP_CCID3
- 	  This text was extracted from RFC 4340 (sec. 10.2),
- 	  http://www.ietf.org/rfc/rfc4340.txt
- 	  
-+	  To compile this CCID as a module, choose M here: the module will be
-+	  called dccp_ccid3.
-+
- 	  If in doubt, say M.
- 
- config IP_DCCP_TFRC_LIB
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index 6533cb2..0fb0d66 100644
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -33,18 +33,11 @@ #include "../ccid.h"
- #include "../dccp.h"
- #include "ccid2.h"
- 
--static int ccid2_debug;
- 
- #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
--#define ccid2_pr_debug(format, a...) \
--        do { if (ccid2_debug) \
--                printk(KERN_DEBUG "%s: " format, __FUNCTION__, ##a); \
--        } while (0)
--#else
--#define ccid2_pr_debug(format, a...)
--#endif
-+static int ccid2_debug;
-+#define ccid2_pr_debug(format, a...)	DCCP_PR_DEBUG(ccid2_debug, format, ##a)
- 
--#ifdef CONFIG_IP_DCCP_CCID2_DEBUG
- static void ccid2_hc_tx_check_sanity(const struct ccid2_hc_tx_sock *hctx)
- {
- 	int len = 0;
-@@ -86,7 +79,8 @@ static void ccid2_hc_tx_check_sanity(con
- 	BUG_ON(len != hctx->ccid2hctx_seqbufc * CCID2_SEQBUF_LEN);
- }
- #else
--#define ccid2_hc_tx_check_sanity(hctx) do {} while (0)
-+#define ccid2_pr_debug(format, a...)
-+#define ccid2_hc_tx_check_sanity(hctx)
- #endif
- 
- static int ccid2_hc_tx_alloc_seq(struct ccid2_hc_tx_sock *hctx, int num,
-@@ -841,8 +835,10 @@ static struct ccid_operations ccid2 = {
- 	.ccid_hc_rx_packet_recv	= ccid2_hc_rx_packet_recv,
- };
- 
-+#ifdef CONFIG_IP_DCCP_CCID2_DEBUG
- module_param(ccid2_debug, int, 0444);
- MODULE_PARM_DESC(ccid2_debug, "Enable debug messages");
-+#endif
- 
- static __init int ccid2_module_init(void)
- {
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index ecb4e7b..33d86f5 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -26,15 +26,20 @@ #define DCCP_BUG_ON(cond)    do { if (un
- 						 __stringify((cond)));	       \
- 			     } while (0)
- 
-+#ifdef MODULE
-+#define DCCP_PRINTK(enable, fmt, args...)	do { if (enable)	     \
-+							printk(fmt, ##args); \
-+					 	} while(0)
-+#else
-+#define DCCP_PRINTK(enable, fmt, args...)	printk(fmt, ##args)
-+#endif
-+#define DCCP_PR_DEBUG(enable, fmt, a...)	DCCP_PRINTK(enable, KERN_DEBUG \
-+						  "%s: " fmt, __FUNCTION__, ##a)
-+
- #ifdef CONFIG_IP_DCCP_DEBUG
- extern int dccp_debug;
--
--#define dccp_pr_debug(format, a...) \
--	do { if (dccp_debug) \
--		printk(KERN_DEBUG "%s: " format, __FUNCTION__ , ##a); \
--	} while (0)
--#define dccp_pr_debug_cat(format, a...) do { if (dccp_debug) \
--					     printk(format, ##a); } while (0)
-+#define dccp_pr_debug(format, a...)	  DCCP_PR_DEBUG(dccp_debug, format, ##a)
-+#define dccp_pr_debug_cat(format, a...)   DCCP_PRINTK(dccp_debug, format, ##a)
- #else
- #define dccp_pr_debug(format, a...)
- #define dccp_pr_debug_cat(format, a...)
+ /* In usecs - half the scheduling granularity as per RFC3448 4.6 */
 -- 
 1.4.2.1.g3d5c
 
