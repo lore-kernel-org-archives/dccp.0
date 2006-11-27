@@ -1,289 +1,53 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Fri, 10 Nov 2006 15:29:18 +0000
-Subject: [PATCH 6/10][DCCP]: calling dccp_v{4,6}_reqsk_send_ack is a BUG
-Message-Id: <20061110152917.GJ23311@mandriva.com>
+Date: Mon, 27 Nov 2006 14:46:37 +0000
+Subject: [PATCH 7/8] [DCCP] ccid3: Resolve small FIXME
+Message-Id: <20061127144636.GR11605@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch removes two functions, the send_ack functions of request_sock,
-which are not called/used by the DCCP code. It is correct that these
-functions are not called, below is a justification why calling these
-functions (on a passive socket in the LISTEN/RESPOND state) would mean
-a DCCP protocol violation.
+This considers the  case - ACK received while no packet has been sent
+so far. Resolved by printing a (rate-limited) warning message.
 
-A) Background: using request_sock in TCP:
------------------------------------------
-
-	req->rsk_ops->send_ack is called only once, in tcp_check_req() of
-        net/ipv4/tcp_minisocks.c This single case deals with a socket in the
-        SYN-RECEIVED state; RFC 793 on page 69 describes the case for
-        SYN-RECEIVED and other states: "If an incoming segment is not
-        acceptable, an acknowledgment should be sent in reply (unless the
-        RST bit is set, if so drop the segment and return):
-
-                       <SEQ=3DSND.NXT><ACK=3DRCV.NXT><CTL=ACK>"
-
-        (SND.NXT =3D ISS + 1, RCV.NEXT =3D SEG.SEQ + 1 if SYN-RECEIVED was
-         entered from LISTEN)
-
-       This is referenced by the following code segment:
-
-        if (paws_reject || !tcp_in_window(...)) {
-                /* Out of window: send ACK and drop. */
-                if (!(flg & TCP_FLAG_RST))
-                        req->rsk_ops->send_ack(skb, req);
-                /* ... */
-                return NULL;
-        }
-
-        This is the _only_ occurrence where rsk_ops->send_ack() is called
-        for TCP.
-
-B) The Problem: protocol constraints of DCCP:
----------------------------------------------
-        (1) rsk_ops->send_ack is called _nowhere_ throughout the DCCP code
-        (grep confirms) (2) This is correct, due to the following:
-                (a) RFC 4340, sec. 8.5, step 3: The only acceptable
-                packets in LISTEN state
-		    are DCCP-Request or packets with a valid InitCookie
-		    option (InitCookie is an optional, not mandatory,
-		    protocol feature). Only if such a packet arrives,
-		    RESPOND is entered after sending a DCCP-Response.
-		    Then, in step 11, receiving any packet other than
-		    DCCP-Request, will trigger the transition to OPEN
-		    (`Established') =3D> the request_sock will become a
-		    full socket here.
-		(b) DCCP uses the Sync where TCP would use an ACK -
-		in the case of
-		    sequence-invalid packets (RFC 4340, 7.5.4). This
-		    however is already handled by calling dccp_send_sync
-		    in dccp_check_seqno(), __dcp_rcv_established(),
-		    dccp_rcv_state_process(), dccp_rcv_closereq().
-
-c) Conclusion:
---------------
-	In DCCP the function pointer send_ack of struct request_sock_ops
-	is unnecessary, and calling it would mean a protocol
-	violation. The DCCP code is correct in this regard in that it
-	does not call the send_ack virtual function pointer, but the
-	existence of two functions - which are never called and are
-	not necessary - is highly confusing - see e.g. the posting on
-	http://www.mail-archive.com/dccp@vger.kernel.org/msg00419.html
-
-        Therefore, the attached patch replaces the functions with a
-        verbose message (if debugging is enabled), and otherwise flags
-        a BUG().  This solution preserves the generic structure of the
-        request_sock while making sure that RFC 4340 is not violated by
-        the implementation.
-
-Commiter note: I've demoted the BUG() all to the equivalente of a WARN_ON,
-i.e. print a message and dump the stack.
+Further removes an unnecessary BUG_ON in ccid3_hc_tx_packet_recv,
+received feedback on a terminating connection is simply ignored.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
-
----------------------------------------------------------------------------=
 ---
+ net/dccp/ccids/ccid3.c |    9 ++++-----
+ 1 files changed, 4 insertions(+), 5 deletions(-)
 
- dccp.h      |    2 ++
- ipv4.c      |   48 +-----------------------------------------------
- ipv6.c      |   57 +------------------------------------------------------=
---
- minisocks.c |   10 ++++++++++
- 4 files changed, 14 insertions(+), 103 deletions(-)
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 58f7cac..6777a7f 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -413,9 +413,6 @@ static void ccid3_hc_tx_packet_recv(stru
+ 	pinv = opt_recv->ccid3or_loss_event_rate;
+ 
+ 	switch (hctx->ccid3hctx_state) {
+-	case TFRC_SSTATE_NO_SENT:
+-		/* FIXME: what to do here? */
+-		return;
+ 	case TFRC_SSTATE_NO_FBACK:
+ 	case TFRC_SSTATE_FBACK:
+ 		/* Calculate new round trip sample by
+@@ -521,8 +518,10 @@ static void ccid3_hc_tx_packet_recv(stru
+ 		/* set idle flag */
+ 		hctx->ccid3hctx_idle = 1;   
+ 		break;
+-	case TFRC_SSTATE_TERM:
+-		DCCP_BUG("Illegal %s state TERM, sk=%p", dccp_role(sk), sk);
++	case TFRC_SSTATE_NO_SENT:
++		DCCP_WARN("Illegal ACK received - no packet has been sent\n");
++		/* fall through */
++	case TFRC_SSTATE_TERM:		/* ignore feedback when closing */
+ 		break;
+ 	}
+ }
+-- 
+1.4.2.1.g3d5c
 
----------------------------------------------------------------------------=
----
-
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 8964b18..3d4b4a9 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -131,6 +131,8 @@ extern int  dccp_retransmit_skb(struct s
-=20
- extern void dccp_send_ack(struct sock *sk);
- extern void dccp_send_delayed_ack(struct sock *sk);
-+extern void dccp_reqsk_send_ack(struct sk_buff *sk, struct request_sock *r=
-sk);
-+
- extern void dccp_send_sync(struct sock *sk, const u64 seq,
- 			   const enum dccp_pkt_type pkt_type);
-=20
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index 7107885..8dd9f5a 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -193,52 +193,6 @@ static inline void dccp_do_pmtu_discover
- 	} /* else let the usual retransmit timer handle it */
- }
-=20
--static void dccp_v4_reqsk_send_ack(struct sk_buff *rxskb,
--				   struct request_sock *req)
--{
--	int err;
--	struct dccp_hdr *rxdh =3D dccp_hdr(rxskb), *dh;
--	const u32 dccp_hdr_ack_len =3D sizeof(struct dccp_hdr) +
--				     sizeof(struct dccp_hdr_ext) +
--				     sizeof(struct dccp_hdr_ack_bits);
--	struct sk_buff *skb;
--
--	if (((struct rtable *)rxskb->dst)->rt_type !=3D RTN_LOCAL)
--		return;
--
--	skb =3D alloc_skb(dccp_v4_ctl_socket->sk->sk_prot->max_header, GFP_ATOMIC=
-);
--	if (skb =3D NULL)
--		return;
--
--	/* Reserve space for headers. */
--	skb_reserve(skb, dccp_v4_ctl_socket->sk->sk_prot->max_header);
--	skb->dst =3D dst_clone(rxskb->dst);
--
--	dh =3D dccp_zeroed_hdr(skb, dccp_hdr_ack_len);
--
--	/* Build DCCP header and checksum it. */
--	dh->dccph_type	   =3D DCCP_PKT_ACK;
--	dh->dccph_sport	   =3D rxdh->dccph_dport;
--	dh->dccph_dport	   =3D rxdh->dccph_sport;
--	dh->dccph_doff	   =3D dccp_hdr_ack_len / 4;
--	dh->dccph_x	   =3D 1;
--
--	dccp_hdr_set_seq(dh, DCCP_SKB_CB(rxskb)->dccpd_ack_seq);
--	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb),
--			 DCCP_SKB_CB(rxskb)->dccpd_seq);
--
--	bh_lock_sock(dccp_v4_ctl_socket->sk);
--	err =3D ip_build_and_send_pkt(skb, dccp_v4_ctl_socket->sk,
--				    rxskb->nh.iph->daddr,
--				    rxskb->nh.iph->saddr, NULL);
--	bh_unlock_sock(dccp_v4_ctl_socket->sk);
--
--	if (err =3D NET_XMIT_CN || err =3D 0) {
--		DCCP_INC_STATS_BH(DCCP_MIB_OUTSEGS);
--		DCCP_INC_STATS_BH(DCCP_MIB_OUTRSTS);
--	}
--}
--
- static int dccp_v4_send_response(struct sock *sk, struct request_sock *req,
- 				 struct dst_entry *dst)
- {
-@@ -1014,7 +968,7 @@ static struct request_sock_ops dccp_requ
- 	.family		=3D PF_INET,
- 	.obj_size	=3D sizeof(struct dccp_request_sock),
- 	.rtx_syn_ack	=3D dccp_v4_send_response,
--	.send_ack	=3D dccp_v4_reqsk_send_ack,
-+	.send_ack	=3D dccp_reqsk_send_ack,
- 	.destructor	=3D dccp_v4_reqsk_destructor,
- 	.send_reset	=3D dccp_v4_ctl_send_reset,
- };
-diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
-index 96a2480..89b2113 100644
---- a/net/dccp/ipv6.c
-+++ b/net/dccp/ipv6.c
-@@ -37,8 +37,6 @@ #include "feat.h"
- static struct socket *dccp_v6_ctl_socket;
-=20
- static void dccp_v6_ctl_send_reset(struct sk_buff *skb);
--static void dccp_v6_reqsk_send_ack(struct sk_buff *skb,
--				   struct request_sock *req);
- static void dccp_v6_send_check(struct sock *sk, int len, struct sk_buff *s=
-kb);
-=20
- static int dccp_v6_do_rcv(struct sock *sk, struct sk_buff *skb);
-@@ -493,7 +491,7 @@ static struct request_sock_ops dccp6_req
- 	.family		=3D AF_INET6,
- 	.obj_size	=3D sizeof(struct dccp6_request_sock),
- 	.rtx_syn_ack	=3D dccp_v6_send_response,
--	.send_ack	=3D dccp_v6_reqsk_send_ack,
-+	.send_ack	=3D dccp_reqsk_send_ack,
- 	.destructor	=3D dccp_v6_reqsk_destructor,
- 	.send_reset	=3D dccp_v6_ctl_send_reset,
- };
-@@ -582,59 +580,6 @@ static void dccp_v6_ctl_send_reset(struc
- 	kfree_skb(skb);
- }
-=20
--static void dccp_v6_reqsk_send_ack(struct sk_buff *rxskb,
--				   struct request_sock *req)
--{
--	struct flowi fl;
--	struct dccp_hdr *rxdh =3D dccp_hdr(rxskb), *dh;
--	const u32 dccp_hdr_ack_len =3D sizeof(struct dccp_hdr) +
--				     sizeof(struct dccp_hdr_ext) +
--				     sizeof(struct dccp_hdr_ack_bits);
--	struct sk_buff *skb;
--
--	skb =3D alloc_skb(dccp_v6_ctl_socket->sk->sk_prot->max_header,
--			GFP_ATOMIC);
--	if (skb =3D NULL)
--		return;
--
--	skb_reserve(skb, dccp_v6_ctl_socket->sk->sk_prot->max_header);
--
--	dh =3D dccp_zeroed_hdr(skb, dccp_hdr_ack_len);
--
--	/* Build DCCP header and checksum it. */
--	dh->dccph_type	=3D DCCP_PKT_ACK;
--	dh->dccph_sport =3D rxdh->dccph_dport;
--	dh->dccph_dport =3D rxdh->dccph_sport;
--	dh->dccph_doff	=3D dccp_hdr_ack_len / 4;
--	dh->dccph_x	=3D 1;
--
--	dccp_hdr_set_seq(dh, DCCP_SKB_CB(rxskb)->dccpd_ack_seq);
--	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb),
--			 DCCP_SKB_CB(rxskb)->dccpd_seq);
--
--	memset(&fl, 0, sizeof(fl));
--	ipv6_addr_copy(&fl.fl6_dst, &rxskb->nh.ipv6h->saddr);
--	ipv6_addr_copy(&fl.fl6_src, &rxskb->nh.ipv6h->daddr);
--
--	/* FIXME: calculate checksum, IPv4 also should... */
--
--	fl.proto =3D IPPROTO_DCCP;
--	fl.oif =3D inet6_iif(rxskb);
--	fl.fl_ip_dport =3D dh->dccph_dport;
--	fl.fl_ip_sport =3D dh->dccph_sport;
--	security_req_classify_flow(req, &fl);
--
--	if (!ip6_dst_lookup(NULL, &skb->dst, &fl)) {
--		if (xfrm_lookup(&skb->dst, &fl, NULL, 0) >=3D 0) {
--			ip6_xmit(dccp_v6_ctl_socket->sk, skb, &fl, NULL, 0);
--			DCCP_INC_STATS_BH(DCCP_MIB_OUTSEGS);
--			return;
--		}
--	}
--
--	kfree_skb(skb);
--}
--
- static struct sock *dccp_v6_hnd_req(struct sock *sk,struct sk_buff *skb)
- {
- 	const struct dccp_hdr *dh =3D dccp_hdr(skb);
-diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
-index 9045438..5f3e1a4 100644
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -11,6 +11,7 @@
-  */
-=20
- #include <linux/dccp.h>
-+#include <linux/kernel.h>
- #include <linux/skbuff.h>
- #include <linux/timer.h>
-=20
-@@ -283,3 +284,12 @@ int dccp_child_process(struct sock *pare
- }
-=20
- EXPORT_SYMBOL_GPL(dccp_child_process);
-+
-+void dccp_reqsk_send_ack(struct sk_buff *skb, struct request_sock *rsk)
-+{
-+	pr_info(KERN_WARNING "DCCP: ACK packets are never sent in "
-+			     "LISTEN/RESPOND state\n");
-+	dump_stack();
-+}
-+
-+EXPORT_SYMBOL_GPL(dccp_reqsk_send_ack);
