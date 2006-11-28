@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 28 Nov 2006 19:26:02 +0000
+From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
+Date: Tue, 28 Nov 2006 20:21:38 +0000
 Subject: Re: [RFC] [PATCH 1/2]: Remove small typo
-Message-Id: <5640c7e00611281126v1f74216dx92e84b4cb3c970d6@mail.gmail.com>
+Message-Id: <39e6f6c70611281221n5bff271blb7e76382feda02a1@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200611281434.31175@strip-the-willow>
 In-Reply-To: <200611281434.31175@strip-the-willow>
@@ -10,15 +10,10 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/29/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [CCID 3]: Remove small typo
->
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
--- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+On 11/28/06, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
+> On 11/29/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> > [CCID 3]: Remove small typo
+> >
+> Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+
+Thanks, applied.
