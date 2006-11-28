@@ -1,25 +1,183 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 08 Nov 2006 20:49:10 +0000
-Subject: DCCP into Dave M's net-2.6.20 tree?
-Message-Id: <5640c7e00611081249r2b06dd58y87af020aa030b0b4@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Tue, 28 Nov 2006 21:59:05 +0000
+Subject: [PATCH 6/7] [DCCP] ccid3: Larger initial windows
+Message-Id: <20061128215904.GO19882@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Arnaldo,
+This implements the larger-initial-windows feature for CCID 3, as described in
+section 5 of RFC 4342. When the first feedback packet arrives, the sender can
+send up to 2..4 packets per RTT, instead of just one.
 
-Are you able to merge Gerrit's tree containing many patches soon so we
-don't miss out on 2.6.20 and start to merge some of the growing
-backlog?
+The patch further
+ * reduces the number of timestamping calls by passing the timestamp value
+   (which is computed in one of the calling functions anyway) as argument
 
-Ian
+ * renames one constant with a very long name into one which is shorter and
+   resembles the one in RFC 3448 (t_mbi)
+
+ * simplifies some of the min_t/max_t cases where both `x', `y' have the same
+   type
+
+Commiter note: renamed TFRC_t_mbi to TFRC_T_MBI, to follow Linux coding style.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+---
+ net/dccp/ccids/ccid3.c |   66 +++++++++++++++++++++++++-----------------------
+ net/dccp/ccids/ccid3.h |    4 +--
+ 2 files changed, 37 insertions(+), 33 deletions(-)
+
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 05513f3..aa5440e 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -128,7 +128,8 @@ static inline void ccid3_update_send_tim
+  *          X = max(min(2 * X, 2 * X_recv), s / R);
+  *          tld = now;
+  */ 
+-static void ccid3_hc_tx_update_x(struct sock *sk)
++static void ccid3_hc_tx_update_x(struct sock *sk, struct timeval *now)
++
+ {
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	const __u32 old_x = hctx->ccid3hctx_x;
+@@ -138,23 +139,20 @@ static void ccid3_hc_tx_update_x(struct 
+ 		hctx->ccid3hctx_x_calc = tfrc_calc_x(hctx->ccid3hctx_s,
+ 						     hctx->ccid3hctx_rtt,
+ 						     hctx->ccid3hctx_p);
+-		hctx->ccid3hctx_x = max_t(u32, min_t(u32, hctx->ccid3hctx_x_calc,
+-							  2 * hctx->ccid3hctx_x_recv),
+-					       (hctx->ccid3hctx_s /
+-					        TFRC_MAX_BACK_OFF_TIME));
+-	} else {
+-		struct timeval now;
++		hctx->ccid3hctx_x = max_t(u32, min(hctx->ccid3hctx_x_calc,
++						   hctx->ccid3hctx_x_recv * 2),
++					       hctx->ccid3hctx_s / TFRC_T_MBI);
++
++	} else if (timeval_delta(now, &hctx->ccid3hctx_t_ld) >+							  hctx->ccid3hctx_rtt) {
++		hctx->ccid3hctx_x = max(min(hctx->ccid3hctx_x_recv,
++					    hctx->ccid3hctx_x      ) * 2,
++					usecs_div(hctx->ccid3hctx_s,
++					       	  hctx->ccid3hctx_rtt)   );
++		hctx->ccid3hctx_t_ld = *now;
++	} else
++		ccid3_pr_debug("Not changing X\n");
+ 
+-		dccp_timestamp(sk, &now);
+-	       	if (timeval_delta(&now, &hctx->ccid3hctx_t_ld) >-		    hctx->ccid3hctx_rtt) {
+-			hctx->ccid3hctx_x = max_t(u32, min_t(u32, hctx->ccid3hctx_x_recv,
+-								  hctx->ccid3hctx_x) * 2,
+-						       usecs_div(hctx->ccid3hctx_s,
+-							       	 hctx->ccid3hctx_rtt));
+-			hctx->ccid3hctx_t_ld = now;
+-		}
+-	}
+ 	if (hctx->ccid3hctx_x != old_x)
+ 		ccid3_update_send_time(hctx);
+ }
+@@ -196,12 +194,9 @@ static void ccid3_hc_tx_no_feedback_time
+ 	
+ 	switch (hctx->ccid3hctx_state) {
+ 	case TFRC_SSTATE_NO_FBACK:
+-		/* Halve send rate */
+-		hctx->ccid3hctx_x /= 2;
+-		if (hctx->ccid3hctx_x < (hctx->ccid3hctx_s /
+-					 TFRC_MAX_BACK_OFF_TIME))
+-			hctx->ccid3hctx_x = (hctx->ccid3hctx_s /
+-					     TFRC_MAX_BACK_OFF_TIME);
++		/* RFC 3448, 4.4: Halve send rate directly */
++		hctx->ccid3hctx_x = min_t(u32, hctx->ccid3hctx_x / 2,
++					       hctx->ccid3hctx_s / TFRC_T_MBI);
+ 
+ 		ccid3_pr_debug("%s, sk=%p, state=%s, updated tx rate to %d "
+ 			       "bytes/s\n",
+@@ -221,6 +216,8 @@ static void ccid3_hc_tx_no_feedback_time
+ 		if (!hctx->ccid3hctx_idle ||
+ 		    (hctx->ccid3hctx_x_recv > 		     4 * usecs_div(hctx->ccid3hctx_s, hctx->ccid3hctx_rtt))) {
++			struct timeval now;
++
+ 			ccid3_pr_debug("%s, sk=%p, state=%s, not idle\n",
+ 				       dccp_role(sk), sk,
+ 				       ccid3_tx_state_name(hctx->ccid3hctx_state));
+@@ -238,12 +235,13 @@ static void ccid3_hc_tx_no_feedback_time
+ 			if (hctx->ccid3hctx_p < TFRC_SMALLEST_P ||
+ 			    hctx->ccid3hctx_x_calc > 2 * hctx->ccid3hctx_x_recv)
+ 				hctx->ccid3hctx_x_recv = max_t(u32, hctx->ccid3hctx_x_recv / 2,
+-								    hctx->ccid3hctx_s / (2 * TFRC_MAX_BACK_OFF_TIME));
++								    hctx->ccid3hctx_s / (2 * TFRC_T_MBI));
+ 			else
+ 				hctx->ccid3hctx_x_recv = hctx->ccid3hctx_x_calc / 4;
+ 
+ 			/* Update sending rate */
+-			ccid3_hc_tx_update_x(sk);
++			dccp_timestamp(sk, &now);
++			ccid3_hc_tx_update_x(sk, &now);
+ 		}
+ 		/*
+ 		 * Schedule no feedback timer to expire in
+@@ -473,11 +471,21 @@ static void ccid3_hc_tx_packet_recv(stru
+ 		 * q is a constant, RFC 3448 recomments 0.9
+ 		 */
+ 		if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
++			/* Use Larger Initial Windows [RFC 4342, sec. 5]
++			 * We deviate in that we use `s' instead of `MSS'. */
++			u16 w_init = max(    4 * hctx->ccid3hctx_s,
++					 max(2 * hctx->ccid3hctx_s, 4380));
++			hctx->ccid3hctx_rtt  = r_sample;
++			hctx->ccid3hctx_x    = usecs_div(w_init, r_sample);
++			hctx->ccid3hctx_t_ld = now;
++
++			ccid3_update_send_time(hctx);
+ 			ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
+-			hctx->ccid3hctx_rtt = r_sample;
+-		} else
++		} else {
+ 			hctx->ccid3hctx_rtt = (hctx->ccid3hctx_rtt * 9) / 10 +
+ 					      r_sample / 10;
++			ccid3_hc_tx_update_x(sk, &now);
++		}
+ 
+ 		ccid3_pr_debug("%s, sk=%p, New RTT estimate=%uus, "
+ 			       "r_sample=%us\n", dccp_role(sk), sk,
+@@ -502,9 +510,6 @@ static void ccid3_hc_tx_packet_recv(stru
+ 		/* unschedule no feedback timer */
+ 		sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
+ 
+-		/* Update sending rate (and likely t_ipi, t_nom, and delta) */
+-		ccid3_hc_tx_update_x(sk);
+-
+ 		/* remove all packets older than the one acked from history */
+ 		dccp_tx_hist_purge_older(ccid3_tx_hist,
+ 					 &hctx->ccid3hctx_hist, packet);
+@@ -514,7 +519,6 @@ static void ccid3_hc_tx_packet_recv(stru
+ 		 */
+ 		sk->sk_write_space(sk);
+ 
+-
+ 		/* Update timeout interval. We use the alternative variant of
+ 		 * [RFC 3448, 3.1] which sets the upper bound of t_rto to one
+ 		 * second, as it is suggested for TCP (see RFC 2988, 2.4). */
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index dbb8844..27cb20a 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -48,8 +48,8 @@ #define TFRC_INITIAL_TIMEOUT	   (2 * USE
+ /* In usecs - half the scheduling granularity as per RFC3448 4.6 */
+ #define TFRC_OPSYS_HALF_TIME_GRAN  (USEC_PER_SEC / (2 * HZ))
+ 
+-/* In seconds */
+-#define TFRC_MAX_BACK_OFF_TIME	   64
++/* Parameter t_mbi from [RFC 3448, 4.3]: backoff interval in seconds */
++#define TFRC_T_MBI		   64
+ 
+ #define TFRC_SMALLEST_P		   40
+ 
 -- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+1.4.2.1.g3d5c
+
