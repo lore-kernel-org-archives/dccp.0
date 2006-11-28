@@ -1,54 +1,139 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 26 Nov 2006 03:18:15 +0000
-Subject: [PATCH 1/4] [DCCP] ackvec: Remove unused dccpav_ack_ptr field from dccp_ackvec
-Message-Id: <20061126031815.GB17851@mandriva.com>
+Date: Tue, 28 Nov 2006 21:57:53 +0000
+Subject: [PATCH 1/7] [DCCP]: Remove allocation of sysctl numbers
+Message-Id: <20061128215752.GJ19882@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Commiter note: original patch was splitted.
+This is in response to a request sent earlier by Eric W. Biederman
+and replaces all sysctl numbers for net.dccp.default with CTL_UNNUMBERED.
 
-Signed-off-by: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
+It has been tested to compile and to work.
+
+Commiter note: I've removed the use of CTL_UNNUMBERED, not setting .ctl_name
+               sets it to 0, that is the what CTL_UNNUMBERED is, reason is
+               to avoid unneeded source code cluttering.
+
+Signed-off-by: Gerrit Renker  <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ackvec.c |    1 -
- net/dccp/ackvec.h |    2 --
- 2 files changed, 0 insertions(+), 3 deletions(-)
+ include/linux/sysctl.h |   14 --------------
+ net/dccp/sysctl.c      |   10 ----------
+ 2 files changed, 0 insertions(+), 24 deletions(-)
 
-diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-index 1b4b60d..215355d 100644
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -141,7 +141,6 @@ struct dccp_ackvec *dccp_ackvec_alloc(co
- 		av->dccpav_buf_head	= DCCP_MAX_ACKVEC_LEN - 1;
- 		av->dccpav_buf_ackno	= DCCP_MAX_SEQNO + 1;
- 		av->dccpav_buf_nonce = av->dccpav_buf_nonce = 0;
--		av->dccpav_ack_ptr	= 0;
- 		av->dccpav_time.tv_sec	= 0;
- 		av->dccpav_time.tv_usec	= 0;
- 		av->dccpav_vec_len	= 0;
-diff --git a/net/dccp/ackvec.h b/net/dccp/ackvec.h
-index cf8f20c..d6a58db 100644
---- a/net/dccp/ackvec.h
-+++ b/net/dccp/ackvec.h
-@@ -41,7 +41,6 @@ #define DCCP_ACKVEC_LEN_MASK		0x3F /* 00
-  * Ack Vectors it has recently sent. For each packet sent carrying an
-  * Ack Vector, it remembers four variables:
-  *
-- * @dccpav_ack_ptr - the value of buf_head at the time of acknowledgement.
-  * @dccpav_records - list of dccp_ackvec_record
-  * @dccpav_ack_nonce - the one-bit sum of the ECN Nonces for all State 0.
-  *
-@@ -53,7 +52,6 @@ struct dccp_ackvec {
- 	struct list_head dccpav_records;
- 	struct timeval	dccpav_time;
- 	u8		dccpav_buf_head;
--	u8		dccpav_ack_ptr;
- 	u8		dccpav_vec_len;
- 	u8		dccpav_buf_nonce;
- 	u8		dccpav_ack_nonce;
+diff --git a/include/linux/sysctl.h b/include/linux/sysctl.h
+index 61dd99c..94316a9 100644
+--- a/include/linux/sysctl.h
++++ b/include/linux/sysctl.h
+@@ -606,20 +606,6 @@ enum {
+ 	NET_DCCP_DEFAULT=1,
+ };
+ 
+-/* /proc/sys/net/dccp/default */
+-enum {
+-	NET_DCCP_DEFAULT_SEQ_WINDOW  = 1,
+-	NET_DCCP_DEFAULT_RX_CCID     = 2,
+-	NET_DCCP_DEFAULT_TX_CCID     = 3,
+-	NET_DCCP_DEFAULT_ACK_RATIO   = 4,
+-	NET_DCCP_DEFAULT_SEND_ACKVEC = 5,
+-	NET_DCCP_DEFAULT_SEND_NDP    = 6,
+-	NET_DCCP_DEFAULT_REQ_RETRIES = 7,
+-	NET_DCCP_DEFAULT_RETRIES1    = 8,
+-	NET_DCCP_DEFAULT_RETRIES2    = 9,
+-	NET_DCCP_DEFAULT_TX_QLEN     = 10,
+-};
+-
+ /* /proc/sys/net/ipx */
+ enum {
+ 	NET_IPX_PPROP_BROADCASTING=1,
+diff --git a/net/dccp/sysctl.c b/net/dccp/sysctl.c
+index 4775ba3..fdcfca3 100644
+--- a/net/dccp/sysctl.c
++++ b/net/dccp/sysctl.c
+@@ -20,7 +20,6 @@ #endif
+ 
+ static struct ctl_table dccp_default_table[] = {
+ 	{
+-		.ctl_name	= NET_DCCP_DEFAULT_SEQ_WINDOW,
+ 		.procname	= "seq_window",
+ 		.data		= &sysctl_dccp_feat_sequence_window,
+ 		.maxlen		= sizeof(sysctl_dccp_feat_sequence_window),
+@@ -28,7 +27,6 @@ static struct ctl_table dccp_default_tab
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+-		.ctl_name	= NET_DCCP_DEFAULT_RX_CCID,
+ 		.procname	= "rx_ccid",
+ 		.data		= &sysctl_dccp_feat_rx_ccid,
+ 		.maxlen		= sizeof(sysctl_dccp_feat_rx_ccid),
+@@ -36,7 +34,6 @@ static struct ctl_table dccp_default_tab
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+-		.ctl_name	= NET_DCCP_DEFAULT_TX_CCID,
+ 		.procname	= "tx_ccid",
+ 		.data		= &sysctl_dccp_feat_tx_ccid,
+ 		.maxlen		= sizeof(sysctl_dccp_feat_tx_ccid),
+@@ -44,7 +41,6 @@ static struct ctl_table dccp_default_tab
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+-		.ctl_name	= NET_DCCP_DEFAULT_ACK_RATIO,
+ 		.procname	= "ack_ratio",
+ 		.data		= &sysctl_dccp_feat_ack_ratio,
+ 		.maxlen		= sizeof(sysctl_dccp_feat_ack_ratio),
+@@ -52,7 +48,6 @@ static struct ctl_table dccp_default_tab
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+-		.ctl_name	= NET_DCCP_DEFAULT_SEND_ACKVEC,
+ 		.procname	= "send_ackvec",
+ 		.data		= &sysctl_dccp_feat_send_ack_vector,
+ 		.maxlen		= sizeof(sysctl_dccp_feat_send_ack_vector),
+@@ -60,7 +55,6 @@ static struct ctl_table dccp_default_tab
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+-		.ctl_name	= NET_DCCP_DEFAULT_SEND_NDP,
+ 		.procname	= "send_ndp",
+ 		.data		= &sysctl_dccp_feat_send_ndp_count,
+ 		.maxlen		= sizeof(sysctl_dccp_feat_send_ndp_count),
+@@ -68,7 +62,6 @@ static struct ctl_table dccp_default_tab
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+-		.ctl_name	= NET_DCCP_DEFAULT_REQ_RETRIES,
+ 		.procname	= "request_retries",
+ 		.data		= &sysctl_dccp_request_retries,
+ 		.maxlen		= sizeof(sysctl_dccp_request_retries),
+@@ -76,7 +69,6 @@ static struct ctl_table dccp_default_tab
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+-		.ctl_name	= NET_DCCP_DEFAULT_RETRIES1,
+ 		.procname	= "retries1",
+ 		.data		= &sysctl_dccp_retries1,
+ 		.maxlen		= sizeof(sysctl_dccp_retries1),
+@@ -84,7 +76,6 @@ static struct ctl_table dccp_default_tab
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+-		.ctl_name	= NET_DCCP_DEFAULT_RETRIES2,
+ 		.procname	= "retries2",
+ 		.data		= &sysctl_dccp_retries2,
+ 		.maxlen		= sizeof(sysctl_dccp_retries2),
+@@ -92,7 +83,6 @@ static struct ctl_table dccp_default_tab
+ 		.proc_handler	= proc_dointvec,
+ 	},
+ 	{
+-		.ctl_name	= NET_DCCP_DEFAULT_TX_QLEN,
+ 		.procname	= "tx_qlen",
+ 		.data		= &sysctl_dccp_tx_qlen,
+ 		.maxlen		= sizeof(sysctl_dccp_tx_qlen),
 -- 
 1.4.2.1.g3d5c
 
