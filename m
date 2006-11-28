@@ -1,7 +1,7 @@
-From: David Miller <davem@davemloft.net>
-Date: Tue, 28 Nov 2006 01:04:59 +0000
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Tue, 28 Nov 2006 01:08:55 +0000
 Subject: Re: [PATCHES 0/3][DCCP]: further ccid3 work
-Message-Id: <20061127.170459.31649027.davem@davemloft.net>
+Message-Id: <20061128010854.GA4029@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20061127223531.GA11605@mandriva.com>
 In-Reply-To: <20061127223531.GA11605@mandriva.com>
@@ -10,11 +10,16 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Mon, 27 Nov 2006 20:35:32 -0200
-
-> 	Please consider pulling from:
+On Mon, Nov 27, 2006 at 05:04:59PM -0800, David Miller wrote:
+> From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+> Date: Mon, 27 Nov 2006 20:35:32 -0200
 > 
-> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.20.git
+> > 	Please consider pulling from:
+> > 
+> > master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.20.git
+> 
+> All looks good, pulled and pushed out, thanks a lot Arnaldo.
 
-All looks good, pulled and pushed out, thanks a lot Arnaldo.
+Thanks dude, it has been a good day I'd say :-)
+
+- Arnaldo
