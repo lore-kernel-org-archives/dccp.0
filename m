@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Tue, 28 Nov 2006 20:37:17 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 28 Nov 2006 20:53:38 +0000
 Subject: Re: [PATCH 2/2]: Use `unsigned' for packet lengths
-Message-Id: <39e6f6c70611281237x1555ae93m9de0535b1bc4c823@mail.gmail.com>
+Message-Id: <200611282053.38867@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200611281435.05466@strip-the-willow>
 In-Reply-To: <200611281435.05466@strip-the-willow>
@@ -10,26 +10,244 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/28/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> |  On 11/29/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> |  > Quoting Ian McDonald:
-> |  > |  I think I didn't explain my point well here. You can't change to u32
-> |  > |  but need to be unsigned int (not u64).
-> |  > Don't get this: u32 is a 32-bit unsigned value and therefore looks sufficient - and you
-> |  > are proposing `unsigned int' to have easier conversion to skb->len, right?
-> |  >
-> |  OK. On 64 bit platform unsigned int = 64 bits and we are passing a 64
-> |  bit argument (skb->len) into a 32 bit parameter. We either need to
-> |  explicitly typecast or change wherever you have put u32 to unsigned
-> |  int.
-> |
-> |  Arnaldo probably knows which way is better from his experience.
-> My suggestion then is
->  a) remove third arg of send_packet(), use skb->len directly
->  b) implement `unsigned int' as third parameter of packet_sent()
->
-> => Arnaldo what do you think?
+This is a re-sent after discussion which 
+  * changes the types to `unsigned int'
+  * removes the third argument of ccid_hc_tx_send_packet
+    since it is always set to skb->len
 
-Checking... Agreed, send the patch please
+I double-checked this once, and compile-tested it.
+Gerrit
 
-- Arnaldo
+----------------> Commit Message <-----------------------------------
+[DCCP]: Use `unsigned' for packet lengths
+
+This patch implements a suggestion by Ian McDonald and
+
+ 1) Avoids tests against negative packet lengths by using unsigned int
+    for packet payload lengths in the CCID send_packet()/packet_sent() routines
+
+ 2) As a consequence, it removes an now unnecessary test with regard to `len > 0'
+    in ccid3_hc_tx_packet_sent: that condition is always true, since
+      * negative packet lengths are avoided
+      * ccid3_hc_tx_send_packet flags an error whenever the payload length is 0.
+        As a consequence, ccid3_hc_tx_packet_sent is never called as all errors
+        returned by ccid_hc_tx_send_packet are caught in dccp_write_xmit
+
+ 3) Removes the third argument of ccid_hc_tx_send_packet (the `len' parameter),
+    since it is currently always set to skb->len. The code is updated with regard
+    to this parameter change.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>       
+---
+ net/dccp/ccid.h        |   14 ++++----
+ net/dccp/ccids/ccid2.c |    5 +-
+ net/dccp/ccids/ccid3.c |   83 ++++++++++++++++++++++---------------------------
+ net/dccp/output.c      |    6 +--
+ 4 files changed, 49 insertions(+), 59 deletions(-)
+
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -51,10 +51,10 @@ struct ccid_operations {
+ 						    unsigned char option,
+ 						    unsigned char len, u16 idx,
+ 						    unsigned char* value);
+-	int		(*ccid_hc_tx_send_packet)(struct sock *sk,
+-						  struct sk_buff *skb, int len);
+-	void		(*ccid_hc_tx_packet_sent)(struct sock *sk, int more,
+-						  int len);
++	int		(*ccid_hc_tx_send_packet)(struct sock *sk,
++						  struct sk_buff *skb);
++	void		(*ccid_hc_tx_packet_sent)(struct sock *sk,
++						  int more, unsigned int len);
+ 	void		(*ccid_hc_rx_get_info)(struct sock *sk,
+ 					       struct tcp_info *info);
+ 	void		(*ccid_hc_tx_get_info)(struct sock *sk,
+@@ -94,16 +94,16 @@ extern void ccid_hc_rx_delete(struct cci
+ extern void ccid_hc_tx_delete(struct ccid *ccid, struct sock *sk);
+ 
+ static inline int ccid_hc_tx_send_packet(struct ccid *ccid, struct sock *sk,
+-					 struct sk_buff *skb, int len)
++					 struct sk_buff *skb)
+ {
+ 	int rc = 0;
+ 	if (ccid->ccid_ops->ccid_hc_tx_send_packet != NULL)
+-		rc = ccid->ccid_ops->ccid_hc_tx_send_packet(sk, skb, len);
++		rc = ccid->ccid_ops->ccid_hc_tx_send_packet(sk, skb);
+ 	return rc;
+ }
+ 
+ static inline void ccid_hc_tx_packet_sent(struct ccid *ccid, struct sock *sk,
+-					  int more, int len)
++					  int more, unsigned int len)
+ {
+ 	if (ccid->ccid_ops->ccid_hc_tx_packet_sent != NULL)
+ 		ccid->ccid_ops->ccid_hc_tx_packet_sent(sk, more, len);
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -125,8 +125,7 @@ static int ccid2_hc_tx_alloc_seq(struct 
+ 	return 0;
+ }
+ 
+-static int ccid2_hc_tx_send_packet(struct sock *sk,
+-				   struct sk_buff *skb, int len)
++static int ccid2_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct ccid2_hc_tx_sock *hctx;
+ 
+@@ -268,7 +267,7 @@ static void ccid2_start_rto_timer(struct
+ 		       jiffies + hctx->ccid2hctx_rto);
+ }
+ 
+-static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, int len)
++static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -273,8 +273,7 @@ out:
+  *   = 0: can send immediately
+  *   < 0: error condition; do not send packet
+  */
+-static int ccid3_hc_tx_send_packet(struct sock *sk,
+-				   struct sk_buff *skb, int len)
++static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+@@ -289,7 +288,7 @@ static int ccid3_hc_tx_send_packet(struc
+ 	 * zero-sized Data(Ack)s is theoretically possible, but for congestion
+ 	 * control this case is pathological - ignore it.
+ 	 */
+-	if (unlikely(len = 0))
++	if (unlikely(skb->len = 0))
+ 		return -EBADMSG;
+ 
+ 	/* See if last packet allocated was not sent */
+@@ -318,7 +317,7 @@ static int ccid3_hc_tx_send_packet(struc
+ 		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_NO_FBACK);
+ 
+ 		/* Set initial sending rate to 1 packet per second */
+-		ccid3_hc_tx_update_s(hctx, len);
++		ccid3_hc_tx_update_s(hctx, skb->len);
+ 		hctx->ccid3hctx_x     = hctx->ccid3hctx_s;
+ 
+ 		/* First timeout, according to [RFC 3448, 4.2], is 1 second */
+@@ -357,59 +356,53 @@ static int ccid3_hc_tx_send_packet(struc
+ 	return 0;
+ }
+ 
+-static void ccid3_hc_tx_packet_sent(struct sock *sk, int more, int len)
++static void ccid3_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ {
+ 	const struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	struct timeval now;
++	unsigned long quarter_rtt;
++	struct dccp_tx_hist_entry *packet;
+ 
+ 	BUG_ON(hctx = NULL);
+ 
+ 	dccp_timestamp(sk, &now);
+ 
+-	/* check if we have sent a data packet */
+-	if (len > 0) {
+-		unsigned long quarter_rtt;
+-		struct dccp_tx_hist_entry *packet;
++	ccid3_hc_tx_update_s(hctx, len);
+ 
+-		ccid3_hc_tx_update_s(hctx, len);
++	packet = dccp_tx_hist_head(&hctx->ccid3hctx_hist);
++	if (unlikely(packet = NULL)) {
++		DCCP_WARN("packet doesn't exist in history!\n");
++		return;
++	}
++	if (unlikely(packet->dccphtx_sent)) {
++		DCCP_WARN("no unsent packet in history!\n");
++		return;
++	}
++	packet->dccphtx_tstamp = now;
++	packet->dccphtx_seqno  = dp->dccps_gss;
++	/*
++	 * Check if win_count have changed
++	 * Algorithm in "8.1. Window Counter Value" in RFC 4342.
++	 */
++	quarter_rtt = timeval_delta(&now, &hctx->ccid3hctx_t_last_win_count);
++	if (likely(hctx->ccid3hctx_rtt > 8))
++		quarter_rtt /= hctx->ccid3hctx_rtt / 4;
+ 
+-		packet = dccp_tx_hist_head(&hctx->ccid3hctx_hist);
+-		if (unlikely(packet = NULL)) {
+-			DCCP_WARN("packet doesn't exist in history!\n");
+-			return;
+-		}
+-		if (unlikely(packet->dccphtx_sent)) {
+-			DCCP_WARN("no unsent packet in history!\n");
+-			return;
+-		}
+-		packet->dccphtx_tstamp = now;
+-		packet->dccphtx_seqno  = dp->dccps_gss;
+-		/*
+-		 * Check if win_count have changed
+-		 * Algorithm in "8.1. Window Counter Value" in RFC 4342.
+-		 */
+-		quarter_rtt = timeval_delta(&now, &hctx->ccid3hctx_t_last_win_count);
+-		if (likely(hctx->ccid3hctx_rtt > 8))
+-			quarter_rtt /= hctx->ccid3hctx_rtt / 4;
+-
+-		if (quarter_rtt > 0) {
+-			hctx->ccid3hctx_t_last_win_count = now;
+-			hctx->ccid3hctx_last_win_count	 = (hctx->ccid3hctx_last_win_count +
+-							    min_t(unsigned long, quarter_rtt, 5)) % 16;
+-			ccid3_pr_debug("%s, sk=%p, window changed from "
+-				       "%u to %u!\n",
+-				       dccp_role(sk), sk,
+-				       packet->dccphtx_ccval,
+-				       hctx->ccid3hctx_last_win_count);
+-		}
++	if (quarter_rtt > 0) {
++		hctx->ccid3hctx_t_last_win_count = now;
++		hctx->ccid3hctx_last_win_count	 = (hctx->ccid3hctx_last_win_count +
++						    min_t(unsigned long, quarter_rtt, 5)) % 16;
++		ccid3_pr_debug("%s, sk=%p, window changed from "
++			       "%u to %u!\n",
++			       dccp_role(sk), sk,
++			       packet->dccphtx_ccval,
++			       hctx->ccid3hctx_last_win_count);
++	}
+ 
+-		hctx->ccid3hctx_idle = 0;
+-		packet->dccphtx_rtt  = hctx->ccid3hctx_rtt;
+-		packet->dccphtx_sent = 1;
+-	} else
+-		ccid3_pr_debug("%s, sk=%p, seqno=%llu NOT inserted!\n",
+-			       dccp_role(sk), sk, dp->dccps_gss);
++	hctx->ccid3hctx_idle = 0;
++	packet->dccphtx_rtt  = hctx->ccid3hctx_rtt;
++	packet->dccphtx_sent = 1;
+ }
+ 
+ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -195,8 +195,7 @@ static int dccp_wait_for_ccid(struct soc
+ 		if (signal_pending(current))
+ 			goto do_interrupted;
+ 
+-		rc = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb,
+-					    skb->len);
++		rc = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb);
+ 		if (rc <= 0)
+ 			break;
+ 		delay = msecs_to_jiffies(rc);
+@@ -245,8 +244,7 @@ void dccp_write_xmit(struct sock *sk, in
+ 					   this we have other issues */
+ 
+ 	while ((skb = skb_peek(&sk->sk_write_queue))) {
+-		int err = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb,
+-					 skb->len);
++		int err = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb);
+ 
+ 		if (err > 0) {
+ 			if (!block) {
+
