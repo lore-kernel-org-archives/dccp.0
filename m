@@ -1,35 +1,54 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 23 Nov 2006 19:29:55 +0000
-Subject: Re: Conditions when t_ipi, t_nom, t_delta need to be recalculated
-Message-Id: <5640c7e00611231129h79389b71l60c4029a6ccc0fdc@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 28 Nov 2006 14:34:31 +0000
+Subject: [RFC] [PATCH 1/2]: Remove small typo
+Message-Id: <200611281434.31175@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200611231302.45475@strip-the-willow>
-In-Reply-To: <200611231302.45475@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/24/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
->
->           "When is it necessary to update t_ipi, t_delta, t_nom"  ?
->           =============================
->
->  Following Ian's email from yesterday, I spent time working through the RFCs and
->  compiled information about the dependencies among the different parameters. This
->  email is a write-up of what I found and serves as basis for subsequent patches.
->
-This is really excellent work Gerrit.
+[CCID 3]: Remove small typo
 
-I think we should put this on the ODSL Wiki or in a text file under
-Documentation.
+This removes a small typo introduced by an earlier patch.
 
-Ian
--- 
-Ian McDonald
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
-Department of Computer Science
-University of Waikato
-New Zealand
+===> It is sent as RFC since it would be a much better idea to
+       revise this so that the nofeedback timer expires after 
+             max(4*R, 2 * s/X) 
+       instead of after 
+        max(t_rto, 2 * s/X)  =  max(max(4*R, 1 second), 2 *s/X)
+       as is currently the case.
+
+===> Advantage:
+           * the current solution is non-standard
+           * simulation experience suggest that  max(4*R, 2 * s/X)
+             is better, especially if R is small
+
+===>  OK with this suggestion?
+
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -246,7 +246,7 @@ static void ccid3_hc_tx_no_feedback_time
+ 		}
+ 		/*
+ 		 * Schedule no feedback timer to expire in
+-		 * max(4 * t_RTO, 2 * s/X)  =  max(4 * t_RTO, 2 * t_ipi)
++		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
+ 		 * XXX This is non-standard, RFC 3448, 4.3 uses 4 * R
+ 		 */
+ 		next_tmout = max(hctx->ccid3hctx_t_rto, 2*hctx->ccid3hctx_t_ipi);
+@@ -523,7 +523,7 @@ static void ccid3_hc_tx_packet_recv(stru
+ 					      	   USEC_PER_SEC            );
+ 		/*
+ 		 * Schedule no feedback timer to expire in
+-		 * max(4 * t_RTO, 2 * s/X)  =  max(4 * t_RTO, 2 * t_ipi)
++		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
+ 		 * XXX This is non-standard, RFC 3448, 4.3 uses 4 * R
+ 		 */
+ 		next_tmout = max(hctx->ccid3hctx_t_rto, 2*hctx->ccid3hctx_t_ipi);
