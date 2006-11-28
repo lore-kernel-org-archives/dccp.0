@@ -1,32 +1,41 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 28 Nov 2006 21:56:05 +0000
-Subject: Re: [PATCH 2/2]: Use `unsigned' for packet lengths
-Message-Id: <200611282156.11750@strip-the-willow>
+Date: Tue, 28 Nov 2006 14:30:01 +0000
+Subject: [PATCH 0/2] [RFC]: Clean-ups
+Message-Id: <200611281430.01278@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200611281435.05466@strip-the-willow>
-In-Reply-To: <200611281435.05466@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting Eddie Kohler:
-|  > |  > Would really appreciate if you could at some time have a look at the moving-average patch. Have communicated
-|  > |  > with Eddie again about it, and using MSS would at the moment be much more complicated.
-|  > |  >
-|  > |  Will look at it tomorrow (along with performance testing existing
-|  > |  changes in tree) as meant to be preparing coursework and working on
-|  > |  PhD today.... Agree MSS is problematic at present without PMTU.
-|  
-|  I guess I don't understand why using MSS is problematic for congestion 
-|  control; since assuming that s=MSS causes s to drop out of all congestion 
-|  control equations, returning them to packet-based CC.  One could therefore set 
-|  "s=ANY_ARBITRARY_VALUE" and get the same result.  Ah, well!  Yes, providing 
-|  lots of options is harder for users than providing the one right answer, but 
-|  we just don't know what that right answer is.  It will be interesting to see 
-|  how the moving-average patch actually behaves in practice; the Internet has 
-|  much more experience with s=MSS/packet-based CC.
-That would be an interesting feature to have once PMTUD is fixed (and PMTUD should also communicate
-expected header lengths via the CCID interface); I agree that cancelling out `s' out of the equation
-would, in the long run, probably make things simpler. But for the moment I'd prefer to plug all the
-existing holes and then return to such things.
+Quoting Arnaldo Carvalho de Melo:
+|  most things merged, except for the packet size and
+|  TRFC equation patches, that I thought a day or two would be nice for
+|  further discussion.
+
+I have tidied up what remained and uploaded the up-to-date remaining patches on to
+     http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/
+
+
+There are two small patches which I send as RFC, for the first I need a consensus:
+
+Patch 1: Removes a typo in setting the nofeedback timer. 
+         => Question: The nofeedback timer is currently set to time out after
+
+                           max(t_rto, 2 * s/X)  =  max(max(4*R, 1 second), 2 *s/X)
+
+                       This is non-standard and has been flagged in the code as such
+             I have conferred with a colleague who does a lot of simulations in this
+             field and he says doing this is bad, especially when the RTTs are small.
+             Therefore, since it is both non-standard and obviously not a good idea,
+             I want to suggest revising the entire patch so that the nofeedback timer
+             expires after max(4*R, 2 * s/X) as per RFC 3448.
+             OK with this suggestion?
+
+Patch 2: Implements a useful idea which Ian suggested while discussing one of the
+         previous patches: if the `len' arguments of ccid_{send_packet,packet_sent}()
+         are unsigned, then we do not need to perform extra checks against `len > 0'
+         The patch implements this idea and, as a result, another unused block/test
+         in ccid3.c can go.
+
+Gerrit
