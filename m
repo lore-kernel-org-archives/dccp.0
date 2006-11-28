@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Tue, 28 Nov 2006 21:12:12 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Tue, 28 Nov 2006 21:15:21 +0000
 Subject: Re: Packet size s Re: [PATCH 2/2]: Use `unsigned' for packet lengths
-Message-Id: <39e6f6c70611281312l253e1b22g67eb3c67604980cd@mail.gmail.com>
+Message-Id: <5640c7e00611281315m4189a6dew38cccc8e06a444d9@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00611281246m6e44de93j4b2c34b73040679f@mail.gmail.com>
 In-Reply-To: <5640c7e00611281246m6e44de93j4b2c34b73040679f@mail.gmail.com>
@@ -10,32 +10,26 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/28/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Ian McDonald wrote:
-> |  Why is it broken? The RFC says that the user can have the option of
-> |  setting the packet size s, so it is not experimental. Yes it is only
-> |  for CCID3 but there are already lots of things that are CCID2 or CCID3
-> |  only.
-> ... and that is the problem I am referring to. From the local perspective of adding
->     this or that socket option, nothing is probably too much of a burden. But there
->     is no documentation for these socket options (I have at begun with documenting some
->     sysctls). Hence one can not, with a good conscience, argue that the programming interface
->     is `as easy as UDP'. I think that should be the guideline and that is what I am proposing,
->     leave everything out which is not strictly and essentially requrired. Otherwise, it will
->     confuse users.
->     I had meant for a long time to put up my updated ttcp clone but I will put nothing online
->     until the socket API is not ironed out and documented.
->     And there are some credits to be had for people daring enough to document the socket API -
->     the DCCP user guide is apparently well well out of date.
+> > In short: my suggestion is to keep an experimental patch for this and I would even offer to
+> >           keep one up-to-date and online, if in return we can simplify the socket API. Does
+> >           this sound like a more convincing argument?
 >
-> In short: my suggestion is to keep an experimental patch for this and I would even offer to
->           keep one up-to-date and online, if in return we can simplify the socket API. Does
->           this sound like a more convincing argument?
+> Fair enough, I think we should go this way for now, please post here
+> the patch that provides the experimental feature of explicitely
+> setting the packet size, interested people can try and use it and
+> report their findings, later we can get back and possibly merge the
+> patch if it proves useful.
+>
+Basically my patches from a month or two ago would do this with a  few
+changes. I'd say merge average patch, I'll update mine to go on top
+(tomorrow??) and allow a mechanism to switch to use it.
 
-Fair enough, I think we should go this way for now, please post here
-the patch that provides the experimental feature of explicitely
-setting the packet size, interested people can try and use it and
-report their findings, later we can get back and possibly merge the
-patch if it proves useful.
-
-- Arnaldo
+Ian
+-- 
+Ian McDonald
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
+Department of Computer Science
+University of Waikato
+New Zealand
