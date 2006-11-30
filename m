@@ -1,37 +1,42 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Fri, 10 Nov 2006 15:28:34 +0000
-Subject: [PATCH 5/10][DCCP] timewait: Remove leftover extern declarations
-Message-Id: <20061110152834.GI23311@mandriva.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 30 Nov 2006 13:37:22 +0000
+Subject: Re: DCCP CCID 3 bug
+Message-Id: <200611301337.22692@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Gerrit Renker noticed dccp_tw_deschedule and submitted a patch with a FIXME,
-but as he suggests in the same patch the best thing is to just ditch this
-declaration, while doing that also noticed that tcp_tw_count is as well not
-defined anywhere, so ditch it too.
+|  > BTW, I am using CCID3.
+|  
+|  Ok, now to the next troubleshooting test: can you please try using
+|  CCID2? That way we can isolate the problem, is it CCID3 specific?
+|  CCID2? Core? Something else?
 
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Yes, please do send all kinds of debug information which you encounter to the list; 
+this makes tracking down the errors much simpler. 
 
-------------------------------------------------------------------------------
+Both CCID 2 and CCID 3 now have debugging options, 
 
- dccp.h |    2 --
- 1 file changed, 2 deletions(-)
+ CONFIG_IP_DCCP_CCID2_DEBUG=y
+ CONFIG_IP_DCCP_CCID3_DEBUG=y
 
-------------------------------------------------------------------------------
+but in order to get debugging output, these must be explicitly set via module parameter. 
+This can be automated. 
 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 9f00dd8..8964b18 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -35,8 +35,6 @@ #endif
- extern struct inet_hashinfo dccp_hashinfo;
- 
- extern atomic_t dccp_orphan_count;
--extern int dccp_tw_count;
--extern void dccp_tw_deschedule(struct inet_timewait_sock *tw);
- 
- extern void dccp_time_wait(struct sock *sk, int state, int timeo);
- 
+If you paste the following into a file /etc/modutils/options,
+
+# options for DCCP
+options dccp            dccp_debug=1
+options dccp_ccid2      ccid2_debug=1
+options dccp_ccid3      ccid3_debug=1
+# EOF
+
+and run `update-modules' [alternatively: paste the above at the end of /etc/modules.conf ]
+
+The same options should also be placed into a file /etc/modprobe.d/options (if you are running modprobe);
+or alternatively into  /etc/modprobe.conf (man 5 modprobe.conf).
+
+This all is important, much helpful output (e.g. DCCP_BUG(...)) depends on having debugging enabled.
+
