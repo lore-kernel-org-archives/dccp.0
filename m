@@ -1,116 +1,103 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 30 Nov 2006 13:18:46 +0000
-Subject: [PATCH] [DCCP]: Use higher timeout value for nofeedback timer
-Message-Id: <200611301318.46685@strip-the-willow>
+From: Lars Eggert <lars.eggert@netlab.nec.de>
+Date: Thu, 30 Nov 2006 22:07:37 +0000
+Subject: Re: [PATCH] [DCCP]: Use higher timeout value for nofeedback timer
+Message-Id: <E2BD0F03-80EE-4719-B948-19F2E5B1362B@netlab.nec.de>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="Apple-Mail-46--213819164"
 List-Id: <dccp.vger.kernel.org>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+References: <200611301318.46685@strip-the-willow>
+In-Reply-To: <200611301318.46685@strip-the-willow>
 To: dccp@vger.kernel.org
 
-This is the patch which stops the nofeedback timer from spinning
-every couple of microseconds, triggered by small RTTs. 
 
-However, there are a few more bugs in CCID 3; this is work in progress.
+--Apple-Mail-46--213819164
+Content-Transfer-Encoding: 7bit
+Content-Type: text/plain;
+	charset=US-ASCII;
+	delsp=yes;
+	format=flowed
 
------------------> Commit Message <-----------------------------------
-[DCCP]: Use higher RTO default for CCID3 
+On Nov 30, 2006, at 11:13, Ian McDonald wrote:
+> This patch provides a configuration option to set the bound for the
+> nofeedback timer, using as default the TCP RTO timeout of 1 second.
 
-The TFRC nofeedback timer normally expires after the maximum of 4
-RTTs and twice the current send interval (RFC 3448, 4.3). On LANs
-with a small RTT this can mean a high processing load and reduced
-performance, since then the nofeedback timer is triggered very
-frequently. As a result, the sending rate quickly converges towards
-zero.
+The default TCP RTO is 3 seconds (RFC 2988). Linux is apparently not  
+conformant to that RFC?
 
-This patch provides a configuration option to set the bound for the
-nofeedback timer, using as default the TCP RTO timeout of 1 second.
+Lars
 
-By setting the configuration option to 0, RFC 3448 behaviour can
-be enforced for the nofeedback timer.
 
-Has been tested to compile and work.
+--Apple-Mail-46--213819164
+Content-Transfer-Encoding: base64
+Content-Type: application/pkcs7-signature;
+	name=smime.p7s
+Content-Disposition: attachment;
+	filename=smime.p7s
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/Kconfig |   22 ++++++++++++++++++++++
- net/dccp/ccids/ccid3.c |   20 +++++++++++---------
- 2 files changed, 33 insertions(+), 9 deletions(-)
+MIAGCSqGSIb3DQEHAqCAMIACAQExCzAJBgUrDgMCGgUAMIAGCSqGSIb3DQEHAQAAoIIKZDCCAwEw
+ggJqoAMCAQICEBCR/semQl5bz/x3jtiU02YwDQYJKoZIhvcNAQEFBQAwYjELMAkGA1UEBhMCWkEx
+JTAjBgNVBAoTHFRoYXd0ZSBDb25zdWx0aW5nIChQdHkpIEx0ZC4xLDAqBgNVBAMTI1RoYXd0ZSBQ
+ZXJzb25hbCBGcmVlbWFpbCBJc3N1aW5nIENBMB4XDTA2MDgxNjA5MTU0NloXDTA3MDgxNjA5MTU0
+NlowYDEPMA0GA1UEBBMGRWdnZXJ0MQ0wCwYDVQQqEwRMYXJzMRQwEgYDVQQDEwtMYXJzIEVnZ2Vy
+dDEoMCYGCSqGSIb3DQEJARYZbGFycy5lZ2dlcnRAbmV0bGFiLm5lYy5kZTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAL/+LXyqufw8ApYnCU24cnZ/H9S7ro4zZYeCqcyFqhwJpTcM8/yX
+6Ms+16d2EtIceQS8Bas3GAUR+xfq0QI5dt8uIKM1Uy4trk8AAO0dh23+QTLw7toloArVngGIhUhC
+OTpVRR1bYfJTwPVpSAY43mbGhSGhwiu5035yKdYJezNWOXmuIO+lvXcD36hc5cU6AzRJkj0LYaFd
+WHjbfwzGmT7MO60p/7hT+aTv5xvTl/mcwslvm+KhKmJjoMYfSOF99xvuJE/rB7Ho3g6wDoeB2Tip
+44Qq8CPmOHtCXzh/tF/bYo+OHStkPTzgPfOuNDMxa0/gAPEyELNL0Eh1/hC2TeMCAwEAAaM2MDQw
+JAYDVR0RBB0wG4EZbGFycy5lZ2dlcnRAbmV0bGFiLm5lYy5kZTAMBgNVHRMBAf8EAjAAMA0GCSqG
+SIb3DQEBBQUAA4GBAHdaTI5TM5wV+LG2WW+CMEmxEyNhaRu3oca9T31HjbfHzvhVJe2fzKt1xBSo
++hhCg0qKVFuE7yKxDH975Csq9jVvJJj3oL29RQjPnc3CgQqlMFJKHdJgterPQ+ZiCp05S9rbMhRl
+1zxB/x+GvnDFHsXu19gA2dlynrdWN/G1BVWJMIIDPzCCAqigAwIBAgIBDTANBgkqhkiG9w0BAQUF
+ADCB0TELMAkGA1UEBhMCWkExFTATBgNVBAgTDFdlc3Rlcm4gQ2FwZTESMBAGA1UEBxMJQ2FwZSBU
+b3duMRowGAYDVQQKExFUaGF3dGUgQ29uc3VsdGluZzEoMCYGA1UECxMfQ2VydGlmaWNhdGlvbiBT
+ZXJ2aWNlcyBEaXZpc2lvbjEkMCIGA1UEAxMbVGhhd3RlIFBlcnNvbmFsIEZyZWVtYWlsIENBMSsw
+KQYJKoZIhvcNAQkBFhxwZXJzb25hbC1mcmVlbWFpbEB0aGF3dGUuY29tMB4XDTAzMDcxNzAwMDAw
+MFoXDTEzMDcxNjIzNTk1OVowYjELMAkGA1UEBhMCWkExJTAjBgNVBAoTHFRoYXd0ZSBDb25zdWx0
+aW5nIChQdHkpIEx0ZC4xLDAqBgNVBAMTI1RoYXd0ZSBQZXJzb25hbCBGcmVlbWFpbCBJc3N1aW5n
+IENBMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDEpjxVc1X7TrnKmVoeaMB1BHCd3+n/ox7s
+vc31W/Iadr1/DDph8r9RzgHU5VAKMNcCY1osiRVwjt3J8CuFWqo/cVbLrzwLB+fxH5E2JCoTzyvV
+84J3PQO+K/67GD4Hv0CAAmTXp6a7n2XRxSpUhQ9IBH+nttE8YQRAHmQZcmC3+wIDAQABo4GUMIGR
+MBIGA1UdEwEB/wQIMAYBAf8CAQAwQwYDVR0fBDwwOjA4oDagNIYyaHR0cDovL2NybC50aGF3dGUu
+Y29tL1RoYXd0ZVBlcnNvbmFsRnJlZW1haWxDQS5jcmwwCwYDVR0PBAQDAgEGMCkGA1UdEQQiMCCk
+HjAcMRowGAYDVQQDExFQcml2YXRlTGFiZWwyLTEzODANBgkqhkiG9w0BAQUFAAOBgQBIjNFQg+oL
+LswNo2asZw9/r6y+whehQ5aUnX9MIbj4Nh+qLZ82L8D0HFAgk3A8/a3hYWLD2ToZfoSxmRsAxRoL
+gnSeJVCUYsfbJ3FXJY3dqZw5jowgT2Vfldr394fWxghOrvbqNOUQGls1TXfjViF4gtwhGTXeJLHT
+HUb/XV9lTzCCBBgwggOBoAMCAQICAQAwDQYJKoZIhvcNAQEFBQAwgb8xCzAJBgNVBAYTAkRFMRww
+GgYDVQQIFBNCYWRlbi1Xw3VlcnR0ZW1iZXJnMRMwEQYDVQQHEwpIZWlkZWxiZXJnMRcwFQYDVQQK
+Ew5ORUMgRXVyb3BlIEx0ZDEdMBsGA1UECxMUTmV0d29yayBMYWJvcmF0b3JpZXMxGzAZBgNVBAMT
+EmtvYmUubmV0bGFiLm5lYy5kZTEoMCYGCSqGSIb3DQEJARYZbGFycy5lZ2dlcnRAbmV0bGFiLm5l
+Yy5kZTAeFw0wNDA2MTgxMTUzMDhaFw0wOTA2MTcxMTUzMDhaMIG/MQswCQYDVQQGEwJERTEcMBoG
+A1UECBQTQmFkZW4tV8N1ZXJ0dGVtYmVyZzETMBEGA1UEBxMKSGVpZGVsYmVyZzEXMBUGA1UEChMO
+TkVDIEV1cm9wZSBMdGQxHTAbBgNVBAsTFE5ldHdvcmsgTGFib3JhdG9yaWVzMRswGQYDVQQDExJr
+b2JlLm5ldGxhYi5uZWMuZGUxKDAmBgkqhkiG9w0BCQEWGWxhcnMuZWdnZXJ0QG5ldGxhYi5uZWMu
+ZGUwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALQ5DCwTzpGu3RmzQY4KxiaQak/BwIW9Wk6K
+Mg+/V0aiWvlrz7uFdICBGVTKhyWr3F+GxRPCVTWqS9VEPf9A59DI9TFCS3FtraSx+w8ApQei8idb
+J0Lqu8tTz2O1gYR2dELID5wQH9dxIANt3bP39crgDZzGYxCJilcimFhADEgHAgMBAAGjggEgMIIB
+HDAdBgNVHQ4EFgQU6Hsv16oYecCFsl07g9gtjPEJo00wgewGA1UdIwSB5DCB4YAU6Hsv16oYecCF
+sl07g9gtjPEJo02hgcWkgcIwgb8xCzAJBgNVBAYTAkRFMRwwGgYDVQQIFBNCYWRlbi1Xw3VlcnR0
+ZW1iZXJnMRMwEQYDVQQHEwpIZWlkZWxiZXJnMRcwFQYDVQQKEw5ORUMgRXVyb3BlIEx0ZDEdMBsG
+A1UECxMUTmV0d29yayBMYWJvcmF0b3JpZXMxGzAZBgNVBAMTEmtvYmUubmV0bGFiLm5lYy5kZTEo
+MCYGCSqGSIb3DQEJARYZbGFycy5lZ2dlcnRAbmV0bGFiLm5lYy5kZYIBADAMBgNVHRMEBTADAQH/
+MA0GCSqGSIb3DQEBBQUAA4GBAJfoil3cAX3cUPMFrDdlW9DPMK/+QY8EHPOsnefm77h5CmmY6J+G
+5Ydl9vyHxL76Opyg8cZWOOU/k9oVv7AvQ1GmIFqVFyWKQPfEhj+EWjEnUAcI7QDN8XER+U7XRvj6
+yYysFgm2Tl30QCGvmESCgYIztCKMG2cLBkEosj2kWBbXMYIDsjCCA64CAQEwdjBiMQswCQYDVQQG
+EwJaQTElMCMGA1UEChMcVGhhd3RlIENvbnN1bHRpbmcgKFB0eSkgTHRkLjEsMCoGA1UEAxMjVGhh
+d3RlIFBlcnNvbmFsIEZyZWVtYWlsIElzc3VpbmcgQ0ECEBCR/semQl5bz/x3jtiU02YwCQYFKw4D
+AhoFAKCCAhEwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMDYxMTMw
+MjIwNzM4WjAjBgkqhkiG9w0BCQQxFgQUUmOOMETaDSKbAFoJHGKNd6Z8hOMwgdYGCSsGAQQBgjcQ
+BDGByDCBxTCBvzELMAkGA1UEBhMCREUxHDAaBgNVBAgUE0JhZGVuLVfDdWVydHRlbWJlcmcxEzAR
+BgNVBAcTCkhlaWRlbGJlcmcxFzAVBgNVBAoTDk5FQyBFdXJvcGUgTHRkMR0wGwYDVQQLExROZXR3
+b3JrIExhYm9yYXRvcmllczEbMBkGA1UEAxMSa29iZS5uZXRsYWIubmVjLmRlMSgwJgYJKoZIhvcN
+AQkBFhlsYXJzLmVnZ2VydEBuZXRsYWIubmVjLmRlAgEAMIHYBgsqhkiG9w0BCRACCzGByKCBxTCB
+vzELMAkGA1UEBhMCREUxHDAaBgNVBAgUE0JhZGVuLVfDdWVydHRlbWJlcmcxEzARBgNVBAcTCkhl
+aWRlbGJlcmcxFzAVBgNVBAoTDk5FQyBFdXJvcGUgTHRkMR0wGwYDVQQLExROZXR3b3JrIExhYm9y
+YXRvcmllczEbMBkGA1UEAxMSa29iZS5uZXRsYWIubmVjLmRlMSgwJgYJKoZIhvcNAQkBFhlsYXJz
+LmVnZ2VydEBuZXRsYWIubmVjLmRlAgEAMA0GCSqGSIb3DQEBAQUABIIBAA97xDW9kNnEmSos13hW
++g9c5gM61kZB7wOyX+FepvZQpavBdwrFXBtB+rhjbWYFChhOL3prnonTnk5NTum9VBNozeFeUC27
+pms0h/0dm2iksiTFrN7Zu6/OIznR+Ft+alKEDgYLHtGfqYGPP+EWIn4rh+evuHqu+rK31/g1K+RH
+a0pA34PZBu9HELjMIewVq4nfNMn9B0VpOEJbUdaPg8KJubsz+jFL1o6GPPKf/k5GMzpgDR1ty6O9
+GEQoOBTk7U2QgkhtYiHR0Fl7cgM6parevp/5MM5k80vBBr9+IjZhXT8nYrjtrgLME4oJIKUQSVn3
+mQoQ663mF+5z5xesRRcAAAAAAAA=
 
---- a/net/dccp/ccids/Kconfig
-+++ b/net/dccp/ccids/Kconfig
-@@ -89,4 +89,26 @@ config IP_DCCP_CCID3_DEBUG
- 	    parameter to 0 or 1.
- 
- 	    If in doubt, say N.
-+
-+config IP_DCCP_CCID3_RTO
-+	  int "Use higher (TCP) RTO for nofeedback timer"
-+	  default 1
-+	  depends on IP_DCCP_CCID3
-+	  ---help---
-+	    Use higher (TCP) RTO value for nofeedback expiration.
-+
-+	    The TFRC nofeedback timer normally expires after the maximum of 4
-+	    RTTs and twice the current send interval (RFC 3448, 4.3). On LANs
-+	    with a small RTT this can mean a high processing load and reduced
-+	    performance, since then the nofeedback timer is triggered very
-+	    frequently. As a result, the sending rate quickly converges towards
-+	    zero.
-+
-+	    This option enables to set a higher upper bound for the nofeedback
-+	    value. Values in units of seconds can be set here.
-+
-+	    A value of 0 disables this feature by enforcing the value specified
-+	    in RFC 3448. It is recommended to use the default value of 1 second,
-+	    as this is also the suggested TCP RTO default (RFC 2988, 2.4).
-+
- endmenu
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -245,9 +245,10 @@ static void ccid3_hc_tx_no_feedback_time
- 		}
- 		/*
- 		 * Schedule no feedback timer to expire in
--		 * max(4 * R, 2 * s/X)  =  max(4 * R, 2 * t_ipi)
-+		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
-+		 * See comments above regarding the value of t_RTO.
- 		 */
--		t_nfb = max(4 * hctx->ccid3hctx_rtt, 2 * hctx->ccid3hctx_t_ipi);
-+		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
- 		break;
- 	case TFRC_SSTATE_NO_SENT:
- 		DCCP_BUG("Illegal %s state NO_SENT, sk=%p", dccp_role(sk), sk);
-@@ -481,7 +482,7 @@ static void ccid3_hc_tx_packet_recv(stru
- 		}
- 
- 		ccid3_pr_debug("%s, sk=%p, New RTT estimate=%uus, "
--			       "r_sample=%us\n", dccp_role(sk), sk,
-+			       "r_sample=%uus\n", dccp_role(sk), sk,
- 			       hctx->ccid3hctx_rtt, r_sample);
- 
- 		/* Update receive rate */
-@@ -512,16 +513,17 @@ static void ccid3_hc_tx_packet_recv(stru
- 		 */
- 		sk->sk_write_space(sk);
- 
--		/* Update timeout interval. We use the alternative variant of
--		 * [RFC 3448, 3.1] which sets the upper bound of t_rto to one
--		 * second, as it is suggested for TCP (see RFC 2988, 2.4). */
-+		/* Update timeout interval. A value of IP_DCCP_CCID3_RTO=0
-+		 * lets the nofeedback timer expire as per [RFC 3448, 3.1];
-+		 * a value of 1 second corresponds to the RTO suggested for
-+		 * TCP (see RFC 2988, 2.4). */
- 		hctx->ccid3hctx_t_rto = max_t(u32, 4 * hctx->ccid3hctx_rtt,
--					      	   USEC_PER_SEC            );
-+					CONFIG_IP_DCCP_CCID3_RTO * USEC_PER_SEC);
- 		/*
- 		 * Schedule no feedback timer to expire in
--		 * max(4 * R, 2 * s/X)  =  max(4 * R, 2 * t_ipi)
-+		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
- 		 */
--		t_nfb = max(4 * hctx->ccid3hctx_rtt, 2 * hctx->ccid3hctx_t_ipi);
-+		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
- 			
- 		ccid3_pr_debug("%s, sk=%p, Scheduled no feedback timer to "
- 			       "expire in %lu jiffies (%luus)\n",
+--Apple-Mail-46--213819164--
