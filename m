@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Thu, 30 Nov 2006 00:46:12 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Thu, 30 Nov 2006 01:05:04 +0000
 Subject: Re: [PATCH] [RFC]: Fine-grained sending rate resolution / division errors
-Message-Id: <39e6f6c70611291646y51dfea8fmf210c475f0b23670@mail.gmail.com>
+Message-Id: <5640c7e00611291705g14b28bbei41fbc4f7afa8aa73@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200611292052.01303@strip-the-willow>
 In-Reply-To: <200611292052.01303@strip-the-willow>
@@ -10,20 +10,22 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/29/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+On 11/30/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
 > Here is now the patch, I have had a hard time due to division of u64 by
 > u32. I have also checked again - it is feasible to prune X_calc and
 > X_recv back to u32. If you prefer that, I can change the patch.
+>
+Yes I remember having great difficulty with that too when I converted
+the code from FreeBSD to Linux (and they had floating point as
+well...) I never got further than what went into the code.
 
-If it is possible, its better, minus 8 bytes per half connection on a
-(hey, I really, really wanna see this real) _real busy_ DCCP server
-:-)
+This all looks good in theory. Still trying to resolve earlier DCCP
+CCID3 issues.
 
-> I'd welcome suggestions about how to improve the division, I had wanted
-> to at least not throw away the remainder.
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 
-Just got back from a "my dog took me to do some exercise" session,
-will have to read this tomorrow again, but I liked what I saw from the
-first skim of it :-)
-
-- Arnaldo
+Ian
+-- 
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
