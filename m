@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 30 Nov 2006 18:08:26 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 30 Nov 2006 18:11:50 +0000
 Subject: Re: [DCCP]: Fix BUG in send time calculation
-Message-Id: <5640c7e00611301008l4fa2ce6dmcb34a85b0abc49b6@mail.gmail.com>
+Message-Id: <200611301811.50577@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200611301541.36467@strip-the-willow>
 In-Reply-To: <200611301541.36467@strip-the-willow>
@@ -10,19 +10,15 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/1/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> I think I found the bug, see description below.
-> The problem was clearly in CCID 3, with CCID 2 performance was good.
-> I think it makes sense to use the other patch (RTO) as well. CCID 3
-> needs some more work, but I think with this the reported problem is
-> solved.
->
-> ------------> Commit Message <---------------------------------
-> [DCCP]: Fix BUG in retransmission delay calculation
->
-I'd just found the same patch being faulty using git-bisect so I agree...
+Hi Arnaldo,
 
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+|  > I will do more tests tomorrow and see how it behaves.
+|  
+|  Thanks for testing, I'm going to apply both now,
+That would be really great. I have done some testing - the bug is fixed by the second patch.
+However, the throughput is much higher when using a RTO timeout of 1 second (as per configuration menu),
+via the first patch - so it does seem to be useful (and different settings can be tested).
+
+I'd be grateful for any further CCID 3 observations - hopefully we can get it up to speed soon.
+
+Gerrit
