@@ -1,7 +1,7 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 30 Nov 2006 18:11:50 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Thu, 30 Nov 2006 22:11:20 +0000
 Subject: Re: [DCCP]: Fix BUG in send time calculation
-Message-Id: <200611301811.50577@strip-the-willow>
+Message-Id: <5640c7e00611301411t234b759fi879646d3777aa1a1@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200611301541.36467@strip-the-willow>
 In-Reply-To: <200611301541.36467@strip-the-willow>
@@ -10,15 +10,18 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Arnaldo,
+On 12/1/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> ------------> Commit Message <---------------------------------
+> [DCCP]: Fix BUG in retransmission delay calculation
+>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 
-|  > I will do more tests tomorrow and see how it behaves.
-|  
-|  Thanks for testing, I'm going to apply both now,
-That would be really great. I have done some testing - the bug is fixed by the second patch.
-However, the throughput is much higher when using a RTO timeout of 1 second (as per configuration menu),
-via the first patch - so it does seem to be useful (and different settings can be tested).
+I can confirm this fixes the problem in this case. Performance still
+sucks but this fixes one aspect - tested by reverting to my code in
+this and comparing. See message to follow.
 
-I'd be grateful for any further CCID 3 observations - hopefully we can get it up to speed soon.
-
-Gerrit
+Ian
+-- 
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
