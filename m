@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Thu, 30 Nov 2006 18:02:34 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Thu, 30 Nov 2006 18:08:26 +0000
 Subject: Re: [DCCP]: Fix BUG in send time calculation
-Message-Id: <39e6f6c70611301002s187f0c99q2dee527bf622b7da@mail.gmail.com>
+Message-Id: <5640c7e00611301008l4fa2ce6dmcb34a85b0abc49b6@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200611301541.36467@strip-the-willow>
 In-Reply-To: <200611301541.36467@strip-the-willow>
@@ -10,13 +10,19 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/30/06, Burak Gorkemli <burakgmail-dccp@yahoo.com> wrote:
-> Gerrit,
+On 12/1/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> I think I found the bug, see description below.
+> The problem was clearly in CCID 3, with CCID 2 performance was good.
+> I think it makes sense to use the other patch (RTO) as well. CCID 3
+> needs some more work, but I think with this the reported problem is
+> solved.
 >
-> After applying both of your patches I am able to send packets over DCCP (CCID3). I will do more tests tomorrow and see how it behaves.
+> ------------> Commit Message <---------------------------------
+> [DCCP]: Fix BUG in retransmission delay calculation
+>
+I'd just found the same patch being faulty using git-bisect so I agree...
 
-Thanks for testing, I'm going to apply both now,
-
-Regards,
-
-- Arnaldo
+-- 
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
