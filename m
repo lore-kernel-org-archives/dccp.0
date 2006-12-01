@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Fri, 01 Dec 2006 18:26:31 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 01 Dec 2006 18:34:52 +0000
 Subject: Re: [BUG] CCID3 performance is f**ked
-Message-Id: <5640c7e00612011026k95a0a15qe1ee27bb51d177eb@mail.gmail.com>
+Message-Id: <200612011834.52472@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00611301425v1c0c4b07kfeace18480cd0039@mail.gmail.com>
 In-Reply-To: <5640c7e00611301425v1c0c4b07kfeace18480cd0039@mail.gmail.com>
@@ -10,33 +10,29 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-> Thank you for this carefully worded bug report :-)
->
-> Really, with the number of bugs that are still in the code, I am actually
-> amazed that we get this far 8-)
->
-> I don't think that doing performance-testing at this stage is of any use.
-> When you repair your car and take out half of the engine, then take it
-> for a spin, do you expect top-gear performance?
+Ian - I have to agree, the performance at the moment is nothing to
+boast about. I will be sticking my head into this until the code
+works again to satisfaction. 
+It would be most helpful if people could submit observations and bug
+reports meanwhile. I will work full time on this next week.
 
-I don't really have time to respond properly at present. However I
-would say we shouldn't ever be making kernel worse and basically not
-working. My standard for submitting patches is that it still works at
-least as well as before. It's not good when users pull kernels and
-they don't work. It takes me (and anybody else) five minutes to test
-after each set of patches that I do. However it takes me hours/day to
-bisect faulty kernel trees.
+|  My standard for submitting patches is that it still works at 
+|  least as well as before. It's not good when users pull kernels and
+|  they don't work.
+Agree - you are right, I could have tested more. But there is so much to
+be fixed that I postponed it at the moment - my queue of CCID 3 ToDos 
+resembles more and more a stack.
 
-> Thank you for forwarding this onto the IETF list.
 
-I am not sure if this is sarcasm or not. By forwarding to the IETF
-list I was trying to resolve a protocol (not implementation) issue of
-timers going off all the time - which unfortunately hasn't been
-answered yet. You're solving the problem in a good way but I wanted
-DCCP fixed (not your code). I'm sorry if I offended you - it wasn't my
-intent.
+|  bisect faulty kernel trees.
+I am not sure that bisecting is the right method. It is good when everything
+else fails. 
 
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+|  > Thank you for forwarding this onto the IETF list.
+|  
+|  I am not sure if this is sarcasm or not.
+No sorry - it was meant to be humorous, not sarcastic. It has indeed proven
+to be very helpful -- I have added the comments by Perkins/Handley to the menu.
+
+You are right about what you are saying with regard to the testing. As per
+the earlier email, I will work on this code until the performance is reasonable.
