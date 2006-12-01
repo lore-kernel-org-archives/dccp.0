@@ -1,77 +1,53 @@
-From: Eddie Kohler <kohler@cs.ucla.edu>
-Date: Sun, 17 Dec 2006 21:55:12 +0000
-Subject: Re: [PATCH] BUG-FIX - conversion errors
-Message-Id: <4585BCC0.9050708@cs.ucla.edu>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 01 Dec 2006 18:25:43 +0000
+Subject: [PATCH 0/8]: 2 Bug fixes, all earlier patches revised
+Message-Id: <200612011825.43747@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200612081532.21104@strip-the-willow>
-In-Reply-To: <200612081532.21104@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-FYI, you're right, Gerrit: CCIDs 2 and 3 don't mention CCMPS because for 
-those CCIDs, CCMPS=\infty.  CCID 4, when defined, will impose a CCMPS.
+I have been doing bug hunting almost all day, two bug fixes are enclosed, 
+for the remainder I am willing to stick my head into the code next week
+until the performance is up to a reasonable level and most of the known
+bugs are ironed out. 
 
-Eddie
+I went through the earlier patches and tossed out some material and re-arranged
+the TFRC lookup stuff in a different way. I think it is now much easier to read.
 
 
-Gerrit Renker wrote:
-> |  > |  Do we calculate mss anywhere?
-> |  > Yes there is support in dccps_mss_cache .
-> |  > At the begin of dccp_send_msg e.g. it is used. 
-> |  
-> |  Yup, look at dccp_sync_mss() used in dccp_connect_init():
-> 
-> <snip>
-> 
-> Thank you for the helpful `pointers' :)  - I was amazed a couple of months ago
-> about how much of that code is active and quietly doing its job with accuracy. 
-> 
-> 
-> |          /*
-> |           * FIXME: this should come from the CCID infrastructure, where,
-> |           * say, TFRC will say it wants TIMESTAMPS, ELAPSED time, etc,
-> |           * for now lets put a rough estimate for NDP + TIMESTAMP +
-> |           * TIMESTAMP_ECHO + ELAPSED TIME + TFRC_OPT_LOSS_EVENT_RATE +
-> |           * TFRC_OPT_RECEIVE_RATE + padding to
-> |           * make it a multiple of 4
-> |           */
-> |  
-> |          mss_now -= ((5 + 6 + 10 + 6 + 6 + 6 + 3) / 4) * 4;
-> |  
-> I thought that when we are actively using the provided MSS facilities, then there
-> is more incentive to tackle this one above too.
-> 
-> 
-> 
-> |  Infrastructure wise I guess struct ccid_operations should have a...
-> |  lemme read the relevant part of 4340... there CCMPS:
-> |  
-> |  ----------------- 8< -------------
-> |  14.  Maximum Packet Size
-> |  
-> |     A DCCP implementation MUST maintain the maximum packet size (MPS)
-> |     allowed for each active DCCP session.  The MPS is influenced by the
-> |     maximum packet size allowed by the current congestion control
-> |     mechanism (CCMPS), the maximum packet size supported by the path's
-> |     links (PMTU, the Path Maximum Transmission Unit) [RFC1191], and the
-> |     lengths of the IP and DCCP headers.
-> |  ----------------- 8< -------------
-> I don't know how often I read through 4340, 4341 and 4342 trying to find out what `CCMPS'
-> is for - it seems that in CCID2 and CCID3 it is both set to `infinity', at least I can
-> find no explicit mention in 4341/4342 of CCMPS.
-> 
-> But for the MSS caching a `ccid_mps' member would be useful anyway for the above required purpose.
-> 
-> This in turn re-opens other questions - in CCID3 e.g. feedback packets should always contain
-> also a Loss Intervals option - which is still missing in CCID 3. 
-> 
-> It is good that you raise this; I put a copy into my ToDo folder and will ask around in some time
-> if anyone is working on it. If no one else does it I will give it a try at some time, but am bogged
-> down by other work. I am re-working the CCID `larger initial windows' patch at the moment, plus
-> sequence number issues. 
-> -
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
+Patch 1: Bug fix: sending rates were calculated before X_recv/p  were updated
+Patch 2: Removes the `Illegal ACK received message' [it is harmless]
+ 
+
+Patches 3..8 correspond to the earlier TFRC patches (much smaller now): 
+     Ian I would appreciate if you could have a look at these. 
+     I have put in effort to explain them clearer. While the performance still
+     is bad, these are a step forward. In particular, the parameter checking is
+     useful to have.  Should it be needed, I have documented all everything on
+     http://www.erg.abdn.ac.uk/users/gerrit/dccp/tfrc_documentation/doc/
+
+
+Patch 3: just adds documentation for the TFRC lookup table; no code change, but
+         this provides the basis for all other patches (the formulas)
+
+Patch 4: corrects a small error in the reverse lookup function; I 
+         have now added a detailed explanation _why_ this is an error.
+
+Patch 5: adds extensive parameter checking to the TFRC lookup routines.
+
+Patch 6: wraps up the previous steps by simplifying the forward lookup. 
+         It also defines a constant for the lowest possible resolution and
+         adds a warning if p is greater than 0 and less than this threshold.
+
+Patch 7: deprecates the use of TFRC_SMALLEST_P in ccid3.c. It is subsumed
+         by the minimum threshold set in Patch 4. The use of TFRC_SMALLEST_P
+         is dangerous, as it masks large errors for low values of p.
+         The resolution error is exactly given by:
+           (f(0.0001) - f(p))/f(p) * 100
+         and for TFRC_SMALLEST_P = 0.00004 this is still a value of about 58%!
+         It is better to observe the warning messages and generate a new table
+         in case there are too many warnings.
+
+Patch 8: adds bin-search which should speed up TFRC reverse-lookup a little
