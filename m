@@ -1,40 +1,45 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 01 Dec 2006 12:53:35 +0000
+Date: Fri, 01 Dec 2006 13:52:11 +0000
 Subject: Re: [PATCH] [DCCP]: Use higher timeout value for nofeedback timer
-Message-Id: <200612011253.36045@strip-the-willow>
+Message-Id: <200612011352.12245@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200611301318.46685@strip-the-willow>
 In-Reply-To: <200611301318.46685@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
 Quoting Mark Handley:
-|  I agree that running a very small no-feedback timer is a bad idea.
-|  But I think that 1 second is probably far too large. =A0The purpose of
-|  the nofeedback timer is to slow DCCP down when there is serious
-|  network congestion. =A0Waiting 1 second on a LAN would mean sending for
-|  thousands of RTTs before starting to slow down. =A0And on wide-area
-|  links in places like the UK, it could be 100 RTTs before you slow
-|  down, although this would be mitigated a little if the problem was
-|  congestion, and a queue built up.
-| =20
-|  My gut feeling is that there should be a lower bound on the nofeedback
-|  timer, but that 100ms would be a more appropriate value. =A0This is
-|  motivated by an attempt to compromise between a large value for
-|  efficient DCCP implementations, and a small value to avoid disrupting
-|  the network for too long when bad stuff is happening. =A0From a human
-|  usability point of view, you probably can cope with dropouts in audio
-|  of 100ms without it being too bad, but 1 second is too long.
-Thanks a lot for this feedback. I will change the patch once again so that =
-the
-configuration option scales in units of 100 milliseconds - that will give u=
-sers
-a chance to test at different granularity:
-	* 0 means use RFC 3448 as before
-	* 1 means 100 milliseconds
-	* 10 corresponds to the TCP timeout of 1 sec
-	* ...
+|  On 12/1/06, Colin Perkins <csp@csperkins.org> wrote:
+|  > I'd actually suggest something on the order of 16-20ms. The rationale
+|  > would be to match the typical inter-frame interval for multimedia
+|  > applications, so that the kernel will likely be processing a sent
+|  > packet when the timer expires, and can amortise the costs of checking
+|  > the nofeedback timer into the send routine.
+|  
+|  You make a good point.  The cost of checking the timer should be
+|  fairly low if you're already in the DCCP send code for the relevant
+|  connection.  You have to reset the timer anyway every time you get
+|  feedback, and checking the timer shouldn't be more expensive than
+|  resetting it. As you get feedback every RTT under normal conditions,
+|  you ought to be able to check it at least once per RTT so long as
+|  you're in the DCCP code anyway.
+|  
+|  Now, do you every need to check the timer when you're not in the DCCP
+|  send code?  I think not.  It's not like TCP, where you need to send a
+|  packet on RTO expiry.  I think it should be possible to only ever
+|  check the nofeedback timer when you're in the send code for that
+|  particular DCCP connection.  And if so, then surely you can afford to
+|  check it as often as you reset it - ie around once per RTT?
+|  
+|  You just have to be a bit smart - if you go to send and discover that
+|  the timer should have expired multiple times, then you have to process
+|  multiple backoff events, and perhaps reschedule your send for later
+|  after you've done that.
+Once again thanks to both answers - both value range will be made configurable
+and a default value of 100ms will be provided. With a default of 10ms, one is
+close to the timer granularity of 100HZ on some systems. 
+I will also add the helpful information provided to the configuration menu.
 
 Gerrit
