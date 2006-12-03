@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 02 Dec 2006 18:37:05 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sun, 03 Dec 2006 15:26:20 +0000
 Subject: Re: [PATCH 5/8]: Add protection against invalid parameters
-Message-Id: <5640c7e00612021037vd200247tc586f895df6497ba@mail.gmail.com>
+Message-Id: <200612031526.20401@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200612011827.01580@strip-the-willow>
 In-Reply-To: <200612011827.01580@strip-the-willow>
@@ -10,30 +10,35 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/3/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Quoting Ian McDonald:
-> I thought about this too and initially both were DCCP_BUG_ON(). However,
-> this just delays the Kerboom! -- as I have had to learn painfully:
->         * case `p > 1000000' leads to accessing illegal memory - kernel panics
->         * case `p = 0' leads to division by zero
->
-> I have had one kernel Oops because of not making them DCCP_BUG_ON. The good
-> side of using this is safety: if this condition is met, we will know from console
-> output, and we will also know that there is serious trouble somewhere else.
->
-I definitely want these things to go to the console/logs. I think
-DCCP_BUG_ON does do this - how to stop the divide by zero is then to
-return from the function at that point so next statement can't get
-executed. It doesn't ever halt the system though which is good. The
-reason I say this is good as in the back of my mind I am thinking of
-people looking for DoS vulnerabilities...
+Quoting Ian McDonald:
+|  The
+|  reason I say this is good as in the back of my mind I am thinking of
+|  people looking for DoS vulnerabilities...
+|  
+|  However BUG_ON does work and forces the code to get tidied so the
+|  condition doesn't occur again. So whichever way I'm happy to go ahead
+|  with it.
+What you are saying is very important and I suggest auditing the code against
+calling this function with invalid parameters as next to-do.
 
-However BUG_ON does work and forces the code to get tidied so the
-condition doesn't occur again. So whichever way I'm happy to go ahead
-with it.
+I would further like to inform you and Arnaldo that I have ironed out an error
+of mine in this patch (uploaded), namely the following
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+--- a/net/dccp/ccids/lib/tfrc_equation.c
++++ b/net/dccp/ccids/lib/tfrc_equation.c
+@@ -19,7 +19,7 @@ #include "tfrc.h"
+ 
+ #define TFRC_CALC_X_ARRSIZE 500
+ #define TFRC_CALC_X_SPLIT   50000	/* 0.05 * 1000000, details below */
+-#define TFRC_SMALLEST_P	    TFRC_CALC_X_SPLIT/TFRC_CALC_X_ARRSIZE
++#define TFRC_SMALLEST_P	    (TFRC_CALC_X_SPLIT/TFRC_CALC_X_ARRSIZE)
+ 
+
+This is required since later on the code calls
+  index = p/TFRC_SMALLEST_P -1;
+which cpp expands as
+ index = p/TFRC_CALC_X_SPLIT/TFRC_CALC_X_ARRSIZE -1;
+       = (p/TFRC_CALC_X_SPLIT)/TFRC_CALC_X_ARRSIZE -1;
+since `/' associates to the left. This can lead to an index of -1 (boom!).
+
+This is fixed in the uploaded version.
