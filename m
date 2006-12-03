@@ -1,121 +1,118 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 10 Dec 2006 02:59:39 +0000
-Subject: [PATCH 1/22] [DCCP]: Remove timeo from output.c
-Message-Id: <20061210025938.GC17909@mandriva.com>
+Date: Sun, 03 Dec 2006 22:07:20 +0000
+Subject: [PATCH 1/10] [DCCP]: Use higher RTO default for CCID3
+Message-Id: <20061203220720.GG17803@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-It simplifies waiting for the CCID module to signal that a packet
-is ready to be sent.  Other simplifications flow on from this such as
-removing constants.
+The TFRC nofeedback timer normally expires after the maximum of 4
+RTTs and twice the current send interval (RFC 3448, 4.3). On LANs
+with a small RTT this can mean a high processing load and reduced
+performance, since then the nofeedback timer is triggered very
+frequently.
 
-As a result of this EAGAIN is not returned any more by dccp_wait_for_ccid
-(which would otherwise lead to unnecessarily discarding the packet in
-dccp_write_xmit).
+This patch provides a configuration option to set the bound for the
+nofeedback timer, using as default 100 milliseconds.
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+By setting the configuration option to 0, strict RFC 3448 behaviour
+can be enforced for the nofeedback timer.
+
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/dccp.h   |    2 --
- net/dccp/output.c |   26 ++++++--------------------
- 2 files changed, 6 insertions(+), 22 deletions(-)
+ net/dccp/ccids/Kconfig |   33 +++++++++++++++++++++++++++++++++
+ net/dccp/ccids/ccid3.c |   21 +++++++++++++--------
+ 2 files changed, 46 insertions(+), 8 deletions(-)
 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 6888698..44829d6 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -80,8 +80,6 @@ #define DCCP_RESOURCE_PROBE_INTERVAL ((u
+diff --git a/net/dccp/ccids/Kconfig b/net/dccp/ccids/Kconfig
+index dac8916..80f4698 100644
+--- a/net/dccp/ccids/Kconfig
++++ b/net/dccp/ccids/Kconfig
+@@ -89,4 +89,37 @@ config IP_DCCP_CCID3_DEBUG
+ 	    parameter to 0 or 1.
  
- #define DCCP_RTO_MAX ((unsigned)(120 * HZ)) /* FIXME: using TCP value */
- 
--#define DCCP_XMIT_TIMEO 30000 /* Time/msecs for blocking transmit per packet */
--
- /* sysctl variables for DCCP */
- extern int  sysctl_dccp_request_retries;
- extern int  sysctl_dccp_retries1;
-diff --git a/net/dccp/output.c b/net/dccp/output.c
-index 400c30b..29a8e85 100644
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -175,14 +175,12 @@ void dccp_write_space(struct sock *sk)
- /**
-  * dccp_wait_for_ccid - Wait for ccid to tell us we can send a packet
-  * @sk: socket to wait for
-- * @timeo: for how long
-  */
--static int dccp_wait_for_ccid(struct sock *sk, struct sk_buff *skb,
--			      long *timeo)
-+static int dccp_wait_for_ccid(struct sock *sk, struct sk_buff *skb)
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	DEFINE_WAIT(wait);
--	long delay;
-+	unsigned long delay;
- 	int rc;
- 
- 	while (1) {
-@@ -190,8 +188,6 @@ static int dccp_wait_for_ccid(struct soc
- 
- 		if (sk->sk_err)
- 			goto do_error;
--		if (!*timeo)
--			goto do_nonblock;
- 		if (signal_pending(current))
- 			goto do_interrupted;
- 
-@@ -199,12 +195,9 @@ static int dccp_wait_for_ccid(struct soc
- 		if (rc <= 0)
- 			break;
- 		delay = msecs_to_jiffies(rc);
--		if (delay > *timeo || delay < 0)
--			goto do_nonblock;
--
- 		sk->sk_write_pending++;
- 		release_sock(sk);
--		*timeo -= schedule_timeout(delay);
-+		schedule_timeout(delay);
- 		lock_sock(sk);
- 		sk->sk_write_pending--;
- 	}
-@@ -215,11 +208,8 @@ out:
- do_error:
- 	rc = -EPIPE;
- 	goto out;
--do_nonblock:
--	rc = -EAGAIN;
--	goto out;
- do_interrupted:
--	rc = sock_intr_errno(*timeo);
-+	rc = -EINTR;
- 	goto out;
- }
- 
-@@ -240,8 +230,6 @@ void dccp_write_xmit(struct sock *sk, in
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	struct sk_buff *skb;
--	long timeo = DCCP_XMIT_TIMEO; 	/* If a packet is taking longer than
--					   this we have other issues */
- 
- 	while ((skb = skb_peek(&sk->sk_write_queue))) {
- 		int err = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb);
-@@ -251,10 +239,8 @@ void dccp_write_xmit(struct sock *sk, in
- 				sk_reset_timer(sk, &dp->dccps_xmit_timer,
- 						msecs_to_jiffies(err)+jiffies);
- 				break;
--			} else {
--				err = dccp_wait_for_ccid(sk, skb, &timeo);
--				timeo = DCCP_XMIT_TIMEO;
--			}
-+			} else
-+				err = dccp_wait_for_ccid(sk, skb);
- 			if (err)
- 				DCCP_BUG("err=%d after dccp_wait_for_ccid", err);
+ 	    If in doubt, say N.
++
++config IP_DCCP_CCID3_RTO
++	  int "Use higher bound for nofeedback timer"
++	  default 100
++	  depends on IP_DCCP_CCID3 && EXPERIMENTAL
++	  ---help---
++	    Use higher lower bound for nofeedback timer expiration.
++
++	    The TFRC nofeedback timer normally expires after the maximum of 4
++	    RTTs and twice the current send interval (RFC 3448, 4.3). On LANs
++	    with a small RTT this can mean a high processing load and reduced
++	    performance, since then the nofeedback timer is triggered very
++	    frequently.
++
++	    This option enables to set a higher lower bound for the nofeedback
++	    value. Values in units of milliseconds can be set here.
++
++	    A value of 0 disables this feature by enforcing the value specified
++	    in RFC 3448. The following values have been suggested as bounds for
++	    experimental use:
++	    	* 16-20ms to match the typical multimedia inter-frame interval
++	    	* 100ms as a reasonable compromise [default]
++	    	* 1000ms corresponds to the lower TCP RTO bound (RFC 2988, 2.4)
++
++	    The default of 100ms is a compromise between a large value for
++	    efficient DCCP implementations, and a small value to avoid disrupting
++	    the network in times of congestion.
++
++	    The purpose of the nofeedback timer is to slow DCCP down when there
++	    is serious network congestion: experimenting with larger values should
++	    therefore not be performed on WANs.
++
++
+ endmenu
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 70ebe70..9980778 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -245,9 +245,10 @@ static void ccid3_hc_tx_no_feedback_time
  		}
+ 		/*
+ 		 * Schedule no feedback timer to expire in
+-		 * max(4 * R, 2 * s/X)  =  max(4 * R, 2 * t_ipi)
++		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
++		 * See comments in packet_recv() regarding the value of t_RTO.
+ 		 */
+-		t_nfb = max(4 * hctx->ccid3hctx_rtt, 2 * hctx->ccid3hctx_t_ipi);
++		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
+ 		break;
+ 	case TFRC_SSTATE_NO_SENT:
+ 		DCCP_BUG("Illegal %s state NO_SENT, sk=%p", dccp_role(sk), sk);
+@@ -512,16 +513,20 @@ static void ccid3_hc_tx_packet_recv(stru
+ 		 */
+ 		sk->sk_write_space(sk);
+ 
+-		/* Update timeout interval. We use the alternative variant of
+-		 * [RFC 3448, 3.1] which sets the upper bound of t_rto to one
+-		 * second, as it is suggested for TCP (see RFC 2988, 2.4). */
++		/*
++		 * Update timeout interval for the nofeedback timer.
++		 * We use a configuration option to increase the lower bound.
++		 * This can help avoid triggering the nofeedback timer too often
++		 * ('spinning') on LANs with small RTTs.
++		 */
+ 		hctx->ccid3hctx_t_rto = max_t(u32, 4 * hctx->ccid3hctx_rtt,
+-					      	   USEC_PER_SEC            );
++						   CONFIG_IP_DCCP_CCID3_RTO *
++						   (USEC_PER_SEC/1000)	     );
+ 		/*
+ 		 * Schedule no feedback timer to expire in
+-		 * max(4 * R, 2 * s/X)  =  max(4 * R, 2 * t_ipi)
++		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
+ 		 */
+-		t_nfb = max(4 * hctx->ccid3hctx_rtt, 2 * hctx->ccid3hctx_t_ipi);
++		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
+ 			
+ 		ccid3_pr_debug("%s, sk=%p, Scheduled no feedback timer to "
+ 			       "expire in %lu jiffies (%luus)\n",
 -- 
 1.4.2.1.g3d5c
 
