@@ -1,205 +1,91 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 10 Dec 2006 03:01:55 +0000
-Subject: [PATCH 9/22] [DCCP]: Debug timeval operations
-Message-Id: <20061210030155.GK17909@mandriva.com>
+Date: Sun, 03 Dec 2006 22:08:52 +0000
+Subject: [PATCH 8/10] [DCCP] tfrc: Identify TFRC table limits and simplify code
+Message-Id: <20061203220851.GN17803@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Problem:
+This
+ * adds documentation about the lowest resolution that is possible within
+   the bounds of the current lookup table
+ * defines a constant TFRC_SMALLEST_P which defines this resolution
+ * issues a warning if a given value of p is below resolution
+ * combines two previously adjacent if-blocks of nearly identical
+   structure into one
 
- Most target types in the CCID3 code are u32, so subtle conversion errors
- can occur if signed time calculations yield negative results: the original
- values are lost in the conversion to unsigned, calculation errors go undetected.
-
- This patch therefore
-   * sets all critical time types from unsigned to suseconds_t
-   * avoids comparison between signed/unsigned via type-casting
-   * provides ample warning messages in case time calculations are negative
-
- These warning messages can be removed at a later stage when the code
- has undergone more testing.
+This patch does not change the algorithm as such.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid3.c |   56 +++++++++++++++++++++++++++---------------------
- net/dccp/dccp.h        |    1 +
- 2 files changed, 33 insertions(+), 24 deletions(-)
+ net/dccp/ccids/lib/tfrc_equation.c |   27 ++++++++++++++++++---------
+ 1 files changed, 18 insertions(+), 9 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 89ef118..820bc25 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -128,8 +128,8 @@ static void ccid3_hc_tx_update_x(struct 
- 		hctx->ccid3hctx_x = max_t(u64, hctx->ccid3hctx_x,
- 					  (hctx->ccid3hctx_s << 6)/TFRC_T_MBI);
+diff --git a/net/dccp/ccids/lib/tfrc_equation.c b/net/dccp/ccids/lib/tfrc_equation.c
+index ef3233d..0a4a3d2 100644
+--- a/net/dccp/ccids/lib/tfrc_equation.c
++++ b/net/dccp/ccids/lib/tfrc_equation.c
+@@ -19,6 +19,7 @@ #include "tfrc.h"
  
--	} else if (timeval_delta(now, &hctx->ccid3hctx_t_ld) >-							  hctx->ccid3hctx_rtt) {
-+	} else if (timeval_delta(now, &hctx->ccid3hctx_t_ld) -
-+			(suseconds_t)hctx->ccid3hctx_rtt >= 0 ) {
+ #define TFRC_CALC_X_ARRSIZE 500
+ #define TFRC_CALC_X_SPLIT   50000	/* 0.05 * 1000000, details below */
++#define TFRC_SMALLEST_P	    (TFRC_CALC_X_SPLIT/TFRC_CALC_X_ARRSIZE)
  
- 		hctx->ccid3hctx_x = max(2 * min(hctx->ccid3hctx_x,
- 						hctx->ccid3hctx_x_recv),
-@@ -271,7 +271,7 @@ static int ccid3_hc_tx_send_packet(struc
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 	struct dccp_tx_hist_entry *new_packet;
- 	struct timeval now;
--	long delay;
-+	suseconds_t delay;
- 
- 	BUG_ON(hctx = NULL);
- 
-@@ -331,7 +331,7 @@ static int ccid3_hc_tx_send_packet(struc
- 		 * else
- 		 *       // send the packet in (t_nom - t_now) milliseconds.
- 		 */
--		if (delay - (long)hctx->ccid3hctx_delta >= 0)
-+		if (delay - (suseconds_t)hctx->ccid3hctx_delta >= 0)
- 			return delay / 1000L;
- 		break;
- 	case TFRC_SSTATE_TERM:
-@@ -353,7 +353,7 @@ static void ccid3_hc_tx_packet_sent(stru
- 	const struct dccp_sock *dp = dccp_sk(sk);
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 	struct timeval now;
--	unsigned long quarter_rtt;
-+	suseconds_t quarter_rtt;
- 	struct dccp_tx_hist_entry *packet;
- 
- 	BUG_ON(hctx = NULL);
-@@ -450,10 +450,8 @@ static void ccid3_hc_tx_packet_recv(stru
- 		r_sample  = timeval_delta(&now, &packet->dccphtx_tstamp);
- 		t_elapsed = dp->dccps_options_received.dccpor_elapsed_time * 10;
- 
--		if (unlikely(r_sample <= 0)) {
--			DCCP_WARN("WARNING: R_sample (%ld) <= 0!\n", r_sample);
--			r_sample = 0;
--		} else if (unlikely(r_sample <= t_elapsed))
-+		DCCP_BUG_ON(r_sample < 0);
-+		if (unlikely(r_sample <= t_elapsed))
- 			DCCP_WARN("WARNING: r_sample=%ldus <= t_elapsed=%ldus\n",
- 				  r_sample, t_elapsed);
- 		else
-@@ -698,6 +696,7 @@ static void ccid3_hc_rx_send_feedback(st
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	struct dccp_rx_hist_entry *packet;
- 	struct timeval now;
-+	suseconds_t delta;
- 
- 	ccid3_pr_debug("%s, sk=%p\n", dccp_role(sk), sk);
- 
-@@ -707,12 +706,12 @@ static void ccid3_hc_rx_send_feedback(st
- 	case TFRC_RSTATE_NO_DATA:
- 		hcrx->ccid3hcrx_x_recv = 0;
- 		break;
--	case TFRC_RSTATE_DATA: {
--		const u32 delta = timeval_delta(&now,
--					&hcrx->ccid3hcrx_tstamp_last_feedback);
-+	case TFRC_RSTATE_DATA:
-+		delta = timeval_delta(&now,
-+				      &hcrx->ccid3hcrx_tstamp_last_feedback);
-+		DCCP_BUG_ON(delta < 0);
- 		hcrx->ccid3hcrx_x_recv  			scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
--	}
- 		break;
- 	case TFRC_RSTATE_TERM:
- 		DCCP_BUG("Illegal %s state TERM, sk=%p", dccp_role(sk), sk);
-@@ -730,9 +729,10 @@ static void ccid3_hc_rx_send_feedback(st
- 	hcrx->ccid3hcrx_ccval_last_counter   = packet->dccphrx_ccval;
- 	hcrx->ccid3hcrx_bytes_recv	     = 0;
- 
--	/* Convert to multiples of 10us */
--	hcrx->ccid3hcrx_elapsed_time -			timeval_delta(&now, &packet->dccphrx_tstamp) / 10;
-+	/* Elapsed time information [RFC 4340, 13.2] in units of 10 * usecs */
-+	delta = timeval_delta(&now, &packet->dccphrx_tstamp);
-+	DCCP_BUG_ON(delta < 0);
-+	hcrx->ccid3hcrx_elapsed_time = delta / 10;
- 
- 	if (hcrx->ccid3hcrx_p = 0)
- 		hcrx->ccid3hcrx_pinv = ~0U;	/* see RFC 4342, 8.5 */
-@@ -785,7 +785,8 @@ static u32 ccid3_hc_rx_calc_first_li(str
- {
- 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
- 	struct dccp_rx_hist_entry *entry, *next, *tail = NULL;
--	u32 rtt, delta, x_recv, p;
-+	u32 x_recv, p;
-+	suseconds_t rtt, delta;
- 	struct timeval tstamp = { 0, };
- 	int interval = 0;
- 	int win_count = 0;
-@@ -830,8 +831,12 @@ found:
- 		DCCP_CRIT("tail is null\n");
- 		return ~0;
- 	}
--	rtt = timeval_delta(&tstamp, &tail->dccphrx_tstamp) * 4 / interval;
--	ccid3_pr_debug("%s, sk=%p, approximated RTT to %uus\n",
+ /*
+   TFRC TCP Reno Throughput Equation Lookup Table for f(p)
+@@ -68,7 +69,9 @@ #define TFRC_CALC_X_SPLIT   50000	/* 0.0
+   granularity for the practically more relevant case of small values of p (up to
+   5%), the second column is used; the first one ranges up to 100%.  This split
+   corresponds to the value of q = TFRC_CALC_X_SPLIT. At the same time this also
+-  determines the smallest resolution.
++  determines the smallest resolution possible with this lookup table:
 +
-+	delta = timeval_delta(&tstamp, &tail->dccphrx_tstamp);
-+	DCCP_BUG_ON(delta < 0);
++    TFRC_SMALLEST_P   =  TFRC_CALC_X_SPLIT / TFRC_CALC_X_ARRSIZE
+ 
+   The entire table is generated by:
+     for(i=0; i < TFRC_CALC_X_ARRSIZE; i++) {
+@@ -79,7 +82,7 @@ #define TFRC_CALC_X_SPLIT   50000	/* 0.0
+   With the given configuration, we have, with M = TFRC_CALC_X_ARRSIZE-1,
+     lookup[0][0]  =  g(1000000/(M+1)) 		 =  1000000 * f(0.2%)
+     lookup[M][0]  =  g(1000000)			 =  1000000 * f(100%)
+-    lookup[0][1]  =  g(TFRC_CALC_X_SPLIT/(M+1))	 =  1000000 * f(0.01%)
++    lookup[0][1]  =  g(TFRC_SMALLEST_P)		  = 1000000 * f(0.01%)
+     lookup[M][1]  =  g(TFRC_CALC_X_SPLIT)	 =  1000000 * f(5%)
+ 
+   In summary, the two columns represent f(p) for the following ranges:
+@@ -616,15 +619,21 @@ u32 tfrc_calc_x(u16 s, u32 R, u32 p)
+ 		return ~0U;
+  	}
+ 
+-	if (p < TFRC_CALC_X_SPLIT) 		      /* 0      <= p <  0.05  */
+-		index = (p / (TFRC_CALC_X_SPLIT / TFRC_CALC_X_ARRSIZE)) - 1;
+-	else		 			      /* 0.05   <= p <= 1.00  */
+-		index = (p / (1000000 / TFRC_CALC_X_ARRSIZE)) - 1;
++	if (p <= TFRC_CALC_X_SPLIT) 		{     /* 0.0000 < p <= 0.05   */
++		if (p < TFRC_SMALLEST_P) {	      /* 0.0000 < p <  0.0001 */
++			DCCP_WARN("Value of p (%d) below resolution. "
++				  "Substituting %d\n", p, TFRC_SMALLEST_P);
++			index = 0;
++		} else 				      /* 0.0001 <= p <= 0.05  */
++			index =  p/TFRC_SMALLEST_P - 1;
 +
-+	rtt = delta * 4 / interval;
-+	ccid3_pr_debug("%s, sk=%p, approximated RTT to %ldus\n",
- 		       dccp_role(sk), sk, rtt);
++ 		f = tfrc_calc_x_lookup[index][1];
++
++	} else {	 			      /* 0.05   <  p <= 1.00  */
++		index = p/(1000000/TFRC_CALC_X_ARRSIZE) - 1;
  
- 	/*
-@@ -849,8 +854,9 @@ found:
+-	if (p >= TFRC_CALC_X_SPLIT)
+ 		f = tfrc_calc_x_lookup[index][0];
+-	else
+-		f = tfrc_calc_x_lookup[index][1];
++	}
  
- 	dccp_timestamp(sk, &tstamp);
- 	delta = timeval_delta(&tstamp, &hcrx->ccid3hcrx_tstamp_last_feedback);
--	x_recv = scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
-+	DCCP_BUG_ON(delta <= 0);
- 
-+	x_recv = scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
- 	if (x_recv = 0) {		/* would also trigger divide-by-zero */
- 		DCCP_WARN("X_recv=0\n");
- 		if ((x_recv = hcrx->ccid3hcrx_x_recv) = 0) {
-@@ -977,7 +983,8 @@ static void ccid3_hc_rx_packet_recv(stru
- 	const struct dccp_options_received *opt_recv;
- 	struct dccp_rx_hist_entry *packet;
- 	struct timeval now;
--	u32 p_prev, rtt_prev, r_sample, t_elapsed;
-+	u32 p_prev, rtt_prev;
-+	suseconds_t r_sample, t_elapsed;
- 	int loss, payload_size;
- 
- 	BUG_ON(hcrx = NULL);
-@@ -997,8 +1004,9 @@ static void ccid3_hc_rx_packet_recv(stru
- 		r_sample = timeval_usecs(&now);
- 		t_elapsed = opt_recv->dccpor_elapsed_time * 10;
- 
-+		DCCP_BUG_ON(r_sample < 0);
- 		if (unlikely(r_sample <= t_elapsed))
--			DCCP_WARN("r_sample=%uus, t_elapsed=%uus\n",
-+			DCCP_WARN("r_sample=%ldus, t_elapsed=%ldus\n",
- 				  r_sample, t_elapsed);
- 		else
- 			r_sample -= t_elapsed;
-@@ -1051,8 +1059,8 @@ static void ccid3_hc_rx_packet_recv(stru
- 			break;
- 
- 		dccp_timestamp(sk, &now);
--		if (timeval_delta(&now, &hcrx->ccid3hcrx_tstamp_last_ack) >-		    hcrx->ccid3hcrx_rtt) {
-+		if (timeval_delta(&now, &hcrx->ccid3hcrx_tstamp_last_ack) -
-+					(suseconds_t)hcrx->ccid3hcrx_rtt >= 0) {
- 			hcrx->ccid3hcrx_tstamp_last_ack = now;
- 			ccid3_hc_rx_send_feedback(sk);
- 		}
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 44829d6..a0900bf 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -432,6 +432,7 @@ static inline void timeval_sub_usecs(str
- 		tv->tv_sec--;
- 		tv->tv_usec += USEC_PER_SEC;
- 	}
-+	DCCP_BUG_ON(tv->tv_sec < 0);
- }
- 
- #ifdef CONFIG_SYSCTL
+ 	/* The following computes X = s/(R*f(p)) in bytes per second. Since f(p)
+ 	 * and R are both scaled by 1000000, we need to multiply by 1000000^2.
 -- 
 1.4.2.1.g3d5c
 
