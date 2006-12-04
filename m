@@ -1,43 +1,35 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Mon, 04 Dec 2006 01:55:51 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 04 Dec 2006 07:15:58 +0000
 Subject: Re: [BUG] CCID3 performance
-Message-Id: <5640c7e00612031755h434e643cwf87e043a8ec0d163@mail.gmail.com>
+Message-Id: <200612040715.58328@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
+References: <5640c7e00612031755h434e643cwf87e043a8ec0d163@mail.gmail.com>
+In-Reply-To: <5640c7e00612031755h434e643cwf87e043a8ec0d163@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On 12/1/06, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> Folks,
->
-> With 2.6.19rc6 plus the patches from
-> http://wand.net.nz/~iam4/dccp/patches/ it works fine. (The only
-> significant patch here is tx_qlen - all the rest should have no
-> impact).
->
-> So here are the stats using iperf:
-> Test                                             2.6.19rc6+ian
-> 2.6.20-acme20
-> Direct connect                                87 Mbits             36 Mbits
-> Through a Linux router (1.2 ms rtt)    36 Mbit               200 kbits
-> (yes that is correct!)
-> Through netem (100 ms rtt, 5% loss)  130 kbits           116 kbits (OK)
->
-I've been trying to track this down to any individual patch and I'm
-going crazy! With my code (2.6.19rc6+my patches) now I'm getting the
-same bad numbers as for 2.6.20-acme20
-
-This is bizarre and means that there is something in there very fickle
-and intermittent...
-
-That means I also owe a big apology to everybody for casting
-dispersion on their code.
-
-I'm giving up for today I think as my head hurts!!
-
-Ian
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+|  > So here are the stats using iperf:
+|  > Test =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
+=A0 =A0 =A0 =A0 =A0 =A0 2.6.19rc6+ian
+|  > 2.6.20-acme20
+|  > Direct connect =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0=
+ =A0 =A087 Mbits =A0 =A0 =A0 =A0 =A0 =A0 36 Mbits
+|  > Through a Linux router (1.2 ms rtt) =A0 =A036 Mbit =A0 =A0 =A0 =A0 =A0=
+ =A0 =A0 200 kbits
+|  > (yes that is correct!)
+|  > Through netem (100 ms rtt, 5% loss) =A0130 kbits =A0 =A0 =A0 =A0 =A0 1=
+16 kbits (OK)
+|  >
+|  I've been trying to track this down to any individual patch and I'm
+|  going crazy! With my code (2.6.19rc6+my patches) now I'm getting the
+|  same bad numbers as for 2.6.20-acme20
+I can confirm this - it seems sometimes as if the code in a fuzzy way needs=
+ to `warm up'.
+Also I can not test at home with my older equipment - DCCP is too demanding=
+ on CPU speed;
+the top performance even with CCID2 is 15Mbits/sec.
+Therefore the more experience/performance reports come in, the better for u=
+nderstanding
+what is going on.
