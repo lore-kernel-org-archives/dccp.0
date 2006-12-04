@@ -1,19 +1,22 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 03 Dec 2006 22:06:42 +0000
-Subject: [PATCHES][DCCP] ccid3: request for merge
-Message-Id: <20061203220641.GF17803@mandriva.com>
+From: David Miller <davem@davemloft.net>
+Date: Mon, 04 Dec 2006 03:25:15 +0000
+Subject: Re: [PATCHES][DCCP] ccid3: request for merge
+Message-Id: <20061203.192515.07639443.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
+References: <20061203220641.GF17803@mandriva.com>
+In-Reply-To: <20061203220641.GF17803@mandriva.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi David,
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Sun, 3 Dec 2006 20:06:42 -0200
 
-	Please consider pulling from:
+> Hi David,
+> 
+> 	Please consider pulling from:
+> 
+> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.git
 
-master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.git
-
-Regards,
-
-- Arnaldo
+Looks great, pulled and pushed back out, thanks.
