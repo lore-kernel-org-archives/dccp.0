@@ -1,87 +1,69 @@
-From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Thu, 28 Dec 2006 04:08:38 +0000
-Subject: [PATCH 4/4] DCCP: Recalculate t_nom on change of t_ipi
-Message-Id: <200612281708.38935.ian.mcdonald@jandi.co.nz>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 05 Dec 2006 20:38:39 +0000
+Subject: [PATCH 5/7]: Replace scaled division operations
+Message-Id: <200612052038.39114@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-When we recalculate t_nom and t_ipi we should check that t_nom is not
-before the current time. If it is then we should set t_nom to current time.
+[DCCP]: Replace scaled division operations
 
-Found this by observing flood of packets when t_ipi decreases.
+This replaces the remaining uses of usecs_div with scaled_div32, which
+internally uses 64bit division and produces a warning on overflow.
 
-Also uninline the function as it is big and gcc should decide when to
-inline anyway.
-
-Modified this from last iteration by only recalculate if t_ipi drops to
-save expensive operations on time.
-
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index e93bae5..ea22d08 100644
+ net/dccp/ccids/ccid3.c |   27 +++------------------------
+ 1 file changed, 3 insertions(+), 24 deletions(-)
+
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -84,8 +84,12 @@ static void ccid3_hc_tx_set_state(struct sock *sk,
-  * Recalculate scheduled nominal send time t_nom, inter-packet interval
-  * t_ipi, and delta value. Should be called after each change to X.
-  */
--static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
-+static void ccid3_update_send_time(struct sock *sk)
- {
-+	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
-+	suseconds_t delay;
-+	u32 old_t_ipi = hctx->ccid3hctx_t_ipi;
-+
- 	timeval_sub_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
+@@ -41,27 +41,6 @@
+ #include "lib/tfrc.h"
+ #include "ccid3.h"
  
- 	/* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second) */
-@@ -103,6 +107,18 @@ static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
- 	               hctx->ccid3hctx_t_ipi, hctx->ccid3hctx_delta,
- 		       hctx->ccid3hctx_s, hctx->ccid3hctx_x >> 6);
- 
-+	if (old_t_ipi > hctx->ccid3hctx_t_ipi) {
-+		struct timeval now;
-+		dccp_timestamp(sk, &now);
-+
-+		/* we want to check if before current time so we don't send a
-+		 * flood of packets */
-+		delay = timeval_delta(&hctx->ccid3hctx_t_nom, &now);
-+		if (delay < 0) {
-+			hctx->ccid3hctx_t_nom = now;
-+			ccid3_pr_debug("reset t_nom\n");
-+		}
-+	}
- }
- /*
-  * Update X by
-@@ -149,7 +165,7 @@ static void ccid3_hc_tx_update_x(struct sock *sk, struct timeval *now)
- 		ccid3_pr_debug("X_prev=%llu, X_now=%llu, X_calc=%u, "
- 		               "X_recv=%llu\n", old_x, hctx->ccid3hctx_x,
- 			       hctx->ccid3hctx_x_calc, hctx->ccid3hctx_x_recv);
--		ccid3_update_send_time(hctx);
-+		ccid3_update_send_time(sk);
+-/*
+- * Reason for maths here is to avoid 32 bit overflow when a is big.
+- * With this we get close to the limit.
+- */
+-static u32 usecs_div(const u32 a, const u32 b)
+-{
+-	const u32 div = a < (UINT_MAX / (USEC_PER_SEC /    10)) ?    10 :
+-			a < (UINT_MAX / (USEC_PER_SEC /    50)) ?    50 :
+-			a < (UINT_MAX / (USEC_PER_SEC /   100)) ?   100 :
+-			a < (UINT_MAX / (USEC_PER_SEC /   500)) ?   500 :
+-			a < (UINT_MAX / (USEC_PER_SEC /  1000)) ?  1000 :
+-			a < (UINT_MAX / (USEC_PER_SEC /  5000)) ?  5000 :
+-			a < (UINT_MAX / (USEC_PER_SEC / 10000)) ? 10000 :
+-			a < (UINT_MAX / (USEC_PER_SEC / 50000)) ? 50000 :
+-								 100000;
+-	const u32 tmp = a * (USEC_PER_SEC / div);
+-	return (b >= 2 * div) ? tmp / (b / div) : tmp;
+-}
+-
+-
+-
+ #ifdef CONFIG_IP_DCCP_CCID3_DEBUG
+ static int ccid3_debug;
+ #define ccid3_pr_debug(format, a...)	DCCP_PR_DEBUG(ccid3_debug, format, ##a)
+@@ -731,8 +710,8 @@ static void ccid3_hc_rx_send_feedback(st
+ 	case TFRC_RSTATE_DATA: {
+ 		const u32 delta = timeval_delta(&now,
+ 					&hcrx->ccid3hcrx_tstamp_last_feedback);
+-		hcrx->ccid3hcrx_x_recv = usecs_div(hcrx->ccid3hcrx_bytes_recv,
+-						   delta);
++		hcrx->ccid3hcrx_x_recv +			scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
  	}
- }
- 
-@@ -226,7 +242,7 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
- 		/* The value of R is still undefined and so we can not recompute
- 		 * the timout value. Keep initial value as per [RFC 4342, 5]. */
- 		t_nfb = TFRC_INITIAL_TIMEOUT;
--		ccid3_update_send_time(hctx);
-+		ccid3_update_send_time(sk);
  		break;
- 	case TFRC_SSTATE_FBACK:
- 		/*
-@@ -485,7 +501,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 			hctx->ccid3hctx_x    = scaled_div(w_init << 6, r_sample);
- 			hctx->ccid3hctx_t_ld = now;
+ 	case TFRC_RSTATE_TERM:
+@@ -862,7 +841,7 @@ found:
  
--			ccid3_update_send_time(hctx);
-+			ccid3_update_send_time(sk);
+ 	dccp_timestamp(sk, &tstamp);
+ 	delta = timeval_delta(&tstamp, &hcrx->ccid3hcrx_tstamp_last_feedback);
+-	x_recv = usecs_div(hcrx->ccid3hcrx_bytes_recv, delta);
++	x_recv = scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
  
- 			ccid3_pr_debug("%s(%p), s=%u, MSS=%u, w_init=%u, "
- 				       "R_sample=%dus, X=%u\n", dccp_role(sk),
+ 	if (x_recv = 0)
+ 		x_recv = hcrx->ccid3hcrx_x_recv;
