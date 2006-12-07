@@ -1,43 +1,56 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 20 Dec 2006 01:00:46 +0000
-Subject: Re: [PATCH 1/1] DCCP: Fix non-conformance to RFC
-Message-Id: <5640c7e00612191700i71aa370fg51d0192ce115dea8@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 07 Dec 2006 21:12:53 +0000
+Subject: [Patch 5/12]: Initialise RTT values
+Message-Id: <200612072112.53347@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200612191436.01509.ian.mcdonald@jandi.co.nz>
-In-Reply-To: <200612191436.01509.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/19/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> |  @@ -384,6 +384,9 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more,
-> |       packet->dccphtx_rtt    = hctx->ccid3hctx_rtt;
-> |       packet->dccphtx_sent   = 1;
-> |       hctx->ccid3hctx_idle   = 0;
-> |  +
-> |  +    ccid3_pr_debug("seqno = %llu, rtt = %u\n",
-> |  +       (long long unsigned)packet->dccphtx_seqno, packet->dccphtx_rtt);
-> |   }
-> Is this statement really necessary - both values appear somewhere else and neither is specific
-> to ccid3_hc_tx_packet_sent.
+[CCID3]: Initialise RTT values
 
-I think it is useful. Nowhere else in the send path do we print out
-which packet we are sending!
+In both the sender and the receiver it is possible that the stored
+RTT value is accessed before an actual RTT estimate has been computed.
 
->
->
-> |  @@ -158,6 +158,7 @@ enum ccid3_hc_rx_states {
-> |    *  @ccid3hcrx_s  -  Received packet size in bytes
-> |    *  @ccid3hcrx_pinv  -  Inverse of Loss Event Rate (RFC 4342, sec. 8.5)
-> |    *  @ccid3hcrx_elapsed_time  -  Time since packet reception
-> |  + *  @ccid3hcrx_seq_recalc_loss - when to recalc loss due to non-loss
-> Would it be possible to use a reference to the RFC section here - the entry is slightly confusing.
->
-Have done. Will be resending patch soon.
+This patch
+ * initialises the sender RTT to 0 
+     - the sender always accesses the RTT in ccid3_hc_tx_packet_sent
+     - the RTT is further needed for the window counter algorithm
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+ * replaces the receiver initialisation of 5msec with 0 
+     - which has the same effect and removes an `XXX'
+     - the RTT value is needed in ccid3_hc_rx_packet_recv as rtt_prev
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk> 
+---
+ net/dccp/ccids/ccid3.c |    4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -622,6 +622,7 @@ static int ccid3_hc_tx_init(struct ccid 
+ 	struct ccid3_hc_tx_sock *hctx = ccid_priv(ccid);
+ 
+ 	hctx->ccid3hctx_s     = 0;
++	hctx->ccid3hctx_rtt   = 0;
+ 	hctx->ccid3hctx_state = TFRC_SSTATE_NO_SENT;
+ 	INIT_LIST_HEAD(&hctx->ccid3hctx_hist);
+ 
+@@ -1011,6 +1012,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 			hcrx->ccid3hcrx_rtt = (hcrx->ccid3hcrx_rtt * 9) / 10 +
+ 					      r_sample / 10;
+ 
++
+ 		if (rtt_prev != hcrx->ccid3hcrx_rtt)
+ 			ccid3_pr_debug("%s, New RTT=%uus, elapsed time=%u\n",
+ 				       dccp_role(sk), hcrx->ccid3hcrx_rtt,
+@@ -1098,7 +1100,7 @@ static int ccid3_hc_rx_init(struct ccid 
+ 	dccp_timestamp(sk, &hcrx->ccid3hcrx_tstamp_last_ack);
+ 	hcrx->ccid3hcrx_tstamp_last_feedback = hcrx->ccid3hcrx_tstamp_last_ack;
+ 	hcrx->ccid3hcrx_s   = 0;
+-	hcrx->ccid3hcrx_rtt = 5000; /* XXX 5ms for now... */
++	hcrx->ccid3hcrx_rtt = 0;
+ 	return 0;
+ }
+ 
