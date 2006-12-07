@@ -1,121 +1,114 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Mon, 27 Nov 2006 22:36:00 +0000
-Subject: [PATCH 2/3] [DCCP] ccid3: Consistently update t_nom, t_ipi, t_delta
-Message-Id: <20061127223559.GC11605@mandriva.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 07 Dec 2006 21:13:07 +0000
+Subject: [Patch 7/12]: Shift window counter computation
+Message-Id: <200612072113.08070@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch:
+[CCID3]: Shift window counter computation
 
- * consolidates updating of parameters (t_nom, t_ipi, t_delta) which
-   need to be updated at the same time, since they are inter-dependent
+ This puts the window counter computation [RFC 4342, 8.1] into a separate
+ function which is called whenever a new packet is ready for immediate
+ transmission in ccid3_hc_tx_send_packet.
 
- * removes two inline functions which are no longer needed as a result of
-   the above consolidation
 
- * resolves a FIXME regarding the re-calculation of t_ipi within the nofeedback
-   timer, in the state where no feedback has previously been received
+Justification:
+--------------
+ The window counter update was previously computed after the packet was sent. This has
+ two drawbacks, both fixed by this patch: 
+   1) re-compute another timestamp almost directly after the packet was sent (expensive),
+   2) the CCVal for the window counter is needed at the instant the packet is sent.
 
- * ties updating these parameters to updating the sending rate X, exploiting
-   that all three parameters in turn depend on X; and using a small optimisation
-   which can reduce the number of required instructions: only update the three
-   parameters when X really changes
+Further details:
+----------------
+ The initialisation of the window counter is left in the state NO_SENT, as before. 
+ The algorithm will do nothing if either RTT is initialised to 0 (which is ok) or if
+ the RTT value remains below 4 microseconds (which is almost pathological).
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>   
 ---
- net/dccp/ccids/ccid3.c |   38 +++++++++++++++++---------------------
- 1 files changed, 17 insertions(+), 21 deletions(-)
+ net/dccp/ccids/ccid3.c |   49 +++++++++++++++++++++++++++++--------------------
+ 1 file changed, 29 insertions(+), 20 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 9297fca..4342caf 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -100,19 +100,24 @@ static void ccid3_hc_tx_set_state(struct
- 	hctx->ccid3hctx_state = state;
+@@ -161,6 +161,33 @@ static inline void ccid3_hc_tx_update_s(
+ 	 */
  }
  
--/* Calculate new t_ipi (inter packet interval) by t_ipi = s / X_inst */
--static inline void ccid3_calc_new_t_ipi(struct ccid3_hc_tx_sock *hctx)
 +/*
-+ * Recalculate scheduled nominal send time t_nom, inter-packet interval
-+ * t_ipi, and delta value. Should be called after each change to X.
++ * 	Update Window Counter using the algorithm from [RFC 4342, 8.1].
++ * 	The algorithm is not applicable if RTT < 4 microseconds.
 + */
-+static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
- {
-+	timeval_sub_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
++static inline void ccid3_hc_tx_update_win_count(struct ccid3_hc_tx_sock *hctx,
++						struct timeval *now)
++{
++	suseconds_t delta;
++	u32 quarter_rtts;
 +
-+	/* Calculate new t_ipi (inter packet interval) by t_ipi = s / X_inst */
- 	hctx->ccid3hctx_t_ipi = usecs_div(hctx->ccid3hctx_s, hctx->ccid3hctx_x);
--}
- 
--/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
--static inline void ccid3_calc_new_delta(struct ccid3_hc_tx_sock *hctx)
--{
-+	/* Update nominal send time with regard to the new t_ipi */
-+	timeval_add_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
++	if (unlikely(hctx->ccid3hctx_rtt < 4))	/* avoid divide-by-zero */
++		return;
 +
-+	/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
- 	hctx->ccid3hctx_delta = min_t(u32, hctx->ccid3hctx_t_ipi / 2,
- 					   TFRC_OPSYS_HALF_TIME_GRAN);
- }
--
- /*
-  * Update X by
-  *    If (p > 0)
-@@ -126,6 +131,7 @@ static inline void ccid3_calc_new_delta(
- static void ccid3_hc_tx_update_x(struct sock *sk)
- {
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
-+	const __u32 old_x = hctx->ccid3hctx_x;
- 
- 	/* To avoid large error in calcX */
- 	if (hctx->ccid3hctx_p >= TFRC_SMALLEST_P) {
-@@ -149,6 +155,8 @@ static void ccid3_hc_tx_update_x(struct 
- 			hctx->ccid3hctx_t_ld = now;
- 		}
- 	}
-+	if (hctx->ccid3hctx_x != old_x)
-+		ccid3_update_send_time(hctx);
- }
- 
++	delta = timeval_delta(now, &hctx->ccid3hctx_t_last_win_count);
++	DCCP_BUG_ON(delta < 0);
++
++	quarter_rtts = (u32)delta / (hctx->ccid3hctx_rtt / 4);
++
++	if (quarter_rtts > 0) {
++		hctx->ccid3hctx_t_last_win_count = *now;
++		hctx->ccid3hctx_last_win_count	+= min_t(u32, quarter_rtts, 5);
++		hctx->ccid3hctx_last_win_count	&= 0xF;		/* mod 16 */
++
++		ccid3_pr_debug("now at %#X\n", hctx->ccid3hctx_last_win_count);
++	}
++}
++
  static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
-@@ -184,11 +192,7 @@ static void ccid3_hc_tx_no_feedback_time
- 		/* The value of R is still undefined and so we can not recompute
- 		 * the timout value. Keep initial value as per [RFC 4342, 5]. */
- 		next_tmout = TFRC_INITIAL_TIMEOUT;
--		/*
--		 * FIXME - not sure above calculation is correct. See section
--		 * 5 of CCID3 11 should adjust tx_t_ipi and double that to
--		 * achieve it really
--		 */
-+		ccid3_update_send_time(hctx);
+ {
+ 	struct sock *sk = (struct sock *)data;
+@@ -333,6 +360,8 @@ static int ccid3_hc_tx_send_packet(struc
+ 		 */
+ 		if (delay - (suseconds_t)hctx->ccid3hctx_delta >= 0)
+ 			return delay / 1000L;
++
++		ccid3_hc_tx_update_win_count(hctx, &now);
  		break;
- 	case TFRC_SSTATE_FBACK:
- 		/*
-@@ -479,17 +483,9 @@ static void ccid3_hc_tx_packet_recv(stru
- 		/* unschedule no feedback timer */
- 		sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
+ 	case TFRC_SSTATE_TERM:
+ 		DCCP_BUG("Illegal %s state TERM, sk=%p", dccp_role(sk), sk);
+@@ -353,7 +382,6 @@ static void ccid3_hc_tx_packet_sent(stru
+ 	const struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	struct timeval now;
+-	suseconds_t quarter_rtt;
+ 	struct dccp_tx_hist_entry *packet;
  
--		/* Update sending rate */
-+		/* Update sending rate (and likely t_ipi, t_nom, and delta) */
- 		ccid3_hc_tx_update_x(sk);
- 
--		/* Update next send time */
--		timeval_sub_usecs(&hctx->ccid3hctx_t_nom,
--				  hctx->ccid3hctx_t_ipi);
--		ccid3_calc_new_t_ipi(hctx);
--		timeval_add_usecs(&hctx->ccid3hctx_t_nom,
--				  hctx->ccid3hctx_t_ipi);
--		ccid3_calc_new_delta(hctx);
+ 	BUG_ON(hctx = NULL);
+@@ -373,25 +401,6 @@ static void ccid3_hc_tx_packet_sent(stru
+ 	}
+ 	packet->dccphtx_tstamp = now;
+ 	packet->dccphtx_seqno  = dp->dccps_gss;
+-	/*
+-	 * Check if win_count have changed
+-	 * Algorithm in "8.1. Window Counter Value" in RFC 4342.
+-	 */
+-	quarter_rtt = timeval_delta(&now, &hctx->ccid3hctx_t_last_win_count);
+-	if (likely(hctx->ccid3hctx_rtt > 8))
+-		quarter_rtt /= hctx->ccid3hctx_rtt / 4;
 -
- 		/* remove all packets older than the one acked from history */
- 		dccp_tx_hist_purge_older(ccid3_tx_hist,
- 					 &hctx->ccid3hctx_hist, packet);
--- 
-1.4.2.1.g3d5c
-
+-	if (quarter_rtt > 0) {
+-		hctx->ccid3hctx_t_last_win_count = now;
+-		hctx->ccid3hctx_last_win_count	 = (hctx->ccid3hctx_last_win_count +
+-						    min_t(unsigned long, quarter_rtt, 5)) % 16;
+-		ccid3_pr_debug("%s, sk=%p, window changed from "
+-			       "%u to %u!\n",
+-			       dccp_role(sk), sk,
+-			       packet->dccphtx_ccval,
+-			       hctx->ccid3hctx_last_win_count);
+-	}
+-
+ 	hctx->ccid3hctx_idle = 0;
+ 	packet->dccphtx_rtt  = hctx->ccid3hctx_rtt;
+ 	packet->dccphtx_sent = 1;
