@@ -1,31 +1,25 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Fri, 01 Dec 2006 13:43:37 +0000
-Subject: Re: [PATCHv2] [DCCP]: Use higher timeout value for nofeedback timer
-Message-Id: <39e6f6c70612010543t144e465bn6907eec071699fa2@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 08 Dec 2006 13:59:16 +0000
+Subject: CCID 3 starts to rock!
+Message-Id: <200612081359.16989@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200612011314.26835@strip-the-willow>
-In-Reply-To: <200612011314.26835@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/1/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Quoting Arnaldo Carvalho de Melo:
-> |  We're agreeing Gerrit... you jumped to conclusions too fast because
-> |  you didn't read what I said in the next paragraph, that I quote here:
-> |
-> |  ------------------------
-> |  Clarification on this one, you had _fixed_ it in your previous patch,
-> |  then removed this bit :)
-> |  ------------------------
-> Oh, I apologise.
->
-> I just got an email from Colin Perkins (do you read dccp@ietf?) who says
-> that it should be 16..20msec. I think will change to milliseconds, use the
-> default of 100msec suggested by Mark Handley, and update the configuration
-> menu once again.
+Just compiled the latest DaveM kernel on top of which the stack of submitted
+patches are applied. And see what I got:
 
-Yes, I do, saw that message :-)
+doom: ~#  iperf -Xdccp -l1424 -s -t20
+------------------------------------------------------------
+Server listening on DCCP port 5001
+ (default)
+------------------------------------------------------------
+[  4] local 139.133.209.65 port 5001 connected with 139.133.209.75 port 57297
+[  4]  0.0-20.0 sec  1.23 GBytes    527 Mbits/sec
 
-- Arnaldo
+
+I am not saying that this is due to the patches, but it is encouraging enough
+to improve the code so that it climbs up to the 940 Mbits/sec or so that TCP does.
+So, let's keep at this 8-)
