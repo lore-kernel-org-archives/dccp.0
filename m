@@ -1,20 +1,115 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 07 Dec 2006 22:21:57 +0000
-Subject: Re: [Patch 7/12]: Shift window counter computation
-Message-Id: <5640c7e00612071421s71c2b0dem94fd1ab019d95af1@mail.gmail.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Fri, 08 Dec 2006 03:40:48 +0000
+Subject: [PATCH 1/1 (Revised)] DCCP: Remove timeo
+Message-Id: <200612081640.49713.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <200612072113.08070@strip-the-willow>
-In-Reply-To: <200612072113.08070@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/8/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [CCID3]: Shift window counter computation
->
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+This patch simplifies things a lot by removing timeo as not needed.
+
+Other simplifications flow on from this such as removing constants.
+
+As a result of this EAGAIN is not returned any more.
+
+(Revised slightly as hadn't updated documentation)
+
+Inspired by Gerrit Renker
+
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
+index 6888698..44829d6 100644
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -80,8 +80,6 @@ extern void dccp_time_wait(struct sock *sk, int state, int timeo);
+ 
+ #define DCCP_RTO_MAX ((unsigned)(120 * HZ)) /* FIXME: using TCP value */
+ 
+-#define DCCP_XMIT_TIMEO 30000 /* Time/msecs for blocking transmit per packet */
+-
+ /* sysctl variables for DCCP */
+ extern int  sysctl_dccp_request_retries;
+ extern int  sysctl_dccp_retries1;
+diff --git a/net/dccp/output.c b/net/dccp/output.c
+index 400c30b..29a8e85 100644
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -175,14 +175,12 @@ void dccp_write_space(struct sock *sk)
+ /**
+  * dccp_wait_for_ccid - Wait for ccid to tell us we can send a packet
+  * @sk: socket to wait for
+- * @timeo: for how long
+  */
+-static int dccp_wait_for_ccid(struct sock *sk, struct sk_buff *skb,
+-			      long *timeo)
++static int dccp_wait_for_ccid(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	DEFINE_WAIT(wait);
+-	long delay;
++	unsigned long delay;
+ 	int rc;
+ 
+ 	while (1) {
+@@ -190,8 +188,6 @@ static int dccp_wait_for_ccid(struct sock *sk, struct sk_buff *skb,
+ 
+ 		if (sk->sk_err)
+ 			goto do_error;
+-		if (!*timeo)
+-			goto do_nonblock;
+ 		if (signal_pending(current))
+ 			goto do_interrupted;
+ 
+@@ -199,12 +195,9 @@ static int dccp_wait_for_ccid(struct sock *sk, struct sk_buff *skb,
+ 		if (rc <= 0)
+ 			break;
+ 		delay = msecs_to_jiffies(rc);
+-		if (delay > *timeo || delay < 0)
+-			goto do_nonblock;
+-
+ 		sk->sk_write_pending++;
+ 		release_sock(sk);
+-		*timeo -= schedule_timeout(delay);
++		schedule_timeout(delay);
+ 		lock_sock(sk);
+ 		sk->sk_write_pending--;
+ 	}
+@@ -215,11 +208,8 @@ out:
+ do_error:
+ 	rc = -EPIPE;
+ 	goto out;
+-do_nonblock:
+-	rc = -EAGAIN;
+-	goto out;
+ do_interrupted:
+-	rc = sock_intr_errno(*timeo);
++	rc = -EINTR;
+ 	goto out;
+ }
+ 
+@@ -240,8 +230,6 @@ void dccp_write_xmit(struct sock *sk, int block)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct sk_buff *skb;
+-	long timeo = DCCP_XMIT_TIMEO; 	/* If a packet is taking longer than
+-					   this we have other issues */
+ 
+ 	while ((skb = skb_peek(&sk->sk_write_queue))) {
+ 		int err = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb);
+@@ -251,10 +239,8 @@ void dccp_write_xmit(struct sock *sk, int block)
+ 				sk_reset_timer(sk, &dp->dccps_xmit_timer,
+ 						msecs_to_jiffies(err)+jiffies);
+ 				break;
+-			} else {
+-				err = dccp_wait_for_ccid(sk, skb, &timeo);
+-				timeo = DCCP_XMIT_TIMEO;
+-			}
++			} else
++				err = dccp_wait_for_ccid(sk, skb);
+ 			if (err)
+ 				DCCP_BUG("err=%d after dccp_wait_for_ccid", err);
+ 		}
