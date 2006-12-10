@@ -1,54 +1,52 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 05 Dec 2006 20:38:15 +0000
-Subject: [PATCH 1/7]:  Check against too large p
-Message-Id: <200612052038.15686@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Sun, 10 Dec 2006 03:02:26 +0000
+Subject: [PATCH 12/22] [DCCP]: Warn when discarding packet due to internal errors
+Message-Id: <20061210030225.GN17909@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Check against too large p
+This adds a (debug) warning message which is triggered whenever a packet is
+discarded due to send failure.
 
-This patch follows a suggestion by Ian McDonald and ensures that in
-the current code the value of p can not exceed 100%.  Such a value is
-illegal and would consequently cause a bug condition in tfrc_calc_x().
-
-The receiver case is also tested, and a warning message is added.
+It also adds a conditional, so that an interruption during dccp_wait_for_ccid
+is not treated as a `BUG': the rationale is that interruptions are external,
+whereas bug warnings are concerned with the internals.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid3.c |   13 +++++++++----
- 1 file changed, 9 insertions(+), 4 deletions(-)
+ net/dccp/output.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -444,9 +444,9 @@ static void ccid3_hc_tx_packet_recv(stru
+diff --git a/net/dccp/output.c b/net/dccp/output.c
+index 29a8e85..b4df12b 100644
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -241,7 +241,7 @@ void dccp_write_xmit(struct sock *sk, in
+ 				break;
+ 			} else
+ 				err = dccp_wait_for_ccid(sk, skb);
+-			if (err)
++			if (err && err != -EINTR)
+ 				DCCP_BUG("err=%d after dccp_wait_for_ccid", err);
+ 		}
  
- 		/* Update loss event rate */
- 		pinv = opt_recv->ccid3or_loss_event_rate;
--		if (pinv = ~0U || pinv = 0)
-+		if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
- 			hctx->ccid3hctx_p = 0;
--		else
-+		else				       /* can not exceed 100% */
-  			hctx->ccid3hctx_p = 1000000 / pinv;
- 
- 		dccp_timestamp(sk, &now);
-@@ -733,10 +733,15 @@ static void ccid3_hc_rx_send_feedback(st
- 	/* Convert to multiples of 10us */
- 	hcrx->ccid3hcrx_elapsed_time  			timeval_delta(&now, &packet->dccphrx_tstamp) / 10;
-+
- 	if (hcrx->ccid3hcrx_p = 0)
--		hcrx->ccid3hcrx_pinv = ~0;
--	else
-+		hcrx->ccid3hcrx_pinv = ~0U;	/* see RFC 4342, 8.5 */
-+	else if (hcrx->ccid3hcrx_p > 1000000) {
-+		DCCP_WARN("p (%u) > 100%%\n", hcrx->ccid3hcrx_p);
-+		hcrx->ccid3hcrx_pinv = 1;	/* use 100% in this case */
-+	} else
- 		hcrx->ccid3hcrx_pinv = 1000000 / hcrx->ccid3hcrx_p;
-+
- 	dp->dccps_hc_rx_insert_options = 1;
- 	dccp_send_ack(sk);
+@@ -267,8 +267,10 @@ void dccp_write_xmit(struct sock *sk, in
+ 			if (err)
+ 				DCCP_BUG("err=%d after ccid_hc_tx_packet_sent",
+ 					 err);
+-		} else
++		} else {
++			dccp_pr_debug("packet discarded\n");
+ 			kfree(skb);
++		}
+ 	}
  }
+ 
+-- 
+1.4.2.1.g3d5c
+
