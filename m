@@ -1,157 +1,59 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 10 Dec 2006 03:02:08 +0000
-Subject: [PATCH 10/22] [DCCP]: Simplify TFRC calculation
-Message-Id: <20061210030207.GL17909@mandriva.com>
+Date: Sun, 10 Dec 2006 03:00:07 +0000
+Subject: [PATCH 3/22] [DCCP] ccid3: Check against too large p
+Message-Id: <20061210030007.GE17909@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-In migrating towards using the newer functions scaled_div/scaled_div32
-for TFRC computations mapped from floating-point onto integer arithmetic,
-this completes the last stage of modifications.
+This patch follows a suggestion by Ian McDonald and ensures that in
+the current code the value of p can not exceed 100%.  Such a value is
+illegal and would consequently cause a bug condition in tfrc_calc_x().
 
-In particular, the overflow case for computing X_calc is circumvented by
- * breaking the computation into two stages
- * the first stage, res = (s*1E6)/R, cannot overflow due to use of u64
- * in the second stage, res = (res*1E6)/f, overflow on u32 is avoided due
-   to (i) returning UINT_MAX in this case (which is logically appropriate)
-   and (ii) issuing a warning message into the system log (since very likely
-   there is a problem somewhere else with the parameters)
-
-Lastly, all such scaling operations are now exported into tfrc.h, since
-actually this form of scaled computation is specific to TFRC and not to CCID3.
+The receiver case is also tested, and a warning message is added.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid3.h             |   19 -------------------
- net/dccp/ccids/lib/tfrc.h          |   23 ++++++++++++++++++++++-
- net/dccp/ccids/lib/tfrc_equation.c |   28 +++++++++++++---------------
- 3 files changed, 35 insertions(+), 35 deletions(-)
+ net/dccp/ccids/ccid3.c |   13 +++++++++----
+ 1 files changed, 9 insertions(+), 4 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index cd4fc54..da0ca3c 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -171,23 +171,4 @@ static inline struct ccid3_hc_rx_sock *c
-     return ccid_priv(dccp_sk(sk)->dccps_hc_rx_ccid);
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 66a27b9..f1b745e 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -444,9 +444,9 @@ static void ccid3_hc_tx_packet_recv(stru
+ 
+ 		/* Update loss event rate */
+ 		pinv = opt_recv->ccid3or_loss_event_rate;
+-		if (pinv = ~0U || pinv = 0)
++		if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
+ 			hctx->ccid3hctx_p = 0;
+-		else
++		else				       /* can not exceed 100% */
+  			hctx->ccid3hctx_p = 1000000 / pinv;
+ 
+ 		dccp_timestamp(sk, &now);
+@@ -733,10 +733,15 @@ static void ccid3_hc_rx_send_feedback(st
+ 	/* Convert to multiples of 10us */
+ 	hcrx->ccid3hcrx_elapsed_time  			timeval_delta(&now, &packet->dccphrx_tstamp) / 10;
++
+ 	if (hcrx->ccid3hcrx_p = 0)
+-		hcrx->ccid3hcrx_pinv = ~0;
+-	else
++		hcrx->ccid3hcrx_pinv = ~0U;	/* see RFC 4342, 8.5 */
++	else if (hcrx->ccid3hcrx_p > 1000000) {
++		DCCP_WARN("p (%u) > 100%%\n", hcrx->ccid3hcrx_p);
++		hcrx->ccid3hcrx_pinv = 1;	/* use 100% in this case */
++	} else
+ 		hcrx->ccid3hcrx_pinv = 1000000 / hcrx->ccid3hcrx_p;
++
+ 	dp->dccps_hc_rx_insert_options = 1;
+ 	dccp_send_ack(sk);
  }
- 
--static inline u64 scaled_div(u64 a, u32 b)
--{
--	BUG_ON(b=0);
--	a *= 1000000;
--	do_div(a, b);
--	return a;
--}
--
--static inline u32 scaled_div32(u64 a, u32 b)
--{
--	u64 result = scaled_div(a, b);
--
--	if (result > UINT_MAX) {
--		DCCP_CRIT("Overflow: a(%llu)/b(%u) > ~0U",
--			  (unsigned long long)a, b);
--		return UINT_MAX;
--	}
--	return result;
--}
- #endif /* _DCCP_CCID3_H_ */
-diff --git a/net/dccp/ccids/lib/tfrc.h b/net/dccp/ccids/lib/tfrc.h
-index 45f30f5..faf5f7e 100644
---- a/net/dccp/ccids/lib/tfrc.h
-+++ b/net/dccp/ccids/lib/tfrc.h
-@@ -13,8 +13,29 @@ #define _TFRC_H_
-  *  the Free Software Foundation; either version 2 of the License, or
-  *  (at your option) any later version.
-  */
--
- #include <linux/types.h>
-+#include <asm/div64.h>
-+
-+/* integer-arithmetic divisions of type (a * 1000000)/b */
-+static inline u64 scaled_div(u64 a, u32 b)
-+{
-+	BUG_ON(b=0);
-+	a *= 1000000;
-+	do_div(a, b);
-+	return a;
-+}
-+
-+static inline u32 scaled_div32(u64 a, u32 b)
-+{
-+	u64 result = scaled_div(a, b);
-+
-+	if (result > UINT_MAX) {
-+		DCCP_CRIT("Overflow: a(%llu)/b(%u) > ~0U",
-+			  (unsigned long long)a, b);
-+		return UINT_MAX;
-+	}
-+	return result;
-+}
- 
- extern u32 tfrc_calc_x(u16 s, u32 R, u32 p);
- extern u32 tfrc_calc_x_reverse_lookup(u32 fvalue);
-diff --git a/net/dccp/ccids/lib/tfrc_equation.c b/net/dccp/ccids/lib/tfrc_equation.c
-index ddac2c5..90009fd 100644
---- a/net/dccp/ccids/lib/tfrc_equation.c
-+++ b/net/dccp/ccids/lib/tfrc_equation.c
-@@ -13,7 +13,6 @@
-  */
- 
- #include <linux/module.h>
--#include <asm/div64.h>
- #include "../../dccp.h"
- #include "tfrc.h"
- 
-@@ -616,15 +615,12 @@ static inline u32 tfrc_binsearch(u32 fva
-  *  @R: RTT                  scaled by 1000000   (i.e., microseconds)
-  *  @p: loss ratio estimate  scaled by 1000000
-  *  Returns X_calc           in bytes per second (not scaled).
-- *
-- * Note: DO NOT alter this code unless you run test cases against it,
-- *       as the code has been optimized to stop underflow/overflow.
-  */
- u32 tfrc_calc_x(u16 s, u32 R, u32 p)
- {
--	int index;
-+	u16 index;
- 	u32 f;
--	u64 tmp1, tmp2;
-+	u64 result;
- 
- 	/* check against invalid parameters and divide-by-zero   */
- 	BUG_ON(p >  1000000);		/* p must not exceed 100%   */
-@@ -650,15 +646,17 @@ u32 tfrc_calc_x(u16 s, u32 R, u32 p)
- 		f = tfrc_calc_x_lookup[index][0];
- 	}
- 
--	/* The following computes X = s/(R*f(p)) in bytes per second. Since f(p)
--	 * and R are both scaled by 1000000, we need to multiply by 1000000^2.
--	 * => DO NOT alter this unless you test against overflow on 32 bit   */
--	tmp1 = ((u64)s * 100000000);
--	tmp2 = ((u64)R * (u64)f);
--	do_div(tmp2, 10000);
--	do_div(tmp1, tmp2); 
--
--	return (u32)tmp1; 
-+	/*
-+	 * Compute X = s/(R*f(p)) in bytes per second.
-+	 * Since f(p) and R are both scaled by 1000000, we need to multiply by
-+	 * 1000000^2. To avoid overflow, the result is computed in two stages.
-+	 * This works under almost all reasonable operational conditions, for a
-+	 * wide range of parameters. Yet, should some strange combination of
-+	 * parameters result in overflow, the use of scaled_div32 will catch
-+	 * this and return UINT_MAX - which is a logically adequate consequence.
-+	 */
-+	result = scaled_div(s, R);
-+	return scaled_div32(result, f);
- }
- 
- EXPORT_SYMBOL_GPL(tfrc_calc_x);
 -- 
 1.4.2.1.g3d5c
 
