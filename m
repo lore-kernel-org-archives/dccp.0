@@ -1,17 +1,19 @@
-From: Andrea Bittau <a.bittau@cs.ucl.ac.uk>
-Date: Mon, 04 Dec 2006 08:38:18 +0000
-Subject: Re: [BUG] CCID3 performance
-Message-Id: <20061204083818.GA64094@shorty.sorbonet.org>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Sun, 10 Dec 2006 18:05:37 +0000
+Subject: [PATCHES 0/2] [DCCP]: A fix and some whitespace removals
+Message-Id: <20061210180537.GA25274@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
-References: <5640c7e00612031755h434e643cwf87e043a8ec0d163@mail.gmail.com>
-In-Reply-To: <5640c7e00612031755h434e643cwf87e043a8ec0d163@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Mon, Dec 04, 2006 at 08:34:54AM +0000, Gerrit Renker wrote:
-> This is helpful, many thanks. I was using an older 2xP3 Xeon 700Mhz with 2GB Ram and e100
-> card. I sometimes think it may be the waiting/sleeping/polling which slows things down, but
+Hi David,
 
-I think that SMP and NAPI only add problems.  This is based on rumors.
+	Please consider pulling from:
+
+master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.git
+
+Regards,
+
+- Arnaldo
