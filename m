@@ -1,107 +1,281 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 10 Dec 2006 03:02:38 +0000
-Subject: [PATCH 13/22] [DCCP] ccid: Deprecate ccid_hc_tx_insert_options
-Message-Id: <20061210030237.GO17909@mandriva.com>
+Date: Sun, 10 Dec 2006 03:03:55 +0000
+Subject: [PATCH 21/22] [DCCP] ccid3: Reorder packet history source file
+Message-Id: <20061210030354.GW17909@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
- The function ccid3_hc_tx_insert_options only does a redundant no-op,
- as the operation
+No code change at all.
 
-  DCCP_SKB_CB(skb)->dccpd_ccval = hctx->ccid3hctx_last_win_count;
-
- is already performed _unconditionally_ in ccid3_hc_tx_send_packet.
-
- Since there is further no current need for this function, it is removed
- entirely. Since furthermore, there is actually no present need for the
- entire interface function ccid_hc_tx_insert_options, it was decided to
- remove it also, to clean up the interface.
+This reorders the source file to follow the same order as the corresponding
+header file.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccid.h        |   10 ----------
- net/dccp/ccids/ccid3.c |   12 ------------
- net/dccp/options.c     |    5 -----
- 3 files changed, 0 insertions(+), 27 deletions(-)
+ net/dccp/ccids/lib/packet_history.c |  219 ++++++++++++++++++-----------------
+ 1 files changed, 112 insertions(+), 107 deletions(-)
 
-diff --git a/net/dccp/ccid.h b/net/dccp/ccid.h
-index bcc2d12..c65cb24 100644
---- a/net/dccp/ccid.h
-+++ b/net/dccp/ccid.h
-@@ -43,8 +43,6 @@ struct ccid_operations {
- 						    unsigned char* value);
- 	int		(*ccid_hc_rx_insert_options)(struct sock *sk,
- 						     struct sk_buff *skb);
--	int		(*ccid_hc_tx_insert_options)(struct sock *sk,
--						     struct sk_buff *skb);
- 	void		(*ccid_hc_tx_packet_recv)(struct sock *sk,
- 						  struct sk_buff *skb);
- 	int		(*ccid_hc_tx_parse_options)(struct sock *sk,
-@@ -146,14 +144,6 @@ static inline int ccid_hc_rx_parse_optio
- 	return rc;
- }
+diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
+index b876c9c..2e8ef42 100644
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -36,9 +36,100 @@
  
--static inline int ccid_hc_tx_insert_options(struct ccid *ccid, struct sock *sk,
--					    struct sk_buff *skb)
--{
--	if (ccid->ccid_ops->ccid_hc_tx_insert_options != NULL)
--		return ccid->ccid_ops->ccid_hc_tx_insert_options(sk, skb);
--	return 0;
--}
+ #include <linux/module.h>
+ #include <linux/string.h>
 -
- static inline int ccid_hc_rx_insert_options(struct ccid *ccid, struct sock *sk,
- 					    struct sk_buff *skb)
+ #include "packet_history.h"
+ 
++/*
++ * 	Transmitter History Routines
++ */
++struct dccp_tx_hist *dccp_tx_hist_new(const char *name)
++{
++	struct dccp_tx_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
++	static const char dccp_tx_hist_mask[] = "tx_hist_%s";
++	char *slab_name;
++
++	if (hist = NULL)
++		goto out;
++
++	slab_name = kmalloc(strlen(name) + sizeof(dccp_tx_hist_mask) - 1,
++			    GFP_ATOMIC);
++	if (slab_name = NULL)
++		goto out_free_hist;
++
++	sprintf(slab_name, dccp_tx_hist_mask, name);
++	hist->dccptxh_slab = kmem_cache_create(slab_name,
++					     sizeof(struct dccp_tx_hist_entry),
++					       0, SLAB_HWCACHE_ALIGN,
++					       NULL, NULL);
++	if (hist->dccptxh_slab = NULL)
++		goto out_free_slab_name;
++out:
++	return hist;
++out_free_slab_name:
++	kfree(slab_name);
++out_free_hist:
++	kfree(hist);
++	hist = NULL;
++	goto out;
++}
++
++EXPORT_SYMBOL_GPL(dccp_tx_hist_new);
++
++void dccp_tx_hist_delete(struct dccp_tx_hist *hist)
++{
++	const char* name = kmem_cache_name(hist->dccptxh_slab);
++
++	kmem_cache_destroy(hist->dccptxh_slab);
++	kfree(name);
++	kfree(hist);
++}
++
++EXPORT_SYMBOL_GPL(dccp_tx_hist_delete);
++
++struct dccp_tx_hist_entry *
++	dccp_tx_hist_find_entry(const struct list_head *list, const u64 seq)
++{
++	struct dccp_tx_hist_entry *packet = NULL, *entry;
++
++	list_for_each_entry(entry, list, dccphtx_node)
++		if (entry->dccphtx_seqno = seq) {
++			packet = entry;
++			break;
++		}
++
++	return packet;
++}
++
++EXPORT_SYMBOL_GPL(dccp_tx_hist_find_entry);
++
++void dccp_tx_hist_purge(struct dccp_tx_hist *hist, struct list_head *list)
++{
++	struct dccp_tx_hist_entry *entry, *next;
++
++	list_for_each_entry_safe(entry, next, list, dccphtx_node) {
++		list_del_init(&entry->dccphtx_node);
++		dccp_tx_hist_entry_delete(hist, entry);
++	}
++}
++
++EXPORT_SYMBOL_GPL(dccp_tx_hist_purge);
++
++void dccp_tx_hist_purge_older(struct dccp_tx_hist *hist,
++			      struct list_head *list,
++			      struct dccp_tx_hist_entry *packet)
++{
++	struct dccp_tx_hist_entry *next;
++
++	list_for_each_entry_safe_continue(packet, next, list, dccphtx_node) {
++		list_del_init(&packet->dccphtx_node);
++		dccp_tx_hist_entry_delete(hist, packet);
++	}
++}
++
++EXPORT_SYMBOL_GPL(dccp_tx_hist_purge_older);
++
++/*
++ * 	Receiver History Routines
++ */
+ struct dccp_rx_hist *dccp_rx_hist_new(const char *name)
  {
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 936704d..7017d84 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -551,17 +551,6 @@ static void ccid3_hc_tx_packet_recv(stru
+ 	struct dccp_rx_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
+@@ -83,18 +174,24 @@ void dccp_rx_hist_delete(struct dccp_rx_
+ 
+ EXPORT_SYMBOL_GPL(dccp_rx_hist_delete);
+ 
+-void dccp_rx_hist_purge(struct dccp_rx_hist *hist, struct list_head *list)
++int dccp_rx_hist_find_entry(const struct list_head *list, const u64 seq,
++			    u8 *ccval)
+ {
+-	struct dccp_rx_hist_entry *entry, *next;
++	struct dccp_rx_hist_entry *packet = NULL, *entry;
+ 
+-	list_for_each_entry_safe(entry, next, list, dccphrx_node) {
+-		list_del_init(&entry->dccphrx_node);
+-		kmem_cache_free(hist->dccprxh_slab, entry);
+-	}
+-}
++	list_for_each_entry(entry, list, dccphrx_node)
++		if (entry->dccphrx_seqno = seq) {
++			packet = entry;
++			break;
++		}
+ 
+-EXPORT_SYMBOL_GPL(dccp_rx_hist_purge);
++	if (packet)
++		*ccval = packet->dccphrx_ccval;
+ 
++	return packet != NULL;
++}
++
++EXPORT_SYMBOL_GPL(dccp_rx_hist_find_entry);
+ struct dccp_rx_hist_entry *
+ 		dccp_rx_hist_find_data_packet(const struct list_head *list)
+ {
+@@ -184,110 +281,18 @@ void dccp_rx_hist_add_packet(struct dccp
+ 
+ EXPORT_SYMBOL_GPL(dccp_rx_hist_add_packet);
+ 
+-struct dccp_tx_hist *dccp_tx_hist_new(const char *name)
+-{
+-	struct dccp_tx_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
+-	static const char dccp_tx_hist_mask[] = "tx_hist_%s";
+-	char *slab_name;
+-
+-	if (hist = NULL)
+-		goto out;
+-
+-	slab_name = kmalloc(strlen(name) + sizeof(dccp_tx_hist_mask) - 1,
+-			    GFP_ATOMIC);
+-	if (slab_name = NULL)
+-		goto out_free_hist;
+-
+-	sprintf(slab_name, dccp_tx_hist_mask, name);
+-	hist->dccptxh_slab = kmem_cache_create(slab_name,
+-					     sizeof(struct dccp_tx_hist_entry),
+-					       0, SLAB_HWCACHE_ALIGN,
+-					       NULL, NULL);
+-	if (hist->dccptxh_slab = NULL)
+-		goto out_free_slab_name;
+-out:
+-	return hist;
+-out_free_slab_name:
+-	kfree(slab_name);
+-out_free_hist:
+-	kfree(hist);
+-	hist = NULL;
+-	goto out;
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_tx_hist_new);
+-
+-void dccp_tx_hist_delete(struct dccp_tx_hist *hist)
+-{
+-	const char* name = kmem_cache_name(hist->dccptxh_slab);
+-
+-	kmem_cache_destroy(hist->dccptxh_slab);
+-	kfree(name);
+-	kfree(hist);
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_tx_hist_delete);
+-
+-struct dccp_tx_hist_entry *
+-	dccp_tx_hist_find_entry(const struct list_head *list, const u64 seq)
+-{
+-	struct dccp_tx_hist_entry *packet = NULL, *entry;
+-
+-	list_for_each_entry(entry, list, dccphtx_node)
+-		if (entry->dccphtx_seqno = seq) {
+-			packet = entry;
+-			break;
+-		}
+-
+-	return packet;
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_tx_hist_find_entry);
+-
+-int dccp_rx_hist_find_entry(const struct list_head *list, const u64 seq,
+-   u8 *ccval)
+-{
+-	struct dccp_rx_hist_entry *packet = NULL, *entry;
+-
+-	list_for_each_entry(entry, list, dccphrx_node)
+-		if (entry->dccphrx_seqno = seq) {
+-			packet = entry;
+-			break;
+-		}
+-
+-	if (packet)
+-		*ccval = packet->dccphrx_ccval;
+-
+-	return packet != NULL;
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_rx_hist_find_entry);
+-
+-void dccp_tx_hist_purge_older(struct dccp_tx_hist *hist,
+-			      struct list_head *list,
+-			      struct dccp_tx_hist_entry *packet)
++void dccp_rx_hist_purge(struct dccp_rx_hist *hist, struct list_head *list)
+ {
+-	struct dccp_tx_hist_entry *next;
++	struct dccp_rx_hist_entry *entry, *next;
+ 
+-	list_for_each_entry_safe_continue(packet, next, list, dccphtx_node) {
+-		list_del_init(&packet->dccphtx_node);
+-		dccp_tx_hist_entry_delete(hist, packet);
++	list_for_each_entry_safe(entry, next, list, dccphrx_node) {
++		list_del_init(&entry->dccphrx_node);
++		kmem_cache_free(hist->dccprxh_slab, entry);
  	}
  }
  
--static int ccid3_hc_tx_insert_options(struct sock *sk, struct sk_buff *skb)
+-EXPORT_SYMBOL_GPL(dccp_tx_hist_purge_older);
+-
+-void dccp_tx_hist_purge(struct dccp_tx_hist *hist, struct list_head *list)
 -{
--	const struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+-	struct dccp_tx_hist_entry *entry, *next;
 -
--	BUG_ON(hctx = NULL);
--
--	if (sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN)
--		DCCP_SKB_CB(skb)->dccpd_ccval = hctx->ccid3hctx_last_win_count;
--	return 0;
--}
--
- static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
- 				     unsigned char len, u16 idx,
- 				     unsigned char *value)
-@@ -1216,7 +1205,6 @@ static struct ccid_operations ccid3 = {
- 	.ccid_hc_tx_send_packet	   = ccid3_hc_tx_send_packet,
- 	.ccid_hc_tx_packet_sent	   = ccid3_hc_tx_packet_sent,
- 	.ccid_hc_tx_packet_recv	   = ccid3_hc_tx_packet_recv,
--	.ccid_hc_tx_insert_options = ccid3_hc_tx_insert_options,
- 	.ccid_hc_tx_parse_options  = ccid3_hc_tx_parse_options,
- 	.ccid_hc_rx_obj_size	   = sizeof(struct ccid3_hc_rx_sock),
- 	.ccid_hc_rx_init	   = ccid3_hc_rx_init,
-diff --git a/net/dccp/options.c b/net/dccp/options.c
-index f398b43..c03ba61 100644
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -557,11 +557,6 @@ int dccp_insert_options(struct sock *sk,
- 			return -1;
- 		dp->dccps_hc_rx_insert_options = 0;
- 	}
--	if (dp->dccps_hc_tx_insert_options) {
--		if (ccid_hc_tx_insert_options(dp->dccps_hc_tx_ccid, sk, skb))
--			return -1;
--		dp->dccps_hc_tx_insert_options = 0;
+-	list_for_each_entry_safe(entry, next, list, dccphtx_node) {
+-		list_del_init(&entry->dccphtx_node);
+-		dccp_tx_hist_entry_delete(hist, entry);
 -	}
+-}
++EXPORT_SYMBOL_GPL(dccp_rx_hist_purge);
  
- 	/* Feature negotiation */
- 	/* Data packets can't do feat negotiation */
+-EXPORT_SYMBOL_GPL(dccp_tx_hist_purge);
+ 
+ MODULE_AUTHOR("Ian McDonald <ian.mcdonald@jandi.co.nz>, "
+ 	      "Arnaldo Carvalho de Melo <acme@ghostprotocols.net>");
 -- 
 1.4.2.1.g3d5c
 
