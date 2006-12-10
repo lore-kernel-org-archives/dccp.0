@@ -1,46 +1,123 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 20 Dec 2006 00:09:18 +0000
-Subject: State of CCID3/todo
-Message-Id: <5640c7e00612191609l252883dcqb92e91628ff76916@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Date: Sun, 10 Dec 2006 03:03:25 +0000
+Subject: [PATCH 18/22] [DCCP] ccid3: Perform history operations only after packet has been sent
+Message-Id: <20061210030324.GT17909@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Folks,
+ This migrates all packet history operations into the routine
+ ccid3_hc_tx_packet_sent, thereby removing synchronization problems
+ that occur when, as before, the operations are spread over multiple
+ routines.
+ The following minor simplifications are also applied:
+  * several simplifications now follow from this change - several tests
+    are now no longer required
+  * removal of one unnecessary variable (dp)
 
-Been working away on testing and thought I'd summarise where I'm up
-to. I've got it looking much better (matching closer to TFRC
-throughput equation). Performance is still not so good for direct
-connect boxes/boxes 1 hop away though :-(
+Justification:
 
-We were putting long loss intervals in because we were testing against
-~0 in calc_i_mean instead of ~0U. Patch sent - still to be merged.
+ Currently packet history operations span two different routines,
+ one of which is likely to pass through several iterations of sleeping
+ and awakening.
+ The first routine, ccid3_hc_tx_send_packet, allocates an entry and
+ sets a few fields. The remaining fields are filled in when the second
+ routine (which is not within a sleeping context), ccid3_hc_tx_packet_sent,
+ is called. This has several strong drawbacks:
+  * it is not necessary to split history operations - all fields can be
+    filled in by the second routine
+  * the first routine is called multiple times, until a packet can be sent,
+    and sleeps meanwhile - this causes a lot of difficulties with regard to
+    keeping the list consistent
+  * since both routines do not have a producer-consumer like synchronization,
+    it is very difficult to maintain data across calls to these routines
+  * the fact that the routines are called in different contexts (sleeping, not
+    sleeping) adds further problems
 
-We were sending at way too fast rate because t_ipi was getting
-calculated down because s was too low initially at skb->len when it
-was just a request packet. I've set this initially now to mss in a
-patch soon to be sent. This has mostly been fixed. I was thinking of
-altering ccid3_hc_tx_update_s to call ccid3_hc_tx_update_send_time
-when s changed as this should help also but this causes a divide by
-zero as x is zero initally... Still to look into this.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+---
+ net/dccp/ccids/ccid3.c |   38 +++++++++-----------------------------
+ 1 files changed, 9 insertions(+), 29 deletions(-)
 
-When we recalculate t_ipi we send a flood of packets or starve for a
-while. This is due to the fact we don't check t_nom when the packet is
-sent. Patch to be sent soon for this one.
-
-We weren't taking account of long non-loss intervals. Patch sent for this one.
-
-Calculating the first loss interval seems to be too optimistic - gives
-way too high values. Still to look into.
-
-We don't use ccval in loss calculation. Haven't looked into fixing
-much. Hurts my head.
-
-When we have multi packet loss we make multiple loss intervals of 1
-which is wrong according to spec.
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 6bb3f83..ef68c35 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -296,7 +296,6 @@ static int ccid3_hc_tx_send_packet(struc
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+-	struct dccp_tx_hist_entry *new_packet;
+ 	struct timeval now;
+ 	suseconds_t delay;
+ 
+@@ -310,21 +309,6 @@ static int ccid3_hc_tx_send_packet(struc
+ 	if (unlikely(skb->len = 0))
+ 		return -EBADMSG;
+ 
+-	/* See if last packet allocated was not sent */
+-	new_packet = dccp_tx_hist_head(&hctx->ccid3hctx_hist);
+-	if (new_packet = NULL || new_packet->dccphtx_sent) {
+-		new_packet = dccp_tx_hist_entry_new(ccid3_tx_hist,
+-						    GFP_ATOMIC);
+-
+-		if (unlikely(new_packet = NULL)) {
+-			DCCP_WARN("%s, sk=%p, not enough mem to add to history,"
+-				  "send refused\n", dccp_role(sk), sk);
+-			return -ENOBUFS;
+-		}
+-
+-		dccp_tx_hist_add_entry(&hctx->ccid3hctx_hist, new_packet);
+-	}
+-
+ 	dccp_timestamp(sk, &now);
+ 
+ 	switch (hctx->ccid3hctx_state) {
+@@ -380,31 +364,27 @@ static int ccid3_hc_tx_send_packet(struc
+ 
+ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ {
+-	const struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	struct timeval now;
+ 	struct dccp_tx_hist_entry *packet;
+ 
+ 	BUG_ON(hctx = NULL);
+ 
+-	dccp_timestamp(sk, &now);
+-
+ 	ccid3_hc_tx_update_s(hctx, len);
+ 
+-	packet = dccp_tx_hist_head(&hctx->ccid3hctx_hist);
++	packet = dccp_tx_hist_entry_new(ccid3_tx_hist, GFP_ATOMIC);
+ 	if (unlikely(packet = NULL)) {
+-		DCCP_WARN("packet doesn't exist in history!\n");
+-		return;
+-	}
+-	if (unlikely(packet->dccphtx_sent)) {
+-		DCCP_WARN("no unsent packet in history!\n");
++		DCCP_CRIT("packet history - out of memory!");
+ 		return;
+ 	}
++	dccp_tx_hist_add_entry(&hctx->ccid3hctx_hist, packet);
++
++	dccp_timestamp(sk, &now);
+ 	packet->dccphtx_tstamp = now;
+-	packet->dccphtx_seqno  = dp->dccps_gss;
+-	hctx->ccid3hctx_idle = 0;
+-	packet->dccphtx_rtt  = hctx->ccid3hctx_rtt;
+-	packet->dccphtx_sent = 1;
++	packet->dccphtx_seqno  = dccp_sk(sk)->dccps_gss;
++	packet->dccphtx_rtt    = hctx->ccid3hctx_rtt;
++	packet->dccphtx_sent   = 1;
++	hctx->ccid3hctx_idle   = 0;
+ }
+ 
+ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
 -- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+1.4.2.1.g3d5c
+
