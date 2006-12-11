@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Mon, 11 Dec 2006 08:52:23 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 11 Dec 2006 09:03:09 +0000
 Subject: Re: [PATCH] BUG-FIX - conversion errors
-Message-Id: <5640c7e00612110052s2a8d6309lda6f83f222057e8c@mail.gmail.com>
+Message-Id: <200612110903.09925@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200612081532.21104@strip-the-willow>
 In-Reply-To: <200612081532.21104@strip-the-willow>
@@ -10,18 +10,13 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/11/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Hi there - sorry about the whitespace errors and the above one. I thought about this one
-> when I went home on Friday. I will re-work the above, also to use MSS instead of `s', which
-> does make sense.
->
-> Thanks for all the good work, Arnaldo.
->
-> Gerrit
->
-Do we calculate mss anywhere?
+Quoting Ian McDonald:
+|  Do we calculate mss anywhere?
+Yes there is support in dccps_mss_cache .
+At the begin of dccp_send_msg e.g. it is used. 
 
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+I have thought about `s' vs. MSS and it is really stupid not to use MSS
+ -- if `s' is e.g. 20 bytes, one can only send 40 ... 80 bytes per RTT
+ -- with jumbo ethernet cards the MTU can be as high as 10k -- a multiple of 20 bytes :)
+
+Gerrit
