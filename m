@@ -1,51 +1,29 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 10 Dec 2006 03:03:15 +0000
-Subject: [PATCH 17/22] [DCCP] ccid3: TX history - remove unused field
-Message-Id: <20061210030315.GS17909@mandriva.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Tue, 12 Dec 2006 23:25:52 +0000
+Subject: [PATCH 1/1] DCCP: Fix bug in loss interval handling
+Message-Id: <200612131225.53786.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This removes the `dccphtx_ccval' field since it is nowhere used in the code and
-in fact not necessary for the accounting.
+I've been trying to fix up performance for CCID3 and found this little
+bug that means the comparison was invalid and we were using invalid loss
+intervals when we shouldn't of.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid3.c              |    5 +++--
- net/dccp/ccids/lib/packet_history.h |    1 -
- 2 files changed, 3 insertions(+), 3 deletions(-)
-
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 1a2ffa1..6bb3f83 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -370,8 +370,9 @@ static int ccid3_hc_tx_send_packet(struc
+diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
+index 0a0baef..372d7e7 100644
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -91,7 +91,7 @@ u32 dccp_li_hist_calc_i_mean(struct list_head *list)
+ 	u32 w_tot  = 0;
  
- 	/* prepare to send now (add options etc.) */
- 	dp->dccps_hc_tx_insert_options = 1;
--	new_packet->dccphtx_ccval = DCCP_SKB_CB(skb)->dccpd_ccval -				    hctx->ccid3hctx_last_win_count;
-+	DCCP_SKB_CB(skb)->dccpd_ccval = hctx->ccid3hctx_last_win_count;
-+
-+	/* set the nominal send time for the next following packet */
- 	timeval_add_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
- 
- 	return 0;
-diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
-index 9a8bcf2..4198185 100644
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -52,7 +52,6 @@ #define TFRC_WIN_COUNT_LIMIT	16
- struct dccp_tx_hist_entry {
- 	struct list_head dccphtx_node;
- 	u64		 dccphtx_seqno:48,
--			 dccphtx_ccval:4,
- 			 dccphtx_sent:1;
- 	u32		 dccphtx_rtt;
- 	struct timeval	 dccphtx_tstamp;
--- 
-1.4.2.1.g3d5c
-
+ 	list_for_each_entry_safe(li_entry, li_next, list, dccplih_node) {
+-		if (li_entry->dccplih_interval != ~0) {
++		if (li_entry->dccplih_interval != ~0U) {
+ 			i_tot0 += li_entry->dccplih_interval * dccp_li_hist_w[i];
+ 			w_tot  += dccp_li_hist_w[i];
+ 			if (i != 0)
