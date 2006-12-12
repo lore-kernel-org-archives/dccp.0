@@ -1,126 +1,63 @@
 From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 03 Dec 2006 22:09:07 +0000
-Subject: [PATCH 9/10] [DCCP] ccid3: Deprecate TFRC_SMALLEST_P
-Message-Id: <20061203220907.GO17803@mandriva.com>
+Date: Tue, 12 Dec 2006 22:47:56 +0000
+Subject: [PATCH 1/1][DCCP] ccid3: return value in ccid3_hc_rx_calc_first_li
+Message-Id: <20061212224756.GA6888@mandriva.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
- This patch deprecates the existing use of an arbitrary value TFRC_SMALLEST_P
- for low-threshold values of p. This avoids masking low-resolution errors.
- Instead, the code now checks against real boundaries (implemented by preceding
- patch) and provides warnings whenever a real value falls below the threshold.
+David,
 
- If such messages are observed, it is a better solution to take this as an
- indication that the lookup table needs to be re-engineered.
+	Please consider pulling from:
 
-Changelog:
-----------
- This patch
-   * makes handling all TFRC resolution errors local to the TFRC library
+master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.git
 
-   * removes unnecessary test whether X_calc is 'infinity' due to p=0 -- this
-     condition is already caught by tfrc_calc_x()
+Thanks a lot,
 
-   * removes setting ccid3hctx_p = TFRC_SMALLEST_P in ccid3_hc_tx_packet_recv
-     since this is now done by the TFRC library
+- Arnaldo
 
-   * updates BUG_ON test in ccid3_hc_tx_no_feedback_timer to take into account
-     that p now is either 0 (and then X_calc is irrelevant), or it is > 0; since
-     the handling of TFRC_SMALLEST_P is now taken care of in the tfrc library
+-------------------------------- 8< -------------------------------
 
-Justification:
---------------
- The TFRC code uses a lookup table which has a bounded resolution.
- The lowest possible value of the loss event rate `p' which can be
- resolved is currently 0.0001.  Substituting this lower threshold for
- p when p is less than 0.0001 results in a huge, exponentially-growing
- error.  The error can be computed by the following formula:
+In a recent patch we introduced invalid return codes which will result in the
+opposite of what is intended (i.e. send more packets in face of peculiar
+network conditions).
 
-    (f(0.0001) - f(p))/f(p) * 100      for p < 0.0001
+This fixes it by returning ~0 which means not calculated as per
+dccp_li_hist_calc_i_mean.
 
- Currently the solution is to use an (arbitrary) value
-     TFRC_SMALLEST_P  =   40 * 1E-6   =   0.00004
- and to consider all values below this value as `virtually zero'.  Due to
- the exponentially growing resolution error, this is not a good idea, since
- it hides the fact that the table can not resolve practically occurring cases.
- Already at p = TFRC_SMALLEST_P, the error is as high as 58.19%!
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
 ---
- net/dccp/ccids/ccid3.c |   22 ++++++----------------
- net/dccp/ccids/ccid3.h |    2 --
- 2 files changed, 6 insertions(+), 18 deletions(-)
+ net/dccp/ccids/ccid3.c |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 721efc7..cf8c07b 100644
+index fa6b753..40402c5 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -137,8 +137,7 @@ static void ccid3_hc_tx_update_x(struct 
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 	const __u32 old_x = hctx->ccid3hctx_x;
+@@ -845,8 +845,8 @@ found:
+ 	 * Find some p such that f(p) = fval; return 1/p [RFC 3448, 6.3.1].
+ 	 */
+ 	if (rtt = 0) {			/* would result in divide-by-zero */
+-		DCCP_WARN("RTT=0, returning 1/p = 1\n");
+-		return 1000000;
++		DCCP_WARN("RTT=0\n");
++		return ~0;
+ 	}
  
--	/* To avoid large error in calcX */
--	if (hctx->ccid3hctx_p >= TFRC_SMALLEST_P) {
-+	if (hctx->ccid3hctx_p > 0) {
- 		hctx->ccid3hctx_x_calc = tfrc_calc_x(hctx->ccid3hctx_s,
- 						     hctx->ccid3hctx_rtt,
- 						     hctx->ccid3hctx_p);
-@@ -226,16 +225,14 @@ static void ccid3_hc_tx_no_feedback_time
- 				       ccid3_tx_state_name(hctx->ccid3hctx_state));
- 			/* Halve sending rate */
+ 	dccp_timestamp(sk, &tstamp);
+@@ -858,7 +858,7 @@ found:
+ 		DCCP_WARN("X_recv=0\n");
+ 		if ((x_recv = hcrx->ccid3hcrx_x_recv) = 0) {
+ 			DCCP_BUG("stored value of X_recv is zero");
+-			return 1000000;
++			return ~0;
+ 		}
+ 	}
  
--			/*  If (X_calc > 2 * X_recv)
-+			/*  If (p = 0 || X_calc > 2 * X_recv)
- 			 *    X_recv = max(X_recv / 2, s / (2 * t_mbi));
- 			 *  Else
- 			 *    X_recv = X_calc / 4;
- 			 */
--			BUG_ON(hctx->ccid3hctx_p >= TFRC_SMALLEST_P &&
--			       hctx->ccid3hctx_x_calc = 0);
-+			BUG_ON(hctx->ccid3hctx_p && !hctx->ccid3hctx_x_calc);
- 
--			/* check also if p is zero -> x_calc is infinity? */
--			if (hctx->ccid3hctx_p < TFRC_SMALLEST_P ||
-+			if (hctx->ccid3hctx_p  = 0 ||
- 			    hctx->ccid3hctx_x_calc > 2 * hctx->ccid3hctx_x_recv)
- 				hctx->ccid3hctx_x_recv = max_t(u32, hctx->ccid3hctx_x_recv / 2,
- 								    hctx->ccid3hctx_s / (2 * TFRC_T_MBI));
-@@ -449,15 +446,8 @@ static void ccid3_hc_tx_packet_recv(stru
- 		pinv = opt_recv->ccid3or_loss_event_rate;
- 		if (pinv = ~0U || pinv = 0)
- 			hctx->ccid3hctx_p = 0;
--		else {
--			hctx->ccid3hctx_p = 1000000 / pinv;
--
--			if (hctx->ccid3hctx_p < TFRC_SMALLEST_P) {
--				hctx->ccid3hctx_p = TFRC_SMALLEST_P;
--				ccid3_pr_debug("%s, sk=%p, Smallest p used!\n",
--					       dccp_role(sk), sk);
--			}
--		}
-+		else
-+ 			hctx->ccid3hctx_p = 1000000 / pinv;
- 
- 		dccp_timestamp(sk, &now);
- 
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index 27cb20a..07596d7 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -51,8 +51,6 @@ #define TFRC_OPSYS_HALF_TIME_GRAN  (USEC
- /* Parameter t_mbi from [RFC 3448, 4.3]: backoff interval in seconds */
- #define TFRC_T_MBI		   64
- 
--#define TFRC_SMALLEST_P		   40
--
- enum ccid3_options {
- 	TFRC_OPT_LOSS_EVENT_RATE = 192,
- 	TFRC_OPT_LOSS_INTERVALS	 = 193,
 -- 
 1.4.2.1.g3d5c
+
 
