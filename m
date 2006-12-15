@@ -1,35 +1,32 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 15 Dec 2006 10:49:49 +0000
-Subject: [PATCH 0/8]: Sequence numbers, larger windows revisited, minor cleanups
-Message-Id: <200612151049.50073@strip-the-willow>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Fri, 15 Dec 2006 21:54:43 +0000
+Subject: Re: [PATCH 0/8]: Sequence numbers, larger windows revisited, minor cleanups
+Message-Id: <5640c7e00612151354g9bd71d9kf2c6f2cd7fb893ac@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <200612151049.50073@strip-the-willow>
+In-Reply-To: <200612151049.50073@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is a small set of patches, likely the last for this year.
-I have run my whitespace test script over them and gave them a
-test run (sorry, the sparc64 is not yet up).
+On 12/15/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> This is a small set of patches, likely the last for this year.
+> I have run my whitespace test script over them and gave them a
+> test run (sorry, the sparc64 is not yet up).
+>
+These look good. I presume that they are unfortunately 2.6.21 material
+now :-( At least Gerrit has them as a patch set up. I'll go rework my
+other patches now when I get a chance.
 
-Patch 1: Adds the add48/sub48 functions to dccp.h. This was
-         inspired by Ian McDonald
+The only change (at present) I know that hasn't made it up to Dave M
+for 2.6.20 would be this trivial one of mine:
+http://www.mail-archive.com/dccp@vger.kernel.org/msg01150.html
 
-Patch 2: Changes dccp_delta_seqno(a, b) to return signed numbers,
-         depending on whether a sequence number a is `before' b or not
+I presume this will get pushed to him at some stage.
 
-Patch 3: Makes `before48' unambiguous, following the previous discussions.
-         I have kept Arnaldo's basic concept, only the subtraction and
-         comparison changes. Thanks to Eddie for discussions. 
-
-Patch 4: Fixes a problem with follows48, solved as a byproduct of dccp_delta_seqno
-
-Patch 5: Moves ccid3_pr_debug into header file so that the macro can be used by
-         other files. Thanks to Ian McDonald who raised this.
-
-Patch 6: Removes a now redundant `len' test in ccid3_hc_tx_update_s
-
-Patch 7: Re-orders ccid3.c in a TX/RX section, following the ordering in packet_history.{c,h}
-
-Patch 8: Now uses MSS instead of `s' for larger windows -- and now finally also larger throughput :)
-
+Ian
+-- 
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
