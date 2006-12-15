@@ -1,29 +1,64 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 21 Dec 2006 04:03:26 +0000
-Subject: Re: [PATCH 0/5] DCCP updates
-Message-Id: <5640c7e00612202003q7b8ad33bk8cf1d7814bd95cb6@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 15 Dec 2006 10:50:54 +0000
+Subject: [PATCH 5/8]:  Move debugging macro to header file
+Message-Id: <200612151050.54101@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200612201542.59973.ian.mcdonald@jandi.co.nz>
-In-Reply-To: <200612201542.59973.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/20/06, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> These patches apply against Dave M's tree with Gerrit's patches on top
->
-> Patch 1 is a resend. This is in Arnaldo's tree but not in Gerrit's patchset
-> Patch 2 is a resend but has been altered slightly as per Gerrit's comments
-> Patches 3-5 are new.
+[CCID3]: Move debugging macro to header file
 
-Just resent one of these as had whitespace issues and handed checked
-before (/me smacks hand)
+This moves the ccid3_pr_debug macro into the header file,
+so that it can be used from other files belonging to the
+CCID3 framework as well. 
 
-It's up on the web also corrected.
+Thanks to Ian McDonald for the suggestion.
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |    8 +-------
+ net/dccp/ccids/ccid3.h |    7 +++++++
+ 2 files changed, 8 insertions(+), 7 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -41,13 +41,6 @@
+ #include "lib/tfrc.h"
+ #include "ccid3.h"
+ 
+-#ifdef CONFIG_IP_DCCP_CCID3_DEBUG
+-static int ccid3_debug;
+-#define ccid3_pr_debug(format, a...)	DCCP_PR_DEBUG(ccid3_debug, format, ##a)
+-#else
+-#define ccid3_pr_debug(format, a...)
+-#endif
+-
+ static struct dccp_tx_hist *ccid3_tx_hist;
+ static struct dccp_rx_hist *ccid3_rx_hist;
+ static struct dccp_li_hist *ccid3_li_hist;
+@@ -1227,6 +1220,7 @@ static struct ccid_operations ccid3 = {
+ };
+ 
+ #ifdef CONFIG_IP_DCCP_CCID3_DEBUG
++int ccid3_debug;
+ module_param(ccid3_debug, int, 0444);
+ MODULE_PARM_DESC(ccid3_debug, "Enable debug messages");
+ #endif
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -61,6 +61,13 @@
+ 			rtt = CCID3_SANE_RTT_MAX;			   \
+ 		} 					} while (0)
+ 
++#ifdef CONFIG_IP_DCCP_CCID3_DEBUG
++extern int ccid3_debug;
++#define ccid3_pr_debug(format, a...)	DCCP_PR_DEBUG(ccid3_debug, format, ##a)
++#else
++#define ccid3_pr_debug(format, a...)
++#endif
++
+ enum ccid3_options {
+ 	TFRC_OPT_LOSS_EVENT_RATE = 192,
+ 	TFRC_OPT_LOSS_INTERVALS	 = 193,
