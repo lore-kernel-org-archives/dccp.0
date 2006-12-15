@@ -1,38 +1,21 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 15 Dec 2006 10:50:16 +0000
-Subject: [PATCH 4/8]: Fix for follows48
-Message-Id: <200612151050.16384@strip-the-willow>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Fri, 15 Dec 2006 21:47:00 +0000
+Subject: Re: [PATCH 4/8]: Fix for follows48
+Message-Id: <5640c7e00612151347kc0b286k70943994df3789ae@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <200612151050.16384@strip-the-willow>
+In-Reply-To: <200612151050.16384@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Fix for follows48
+On 12/15/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [DCCP]: Fix for follows48
+>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 
-The follows48 relation identifies the whether 48-bit sequence number
-x is the direct successor of y. Currently, it does not handle all
-cases such as
-	follows48(0x(prefix)10000LL, 0x(prefix)0FFFFLL)
-correctly (where prefix is an arbitrary hex sequence of up to 7 digits).
-
-This is fixed by reusing the new dccp_delta_seqno function.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/dccp.h |    4 +---
- 1 file changed, 1 insertion(+), 3 deletions(-)
-
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -146,9 +146,7 @@ static inline u64 max48(const u64 seq1, 
- /* is seq1 next seqno after seq2 */
- static inline int follows48(const u64 seq1, const u64 seq2)
- {
--	int diff = (seq1 & 0xFFFF) - (seq2 & 0xFFFF);
--
--	return diff=1;
-+	return dccp_delta_seqno(seq2, seq1) = 1;
- }
- 
- enum {
+-- 
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
