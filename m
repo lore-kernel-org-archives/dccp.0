@@ -1,53 +1,87 @@
-From: Eddie Kohler <kohler@cs.ucla.edu>
-Date: Sun, 17 Dec 2006 23:31:03 +0000
-Subject: Re: [PATCH] [DCCP]: Use higher timeout value for nofeedback timer
-Message-Id: <4585D337.3030603@cs.ucla.edu>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 15 Dec 2006 10:50:01 +0000
+Subject: [PATCH 1/8]: Sequence number arithmetic
+Message-Id: <200612151050.02039@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200611301318.46685@strip-the-willow>
-In-Reply-To: <200611301318.46685@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-I agree with Mark here.  The cleanest implementation of the nofeedback 
-timer would probably not involve actual Linux timers at all!  Unless I'm 
-very confused, the nofeedback timer is only needed to change sending 
-rates, and thus can safely be checked in the process of sending a packet.
+[DCCP]: Sequence number arithmetic
 
-Not suggesting an immediate change to the implementation, I don't have a 
-patch ready, etc., etc., just documenting this. :)
+This patch was inspired by Ian McDonald and
+ * organizes the sequence arithmetic functions into one corner of dccp.h
+ * performs a small modification of dccp_set_seqno to make it more widely reusable
+ * adds functions and macros for wider use:
+ 	--modulo-48 addition and modulo-48 subtraction
+	--dccp_inc_seqno now a special case of add48
+ 	--48 bit complement
+   This is needed for the 48-bit sequence arithmetic.
 
-Eddie
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/dccp.h |   43 ++++++++++++++++++++++++-------------------
+ 1 file changed, 24 insertions(+), 19 deletions(-)
 
-
-Mark Handley wrote:
-> On 12/1/06, Colin Perkins <csp@csperkins.org> wrote:
->> I'd actually suggest something on the order of 16-20ms. The rationale
->> would be to match the typical inter-frame interval for multimedia
->> applications, so that the kernel will likely be processing a sent
->> packet when the timer expires, and can amortise the costs of checking
->> the nofeedback timer into the send routine.
-> 
-> You make a good point.  The cost of checking the timer should be
-> fairly low if you're already in the DCCP send code for the relevant
-> connection.  You have to reset the timer anyway every time you get
-> feedback, and checking the timer shouldn't be more expensive than
-> resetting it. As you get feedback every RTT under normal conditions,
-> you ought to be able to check it at least once per RTT so long as
-> you're in the DCCP code anyway.
-> 
-> Now, do you every need to check the timer when you're not in the DCCP
-> send code?  I think not.  It's not like TCP, where you need to send a
-> packet on RTO expiry.  I think it should be possible to only ever
-> check the nofeedback timer when you're in the send code for that
-> particular DCCP connection.  And if so, then surely you can afford to
-> check it as often as you reset it - ie around once per RTT?
-> 
-> You just have to be a bit smart - if you go to send and discover that
-> the timer should have expired multiple times, then you have to process
-> multiple backoff events, and perhaps reschedule your send for later
-> after you've done that.
-> 
-> - Mark
-> 
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -92,6 +92,30 @@ extern int  sysctl_dccp_feat_send_ack_ve
+ extern int  sysctl_dccp_feat_send_ndp_count;
+ extern int  sysctl_dccp_tx_qlen;
+ 
++/*
++ *	48-bit sequence number arithmetic
++ */
++#define S48_NEG_MIN	0x800000000000LL		/* 2^47	    */
++#define DCCP_MAX_SEQNO	0xFFFFFFFFFFFFLL		/* 2^48 - 1 */
++#define COMPLEMENT48(x) (0x1000000000000LL - (x))	/* 2^48 - x */
++
++static inline void dccp_set_seqno(u64 *seqno, u64 value)
++{
++	*seqno = value & DCCP_MAX_SEQNO;
++}
++
++static inline void add48(u64 *seqno, u64 increment)
++{
++	dccp_set_seqno(seqno, *seqno + increment);
++}
++#define sub48(seqno, decr)	add48(seqno, COMPLEMENT48((decr)))
++#define dccp_inc_seqno(seqno)	add48(seqno, 1)
++
++static inline u64 dccp_delta_seqno(u64 seqno1, u64 seqno2)
++{
++	return ((seqno2 << 16) - (seqno1 << 16)) >> 16;
++}
++
+ /* is seq1 < seq2 ? */
+ static inline int before48(const u64 seq1, const u64 seq2)
+ {
+@@ -313,27 +337,8 @@ static inline int dccp_packet_without_ac
+ 	return type = DCCP_PKT_DATA || type = DCCP_PKT_REQUEST;
+ }
+ 
+-#define DCCP_MAX_SEQNO ((((u64)1) << 48) - 1)
+ #define DCCP_PKT_WITHOUT_ACK_SEQ (DCCP_MAX_SEQNO << 2)
+ 
+-static inline void dccp_set_seqno(u64 *seqno, u64 value)
+-{
+-	if (value > DCCP_MAX_SEQNO)
+-		value -= DCCP_MAX_SEQNO + 1;
+-	*seqno = value;
+-}
+-
+-static inline u64 dccp_delta_seqno(u64 seqno1, u64 seqno2)
+-{
+-	return ((seqno2 << 16) - (seqno1 << 16)) >> 16;
+-}
+-
+-static inline void dccp_inc_seqno(u64 *seqno)
+-{
+-	if (++*seqno > DCCP_MAX_SEQNO)
+-		*seqno = 0;
+-}
+-
+ static inline void dccp_hdr_set_seq(struct dccp_hdr *dh, const u64 gss)
+ {
+ 	struct dccp_hdr_ext *dhx = (struct dccp_hdr_ext *)((void *)dh +
