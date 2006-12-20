@@ -1,19 +1,19 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Fri, 08 Dec 2006 01:53:15 +0000
-Subject: Re: [PATCH 0/7]: Two more bugs found, finer-grained resolution, time types
-Message-Id: <20061208015315.GB19737@mandriva.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Wed, 20 Dec 2006 02:42:59 +0000
+Subject: [PATCH 0/5] DCCP updates
+Message-Id: <200612201542.59973.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <200612052037.25304@strip-the-willow>
-In-Reply-To: <200612052037.25304@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Tue, Dec 05, 2006 at 08:37:25PM +0000, Gerrit Renker wrote:
-> This is a small patch set - and two more bugs busted.
+These patches apply against Dave M's tree with Gerrit's patches on top
 
-Gerrit, Ian, I'll work on reviewing both this series and the other one
-tomorrow morning, hope to submit to DaveM before the window closes.
+Patch 1 is a resend. This is in Arnaldo's tree but not in Gerrit's patchset
+Patch 2 is a resend but has been altered slightly as per Gerrit's comments
+Patches 3-5 are new.
 
-- Arnaldo
+These patches can also be found online at http://wand.net.nz/~iam4/dccp/patches/ where I always keep my working set.
+
+Ian
