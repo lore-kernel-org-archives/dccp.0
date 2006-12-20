@@ -1,44 +1,70 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Fri, 01 Dec 2006 14:36:06 +0000
-Subject: Re: [PATCHv3] [DCCP]: Use higher timeout value for nofeedback timer
-Message-Id: <39e6f6c70612010636i292957e6q1bd71e0855e968f6@mail.gmail.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Wed, 20 Dec 2006 02:47:04 +0000
+Subject: [PATCH 3/5]: DCCP Add to debugging
+Message-Id: <200612201547.04753.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <200612011429.21131@strip-the-willow>
-In-Reply-To: <200612011429.21131@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/1/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> This is version three of the patch to increase the minimum
-> bound of the nofeedback timer. It now features
->  * millisecond granularity for increased testing comfort
->  * a more informative configuration menu
->
-> This patch is against the very latest tree by acme-2.6.20
->
-> ===> For testing against 2.6.19 one would need to use
->         a value of 1000 since this was the default in 2.6.19
->         calculation of nofeedback timeout.
->
-> ----------------------> Patchv3 <---------------------------
-> [DCCP]: Use higher RTO default for CCID3
->
-> The TFRC nofeedback timer normally expires after the maximum of 4
-> RTTs and twice the current send interval (RFC 3448, 4.3). On LANs
-> with a small RTT this can mean a high processing load and reduced
-> performance, since then the nofeedback timer is triggered very
-> frequently. As a result, the sending rate quickly converges towards
-> zero.
->
-> This patch provides a configuration option to set the bound for the
-> nofeedback timer, using as default the TCP lower bound of 1 second.
->
-> By setting the configuration option to 0, strict RFC 3448 behaviour
-> can be enforced for the nofeedback timer.
+This adds some more debugging.
 
-Looks ok, you just forgot to update the commit log message, the
-default is not anymore 1 second, its 100ms :-)
-
-- Arnaldo
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index a74f905..0aae302 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -80,6 +80,8 @@ static void ccid3_hc_tx_set_state(struct sock *sk,
+  */
+ static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
+ {
++	ccid3_pr_debug("t_ipi was %u\n", hctx->ccid3hctx_t_ipi);
++
+ 	timeval_sub_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
+ 
+ 	/* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second) */
+@@ -92,6 +94,11 @@ static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
+ 	/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
+ 	hctx->ccid3hctx_delta = min_t(u32, hctx->ccid3hctx_t_ipi / 2,
+ 					   TFRC_OPSYS_HALF_TIME_GRAN);
++
++	ccid3_pr_debug("t_ipi now %u, delta=%u, s=%u, x=%llu\n",
++	   hctx->ccid3hctx_t_ipi, hctx->ccid3hctx_delta, hctx->ccid3hctx_s,
++	   hctx->ccid3hctx_x >> 6);
++
+ }
+ /*
+  * Update X by
+@@ -116,6 +123,8 @@ static void ccid3_hc_tx_update_x(struct sock *sk, struct timeval *now)
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	const  __u64 old_x = hctx->ccid3hctx_x;
+ 
++	ccid3_pr_debug("x was %llu\n", hctx->ccid3hctx_x);
++
+ 	if (hctx->ccid3hctx_p > 0) {
+ 
+ 		hctx->ccid3hctx_x = min(((__u64)hctx->ccid3hctx_x_calc) << 6,
+@@ -134,8 +143,12 @@ static void ccid3_hc_tx_update_x(struct sock *sk, struct timeval *now)
+ 		hctx->ccid3hctx_t_ld = *now;
+ 	}
+ 
+-	if (hctx->ccid3hctx_x != old_x)
++	if (hctx->ccid3hctx_x != old_x) {
++		ccid3_pr_debug("x now %llu, x_calc is %u, x_recv is %llu\n",
++		   hctx->ccid3hctx_x, hctx->ccid3hctx_x_calc,
++		   hctx->ccid3hctx_x_recv);
+ 		ccid3_update_send_time(hctx);
++	}
+ }
+ 
+ /*
+@@ -332,6 +345,7 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 	case TFRC_SSTATE_NO_FBACK:
+ 	case TFRC_SSTATE_FBACK:
+ 		delay = timeval_delta(&hctx->ccid3hctx_t_nom, &now);
++		ccid3_pr_debug("delay=%ld\n", (long)delay);
+ 		/*
+ 		 *	Scheduling of packet transmissions [RFC 3448, 4.6]
+ 		 *
