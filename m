@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 21 Dec 2006 20:44:34 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 21 Dec 2006 21:07:58 +0000
 Subject: Re: [PATCH 4/5]: DCCP Fix t_nom
-Message-Id: <5640c7e00612211244h29e6a179of54262d67a51e320@mail.gmail.com>
+Message-Id: <200612212107.58665@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200612201548.12544.ian.mcdonald@jandi.co.nz>
 In-Reply-To: <200612201548.12544.ian.mcdonald@jandi.co.nz>
@@ -10,29 +10,27 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 12/22/06, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Ian,
->
-> I have found the bug and I am certain that the fix (sent in a minute)
-> resolves it entirely - making PATCH 4/5 unnecessary.
->
-> I am actually on Xmas leave and it takes me about an hour to get to work
-> and back, but since I caused this bug, I think it is worthwhile.
->
-Gerrit,
+Quoting Ian McDonald:
+|  I'll look at this when I get a chance (hopefully today).
 
-Thanks for having a look at this and coming back in. I'll look at this
-when I get a chance (hopefully today). Appreciate the work you are
-doing on this.
+I will be out in a minute. I have few more things:
 
-I was just about to say my patch is causing problems too as the
-performance has gone down quite badly with my version of the patch
-under some tests :-(
+ (a) On
+     http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/3c_CCID3_add_more_debugging_McDonald.diff
+     I made minor changes (to make the format consistent)
 
-Best regards and merry christmas,
+ (b) On my `experimental' patch set I have uploaded the following:
+     
+     http://www.erg.abdn.ac.uk/users/gerrit/dccp/experimental_patches/EXPERIMENTAL_dummy_receiver.diff
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://imcdnzl.blogspot.com
-WAND Network Research Group
+     This short-circuits the feedback loop (when working as an electronics engineer,
+     opening or short-circuiting was the first method of testing something when there
+     was a fault). Using this patch, one can test if the sender `behaves', since the
+     receiver practically does not impose inhibitions.
+
+ (c) Thought again about dccp_wait_for_ccid -- is it certain that when the packet is ready
+     to be sent (ccid_hc_tx_send_packet returns 0), that it indeed will be sent soon?
+     I might ponder this when on holiday B-)
+
+Best wishes
+Gerrit
