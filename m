@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 21 Dec 2006 14:06:41 +0000
+Date: Thu, 21 Dec 2006 20:38:57 +0000
 Subject: Re: [PATCH 4/5]: DCCP Fix t_nom
-Message-Id: <200612211406.41981@strip-the-willow>
+Message-Id: <200612212038.57820@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200612201548.12544.ian.mcdonald@jandi.co.nz>
 In-Reply-To: <200612201548.12544.ian.mcdonald@jandi.co.nz>
@@ -10,59 +10,58 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting Ian McDonald:
-|  When we recalculate t_nom and t_ipi we should check that t_nom is not
-|  before the current time. If it is then we should set t_nom to current time.
-|  
-|  Found this by observing flood of packets when t_ipi decreases.
-In any case, you have found a bug, thank you for spotting this. However, there
-are several problems with this.
- 1) t_nom < t_now is a BUG condition and should never happen (i.e. this fixes a symptom, 
-    the bug is somewhere else)
- 2) the way t_nom is (re-)calculated is as follows: 
+Ian, 
 
-   * First packet:
-     t_0 = t_now             [in ccid3_hc_tx_send_packet, state TFRC_SSTATE_NO_SENT]
+I have found the bug and I am certain that the fix (sent in a minute)
+resolves it entirely - making PATCH 4/5 unnecessary.
 
-   * second ... n-th packet:
-     t_nom = t_nom + t_ipi   [end of ccid3_hc_tx_send_packet]
+I am actually on Xmas leave and it takes me about an hour to get to work
+and back, but since I caused this bug, I think it is worthwhile.
 
-   * modification of t_nom due to change in s or X:
-     t_nom = t_nom - t_ipi_old + t_ipi_new
-           = t_nom - (t_ipi_old - t_ipi_new)
+		Detailed BUG Analysis
+		---------------------
 
-     ==> That means, t_nom can only be before t_now, if t_ipi_new > t_ipi_old. 
-          This would contradict the condition you stated (t_ipi_new < t_ipi_old).
-          I have a suspicion that this is actually due to nofeedbacktimer over-activity,
-          so it hacks away at the send time. 
+1) When is which function called:
+	* update_send_time is called by 
+		--update_x
+		--in nofeedback_timer, state NO_FBACK
+		--in tx_packet_recv, also state NO_FBACK
+	* update_x is called by
+		--nofeedback_timer, state FBACK
+		--tx_packet_recv, state FBACK
 
- 3) calling do_gettimeofday via dccp_timestamp is an expensive operation and should be 
-    avoided. 
- 4) can you please reinvestigate and confirm this condition. If it is indeed true and not caused
-    by other factors (logically it seems impossible); then we have to bite the bullet and redesign
-    the entire send_packet interface once again. This relates to previous comments by Eddi, Colin
-    Perkins, Mark Handley, and (by personal communication), Gorry, which
-    amount to not using gettimeofday to recalculate send time via nofeedback timer.
-    I had hoped to avoid this since there are many bugs in other sections which then will have to
-    wait longer. 
+2) When is t_nom < t_now a problem
+
+ The scheduled send time t_nom is only of relevance in 
+ ccid3_hc_tx_send_packet, where it is tested against t_now. In between
+ calls to ccid3_hc_tx_send_packet, it does not matter whether t_nom < t_now.
+ The real bug - and I thank you for pointing this out - is that when 
+ 		delay = t_nom - tnow 
+ is less than 0. In this case the packet is late, and t_nom is out of sync.
+ This is fixed by the patch and below I argue that no other changes are 
+ required. 
  
-The consequence: this is a symptom-fix, not a bug fix. The bug is somewhere else and requires
-to redesign the entire sending interface from scratch. It would greatly help if you could tell
-us under which conditions and in which call sequence you have observed that t_nom < t_now.
+3) Why I am certain that the patch fixes the bug entirely
+ 
+ I applied this patch and used your patch which complains when t_nom < t_now
+ in update_send_time. I only got this condition in tx_packet_recv. Here, however,
+ we are between calls to send_packet, and it is not necessary to set t_nom=t_now,
+ since this will be done at the exact instant of sending the packet. 
+ The same applies to calls to the nofeedback timer. 
+ 
+4) Further changes and comments by Eddie/Mark/Colin/Gorry
 
-  
-|  Also uninline the function as it is big and gcc should decide when to
-It does not contain loops, conditionals or nested statements (before it was really tiny).
+ People have argued that evaluating the send time should not be necessary
+ in nofeedback_timer(). I think this is sound and eventually it would be 
+ good to converge the send_packet interface towards this suggestion. 
+ Since there are many other issues with CCID 3 at the moment, I would like
+ to postpone this until we have at least full 3448/4342 conformance; as an 
+ icing on the CCake :-)
+ The idea is using `jiffies' instead of the expensive dccp_timestamp 
+ (Andrea pointed out making this cheaper using clock=tsc, which also increases
+ accuracy). We could store the send time delta in the skb and just decrement
+ it -- until it is actually sent, the skb is blank and we could exploit
+ that to decrement a jiffie value. 
 
-  
-|  Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-But: I have made the below modification in the online version.
-
-
-|  +	delay = timeval_delta(&hctx->ccid3hctx_t_nom, &now);
-|  +	if (delay < 0) {
-|  +		hctx->ccid3hctx_t_nom = now;
-|  -		ccid3_pr_debug("reset t_nom\n");
-   +            DCCP_BUG("t_nom < t_now: RESET");                       	
-|  +	}
+Once again, many thanks for being so alert.
+Gerrit
