@@ -1,96 +1,86 @@
-From: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date: Sun, 10 Dec 2006 03:02:14 +0000
-Subject: [PATCH 11/22] [DCCP]: Only deliver to the CCID rx side in charge
-Message-Id: <20061210030214.GM17909@mandriva.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Thu, 21 Dec 2006 04:01:43 +0000
+Subject: [PATCH 4/5]: DCCP Fix t_nom (without whitespace issue)
+Message-Id: <200612211701.44060.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is an optimisation to reduce CPU load. The received feedback is now
-only directed to the active CCID component, without requiring processing
-also by the inactive one.
+When we recalculate t_nom and t_ipi we should check that t_nom is not
+before the current time. If it is then we should set t_nom to current time.
 
-As a consequence, a similar test in ccid3.c is now redundant and is
-also removed.
+Found this by observing flood of packets when t_ipi decreases.
 
-Justification:
+Also uninline the function as it is big and gcc should decide when to
+inline anyway.
 
- Currently DCCP works as a unidirectional service, i.e. a listening server
- is not at the same time a connecting client.
- As far as I can see, several modifications are necessary until that
- becomes possible.
- At the present time, received feedback is both fed to the rx/tx CCID
- modules. In unidirectional service, only one of these is active at any
- one time.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/ccids/ccid3.c |    6 +++---
- net/dccp/input.c       |   21 +++++++++++++++++----
- 2 files changed, 20 insertions(+), 7 deletions(-)
-
 diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 820bc25..936704d 100644
+index 0aae302..7ec63de 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -540,11 +540,11 @@ static void ccid3_hc_tx_packet_recv(stru
- 				   jiffies + usecs_to_jiffies(t_nfb));
+@@ -78,9 +78,14 @@ static void ccid3_hc_tx_set_state(struct sock *sk,
+  * Recalculate scheduled nominal send time t_nom, inter-packet interval
+  * t_ipi, and delta value. Should be called after each change to X.
+  */
+-static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
++static void ccid3_update_send_time(struct sock *sk)
+ {
++	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
++	struct timeval now;
++	suseconds_t delay;
++
+ 	ccid3_pr_debug("t_ipi was %u\n", hctx->ccid3hctx_t_ipi);
++	dccp_timestamp(sk, &now);
  
- 		/* set idle flag */
--		hctx->ccid3hctx_idle = 1;   
-+		hctx->ccid3hctx_idle = 1;
- 		break;
- 	case TFRC_SSTATE_NO_SENT:
--		if (dccp_sk(sk)->dccps_role = DCCP_ROLE_CLIENT)
--			DCCP_WARN("Illegal ACK received - no packet sent\n");
-+		/* XXX when implementing bidirectional rx/tx check this again */
-+		DCCP_WARN("Illegal ACK received - no packet sent\n");
- 		/* fall through */
- 	case TFRC_SSTATE_TERM:		/* ignore feedback when closing */
- 		break;
-diff --git a/net/dccp/input.c b/net/dccp/input.c
-index 7371a2f..4a3279c 100644
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -248,8 +248,18 @@ int dccp_rcv_established(struct sock *sk
- 			    DCCP_ACKVEC_STATE_RECEIVED))
- 		goto discard;
+ 	timeval_sub_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
  
--	ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
--	ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
-+	/*
-+	 * Deliver to the CCID module in charge.
-+	 * FIXME: Currently DCCP operates one-directional only, i.e. a listening
-+	 *        server is not at the same time a connecting client. There is
-+	 *        not much sense in delivering to both rx/tx sides at the moment
-+	 *        (only one is active at a time); when moving to bidirectional
-+	 *        service, this needs to be revised.
-+	 */
-+	if (dccp_sk(sk)->dccps_role = DCCP_ROLE_SERVER)
-+		ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
-+	else
-+		ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
+@@ -95,10 +100,17 @@ static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
+ 	hctx->ccid3hctx_delta = min_t(u32, hctx->ccid3hctx_t_ipi / 2,
+ 					   TFRC_OPSYS_HALF_TIME_GRAN);
  
- 	return __dccp_rcv_established(sk, skb, dh, len);
- discard:
-@@ -484,8 +494,11 @@ int dccp_rcv_state_process(struct sock *
-  				    DCCP_ACKVEC_STATE_RECEIVED))
-  			goto discard;
- 
--		ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
--		ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
-+		/* XXX see the comments in dccp_rcv_established about this */
-+		if (dccp_sk(sk)->dccps_role = DCCP_ROLE_SERVER)
-+			ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
-+		else
-+			ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
++	/* we want to check if before current time so we don't send a flood
++	 * of packets */
++	delay = timeval_delta(&hctx->ccid3hctx_t_nom, &now);
++	if (delay < 0) {
++		hctx->ccid3hctx_t_nom = now;
++		ccid3_pr_debug("reset t_nom\n");
++	}
++
+ 	ccid3_pr_debug("t_ipi now %u, delta=%u, s=%u, x=%llu\n",
+ 	   hctx->ccid3hctx_t_ipi, hctx->ccid3hctx_delta, hctx->ccid3hctx_s,
+ 	   hctx->ccid3hctx_x >> 6);
+-
+ }
+ /*
+  * Update X by
+@@ -147,7 +159,7 @@ static void ccid3_hc_tx_update_x(struct sock *sk, struct timeval *now)
+ 		ccid3_pr_debug("x now %llu, x_calc is %u, x_recv is %llu\n",
+ 		   hctx->ccid3hctx_x, hctx->ccid3hctx_x_calc,
+ 		   hctx->ccid3hctx_x_recv);
+-		ccid3_update_send_time(hctx);
++		ccid3_update_send_time(sk);
  	}
+ }
  
- 	/*
--- 
-1.4.2.1.g3d5c
-
+@@ -224,7 +236,7 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+ 		/* The value of R is still undefined and so we can not recompute
+ 		 * the timout value. Keep initial value as per [RFC 4342, 5]. */
+ 		t_nfb = TFRC_INITIAL_TIMEOUT;
+-		ccid3_update_send_time(hctx);
++		ccid3_update_send_time(sk);
+ 		break;
+ 	case TFRC_SSTATE_FBACK:
+ 		/*
+@@ -483,7 +495,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 			hctx->ccid3hctx_x    = scaled_div(w_init << 6, r_sample);
+ 			hctx->ccid3hctx_t_ld = now;
+ 
+-			ccid3_update_send_time(hctx);
++			ccid3_update_send_time(sk);
+ 
+ 			ccid3_pr_debug("%s(%p), s=%u, MSS=%u, w_init=%u, "
+ 				       "R_sample=%dus, X=%u\n", dccp_role(sk),
