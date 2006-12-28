@@ -1,384 +1,562 @@
 From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Thu, 28 Dec 2006 04:07:34 +0000
-Subject: [PATCH 3/4] DCCP: Fix loss interval recalculation
-Message-Id: <200612281707.35118.ian.mcdonald@jandi.co.nz>
+Date: Thu, 28 Dec 2006 04:04:48 +0000
+Subject: [PATCH 1/4] DCCP: Refactor loss interval code
+Message-Id: <200612281704.49441.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This works out when to recalculate the loss rate due to significant
-non-loss interval. We do this at time of recalulating loss rate to save
-having to do it every packet. Instead we just check if it's time to
-recalculate. It looked like there was an early attempt to do this but it
-was quite wrong in its implementation.
+This is shifting around loss interval code to places it makes more sense.
 
-This is making the code conform to RFC 3448, section 5.4
+No change in logic at all. A couple of functions/variables have been
+renamed though.
 
-I've added some extra debugging which is useful in testing as well. In
-loss_interval.c I've just used dccp_pr_debug. I tried to use ccid3_pr_debug
-but ran into problems with circular references.
-
-This patch applies on top of Gerrit's patches.
-
-If possible I'd like this to go into 2.6.21 as it's been reported broken by
-about 4 or 5 people.
+Applies on top of 3a_fix_use_of_invalid_li_McDonald.diff so that it can be
+applied while we sort out other patches following.
 
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
 diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index f1f9ebb..e93bae5 100644
+index ba6470a..4401ab4 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -36,9 +36,9 @@
- #include "../ccid.h"
- #include "../dccp.h"
- #include "lib/packet_history.h"
--#include "lib/loss_interval.h"
- #include "lib/tfrc.h"
- #include "ccid3.h"
-+#include "lib/loss_interval.h"
+@@ -1,7 +1,7 @@
+ /*
+  *  net/dccp/ccids/ccid3.c
+  *
+- *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
++ *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
+  *  Copyright (c) 2005-6 Ian McDonald <ian.mcdonald@jandi.co.nz>
+  *
+  *  An implementation of the DCCP protocol
+@@ -49,7 +49,6 @@ static int ccid3_debug;
  
- #ifdef CONFIG_IP_DCCP_CCID3_DEBUG
- static int ccid3_debug;
-@@ -400,6 +400,9 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more,
- 	packet->dccphtx_rtt    = hctx->ccid3hctx_rtt;
- 	packet->dccphtx_sent   = 1;
- 	hctx->ccid3hctx_idle   = 0;
-+
-+	ccid3_pr_debug("seqno = %llu, rtt = %u\n",
-+	   (long long unsigned)packet->dccphtx_seqno, packet->dccphtx_rtt);
- }
+ static struct dccp_tx_hist *ccid3_tx_hist;
+ static struct dccp_rx_hist *ccid3_rx_hist;
+-static struct dccp_li_hist *ccid3_li_hist;
  
- static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
-@@ -822,7 +825,7 @@ static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
+ /*
+  *	Transmitter Half-Connection Routines
+@@ -813,154 +812,6 @@ static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
  	return 0;
  }
  
--static int ccid3_hc_rx_detect_loss(struct sock *sk,
-+static int ccid3_hc_rx_detect_loss(struct sock *sk, struct sk_buff *skb,
+-/* calculate first loss interval
+- *
+- * returns estimated loss interval in usecs */
+-
+-static u32 ccid3_hc_rx_calc_first_li(struct sock *sk)
+-{
+-	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+-	struct dccp_rx_hist_entry *entry, *next, *tail = NULL;
+-	u32 x_recv, p;
+-	suseconds_t rtt, delta;
+-	struct timeval tstamp = { 0, };
+-	int interval = 0;
+-	int win_count = 0;
+-	int step = 0;
+-	u64 fval;
+-
+-	list_for_each_entry_safe(entry, next, &hcrx->ccid3hcrx_hist,
+-				 dccphrx_node) {
+-		if (dccp_rx_hist_entry_data_packet(entry)) {
+-			tail = entry;
+-
+-			switch (step) {
+-			case 0:
+-				tstamp	  = entry->dccphrx_tstamp;
+-				win_count = entry->dccphrx_ccval;
+-				step = 1;
+-				break;
+-			case 1:
+-				interval = win_count - entry->dccphrx_ccval;
+-				if (interval < 0)
+-					interval += TFRC_WIN_COUNT_LIMIT;
+-				if (interval > 4)
+-					goto found;
+-				break;
+-			}
+-		}
+-	}
+-
+-	if (unlikely(step = 0)) {
+-		DCCP_WARN("%s(%p), packet history has no data packets!\n",
+-			  dccp_role(sk), sk);
+-		return ~0;
+-	}
+-
+-	if (unlikely(interval = 0)) {
+-		DCCP_WARN("%s(%p), Could not find a win_count interval > 0."
+-			  "Defaulting to 1\n", dccp_role(sk), sk);
+-		interval = 1;
+-	}
+-found:
+-	if (!tail) {
+-		DCCP_CRIT("tail is null\n");
+-		return ~0;
+-	}
+-
+-	delta = timeval_delta(&tstamp, &tail->dccphrx_tstamp);
+-	DCCP_BUG_ON(delta < 0);
+-
+-	rtt = delta * 4 / interval;
+-	ccid3_pr_debug("%s(%p), approximated RTT to %dus\n",
+-		       dccp_role(sk), sk, (int)rtt);
+-
+-	/*
+-	 * Determine the length of the first loss interval via inverse lookup.
+-	 * Assume that X_recv can be computed by the throughput equation
+-	 *		    s
+-	 *	X_recv = --------
+-	 *		 R * fval
+-	 * Find some p such that f(p) = fval; return 1/p [RFC 3448, 6.3.1].
+-	 */
+-	if (rtt = 0) {			/* would result in divide-by-zero */
+-		DCCP_WARN("RTT=0\n");
+-		return ~0;
+-	}
+-
+-	dccp_timestamp(sk, &tstamp);
+-	delta = timeval_delta(&tstamp, &hcrx->ccid3hcrx_tstamp_last_feedback);
+-	DCCP_BUG_ON(delta <= 0);
+-
+-	x_recv = scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
+-	if (x_recv = 0) {		/* would also trigger divide-by-zero */
+-		DCCP_WARN("X_recv=0\n");
+-		if ((x_recv = hcrx->ccid3hcrx_x_recv) = 0) {
+-			DCCP_BUG("stored value of X_recv is zero");
+-			return ~0;
+-		}
+-	}
+-
+-	fval = scaled_div(hcrx->ccid3hcrx_s, rtt);
+-	fval = scaled_div32(fval, x_recv);
+-	p = tfrc_calc_x_reverse_lookup(fval);
+-
+-	ccid3_pr_debug("%s(%p), receive rate=%u bytes/s, implied "
+-		       "loss rate=%u\n", dccp_role(sk), sk, x_recv, p);
+-
+-	if (p = 0)
+-		return ~0;
+-	else
+-		return 1000000 / p;
+-}
+-
+-static void ccid3_hc_rx_update_li(struct sock *sk, u64 seq_loss, u8 win_loss)
+-{
+-	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+-	struct dccp_li_hist_entry *head;
+-	u64 seq_temp;
+-
+-	if (list_empty(&hcrx->ccid3hcrx_li_hist)) {
+-		if (!dccp_li_hist_interval_new(ccid3_li_hist,
+-		   &hcrx->ccid3hcrx_li_hist, seq_loss, win_loss))
+-			return;
+-
+-		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
+-		   struct dccp_li_hist_entry, dccplih_node);
+-		head->dccplih_interval = ccid3_hc_rx_calc_first_li(sk);
+-	} else {
+-		struct dccp_li_hist_entry *entry;
+-		struct list_head *tail;
+-
+-		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
+-		   struct dccp_li_hist_entry, dccplih_node);
+-		/* FIXME win count check removed as was wrong */
+-		/* should make this check with receive history */
+-		/* and compare there as per section 10.2 of RFC4342 */
+-
+-		/* new loss event detected */
+-		/* calculate last interval length */
+-		seq_temp = dccp_delta_seqno(head->dccplih_seqno, seq_loss);
+-		entry = dccp_li_hist_entry_new(ccid3_li_hist, GFP_ATOMIC);
+-
+-		if (entry = NULL) {
+-			DCCP_BUG("out of memory - can not allocate entry");
+-			return;
+-		}
+-
+-		list_add(&entry->dccplih_node, &hcrx->ccid3hcrx_li_hist);
+-
+-		tail = hcrx->ccid3hcrx_li_hist.prev;
+-		list_del(tail);
+-		kmem_cache_free(ccid3_li_hist->dccplih_slab, tail);
+-
+-		/* Create the newest interval */
+-		entry->dccplih_seqno = seq_loss;
+-		entry->dccplih_interval = seq_temp;
+-		entry->dccplih_win_count = win_loss;
+-	}
+-}
+-
+ static int ccid3_hc_rx_detect_loss(struct sock *sk,
                                      struct dccp_rx_hist_entry *packet)
  {
- 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
-@@ -847,7 +850,7 @@ static int ccid3_hc_rx_detect_loss(struct sock *sk,
+@@ -986,8 +837,7 @@ static int ccid3_hc_rx_detect_loss(struct sock *sk,
  	while (dccp_delta_seqno(hcrx->ccid3hcrx_seqno_nonloss, seqno)
  	   > TFRC_RECV_NUM_LATE_LOSS) {
  		loss = 1;
--		dccp_li_update_li(sk);
-+		dccp_li_update_li(sk, skb);
+-		ccid3_hc_rx_update_li(sk, hcrx->ccid3hcrx_seqno_nonloss,
+-		   hcrx->ccid3hcrx_ccval_nonloss);
++		dccp_li_update_li(sk);
  		tmp_seqno = hcrx->ccid3hcrx_seqno_nonloss;
  		dccp_inc_seqno(&tmp_seqno);
  		hcrx->ccid3hcrx_seqno_nonloss = tmp_seqno;
-@@ -934,7 +937,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		return;
- 	}
+@@ -1157,7 +1007,7 @@ static void ccid3_hc_rx_exit(struct sock *sk)
+ 	dccp_rx_hist_purge(ccid3_rx_hist, &hcrx->ccid3hcrx_hist);
  
--	loss = ccid3_hc_rx_detect_loss(sk, packet);
-+	loss = ccid3_hc_rx_detect_loss(sk, skb, packet);
- 
- 	if (DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK)
- 		return;
-@@ -955,6 +958,15 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		if (loss)
- 			break;
- 
-+		if (hcrx->ccid3hcrx_seq_recalc_loss &&
-+		 after48(dccp_hdr_seq(skb), hcrx->ccid3hcrx_seq_recalc_loss)) {
-+			ccid3_pr_debug("%s(%p, state=%s) checking loss "
-+			   "recalc skb=%llu, recalc_loss = %llu\n",
-+			   dccp_role(sk), sk, dccp_state_name(sk->sk_state),
-+			   dccp_hdr_seq(skb),hcrx->ccid3hcrx_seq_recalc_loss);
-+			break;
-+		}
-+
- 		dccp_timestamp(sk, &now);
- 		if ((timeval_delta(&now, &hcrx->ccid3hcrx_tstamp_last_ack) -
- 		     (suseconds_t)hcrx->ccid3hcrx_rtt) >= 0) {
-@@ -967,15 +979,16 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		return;
- 	}
- 
--	/* Dealing with packet loss */
--	ccid3_pr_debug("%s(%p, state=%s), data loss! Reacting...\n",
-+	/* Dealing with loss intervals*/
-+	if (loss)
-+		ccid3_pr_debug("%s(%p, state=%s), data loss! Reacting...\n",
- 		       dccp_role(sk), sk, dccp_state_name(sk->sk_state));
- 
- 	p_prev = hcrx->ccid3hcrx_p;
- 	
- 	/* Calculate loss event rate */
- 	if (!list_empty(&hcrx->ccid3hcrx_li_hist)) {
--		u32 i_mean = dccp_li_hist_calc_i_mean(&hcrx->ccid3hcrx_li_hist);
-+		u32 i_mean = dccp_li_hist_calc_i_mean(hcrx, skb);
- 
- 		/* Scaling up by 1000000 as fixed decimal */
- 		if (i_mean != 0)
-@@ -983,7 +996,9 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	} else
- 		DCCP_BUG("empty loss history");
- 
--	if (hcrx->ccid3hcrx_p > p_prev) {
-+	if (hcrx->ccid3hcrx_p != p_prev) {
-+		ccid3_pr_debug("p_prev = %u, hcrx_p = %u\n", p_prev,
-+		   hcrx->ccid3hcrx_p);
- 		ccid3_hc_rx_send_feedback(sk);
- 		return;
- 	}
-@@ -1002,6 +1017,7 @@ static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
- 	hcrx->ccid3hcrx_tstamp_last_feedback = hcrx->ccid3hcrx_tstamp_last_ack;
- 	hcrx->ccid3hcrx_s   = 0;
- 	hcrx->ccid3hcrx_rtt = 0;
-+	hcrx->ccid3hcrx_seqno_nonloss = 0;
- 	return 0;
+ 	/* Empty loss interval history */
+-	dccp_li_hist_purge(ccid3_li_hist, &hcrx->ccid3hcrx_li_hist);
++	dccp_li_hist_purge(&hcrx->ccid3hcrx_li_hist);
  }
  
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index 15776a8..885d835 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -151,6 +151,7 @@ enum ccid3_hc_rx_states {
-  *  @ccid3hcrx_s  -  Received packet size in bytes
-  *  @ccid3hcrx_pinv  -  Inverse of Loss Event Rate (RFC 4342, sec. 8.5)
-  *  @ccid3hcrx_elapsed_time  -  Time since packet reception
-+ *  @ccid3hcrx_seq_recalc_loss - recalc loss due to nonloss (RFC 3448, 5.4)
-  */
- struct ccid3_hc_rx_sock {
- 	struct tfrc_rx_info		ccid3hcrx_tfrc;
-@@ -169,6 +170,7 @@ struct ccid3_hc_rx_sock {
- 	u16				ccid3hcrx_s;
- 	u32				ccid3hcrx_pinv;
- 	u32				ccid3hcrx_elapsed_time;
-+	u64				ccid3hcrx_seq_recalc_loss;
- };
+ static void ccid3_hc_rx_get_info(struct sock *sk, struct tcp_info *info)
+@@ -1242,19 +1092,12 @@ static __init int ccid3_module_init(void)
+ 	if (ccid3_tx_hist = NULL)
+ 		goto out_free_rx;
  
- static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
+-	ccid3_li_hist = dccp_li_hist_new("ccid3");
+-	if (ccid3_li_hist = NULL)
+-		goto out_free_tx;
+-
+ 	rc = ccid_register(&ccid3);
+ 	if (rc != 0)
+-		goto out_free_loss_interval_history;
++		goto out_free_tx;
+ out:
+ 	return rc;
+ 
+-out_free_loss_interval_history:
+-	dccp_li_hist_delete(ccid3_li_hist);
+-	ccid3_li_hist = NULL;
+ out_free_tx:
+ 	dccp_tx_hist_delete(ccid3_tx_hist);
+ 	ccid3_tx_hist = NULL;
+@@ -1277,10 +1120,6 @@ static __exit void ccid3_module_exit(void)
+ 		dccp_rx_hist_delete(ccid3_rx_hist);
+ 		ccid3_rx_hist = NULL;
+ 	}
+-	if (ccid3_li_hist != NULL) {
+-		dccp_li_hist_delete(ccid3_li_hist);
+-		ccid3_li_hist = NULL;
+-	}
+ }
+ module_exit(ccid3_module_exit);
+ 
 diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
-index 3ad361d..3212355 100644
+index 372d7e7..3ad361d 100644
 --- a/net/dccp/ccids/lib/loss_interval.c
 +++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -88,31 +88,106 @@ static const int dccp_li_hist_w[DCCP_LI_HIST_IVAL_F_LENGTH] = {
- 	4, 4, 4, 4, 3, 2, 1, 1,
- };
+@@ -1,7 +1,7 @@
+ /*
+  *  net/dccp/ccids/lib/loss_interval.c
+  *
+- *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
++ *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
+  *  Copyright (c) 2005-6 Ian McDonald <ian.mcdonald@jandi.co.nz>
+  *  Copyright (c) 2005 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+  *
+@@ -14,9 +14,20 @@
+ #include <linux/module.h>
+ #include <net/sock.h>
+ #include "../../dccp.h"
++#include "../ccid3.h"
+ #include "loss_interval.h"
++#include "packet_history.h"
++#include "tfrc.h"
  
--u32 dccp_li_hist_calc_i_mean(struct list_head *list)
-+/* This code implements the part of section 5.4 of RFC3448 which says we should
-+ * recalculate the average loss interval if we have a sufficient long loss
-+ * interval.
-+ *
-+ * Given that i_mean = weighted average of loss then we can say that
-+ * 4*n + 4*i[0] + 4*i[1] + 4*i[2] + 3*i[3] + 2*i[4] + i[5] + i[6] + *  y*(4*i[0] + 4*i[i] + 4*i[2] + 4*i[3] + 3*i[4]+ 2*i[5] + i[6] + i[7])
-+ *
-+ * where y is a factor so that we don't check as soon as we hit average
-+ * interval and waste CPU cycles needlessly. n is the non-loss interval
-+ * and i[x] are the loss intervals. We don't need to divide by the sum
-+ * of the weighting as these cancel out on each side.
-+ *
-+ * We can solve for this equation for n which yields:
-+ * n + *  ((4*i[0] + 4*i[1] + 4*i[2] + 4*i[3] + 3*i[4]+ 2*i[5] + i[6] + i[7])/4) -
-+ *  (y*(4*i[0] + 4*i[1] + 4*i[2] + 3*i[3] + 2*i[4] + i[5] + i[6])/4) */
+-struct dccp_li_hist *dccp_li_hist_new(const char *name)
++static struct dccp_li_hist *dccp_li_hist;
 +
-+static u64 dccp_li_hist_recalc_recalcloss(struct sk_buff *skb,
-+                                        u32 i_tot0, u32 i_tot1)
++static inline struct dccp_li_hist_entry *
++		dccp_li_hist_entry_new(void)
 +{
-+	u64 recalcloss_seq = dccp_hdr_seq(skb);
-+
-+	dccp_pr_debug("recalcloss_seq=%llu\n", recalcloss_seq);
-+
-+	if (!i_tot0) {
-+		DCCP_WARN("i_tot0 = 0\n");
-+		return 0;
-+	}
-+
-+	/* We don't adjust if > 1 million as will get overflow
-+	 * in calculations and not so serious anyway */
-+	if (i_tot0 > 1000000) {
-+		DCCP_WARN("i_mean > 100000\n");
-+		return 0;
-+	}
-+
-+	i_tot0 /= 4;
-+	i_tot1 = (i_tot1 * (DCCP_LI_RECALC_LOSS_FACTOR+1))/
-+	   (DCCP_LI_RECALC_LOSS_FACTOR*4);
-+
-+	if (i_tot1 >= i_tot0) {
-+		dccp_pr_debug("only incrementing by 1\n");
-+		add48(&recalcloss_seq, 1);
-+	} else
-+		add48(&recalcloss_seq,(u64)(i_tot0 - i_tot1));
-+
-+	dccp_pr_debug("recalcloss_seq=%llu, i_tot0=%u, i_tot1=%u\n",
-+	   recalcloss_seq, i_tot0, i_tot1);
-+
-+	return recalcloss_seq;
++	return kmem_cache_alloc(dccp_li_hist->dccplih_slab, GFP_ATOMIC);
 +}
 +
-+u32 dccp_li_hist_calc_i_mean(struct ccid3_hc_rx_sock *hcrx, struct sk_buff *skb)
++static struct dccp_li_hist *dccp_li_hist_new(const char *name)
  {
- 	struct dccp_li_hist_entry *li_entry, *li_next;
--	int i = 0;
-+	unsigned int i = 0;
- 	u32 i_tot;
- 	u32 i_tot0 = 0;
- 	u32 i_tot1 = 0;
- 	u32 w_tot  = 0;
-+	u64 non_loss = 0;
-+	u32 i_mean;
-+	struct list_head *list = &hcrx->ccid3hcrx_li_hist;
- 
- 	list_for_each_entry_safe(li_entry, li_next, list, dccplih_node) {
- 		if (li_entry->dccplih_interval != ~0U) {
- 			i_tot0 += li_entry->dccplih_interval * dccp_li_hist_w[i];
- 			w_tot  += dccp_li_hist_w[i];
--			if (i != 0)
--				i_tot1 += li_entry->dccplih_interval * dccp_li_hist_w[i - 1];
--		}
--
-+			if (i != 7)
-+				i_tot1 += li_entry->dccplih_interval
-+				   * dccp_li_hist_w[i + 1];
-+			if (i = 0) {
-+				non_loss = dccp_hdr_seq(skb);
-+				sub48(&non_loss, li_entry->dccplih_seqno);
-+			}
-+			dccp_pr_debug("i=%d, interval=%u, seqno=%llu, "
-+			  "i_tot0=%u, i_tot1=%u, w_tot=%u\n", i,
-+			  li_entry->dccplih_interval,
-+			  (u64)li_entry->dccplih_seqno,i_tot0, i_tot1, w_tot);
-+		} else
-+			dccp_pr_debug("empty loss interval\n");
- 
- 		if (++i > DCCP_LI_HIST_IVAL_F_LENGTH)
- 			break;
- 	}
- 
--	if (i != DCCP_LI_HIST_IVAL_F_LENGTH)
-+	if (i != DCCP_LI_HIST_IVAL_F_LENGTH) {
-+		DCCP_BUG("Length of loss interval list is %u\n", i);
- 		return 0;
-+	}
-+
-+	hcrx->ccid3hcrx_seq_recalc_loss +	   dccp_li_hist_recalc_recalcloss(skb, i_tot0, i_tot1);
- 
-+	i_tot1 += non_loss * dccp_li_hist_w[0];
-+	if (i_tot1 > i_tot0)
-+		dccp_pr_debug("i_mean recalculateed due to high nonloss "
-+		   " interval seqno=%llu nonloss=%llu i_tot0=%u, i_tot1=%u\n",
-+		   dccp_hdr_seq(skb), non_loss, i_tot0, i_tot1);
- 	i_tot = max(i_tot0, i_tot1);
- 
- 	if (!w_tot) {
-@@ -120,7 +195,10 @@ u32 dccp_li_hist_calc_i_mean(struct list_head *list)
- 		return 1;
- 	}
- 
--	return i_tot / w_tot;
-+	i_mean = i_tot / w_tot;
-+	dccp_pr_debug("i_mean=%u\n", i_mean);
-+
-+	return i_mean;
+ 	struct dccp_li_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
+ 	static const char dccp_li_hist_mask[] = "li_hist_%s";
+@@ -47,9 +58,7 @@ out_free_hist:
+ 	goto out;
  }
  
+-EXPORT_SYMBOL_GPL(dccp_li_hist_new);
+-
+-void dccp_li_hist_delete(struct dccp_li_hist *hist)
++static void dccp_li_hist_delete(struct dccp_li_hist *hist)
+ {
+ 	const char* name = kmem_cache_name(hist->dccplih_slab);
+ 
+@@ -58,15 +67,13 @@ void dccp_li_hist_delete(struct dccp_li_hist *hist)
+ 	kfree(hist);
+ }
+ 
+-EXPORT_SYMBOL_GPL(dccp_li_hist_delete);
+-
+-void dccp_li_hist_purge(struct dccp_li_hist *hist, struct list_head *list)
++void dccp_li_hist_purge(struct list_head *list)
+ {
+ 	struct dccp_li_hist_entry *entry, *next;
+ 
+ 	list_for_each_entry_safe(entry, next, list, dccplih_node) {
+ 		list_del_init(&entry->dccplih_node);
+-		kmem_cache_free(hist->dccplih_slab, entry);
++		kmem_cache_free(dccp_li_hist->dccplih_slab, entry);
+ 	}
+ }
+ 
+@@ -118,16 +125,16 @@ u32 dccp_li_hist_calc_i_mean(struct list_head *list)
+ 
  EXPORT_SYMBOL_GPL(dccp_li_hist_calc_i_mean);
-@@ -138,7 +216,7 @@ static int dccp_li_hist_interval_new(struct list_head *list, const u64 seq_loss,
+ 
+-int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+-   struct list_head *list, const u64 seq_loss, const u8 win_loss)
++static int dccp_li_hist_interval_new(struct list_head *list, const u64 seq_loss,
++   const u8 win_loss)
+ {
+ 	struct dccp_li_hist_entry *entry;
+ 	int i;
+ 
+ 	for (i = 0; i < DCCP_LI_HIST_IVAL_F_LENGTH; i++) {
+-		entry = dccp_li_hist_entry_new(hist, GFP_ATOMIC);
++		entry = dccp_li_hist_entry_new();
+ 		if (entry = NULL) {
+-			dccp_li_hist_purge(hist, list);
++			dccp_li_hist_purge(list);
  			DCCP_BUG("loss interval list entry is NULL");
  			return 0;
  		}
--		entry->dccplih_interval = ~0;
-+		entry->dccplih_interval = ~0U;
- 		list_add(&entry->dccplih_node, list);
- 	}
+@@ -140,4 +147,175 @@ int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+ 	return 1;
+ }
  
-@@ -151,7 +229,7 @@ static int dccp_li_hist_interval_new(struct list_head *list, const u64 seq_loss,
-  *
-  * returns estimated loss interval in usecs */
- 
--static u32 dccp_li_calc_first_li(struct sock *sk)
-+static u32 dccp_li_calc_first_li(struct sock *sk, struct sk_buff *skb)
- {
- 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
- 	struct dccp_rx_hist_entry *entry, *next, *tail = NULL;
-@@ -242,13 +320,32 @@ found:
- 	dccp_pr_debug("%s(%p), receive rate=%u bytes/s, implied "
- 		       "loss rate=%u\n", dccp_role(sk), sk, x_recv, p);
- 
--	if (p = 0)
-+	if (p = 0) {
-+		DCCP_WARN("p=0, fval = %llu\n", fval);
- 		return ~0;
--	else
--		return 1000000 / p;
-+	} else {
-+		u32 new_interval = 1000000 / p;
-+		u64 recalc_interval;
+-EXPORT_SYMBOL_GPL(dccp_li_hist_interval_new);
++/* calculate first loss interval
++ *
++ * returns estimated loss interval in usecs */
 +
-+		/* check if low value so don't have to do a * and / */
-+		if (new_interval < DCCP_LI_RECALC_LOSS_MIN)
-+			recalc_interval = new_interval + 1;
-+		else
-+			recalc_interval = (new_interval *
-+			(DCCP_LI_RECALC_LOSS_FACTOR+1)) /
-+			DCCP_LI_RECALC_LOSS_FACTOR;
-+		hcrx->ccid3hcrx_seq_recalc_loss = dccp_hdr_seq(skb);
-+		add48(&hcrx->ccid3hcrx_seq_recalc_loss, recalc_interval);
-+		dccp_pr_debug("%s(%p), interval=%u, recalc_interval=%llu, "
-+		   "seqno=%llu recalc_loss=%llu\n", dccp_role(sk), sk,
-+		   new_interval, recalc_interval, dccp_hdr_seq(skb),
-+		   hcrx->ccid3hcrx_seq_recalc_loss);
++static u32 dccp_li_calc_first_li(struct sock *sk)
++{
++	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
++	struct dccp_rx_hist_entry *entry, *next, *tail = NULL;
++	u32 x_recv, p;
++	suseconds_t rtt, delta;
++	struct timeval tstamp = { 0, };
++	int interval = 0;
++	int win_count = 0;
++	int step = 0;
++	u64 fval;
 +
-+		return new_interval;
++	list_for_each_entry_safe(entry, next, &hcrx->ccid3hcrx_hist,
++				 dccphrx_node) {
++		if (dccp_rx_hist_entry_data_packet(entry)) {
++			tail = entry;
++
++			switch (step) {
++			case 0:
++				tstamp	  = entry->dccphrx_tstamp;
++				win_count = entry->dccphrx_ccval;
++				step = 1;
++				break;
++			case 1:
++				interval = win_count - entry->dccphrx_ccval;
++				if (interval < 0)
++					interval += TFRC_WIN_COUNT_LIMIT;
++				if (interval > 4)
++					goto found;
++				break;
++			}
++		}
 +	}
- }
- 
--void dccp_li_update_li(struct sock *sk)
-+void dccp_li_update_li(struct sock *sk, struct sk_buff *skb)
- {
- 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
- 	struct dccp_li_hist_entry *head;
-@@ -263,7 +360,7 @@ void dccp_li_update_li(struct sock *sk)
- 
- 		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
- 		   struct dccp_li_hist_entry, dccplih_node);
--		head->dccplih_interval = dccp_li_calc_first_li(sk);
-+		head->dccplih_interval = dccp_li_calc_first_li(sk, skb);
- 	} else {
- 		struct dccp_li_hist_entry *entry;
- 		struct list_head *tail;
-@@ -294,6 +391,8 @@ void dccp_li_update_li(struct sock *sk)
- 		entry->dccplih_seqno = seq_loss;
- 		entry->dccplih_interval = seq_temp;
- 		entry->dccplih_win_count = win_loss;
-+		dccp_pr_debug("adding node seqno=%llu, interval=%u\n",
-+		   (u64)entry->dccplih_seqno, entry->dccplih_interval);
- 	}
- }
- 
++
++	if (unlikely(step = 0)) {
++		DCCP_WARN("%s(%p), packet history has no data packets!\n",
++			  dccp_role(sk), sk);
++		return ~0;
++	}
++
++	if (unlikely(interval = 0)) {
++		DCCP_WARN("%s(%p), Could not find a win_count interval > 0."
++			  "Defaulting to 1\n", dccp_role(sk), sk);
++		interval = 1;
++	}
++found:
++	if (!tail) {
++		DCCP_CRIT("tail is null\n");
++		return ~0;
++	}
++
++	delta = timeval_delta(&tstamp, &tail->dccphrx_tstamp);
++	DCCP_BUG_ON(delta < 0);
++
++	rtt = delta * 4 / interval;
++	dccp_pr_debug("%s(%p), approximated RTT to %dus\n",
++		       dccp_role(sk), sk, (int)rtt);
++
++	/*
++	 * Determine the length of the first loss interval via inverse lookup.
++	 * Assume that X_recv can be computed by the throughput equation
++	 *		    s
++	 *	X_recv = --------
++	 *		 R * fval
++	 * Find some p such that f(p) = fval; return 1/p [RFC 3448, 6.3.1].
++	 */
++	if (rtt = 0) {			/* would result in divide-by-zero */
++		DCCP_WARN("RTT=0\n");
++		return ~0;
++	}
++
++	dccp_timestamp(sk, &tstamp);
++	delta = timeval_delta(&tstamp, &hcrx->ccid3hcrx_tstamp_last_feedback);
++	DCCP_BUG_ON(delta <= 0);
++
++	x_recv = scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
++	if (x_recv = 0) {		/* would also trigger divide-by-zero */
++		DCCP_WARN("X_recv=0\n");
++		if ((x_recv = hcrx->ccid3hcrx_x_recv) = 0) {
++			DCCP_BUG("stored value of X_recv is zero");
++			return ~0;
++		}
++	}
++
++	fval = scaled_div(hcrx->ccid3hcrx_s, rtt);
++	fval = scaled_div32(fval, x_recv);
++	p = tfrc_calc_x_reverse_lookup(fval);
++
++	dccp_pr_debug("%s(%p), receive rate=%u bytes/s, implied "
++		       "loss rate=%u\n", dccp_role(sk), sk, x_recv, p);
++
++	if (p = 0)
++		return ~0;
++	else
++		return 1000000 / p;
++}
++
++void dccp_li_update_li(struct sock *sk)
++{
++	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
++	struct dccp_li_hist_entry *head;
++	u64 seq_temp;
++	u64 seq_loss = hcrx->ccid3hcrx_seqno_nonloss;
++	u8 win_loss = hcrx->ccid3hcrx_ccval_nonloss;
++
++	if (list_empty(&hcrx->ccid3hcrx_li_hist)) {
++		if (!dccp_li_hist_interval_new(&hcrx->ccid3hcrx_li_hist,
++		   seq_loss, win_loss))
++			return;
++
++		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
++		   struct dccp_li_hist_entry, dccplih_node);
++		head->dccplih_interval = dccp_li_calc_first_li(sk);
++	} else {
++		struct dccp_li_hist_entry *entry;
++		struct list_head *tail;
++
++		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
++		   struct dccp_li_hist_entry, dccplih_node);
++		/* FIXME win count check removed as was wrong */
++		/* should make this check with receive history */
++		/* and compare there as per section 10.2 of RFC4342 */
++
++		/* new loss event detected */
++		/* calculate last interval length */
++		seq_temp = dccp_delta_seqno(head->dccplih_seqno, seq_loss);
++		entry = dccp_li_hist_entry_new();
++
++		if (entry = NULL) {
++			DCCP_BUG("out of memory - can not allocate entry");
++			return;
++		}
++
++		list_add(&entry->dccplih_node, &hcrx->ccid3hcrx_li_hist);
++
++		tail = hcrx->ccid3hcrx_li_hist.prev;
++		list_del(tail);
++		kmem_cache_free(dccp_li_hist->dccplih_slab, tail);
++
++		/* Create the newest interval */
++		entry->dccplih_seqno = seq_loss;
++		entry->dccplih_interval = seq_temp;
++		entry->dccplih_win_count = win_loss;
++	}
++}
++
++EXPORT_SYMBOL_GPL(dccp_li_update_li);
++
++static __init int li_module_init(void)
++{
++	int rc = -ENOBUFS;
++
++	dccp_li_hist = dccp_li_hist_new("dccp_li");
++	if (dccp_li_hist = NULL)
++		return rc;
++	else
++		return 0;
++}
++module_init(li_module_init);
++
++static __exit void li_module_exit(void)
++{
++	if (dccp_li_hist != NULL) {
++		dccp_li_hist_delete(dccp_li_hist);
++		dccp_li_hist = NULL;
++	}
++}
++module_exit(li_module_exit);
 diff --git a/net/dccp/ccids/lib/loss_interval.h b/net/dccp/ccids/lib/loss_interval.h
-index 19dcbd2..703935b 100644
+index eb25701..19dcbd2 100644
 --- a/net/dccp/ccids/lib/loss_interval.h
 +++ b/net/dccp/ccids/lib/loss_interval.h
-@@ -19,6 +19,12 @@
- 
- #define DCCP_LI_HIST_IVAL_F_LENGTH  8
- 
-+/* Value as a reciprocal to check for change in loss through long
-+ * non-loss intervals. If you change this you must recheck existing
-+ * code for overflow possibilities */
-+#define DCCP_LI_RECALC_LOSS_FACTOR 100
-+#define DCCP_LI_RECALC_LOSS_MIN 150
-+
- struct dccp_li_hist {
+@@ -3,8 +3,8 @@
+ /*
+  *  net/dccp/ccids/lib/loss_interval.h
+  *
+- *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
+- *  Copyright (c) 2005 Ian McDonald <ian.mcdonald@jandi.co.nz>
++ *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
++ *  Copyright (c) 2005-6 Ian McDonald <ian.mcdonald@jandi.co.nz>
+  *  Copyright (c) 2005 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+  *
+  *  This program is free software; you can redistribute it and/or modify it
+@@ -23,9 +23,6 @@ struct dccp_li_hist {
  	struct kmem_cache *dccplih_slab;
  };
-@@ -32,7 +38,8 @@ struct dccp_li_hist_entry {
  
- extern void dccp_li_hist_purge(struct list_head *list);
+-extern struct dccp_li_hist *dccp_li_hist_new(const char *name);
+-extern void dccp_li_hist_delete(struct dccp_li_hist *hist);
+-
+ struct dccp_li_hist_entry {
+ 	struct list_head dccplih_node;
+ 	u64		 dccplih_seqno:48,
+@@ -33,25 +30,9 @@ struct dccp_li_hist_entry {
+ 	u32		 dccplih_interval;
+ };
  
--extern u32 dccp_li_hist_calc_i_mean(struct list_head *list);
-+extern u32 dccp_li_hist_calc_i_mean(struct ccid3_hc_rx_sock *hcrx,
-+   struct sk_buff *skb);
+-static inline struct dccp_li_hist_entry *
+-		dccp_li_hist_entry_new(struct dccp_li_hist *hist,
+-				       const gfp_t prio)
+-{
+-	return kmem_cache_alloc(hist->dccplih_slab, prio);
+-}
+-
+-static inline void dccp_li_hist_entry_delete(struct dccp_li_hist *hist,
+-					     struct dccp_li_hist_entry *entry)
+-{
+-	if (entry != NULL)
+-		kmem_cache_free(hist->dccplih_slab, entry);
+-}
+-
+-extern void dccp_li_hist_purge(struct dccp_li_hist *hist,
+-			       struct list_head *list);
++extern void dccp_li_hist_purge(struct list_head *list);
  
--extern void dccp_li_update_li(struct sock *sk);
-+extern void dccp_li_update_li(struct sock *sk, struct sk_buff *skb);
+ extern u32 dccp_li_hist_calc_i_mean(struct list_head *list);
+ 
+-extern int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+-   struct list_head *list, const u64 seq_loss, const u8 win_loss);
++extern void dccp_li_update_li(struct sock *sk);
  #endif /* _DCCP_LI_HIST_ */
