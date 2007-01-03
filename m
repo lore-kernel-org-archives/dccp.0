@@ -1,44 +1,51 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 03 Jan 2007 13:58:02 +0000
-Subject: [PATCH 4/4][NEW]:  More to see in dccp_probe
-Message-Id: <200701031358.02629@strip-the-willow>
+Date: Wed, 03 Jan 2007 13:30:10 +0000
+Subject: [PATCH 1-6/8 and 8/8]: The more recent patches of the backlog
+Message-Id: <200701031330.10330@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[CCID 3]: More to see in dccp_probe
+I think it is not necessary to resend those patches which have not changed.
+Thus links to the online repository are given instead.
 
-This removes the `size' field from output (which would report the constant buffer size),
-and adds a few more fields of interest to /proc/net/dccpprobe, the following output ensues:
+(NB: in case of DNS difficulties, the online repository is at
+     http://139.133.210.30/users/gerrit/dccp/patch-backlog/            )
 
-sec.usec   src:sport   dst:dport   s   rtt   p   X_calc  X_recv   X   t_ipi
-1           2          3           4   5     6   7       8        9   10
 
-Scripts that go with this can be downloaded from http://139.133.210.30/users/gerrit/dccp/dccp_probe/
+Patch 1: Remove redundant `len' test.
+         First posted on: http://www.mail-archive.com/dccp@vger.kernel.org/msg01163.html
+         Online at      : 2b_ccid3_tx-len-not-needed.diff
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/probe.c |    8 +++++---
- 1 file changed, 5 insertions(+), 3 deletions(-)
+Patch 2: Re-order CCID 3 source file
+	 First posted on: http://www.mail-archive.com/dccp@vger.kernel.org/msg01164.html
+	 Online at      : 2c_re-order-ccid3.c.diff
 
---- a/net/dccp/probe.c
-+++ b/net/dccp/probe.c
-@@ -90,11 +90,13 @@ static int jdccp_sendmsg(struct kiocb *i
- 	if (port = 0 || ntohs(inet->dport) = port ||
- 	    ntohs(inet->sport) = port) {
- 		if (hctx)
--			printl("%d.%d.%d.%d:%u %d.%d.%d.%d:%u %d %d %d %d %d\n",
-+			printl("%d.%d.%d.%d:%u %d.%d.%d.%d:%u %d %d %d %u %llu %llu %d\n",
- 			   NIPQUAD(inet->saddr), ntohs(inet->sport),
--			   NIPQUAD(inet->daddr), ntohs(inet->dport), size,
-+			   NIPQUAD(inet->daddr), ntohs(inet->dport),
- 			   hctx->ccid3hctx_s, hctx->ccid3hctx_rtt,
--			   hctx->ccid3hctx_p, hctx->ccid3hctx_t_ipi);
-+			   hctx->ccid3hctx_p,
-+			   hctx->ccid3hctx_x_calc, hctx->ccid3hctx_x_recv >> 6,
-+			   hctx->ccid3hctx_x >> 6, hctx->ccid3hctx_t_ipi);
- 		else
- 			printl("%d.%d.%d.%d:%u %d.%d.%d.%d:%u %d\n",
- 			   NIPQUAD(inet->saddr), ntohs(inet->sport),
+Patch 3: Use MSS for larger initial windows
+	 First posted on: http://www.mail-archive.com/dccp@vger.kernel.org/msg01165.html
+	 Online at      : 2d_larger_windows_with_MSS.diff
+
+Patch 4: Fix use of invalid loss intervals [by Ian McDonald]
+	 First posted on: http://www.mail-archive.com/dccp@vger.kernel.org/msg01150.html
+	 Online at      : 3a_fix_use_of_invalid_li_McDonald.diff
+
+Patch 5: More verbose debugging [by Ian McDonald]
+	 First posted on: http://www.mail-archive.com/dccp@vger.kernel.org/msg01229.html
+	 Online at 	: 3c_CCID3_add_more_debugging_McDonald.diff
+         => online version has fixes which were pointed out at
+             http://www.mail-archive.com/dccp@vger.kernel.org/msg01235.html
+
+Patch 6: Fix packet tardiness BUG
+	 First posted on: http://www.mail-archive.com/dccp@vger.kernel.org/msg01216.html
+	 Online at      : 3d_CCID3_fix_tardiness-BUG.diff
+
+Patch 7: Remove race condition in access to scheduled send time
+	 Will be submitted hereafter.
+
+Patch 8: Reorganise loss interval code
+	 First posted on: http://www.mail-archive.com/dccp@vger.kernel.org/msg01218.html
+	 Online at      : 3f_CCID3_refactor_loss_interval_code_McDonald.diff
+
+
