@@ -1,103 +1,64 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 11 Jan 2007 10:49:28 +0000
-Subject: Re: CCID 3 question: length of the `open' loss interval I_0
-Message-Id: <200701111049.28942@strip-the-willow>
+Date: Wed, 03 Jan 2007 11:58:08 +0000
+Subject: Re: [PATCH 1/1]: Fix packet tardiness bug in CCID 3
+Message-Id: <200701031158.08831@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200701091321.00592@strip-the-willow>
-In-Reply-To: <200701091321.00592@strip-the-willow>
+References: <200612212044.42230@strip-the-willow>
+In-Reply-To: <200612212044.42230@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-Eddie,
+Ian,
 
-many thanks for the answer; which does clarify an issue which has cost quite
-a lot of reading RFC 3448 / 4342. In particular the example you give below,
-where I_0 is promoted to I_1, makes quite clear that - despite the wording in 
-RFC 3448 - it is indeed better to use the distance from X_prev to measure
-the interval I_0. It is also more consistent with the way I_1 ... I_k are 
-computed, so I think the Linux implementation is heading in the right direction.
+I really do appreciate your effort and your input has been helpful, but
+do you not agree that such a bug needs to be tackled at the root?
+Please see below.
 
-Cheers
+|  > [CCID 3]: Fix packet tardiness BUG
+|  >
+|  > Problem:
+|  > --------
+|  > =A0Due to packet scheduling in CCID 3, it can happen that the
+|  > =A0actual send time of a packet is later than t_now: in this case
+|  > =A0t_nom < t_now.
+|  > =A0This case brings the entire packet scheduling out of sync, since
+|  > =A0the next packet is scheduled at t_nom + t_ipi, and t_nom is in
+|  > =A0the past.
+|  >
+|  > Fix:
+|  > ----
+|  > =A0Update t_nom to t_now whenever a packet is late due to scheduling
+|  > =A0(and then t_nom < t_now). This update takes place in ccid3_hc_tx_
+|  > =A0send_packet. In between calls to this function, it is irrelevant
+|  > =A0if t_nom < t_now (since it will be caught eventually).
+|  >
+|  Agree with the problem statement and your fix helps but I think this
+|  fix isn't quite right and mine uses a bit too much CPU resource.
+
+| =20
+|  The problem with yours is that it resets t_nom whenever it is late
+|  rather than just due to t_ipi changing.=20
+Sorry, did you read the earlier emails that I sent? The point is that
+t_ipi will never cause t_nom to become negative. Let things be what they
+may - one thing is clear: the problem of being too late in scheduling must
+be accounted for. This is what the patch does.
+
+There is a second issue which is more subtle: there are several functions
+which access t_nom asynchronously: packet_sent, packet_recv, no_feedback ti=
+mer.
+Due to concurrency this means that we have a race condition if we allow
+several functions to access t_nom without enforcing mutual exclusion via
+locks: the problem is that one function can read an old t_nom, while t_ipi
+has just been subtracted .... and so on. I have prepared another patch to
+take care of this.
+
+
+|  The problem like this is that if the packet is late for other reasons=20
+|  then we shouldn't slow down following packets as it hurts performance.=20
+Ian, which `other reasons' do you mean?: it is logically impossible to crea=
+te
+a t_nom < t_now other than being too late in scheduling.
+
 Gerrit
-
-Quoting Eddie Kohler:
-|  Hi Gerrit,
-|  
-|  Strictly speaking one can identify a loss event with a single ECN-marked 
-|  packet, so I_0 might be < 3, but let that pass.  The RFC occasionally 
-|  uses "lost" to mean "lost or marked".
-|  
-|  The correct answer is simply to subtract X_prev from the sequence number 
-|  of the currently received packet.  This is certainly what we were 
-|  thinking while writing RFC4342, although I don't have time now to check 
-|  whether the text actually defines this explicitly.
-|  
-|  I'm almost certain but am cc'ing the IETF list for possible correction.
-|  
-|  Among the reasons for this choice is that if you measure it the other 
-|  way, I_0 will use different units from every other loss interval length.
-|  
-|  However, to be honest, I'd say that RFC3448 appears to define it as 
-|  "number of packets received since last loss event".  I think this is a 
-|  misstatement in RFC3448 and should be considered for fixing in 
-|  RFC3448bis.  Every other loss interval is defined as a length in 
-|  sequence space INCLUDING lost and marked packets (RFC3448 5.3).  There 
-|  seems no reason to EXCLUDE lost and marked packets for I_0; this might 
-|  lead to weird rate hiccups where the TFRC rate INCREASED after a loss 
-|  (because I_0 got longer when it became I_1)!  I would define I_0 as "the 
-|  most recent interval, which includes the most recent loss event and all 
-|  packets thereafter" (5.4), and say later that I_0 "includes the packets 
-|  received since the last loss event" (rather than REPRESENTS the number 
-|  of packets received since the last loss event) (5.5).
-|  
-|  Eddie
-|  
-|  
-|  
-|  
-|  Gerrit Renker wrote:
-|  > Eddie, 
-|  > 
-|  > sorry to trouble you with yet another question, but it is extremely important to get this
-|  > right. This concerns the length of I_0, the interval since the most recent loss event.
-|  > 
-|  > In the current implementation, we are relying on the highest sequence numbers received
-|  > before a loss occurred. Using the terminology from [RFC 4342, 10.2], this corresponds
-|  > to X_prev and Y_prev.
-|  > 
-|  > For subsequent loss intervals (assuming that more than 1 RTT lies between X_prev/Y_prev),
-|  > we can compute the loss interval length [RFC 3448, 5.3] as modulo-2^48 distance between
-|  > X_prev and Y_prev.
-|  > ( Strictly speaking, the first packet known to be lost - starting the loss event - 
-|  >   has sequence number (X_prev + 1) % 2^48. Since the next loss event begins at sequence 
-|  >   number (Y_prev + 1) % 2^48, the distance is however the same as from X_prev to Y_prev. )
-|  > 
-|  > With the open loss interval I_0, however, the situation is different. In [RFC 3448, 5.5],
-|  > I_0 is defined as "the number of packets received since the last loss event". Taking this 
-|  > literally means the following:
-|  > 
-|  >   * at the instant this loss is detected,              I_0 = 3 
-|  >     (since NUMDUPACK=3 packets need to be received to identify a loss event)
-|  >   * when the first data packet after the loss arrives, I_0 = 4,
-|  >   * when the i-th  data packet after the loss arrives, I_0 = 3 + i
-|  >   * ... and so on until the next loss is detected 
-|  > 
-|  > Question: Is this reasoning correct, or is the intention to determine the number of 
-|  >           data packets in I_0 by using X_prev and simply subtracting X_prev from the
-|  >           sequence number of the currently received packet (modulo 2^48)? 
-|  >           
-|  > 
-|  > The first variant seems to be conform with the RFC, the latter is conform with the way 
-|  > the other loss intervals are computed.
-|  > 
-|  > Resolving this will help to clear up the loss detection algorithm we are currently using.
-|  > 
-|  > Gerrit
-|  -
-|  To unsubscribe from this list: send the line "unsubscribe dccp" in
-|  the body of a message to majordomo@vger.kernel.org
-|  More majordomo info at  http://vger.kernel.org/majordomo-info.html
-|  
-|  
