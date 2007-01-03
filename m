@@ -1,53 +1,114 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 13 Jan 2007 04:54:23 +0000
-Subject: Re: NAK: [PATCH 1/1] DCCP: Fix up t_nom
-Message-Id: <5640c7e00701122054s341fc025sca63d6e2ce1a922@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 03 Jan 2007 12:56:11 +0000
+Subject: Re: [PATCH 2/5]: DCCP Recalc on non-loss intervals
+Message-Id: <200701031256.11671@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200701081128.10177@strip-the-willow>
-In-Reply-To: <200701081128.10177@strip-the-willow>
+References: <200612201545.39441.ian.mcdonald@jandi.co.nz>
+In-Reply-To: <200612201545.39441.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-Hi there,
+Hi Ian,
 
-On 10/01/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Hello,
->
-> |
-> |  > |  @@ -539,11 +528,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
-> |  > |  -            /*
-> |  > |  -             * Schedule no feedback timer to expire in
-> |  > |  -             * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
-> |  > |  -             */
-> |  > |  -            t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
-> |  > |  +            t_nfb = hctx->ccid3hctx_t_rto;
-> |  > |
-> |  > BUG: This removes conformance with RFC 3448, section 4.3 and section 4.4.
-> |  >
-> |  I think I see what you are saying but the code is/was wrong here.
-> |  Section 4.3 and 4.4 talks about t_mbi, not t_ipi. t_mbi is a constant
-> |  of 64 seconds.
-> I meant the passages where the nofeedback timer is set to expire after max(4*R, 2*s/X), where t_ipi = s/X.
-> Now it is only reset to max(4*R). However - again this is a sideline and not central to what I think your
-> patch tries to achieve.
->
-I've reworked the patch to not make changes here as I reread the spec
-and you are right. This means I keep t_ipi in the structure.
+I appreciate the work you have put into this patch and have no doubt that
+it may have cost a lot of time, but the problem here is one of perspective.
 
->
-> |  can you move the refactor patch one up in the sequence so
-> I have shifted it up by 4 - from 3f to 3a - and refreshed the offsets of the other patches.
->
-Thanks. I'm now in agreement with all your patches except 3d, 3e, 4e.
-If you want to you can move the other ones in front of these three so
-Arnaldo has a list of agreed patches.
+Let's separate the issues:
 
-I'm about to send my revised patch which I believe should replace 3d and 3e.
+|  The RFC is a little confusing but I think I have carried out it's
+|  intention correctly. I'll quote verbatim here the relevant parts:
+| =20
+|  =A0 =A0When calculating the average loss interval we need to decide whet=
+her
+|  =A0 =A0to include the interval since the most recent packet loss event. =
+=A0We
+|  =A0 =A0only do this if it is sufficiently large to increase the average =
+loss
+|  =A0 =A0interval.
+| =20
+|  =A0 =A0Thus if the most recent loss intervals are I_0 to I_n, with I_0 b=
+eing
+|  =A0 =A0the interval since the most recent loss event, then we calculate =
+the
+|  =A0 =A0average loss interval I_mean as:
+| =20
+|  Notice here the "interval since the most recent packet loss event".
+|  This implies (but would help if explicit) that this is an interval
+|  with no loss. We only use if it would increase the average.
+| =20
+|  Backing up my implications is that we have intervals from I_0 to I_n
+|  which is actually n+1 intervals so therefore I read I_0 to be the
+|  interval of non-loss. Does this help? Once you see that it all falls
+|  into place.
+| =20
+|  > If you mean this, then the patch is not necessary. The reason is that =
+this statement
+|  > refers to I_tot0 versus I_tot1. The statement
+|  >
+|  > =A0 I_tot =3D max(I_tot0, I_tot1);
+|  >
+|  > takes care of using the `interval since the most recent packet loss ev=
+ent' only if
+|  > it is sufficiently large. It is not explicit to see, but is implicitly=
+ contained in the
+|  > way the two weighted averages are compared against each other: it boil=
+s down to
+|  > comparing I_0 against the oldest 5 loss intervals.
+|  >
+|  > [ For a more detailed explanation, cf. the MSc thesis by Widmer, I als=
+o have a set of
+|  > =A0 notes on this case ]
+|  >
+|  I didn't mean that but someone had tried to implement it and had done
+|  it incorrectly. The intent as I read is not to compare the calculation
+|  with and without the most recent loss interval but to compare with and
+|  without the non-loss interval.
+ 1) see previous posting - I think we are still having a misunderstanding h=
+ere and
+    I do think that what you cite above is already covered by the condition=
+=20
+    I_tot =3D max(I_tot0, I_tot1)". That would mean, as soon as we implemen=
+t [RFC 3448, 5.4],
+    we have this sorted out (and this method has been tested for 7 years).
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+|  The implementation in the kernel, which was wrong logic, also had
+|  wrong implementation! The code was taken over from FreeBSD (relicensed
+|  under GPL) and we actually didn't analyse properly and were excluding
+|  the wrong item from the loop as linked lists ran the opposite
+|  direction in FreeBSD to Linux in this case!!
+ 2) if you think this has not been implemented correctly, then can you plea=
+se point out
+    > where <. The situation at the moment is: you are saying "X has been i=
+mplemented
+    wrongly, so I use Y to solve the problem". Y however has not much in co=
+mmon with X, so
+    we are left with a broken method X and a non-standard method Y.=20
+
+|  > As far as I can see, it is non-standard.
+| =20
+|  I believe it is standard as per earlier. It does boost performance but
+|  correctly so. Search the archives for Burak and you will see what it
+|  solves. It is particularly applicable to links like satellite with
+|  fixed bandwidth. Think about say a 128 Kbits link and you get a loss
+|  when you are at 40 Kbits per second. If you get no more loss then you
+|  can never achieve your link speed as i_mean is not recalculated.
+ 3) I have a suggestion: you seem to be sure of the merits of this solution=
+ and report on=20
+    test results. My suggestion would be to offer using this method via a c=
+onfiguration
+    option (same as per the nofeedback timer threshold). You could put deta=
+iled advice into
+    the kernel configuration menu, and we would have the best of both world=
+s - a standards-
+    compliant TFRC implementation and a configurable Ian's nifty solution. =
+Would that settle
+    things?
+
+
+|  All this is is a method of not having to call calc_i_mean for EVERY
+|  packet which would be very expensive on CPU. It is new but is a very
+ 4) This code is only invoked when ccid3_hc_rx_detect_loss() returns true, =
+hence it is not
+    invoked for every packet.=20
