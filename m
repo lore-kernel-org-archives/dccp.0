@@ -1,52 +1,52 @@
-From: "Arnaldo Carvalho de Melo" <arnaldo.melo@gmail.com>
-Date: Fri, 12 Jan 2007 19:14:01 +0000
-Subject: Re: [PATCH 1/1]: Remove build warnings on 64-bit architecture
-Message-Id: <39e6f6c70701121114x1054cdbscea4f5b9c195f3c7@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 03 Jan 2007 11:40:20 +0000
+Subject: Re: [PATCH 2/4] DCCP: Add more debugging
+Message-Id: <200701031140.21022@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200701121758.21516@strip-the-willow>
-In-Reply-To: <200701121758.21516@strip-the-willow>
+References: <200612281706.25874.ian.mcdonald@jandi.co.nz>
+In-Reply-To: <200612281706.25874.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 1/12/07, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> On 13/01/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+Hi Ian,
 
-<SNIP>
+I have tested this at home and found a small error:
 
-> > @@ -899,7 +901,7 @@ static void ccid3_hc_rx_packet_recv(stru
-> >                 DCCP_BUG_ON(r_sample < 0);
-> >                 if (unlikely(r_sample <= t_elapsed))
-> >                         DCCP_WARN("r_sample=%ldus, t_elapsed=%ldus\n",
-> > -                                 r_sample, t_elapsed);
-> > +                                 (long)r_sample, (long)t_elapsed);
-> >                 else
-> >                         r_sample -= t_elapsed;
-> >                 CCID3_RTT_SANITY_CHECK(r_sample);
-> > -
->
-> I can't comment on suseconds stuff as don't know so much...
+|  +	if (hctx->ccid3hctx_x != old_x) {
+|  +		ccid3_pr_debug("X_prev=%llu, X_now=%llu, X_calc=%u, "
+|  +		               "X_recv=%llu\n", old_x, hctx->ccid3hctx_x,
+|  +			       hctx->ccid3hctx_x_calc, hctx->ccid3hctx_x_recv);
+|   		ccid3_update_send_time(hctx);
+=> old_x, x, and x_recv are all scaled by 2^6 and need to be divided (would give wrong results).
 
-Checked this last month, look at the URL to see the diff:
+I have fixed this in the online version (3c_CCID3_add_more_debugging_McDonald.diff);
+the inter-diff between previous and now is (having also updated `x' -> `X' for consistency):
 
-http://www.kernel.org/git/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commitdiff;hba78b6cba14bd37fdb12c5367f1e4d58ff2e0f
+diff -u b/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+--- b/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -100,8 +100,8 @@
+        hctx->ccid3hctx_delta = min_t(u32, hctx->ccid3hctx_t_ipi / 2,
+                                           TFRC_OPSYS_HALF_TIME_GRAN);
 
-commit 1fba78b6cba14bd37fdb12c5367f1e4d58ff2e0f
-Author: Arnaldo Carvalho de Melo <acme@mandriva.com>
-Date:   Sun Dec 10 15:39:29 2006 -0200
+-       ccid3_pr_debug("t_ipi=%u, delta=%u, s=%u, x=%llu\n",
+-                      hctx->ccid3hctx_t_ipi, hctx->ccid3hctx_delta,
++       ccid3_pr_debug("t_ipi=%u, delta=%u, s=%u, X=%llu\n",
++                      hctx->ccid3hctx_t_ipi, hctx->ccid3hctx_delta,
+                       hctx->ccid3hctx_s, hctx->ccid3hctx_x >> 6);
 
-    [DCCP] ccid3: Fixup some type conversions related to rtts
+ }
+@@ -148,8 +148,9 @@
 
-    Spotted by David Miller when compiling on sparc64, I reproduced it here on
-    parisc64, that are the only platforms to define __kernel_suseconds_t as an
-    'int', all the others, x86_64 and x86 included typedef it as a
-'long', but from
-    the definition of suseconds_t it should just be an 'int' on
-platforms where it
-    is >= 32bits, it would not require all the castings from
-suseconds_t to (int)
-    when printking variables of this type, that are not needed on parisc64 and
-    sparc64.
-
-    Signed-off-by: Arnaldo Carvalho de Melo <acme@mandriva.com>
+        if (hctx->ccid3hctx_x != old_x) {
+                ccid3_pr_debug("X_prev=%llu, X_now=%llu, X_calc=%u, "
+-                              "X_recv=%llu\n", old_x, hctx->ccid3hctx_x,
+-                              hctx->ccid3hctx_x_calc, hctx->ccid3hctx_x_recv);
++                              "X_recv=%llu\n", old_x >> 6, hctx->ccid3hctx_x >> 6,
++                              hctx->ccid3hctx_x_calc, hctx->ccid3hctx_x_recv >> 6);
++
+                ccid3_update_send_time(hctx);
+        }
+ }
