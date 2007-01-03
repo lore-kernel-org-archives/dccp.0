@@ -1,85 +1,125 @@
-From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Mon, 22 Jan 2007 22:22:17 +0000
-Subject: [PATCH 1/1] DCCP: Fix dccp_calc_first_li
-Message-Id: <200701231122.18624.ian.mcdonald@jandi.co.nz>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 03 Jan 2007 13:31:04 +0000
+Subject: [PATCH 7/8]: Remove race condition in calculating send time
+Message-Id: <200701031331.05000@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-dccp_calc_first_li is calculating incorrect values by observation.
+[CCID 3]: Remove race condition in access to scheduled send time
 
-We don't need to calculate rtt as it has already been calculated elsewhere.
-The previous calculation was wrong from the logs.
+This removes a race condition in the access to the scheduled send time t_nom which 
+results from allowing asynchronous r/w access to t_nom without locks.
 
-The value for x_recv was wrong as it was calculating ALL bytes received
-divided only by number of packets in last RTT. As we don't store bytes
-received in packet history then calculate using s.
 
-Also fix up comments as it is not returning usecs but packet interval.
+			D e t a i l e d   B a c k g r o u n d 
+			-------------------------------------
+ ccid3_hc_tx_packet_recv and ccid3_hc_tx_no_feedback_timer both have, via ccid3_hc_tx_update_x,
+ asynchronous write access to ccid3hctx_t_nom. Thus it can happen that ccid3_hc_tx_send_packet
+ tries to read/write the value of t_nom while at the same time this value is being changed. 
+ 
+ In the worst case, t_ipi has just been subtracted, which means that the packet will be sent 
+ immediately, thereby defeating the whole intention of the rate-based packet scheduling. There 
+ is no locking protection against this simultaneous access, hence this race condition is entirely 
+ possible and likely. 
+ 
+ Currently several different functions have asynchronous access to ccid3hctx_t_nom:
+ 
+  * ccid3_hc_tx_send_packet - read access to check whether further delaying is needed
+                            - write access to designate send time for next packet
+  * ccid3_update_send_time  - write access to re-calculate send interval
+ 
+ The latter function is called 
+  1) whenever the sending rate X changes (via ccid3_hc_tx_update_x) 
+      --> if X increases, a smaller send interval and a sooner t_nom results
+      --> if X decreases, a larger send interval and a later t_nom results;
+  2) when the nofeedback timer expires in state NO_FBACK;
+  3) when receiving the first feedback packet (ccid3_hc_tx_packet_recv, state NO_FBACK).
+ 
+ Cases 2/3 happen at most once during the lifetime of a connection, whereas (1) happens
+ 
+  a) whenever as a result of receiving feedback the sending rate X changes
+  b) whenever the sending rate is halved as a result of an expiring nofeedback timer
+ 
+ Hence, in case (b) the send interval is always increased, whereas in (a) it is decreased
+ or increased depending on the nature of received feedback. 
+ 
+ The modification of t_nom via ccid3_update_send_time has an impact and relevance only for a 
+ single packet: the immediately next one. It is really questionable whether this modification 
+ has any benefit, as t_nom can be influenced in both directions (for good or for worse). 
+ 
 
-Tidy up debugging a little too.
+Fix: By monopolising read/write access of t_nom to ccid3_hc_tx_send_packet. This removes
+     the potential race condition.
+     No harm occurs if t_ipi/delta change while ccid3_hc_tx_send_packet is in the process
+     of sending a packet - in this case the most recently available values will be used.
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
-diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
-index fec5ba3..5026802 100644
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -251,18 +251,19 @@ static int dccp_li_hist_interval_new(struct list_head *list,
+ net/dccp/ccids/ccid3.c |   18 +++++-------------
+ 1 file changed, 5 insertions(+), 13 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -82,20 +82,14 @@ static void ccid3_hc_tx_set_state(struct
+ }
  
- /* calculate first loss interval
-  *
-- * returns estimated loss interval in usecs */
-+ * returns estimated loss interval */
- 
- static u32 dccp_li_calc_first_li(struct sock *sk, struct sk_buff *skb)
+ /*
+- * Recalculate scheduled nominal send time t_nom, inter-packet interval
+- * t_ipi, and delta value. Should be called after each change to X.
++ * Recalculate t_ipi and delta (should be called whenver X changes)
+  */
+-static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
++static inline void ccid3_update_send_interval(struct ccid3_hc_tx_sock *hctx)
  {
- 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
- 	struct dccp_rx_hist_entry *entry, *next, *tail = NULL;
--	u32 x_recv, p;
-+	u32 x_recv, p, bytes_recv;
- 	suseconds_t rtt, delta;
- 	struct timeval tstamp = { 0, };
- 	int interval = 0;
- 	int win_count = 0;
- 	int step = 0;
-+	int pkt_count = 0;
- 	u64 fval;
+-	timeval_sub_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
+-
+ 	/* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second) */
+ 	hctx->ccid3hctx_t_ipi = scaled_div(hctx->ccid3hctx_s,
+ 					   hctx->ccid3hctx_x >> 6);
  
- 	list_for_each_entry_safe(entry, next, &hcrx->ccid3hcrx_hist,
-@@ -278,6 +279,7 @@ static u32 dccp_li_calc_first_li(struct sock *sk, struct sk_buff *skb)
- 				break;
- 			case 1:
- 				interval = win_count - entry->dccphrx_ccval;
-+				pkt_count++;
- 				if (interval < 0)
- 					interval += TFRC_WIN_COUNT_LIMIT;
- 				if (interval > 4)
-@@ -307,9 +309,7 @@ found:
- 	delta = timeval_delta(&tstamp, &tail->dccphrx_tstamp);
- 	DCCP_BUG_ON(delta < 0);
+-	/* Update nominal send time with regard to the new t_ipi */
+-	timeval_add_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
+-
+ 	/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
+ 	hctx->ccid3hctx_delta = min_t(u32, hctx->ccid3hctx_t_ipi / 2,
+ 					   TFRC_OPSYS_HALF_TIME_GRAN);
+@@ -119,8 +113,6 @@ static inline void ccid3_update_send_tim
+  *       fine-grained resolution of sending rates. This requires scaling by 2^6
+  *       throughout the code. Only X_calc is unscaled (in bytes/second).
+  *
+- * If X has changed, we also update the scheduled send time t_now,
+- * the inter-packet interval t_ipi, and the delta value.
+  */
+ static void ccid3_hc_tx_update_x(struct sock *sk, struct timeval *now)
  
--	rtt = delta * 4 / interval;
--	dccp_pr_debug("%s(%p), approximated RTT to %dus\n",
--		       dccp_role(sk), sk, (int)rtt);
-+	rtt = hcrx->ccid3hcrx_rtt;
+@@ -151,7 +143,7 @@ static void ccid3_hc_tx_update_x(struct 
+ 			       "X_recv=%llu\n", old_x >> 6, hctx->ccid3hctx_x >> 6,
+ 			       hctx->ccid3hctx_x_calc, hctx->ccid3hctx_x_recv >> 6);
  
- 	/*
- 	 * Determine the length of the first loss interval via inverse lookup.
-@@ -328,7 +328,13 @@ found:
- 	delta = timeval_delta(&tstamp, &hcrx->ccid3hcrx_tstamp_last_feedback);
- 	DCCP_BUG_ON(delta <= 0);
+-		ccid3_update_send_time(hctx);
++		ccid3_update_send_interval(hctx);
+ 	}
+ }
  
--	x_recv = scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
-+	bytes_recv = hcrx->ccid3hcrx_s * pkt_count;
-+
-+	dccp_pr_debug("%s(%p), rtt=%dus, delta=%dus, bytes_recv=%u "
-+	              "pkt_count=%d\n", dccp_role(sk), sk, (int)rtt,
-+		      (int)delta, bytes_recv, pkt_count);
-+
-+	x_recv = scaled_div32(bytes_recv, delta);
- 	if (x_recv = 0) {		/* would also trigger divide-by-zero */
- 		DCCP_WARN("X_recv=0\n");
- 		if ((x_recv = hcrx->ccid3hcrx_x_recv) = 0) {
+@@ -228,7 +220,7 @@ static void ccid3_hc_tx_no_feedback_time
+ 		/* The value of R is still undefined and so we can not recompute
+ 		 * the timout value. Keep initial value as per [RFC 4342, 5]. */
+ 		t_nfb = TFRC_INITIAL_TIMEOUT;
+-		ccid3_update_send_time(hctx);
++		ccid3_update_send_interval(hctx);
+ 		break;
+ 	case TFRC_SSTATE_FBACK:
+ 		/*
+@@ -486,7 +478,7 @@ static void ccid3_hc_tx_packet_recv(stru
+ 			hctx->ccid3hctx_x    = scaled_div(w_init << 6, r_sample);
+ 			hctx->ccid3hctx_t_ld = now;
+ 
+-			ccid3_update_send_time(hctx);
++			ccid3_update_send_interval(hctx);
+ 
+ 			ccid3_pr_debug("%s(%p), s=%u, MSS=%u, w_init=%u, "
+ 				       "R_sample=%dus, X=%u\n", dccp_role(sk),
