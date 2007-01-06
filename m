@@ -1,61 +1,45 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 05 Jan 2007 14:55:16 +0000
-Subject: [PATCH-UPDATE]: 3f_CCID3_refactor_loss_interval_code_McDonald.diff
-Message-Id: <200701051455.16936@strip-the-willow>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sat, 06 Jan 2007 19:29:37 +0000
+Subject: Re: [PATCH-UPDATE]: 3f_CCID3_refactor_loss_interval_code_McDonald.diff
+Message-Id: <5640c7e00701061129ofd3f9dahc638fd8150e24a4a@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <200701051455.16936@strip-the-willow>
+In-Reply-To: <200701051455.16936@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-I would like to retract the change in the interface of update_li which we discussed recently. 
+On 1/6/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> I would like to retract the change in the interface of update_li which we discussed recently.
+>
+> The reason is that the caller supplies `loss' parameters (a loss sequence number and a loss
+> CCVal); the fact that in the current implementation this coincides with the fields
+>
+>        hccrx->ccid3hcrx_seqno_nonloss and
+>        hcrx->ccid3hcrx_ccval_nonloss
+>
+> in ccid3_hc_rx_detect_loss is more of a coincidence.
 
-The reason is that the caller supplies `loss' parameters (a loss sequence number and a loss
-CCVal); the fact that in the current implementation this coincides with the fields 
+I disagree with you on this. It's not a coincidence at all. I planned
+the code that way. It "happens" to have the right values because I put
+them there.
 
-       hccrx->ccid3hcrx_seqno_nonloss and
-       hcrx->ccid3hcrx_ccval_nonloss
+> I have been going over this code several
+> times and come to the conclusion that not changing the interface of update_li is the cleanest
+> way. I have uploaded this to the online directory, below are the differences to Ian's original.
+>
+>
+I disagree with this. However I can see some confusion because we are
+equating nonloss and loss variables and the variables are named badly
+in the loss interval code. What I've done is stuck with my original
+patch but changed the variable names seq_loss and win_loss to
+seq_nonloss and win_nonloss respectively.
 
-in ccid3_hc_rx_detect_loss is more of a coincidence. I have been going over this code several
-times and come to the conclusion that not changing the interface of update_li is the cleanest
-way. I have uploaded this to the online directory, below are the differences to Ian's original.
+I've posted the new version online. Can you now use this one please?
 
-
-==> This is the `meta-diff' between original diff and the new diff:
-
---- b/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -842,7 +842,8 @@
- 	while (dccp_delta_seqno(hcrx->ccid3hcrx_seqno_nonloss, seqno)
- 	   > TFRC_RECV_NUM_LATE_LOSS) {
- 		loss = 1;
--		dccp_li_update_li(sk);
-+		dccp_li_update_li(sk, hcrx->ccid3hcrx_seqno_nonloss,
-+		                      hcrx->ccid3hcrx_ccval_nonloss);
- 		tmp_seqno = hcrx->ccid3hcrx_seqno_nonloss;
- 		dccp_inc_seqno(&tmp_seqno);
- 		hcrx->ccid3hcrx_seqno_nonloss = tmp_seqno;
---- b/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -248,13 +248,11 @@
- 		return 1000000 / p;
- }
- 
--void dccp_li_update_li(struct sock *sk)
-+void dccp_li_update_li(struct sock *sk, u64 seq_loss, u8 win_loss)
- {
- 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
- 	struct dccp_li_hist_entry *head;
- 	u64 seq_temp;
--	u64 seq_loss = hcrx->ccid3hcrx_seqno_nonloss;
--	u8 win_loss = hcrx->ccid3hcrx_ccval_nonloss;
- 
- 	if (list_empty(&hcrx->ccid3hcrx_li_hist)) {
- 		if (!dccp_li_hist_interval_new(&hcrx->ccid3hcrx_li_hist,
---- b/net/dccp/ccids/lib/loss_interval.h
-+++ b/net/dccp/ccids/lib/loss_interval.h
-@@ -36,3 +36,3 @@
- 
--extern void dccp_li_update_li(struct sock *sk);
-+extern void dccp_li_update_li(struct sock *sk, u64 seq_loss, u8 win_loss);
- #endif /* _DCCP_LI_HIST_ */
+Ian
+-- 
+Web: http://wand.net.nz/~iam4
+Blog: http://imcdnzl.blogspot.com
+WAND Network Research Group
