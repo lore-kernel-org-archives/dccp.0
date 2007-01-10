@@ -1,38 +1,46 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 19 Jan 2007 15:07:30 +0000
-Subject: RFC 4342 Erratum: use Request/Response RTT
-Message-Id: <200701191507.31045@strip-the-willow>
+Date: Wed, 10 Jan 2007 11:44:38 +0000
+Subject: Summary and overview for tackling loss detection / loss history handling
+Message-Id: <200701101144.38445@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Eddie,
+In order to clarify some of the discussions on this list, I have done some summaries; essentially
+a tidied-up write up of issues that were discussed on this list. 
 
-following a discussion with Ian, it became clear that the best way to fix
-some of the outstanding scheduling problems is to implement the Erratum to
-RFC 4342 and use the initial Request/Response handshake as basis for calculating t_ipi.
+Loss Detection:
+	Currently the CCVal/seqno of packets starting a loss event are out of sync in ccid3_detect_loss,
+        which hinders fixing other bugs. I made a case analysis for this on 
 
-I am referring to this posting (sorry the original was no longer in the inbox):
- http://www.mail-archive.com/dccp@vger.kernel.org/msg01319.html
+        http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/detect_loss_algorithm/detect_loss_notes.txt
 
-and was using the RFC 4340/2 erratum page:
- http://www.read.cs.ucla.edu/dccp/rfc4340errata
-
-Now, having spent almost half a day to come up with a solution for initial RTT
-estimates, I found that there are still several things open/unclear:
-
- * RFC 3448, 4.2 specifies an initial sending rate of 1 packet per second
- * RFC 3448, 4.6 specifies t_ipi = s/X => still gives 1 second
- * I can't find an override-clause in RFC 4342 for this
-
-Question: Is the aim to use section 4.2 of RFC 3448 and if yes, to what extent 
-          (this section has quite a few changes to other parts of the algorithm, too).
-
-Can you please clarify, maybe I have got the wrong erratum. 
-
-It would be good to have this clear - so as to implement it.
+        This contains an entire algorithm, for which a flowchart is on 
+	http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/detect_loss_algorithm/detect_loss_flowchart.eps
+	http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/detect_loss_algorithm/detect_loss_flowchart.png
+	http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/detect_loss_algorithm/detect_loss_flowchart.dia
 
 
-Gerrit
+Loss History Handling
+	A systematic write-up of points raised earlier on this list is on 
+	
+	http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/detect_loss_algorithm/summary_of_loss_handling_issues.txt
+
+	This includes a list of currently known bugs which need fixing.
+
+
+Loss History based on Ring Buffer
+	I have worked out a generic algorithm to achieve fixed-size history handling in a LIFO ring buffer.
+	The code is deceptively simple, based on a constant HIST_SIZE, and is online on
+	
+	http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/loss_history_ring-buffer/
+	
+	The detailed description of how this works is on 
+	
+	http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/loss_history_ring-buffer/circular_fixed-size_loss-history_buffer.txt
+
+
+I'd welcome any feedback and comments - if there is none, I may end up sending some of
+the documents to the list ;-)
