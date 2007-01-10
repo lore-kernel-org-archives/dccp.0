@@ -1,30 +1,70 @@
-From: Herbert Xu <herbert@gondor.apana.org.au>
-Date: Wed, 10 Jan 2007 05:14:54 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 10 Jan 2007 09:03:04 +0000
 Subject: Re: AUDIT: Safe usage of before48/after48 in the DCCP code
-Message-Id: <20070110051454.GA26112@gondor.apana.org.au>
+Message-Id: <200701100903.04524@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200701081300.15691@strip-the-willow>
 In-Reply-To: <200701081300.15691@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="hz-gb-2312"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-T24gTW9uLCBKYW4gMDgsIDIwMDcgYXQgMDE6MDA6MTVQTSArMDAwMCwgR2Vycml0IFJlbmtlciB3
-cm90ZToKPiAKPiAJCTEpIEdlbmVyYWwgY2FzZXMKPiAJCT09PT09PT09CgpUaGFua3MgZm9yIGRv
-aW5nIHRoZSBhdWRpdCEKCj4gQ0FTRSAxOiBjYWxscyBvZiB0aGUgZm9ybSAKPiAJICogaWYgKGJl
-Zm9yZTQ4KGEsYikpIG9yIAo+IAkgKiBpZiAoYWZ0ZXI0OChiLGEpKQo+ICAgICAgICAgYXJlIG5v
-dCBhbWJpZ3VvdXMgZHVlIHRvIHRoZSBkZWZpbml0aW9uIG9mIGJlZm9yZTQ4IChzZWUgYWJvdmUg
-bGluayBmb3IgZGV0YWlscykuCgpBY3R1YWxseSwKCglpZiAoYmVmb3JlNDgoYSwgYikpCgppcyBh
-bWJpZ3VvdXMgaWYgYW5kIG9ubHkgaWYKCglpZiAoIWJlZm9yZTQ4KGEsIGIpKQoKaXMgYW1iaWd1
-b3VzLiAgV2hldGhlciBpdCdzIHNhZmUgZGVwZW5kcyBvbiB0aGUgY2xhdXNlIGFmdGVyIHRoZSBp
-ZgpzdGF0ZW1lbnQsIGkuZS4sCgoJaWYgKGJlZm9yZTQ4KGEsIGIpKQoJCXByb2Nlc3NfcGFja2V0
-KCk7Cgp3b3VsZCBiZSBzYWZlIHdoaWxlCgoJaWYgKGJlZm9yZTQ4KGEsIGIpKQoJCWRyb3BfcGFj
-a2V0KCk7CgppcyBub3QuCgpDaGVlcnMsCi0tIApWaXNpdCBPcGVuc3dhbiBhdCBodHRwOi8vd3d3
-Lm9wZW5zd2FuLm9yZy8KRW1haWw6IEhlcmJlcnQgWHUgfntQbVY+SEl+fSA8aGVyYmVydEBnb25k
-b3IuYXBhbmEub3JnLmF1PgpIb21lIFBhZ2U6IGh0dHA6Ly9nb25kb3IuYXBhbmEub3JnLmF1L35o
-ZXJiZXJ0LwpQR1AgS2V5OiBodHRwOi8vZ29uZG9yLmFwYW5hLm9yZy5hdS9+aGVyYmVydC9wdWJr
-ZXkudHh0Ci0KVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxpc3Q6IHNlbmQgdGhlIGxpbmUgInVu
-c3Vic2NyaWJlIGRjY3AiIGluCnRoZSBib2R5IG9mIGEgbWVzc2FnZSB0byBtYWpvcmRvbW9Admdl
-ci5rZXJuZWwub3JnCk1vcmUgbWFqb3Jkb21vIGluZm8gYXQgIGh0dHA6Ly92Z2VyLmtlcm5lbC5v
-cmcvbWFqb3Jkb21vLWluZm8uaHRtbA==
+|  > 		1) General cases
+|  > 		========
+|  
+|  Thanks for doing the audit!
+|  
+|  > CASE 1: calls of the form 
+|  > 	 * if (before48(a,b)) or 
+|  > 	 * if (after48(b,a))
+|  >         are not ambiguous due to the definition of before48 (see above link for details).
+|  
+|  Actually,
+|  
+|  	if (before48(a, b))
+|  
+|  is ambiguous if and only if
+|  
+|  	if (!before48(a, b))
+|  
+|  is ambiguous.  
+The new definition of `before48' is identical to the old one apart from all those
+pairs a,b whose distance is 2^47 - the ambiguous case, which is now included in !before.
+
+|  Whether it's safe depends on the clause after the if 
+|  statement, i.e.,
+|  
+|  	if (before48(a, b))
+|  		process_packet();
+|  
+|  would be safe while
+|  
+|  	if (before48(a, b))
+|  		drop_packet();
+One could consider this in terms of the first as
+	if (!before48(a, b))
+		process_packet();
+
+Thanks for the comments - I therefore went again through the list of cases. I found two instances which are
+of the form you described:
+
+net/dccp/ccids/lib/packet_history.c-225-        if (!list_empty(li_list)) {
+net/dccp/ccids/lib/packet_history.c-226-                list_for_each_entry_safe(entry, next, rx_list, dccphrx_node) {
+net/dccp/ccids/lib/packet_history.c-227-                        if (num_later = 0) {
+net/dccp/ccids/lib/packet_history.c:228:                                if (after48(nonloss_seqno,
+net/dccp/ccids/lib/packet_history.c-229-                                   entry->dccphrx_seqno)) {
+net/dccp/ccids/lib/packet_history.c-230-                                        list_del_init(&entry->dccphrx_node);
+net/dccp/ccids/lib/packet_history.c-231-                                        dccp_rx_hist_entry_delete(hist, entry);
+=> This is part of the synchronous garbage collection for the RX history (function dccp_rx_hist_add_packet).
+    We would have an ambiguity in the case where entry->dccphrx_seqno and nonloss_seqno are 2^47 apart:
+	* with the old definition the entry would be cleared
+	* with the new definition the entry would not be cleared
+    I am arguing that this instance is benign: the entry would not be cleared now; but the condition would be
+    satisfied the next time when dccp_rx_hist_add_packet is called - with a higher value of nonloss_seqno. So
+    the difference is that in this special case the entry would be cleared slightly later, but eventually it will.
+
+net/dccp/ackvec.c:60:           BUG_ON(before48(avr->dccpavr_ack_seqno,
+net/dccp/ackvec.c-61-                           head->dccpavr_ack_seqno));
+=> As in the other instance of Ack Vectors, a sequence number distance of 2^47 is not within the scope of what Ack
+    Vectors are used for, it is a pathological case.
