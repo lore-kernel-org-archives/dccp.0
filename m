@@ -1,25 +1,100 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 24 Jan 2007 01:30:30 +0000
-Subject: Re: [PATCH 5/7]: Use function for CCID 3 RTT sampling
-Message-Id: <5640c7e00701231730q50c84fa8xd5ce602a508304a@mail.gmail.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Sat, 13 Jan 2007 04:56:24 +0000
+Subject: [PATCH 1/1] DCCP: Another attempt at fixing up t_nom
+Message-Id: <200701131756.24975.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <200701231541.06742@strip-the-willow>
-In-Reply-To: <200701231541.06742@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 24/01/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [CCID 3]: Use function for RTT sampling
->
-> This replaces the existing occurrences of RTT sampling with
-> the use of the new function dccp_sample_rtt.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Calculate t_nom as per RFC3448 section 4.6. We have been making it too
+complicated previously.
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+We do have a bit of a hack for initial ipi as we are not picking up the rtt
+from initial setup. This should be tidied up in future.
+
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 1ebb4da..57f9fb8 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -82,12 +82,10 @@ static void ccid3_hc_tx_set_state(struct sock *sk,
+ 
+ /*
+  * Recalculate scheduled nominal send time t_nom, inter-packet interval
+- * t_ipi, and delta value. Should be called after each change to X.
++ * t_ipi, and delta value. Should be called after each packet sent.
+  */
+-static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
++static void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
+ {
+-	timeval_sub_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
+-
+ 	/* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second) */
+ 	hctx->ccid3hctx_t_ipi = scaled_div(hctx->ccid3hctx_s,
+ 					   hctx->ccid3hctx_x >> 6);
+@@ -118,8 +116,6 @@ static inline void ccid3_update_send_time(struct ccid3_hc_tx_sock *hctx)
+  *       fine-grained resolution of sending rates. This requires scaling by 2^6
+  *       throughout the code. Only X_calc is unscaled (in bytes/second).
+  *
+- * If X has changed, we also update the scheduled send time t_now,
+- * the inter-packet interval t_ipi, and the delta value.
+  */
+ static void ccid3_hc_tx_update_x(struct sock *sk, struct timeval *now)
+ 
+@@ -145,13 +141,10 @@ static void ccid3_hc_tx_update_x(struct sock *sk, struct timeval *now)
+ 		hctx->ccid3hctx_t_ld = *now;
+ 	}
+ 
+-	if (hctx->ccid3hctx_x != old_x) {
++	if (hctx->ccid3hctx_x != old_x)
+ 		ccid3_pr_debug("X_prev=%llu, X_now=%llu, X_calc=%u, "
+ 			       "X_recv=%llu\n", old_x >> 6, hctx->ccid3hctx_x >> 6,
+ 			       hctx->ccid3hctx_x_calc, hctx->ccid3hctx_x_recv >> 6);
+-
+-		ccid3_update_send_time(hctx);
+-	}
+ }
+ 
+ /*
+@@ -344,6 +337,8 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 
+ 		/* Set t_0 for initial packet */
+ 		hctx->ccid3hctx_t_nom = now;
++		timeval_add_usecs(&hctx->ccid3hctx_t_nom,
++		   hctx->ccid3hctx_t_ipi);
+ 		break;
+ 	case TFRC_SSTATE_NO_FBACK:
+ 	case TFRC_SSTATE_FBACK:
+@@ -361,6 +356,7 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 			return delay / 1000L;
+ 
+ 		ccid3_hc_tx_update_win_count(hctx, &now);
++		ccid3_update_send_time(hctx);
+ 		break;
+ 	case TFRC_SSTATE_TERM:
+ 		DCCP_BUG("%s(%p) - Illegal state TERM", dccp_role(sk), sk);
+@@ -371,9 +367,6 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 	dp->dccps_hc_tx_insert_options = 1;
+ 	DCCP_SKB_CB(skb)->dccpd_ccval = hctx->ccid3hctx_last_win_count;
+ 
+-	/* set the nominal send time for the next following packet */
+-	timeval_add_usecs(&hctx->ccid3hctx_t_nom, hctx->ccid3hctx_t_ipi);
+-
+ 	return 0;
+ }
+ 
+@@ -486,6 +479,11 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 			hctx->ccid3hctx_x    = scaled_div(w_init << 6, r_sample);
+ 			hctx->ccid3hctx_t_ld = now;
+ 
++
++			/* adjust down from initial 1 second now we have rtt */
++			timeval_sub_usecs(&hctx->ccid3hctx_t_nom,
++			   hctx->ccid3hctx_t_ipi);
++
+ 			ccid3_update_send_time(hctx);
+ 
+ 			ccid3_pr_debug("%s(%p), s=%u, MSS=%u, w_init=%u, "
