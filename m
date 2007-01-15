@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 15 Jan 2007 07:56:34 +0000
+Date: Mon, 15 Jan 2007 08:34:29 +0000
 Subject: Re: [PATCH 1/1] DCCP: Fix up t_nom - FOLLOW-UP
-Message-Id: <200701150756.35069@strip-the-willow>
+Message-Id: <200701150834.30152@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200701101021.38920@strip-the-willow>
 In-Reply-To: <200701101021.38920@strip-the-willow>
@@ -10,23 +10,153 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  > I have a snapshot which illustrates this state:
-|  >
+Quoting Eddie Kohler:
+|  The first figure certainly demonstrates a problem.  However, that 
+|  problem is not inherent in CCID3, it is not inherent in rate-based 
+|  solutions, and high-rate timers probably wouldn't solve it.  CCID3 has 
+|  been tested -- in simulation mind you -- at high rates.  The problem is 
+|  a bug in the Linux implementation.  Ian seems to think he can solve the 
+|  problem with bursts and I am inclined to agree.
+|  
+|  Your comments about X_crit are based on your observations, not analysis, 
+|  yes?  If you can provide some reason why CCID3 inherently has an X_crit, 
+|  I'd like to hear it.  "Oscillat[ing] between the top available speed ... 
+|  and whatever it gets in terms of feedback" is not TFRC.  Sounds like a bug.
+|  
+|  I agree that kernel maintainers don't want bugs in the kernel.
+|  
+|  Anyway, if you can go deeper into the code and determine why you're 
+|  observing this behavior (I assume in the absence of loss, which is even 
+|  weirder), then that might be useful.
+|  
+
+First off - I think we all agree that the RFCs are all sound and 
+thus virtually everything here deals with implementation problems (if there
+are additional observations or discussions, we can copy to dccp@ietf).
+
+I think to find why the CCID 3 performance is so chaotic, unpredictable and 
+abysmally poor we should try to combine the various strenghts of people on this list.
+
+Apart from writing standards documents, you have designed the core of the click
+modular router system, so many issues arising here you can probably evaluate from
+a practical perspective as well as from a standards-based perspective.
+
+Ian has been the maintainer of the CCID 3 module for so long and knows all the background
+from the original Lulea code, through the WAND research code and the various stages it
+went through. So it more or less entirely depends on the communication on this list how
+good this code can be made. 
+
+Below I throw in my 2 cents of why I think there is a critical speed X_crit. Maybe you can
+help me dispel it or point out other possibilities which we can - step-by-step - eliminate,
+until the cause becomes fully clear.
+
+Firstly, all packet scheduling is based on schedule_timeout().
+
+The return code rc of ccid_hc_tx_send_packet (wrapper around ccid3_hc_tx_send_packet) is used
+to decide whether to 
+
+ (a) send the packet immediately or
+ (b) sleep with HZ granularity before retrying
+
+I am assuming that there is no loss on the link and no backlog of packets which couldn't be
+scheduled so far (i.e. if t_nom < t_now then t_now - t_nom < t_ipi). I assume further that
+there is a constant stream of packets, fed into the TX queue by continuously calling
+dccp_sendmsg. This is also the background of the experiments/graphs. 
+
+Here is the analysis, starting with ccid3_hc_tx_send_packet:
+
+ 1) dccp_sendmsg calls dccp_write_xmit(sk, 0)
+
+ 2) dccp_write_xmit calls ccid_hc_tx_send_packet, a wrapper around ccid3_hc_tx_send_packet
+
+ 3) ccid3_hc_tx_send_packet gets the current time in usecs and computes  delay = t_nom - t_now
+
+     (a) if delay >= delta = min(t_ipi/2, t_gran/2) then it returns delay/1000
+     (b) otherwise it returns 0
+
+ 4) back in dccp_write_xmit, 
+     * if rc=0 then the packet is sent immediately;  otherwise (since block=0), 
+     * dccps_xmit_timer is reset to expire in t_now + rc  milliseconds (sk_reset_timer)
+         -- in this case dccp_write_xmit exits now and
+	 -- when the write timer expires, dccp_write_xmit_timer is called, which again
+	    calls dccp_write_xmit(sk, 0)
+	 -- this means going back to (3), now delay < delta, the function returns 0
+	    and the packet is sent immediately
+
+To find where the problematic case is, assume that the sender is in slow start and
+doubles X each RTT. As X increases, t_ipi decreases so that there is a point where
+t_ipi < 1000 usec. 
+ 
+ -> all differences delay = t_nom - t_now which are less than 1000 result in 
+    delay / 1000 = 0 due to integer division
+ -> hence all packets which are late up to 1 millisecond are sent immediately
+ -> assume that t_ipi is less than 1 millisecond, then in effect all packets are
+    sent immediately; hence we have a _continuous_ burst of packets
+ -> schedule_timeout() really only has a granularity of HZ:
+     * if HZ00,   msecs_to_jiffies(m) returns m
+     * if HZ < 1000, msecs_to_jiffies(m) returns (m * HZ + 999)/1000
+          => hence m=1 millisecond will give a result of 1 jiffie
+	  => but the granularity of jiffies is in HZ < 1000 so that the 
+	      timer will expire with a granularity of HZ
+          => that means if X is higher than X_crit, t_ipi will always be such that
+	      the timer expires at a time which is too late, so that packets are all
+	      sent in immediate bursts or in scheduled bursts, but there is no longer
+	      any real scheduling
+
+The other points which I am not entirely sure about yet are
+ * compression of packet spacing due to using TX output queues
+ * interactions with the traffic control subsystem
+ * times when the main socket is locked
+
+- Gerrit
+
+|  > I have a snapshot which illustrates this state: 
+|  > 
 |  >  http://www.erg.abdn.ac.uk/users/gerrit/dccp/dccp_probe/examples/no_tx_locking/transmit_rate.png
-|  >
+|  >   
 |  > The oscillating behaviour is well visible. In contrast, I am sure that you would agree that the
 |  > desirable state is the following:
-|  >
+|  > 
 |  >  http://www.erg.abdn.ac.uk/users/gerrit/dccp/dccp_probe/examples/with_tx_locking/transmit_rate.png
-|  >
+|  > 
+|  > These snapshots were originally taken to compare the performance with and without serializing access to
+|  > TX history. I didn't submit the patch since, at times, I would get the same chaotic behaviour with TX locking.
+|  > 
+|  > Other people on this list have reported that iperf performance is unpredictable with CCID 3. 
+|  > 
+|  > The point is that, without putting in some kind of control, we have a system which gets into a state of
+|  > chaos as soon as the maximum controllable speed X_crit is reached. When it is past that point, there is
+|  > no longer a notion of predictable performance or correct average rate: what happens is then outside the
+|  > control of the CCID 3 module, performance is then a matter of coincidence.
+|  > 
+|  > I don't think that a kernel maintainer will gladly support a module which is liable to reaching such a
+|  > chaotic state.
+|  >  
+|  >   
+|  > |  > I have done a back-of-the-envelope calculation below for different sizes of s; 9kbyte
+|  > |  > I think is the maximum size of an Ethernet jumbo frame.
+|  > |  > 
+|  > |  >    -----------+---------+---------+---------+---------+-------+---------+-------+
+|  > |  >             s | 32      | 100     | 250     | 500     | 1000  | 1500    | 9000  |
+|  > |  >    -----------+---------+---------+---------+---------+-------+---------+-------+
+|  > |  >     X_critical| 32kbps  | 100kbps | 250kbps | 500kbps | 1mbps | 1.5mbps | 9mbps |
+|  > |  >    -----------+---------+---------+---------+---------+-------+---------+-------+ 
+|  > |  > 
+|  > |  > That means we can only expect predictable performance up to 9mbps ?????
+|  > |  
+|  > |  Same comment.  I imagine performance will be predictable at speeds FAR 
+|  > |  ABOVE 9mbps, DESPITE the sub-RTT bursts.  Predictable performance means 
+|  > |  about the same average rate from one RTT to the next.
+|  > I think that, without finer timer resolution, we need to put in some kind of throttle to avoid
+|  > entering the region where speed can no longer be controlled.
+|  > 
+|  >   
+|  > |  > I am dumbstruck - it means that the whole endeavour to try and use Gigabit cards (or
+|  > |  > even 100 Mbit ethernet cards) is futile and we should be using the old 10 Mbit cards???
+|  > |  
+|  > |  Remember that TCP is ENTIRELY based on bursts!!!!!  No rate control at 
+|  > |  all.  And it still gets predictable performance at high rates.
+|  > |  
+|  > Yes, but ..... it uses an entirely different mechanism and is not rate-based.
 |  
-|  Questions on the graphs:
-|  - are these direct connect nodes?
-The nodes are on the same Ethernet LAN, connected via 100Mbps / 1GBps interfaces. There is no
-other traffic on that LAN.
-|  - why is Xcalc 0?
-Since no losses occurred (p is always 0 on these tests).
-|  - why on the stable one is Xrecv different from X. Is X the rate that
-|  it is allowed to send at but doesn't so only achieves Xrecv?
-When there is no loss, X = max(min(2*X, 2*X_recv), s/R) - the graph agrees with this, since
-X is about 2*X_recv.
+|  
