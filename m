@@ -1,28 +1,38 @@
-From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Fri, 26 Jan 2007 03:25:53 +0000
-Subject: [PATCH 0/2] DCCP: Improve loss interval handling some more
-Message-Id: <200701261625.55721.ian.mcdonald@jandi.co.nz>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 19 Jan 2007 15:07:30 +0000
+Subject: RFC 4342 Erratum: use Request/Response RTT
+Message-Id: <200701191507.31045@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Folks,
+Hi Eddie,
 
-At present we don't track if we lose a burst of packets in a row which means
-we get a series of loss intervals with length 1. What this means is that
-performance suddenly slumps. Not good. This fix made a big difference for
-me - increased performance from 10 Kbits to 200 Kbits on a constrained
-1 Mbits link (and then I fixed to higher again later - see my blog).
+following a discussion with Ian, it became clear that the best way to fix
+some of the outstanding scheduling problems is to implement the Erratum to
+RFC 4342 and use the initial Request/Response handshake as basis for calculating t_ipi.
 
-I've got a fix here for this in a basic form. It doesn't address the
-requirement that they be within the same RTT (measured by CCVal) but is
-still better than what we have.
+I am referring to this posting (sorry the original was no longer in the inbox):
+ http://www.mail-archive.com/dccp@vger.kernel.org/msg01319.html
 
-I realise that this is slightly different to how Gerrit is tackling as he is
-adding CCVal support and looking at using array. Consider this a "March"
-patch unless you want to look at sooner. If nothing else it might give ideas
-for people on how to do it even better.
+and was using the RFC 4340/2 erratum page:
+ http://www.read.cs.ucla.edu/dccp/rfc4340errata
 
-Ian
+Now, having spent almost half a day to come up with a solution for initial RTT
+estimates, I found that there are still several things open/unclear:
+
+ * RFC 3448, 4.2 specifies an initial sending rate of 1 packet per second
+ * RFC 3448, 4.6 specifies t_ipi = s/X => still gives 1 second
+ * I can't find an override-clause in RFC 4342 for this
+
+Question: Is the aim to use section 4.2 of RFC 3448 and if yes, to what extent 
+          (this section has quite a few changes to other parts of the algorithm, too).
+
+Can you please clarify, maybe I have got the wrong erratum. 
+
+It would be good to have this clear - so as to implement it.
+
+
+Gerrit
