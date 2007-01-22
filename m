@@ -1,79 +1,85 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 17 Jan 2007 16:03:41 +0000
-Subject: Re: When not resetting t_nom, negative credit never clears
-Message-Id: <200701171603.41560@strip-the-willow>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Mon, 22 Jan 2007 22:22:17 +0000
+Subject: [PATCH 1/1] DCCP: Fix dccp_calc_first_li
+Message-Id: <200701231122.18624.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <200701151330.20366@strip-the-willow>
-In-Reply-To: <200701151330.20366@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Ian,
+dccp_calc_first_li is calculating incorrect values by observation.
 
-thank you for this useful input. The cases are fully possible, with the test run (which had 
-zero loss and no idle times) there would then be three cases where a larger backlog could occur.
+We don't need to calculate rtt as it has already been calculated elsewhere.
+The previous calculation was wrong from the logs.
 
-I have been asking quite a few people about the scheduling granularity problem and got the
-following answers which may help deal with the third case (of the test run):
+The value for x_recv was wrong as it was calculating ALL bytes received
+divided only by number of packets in last RTT. As we don't store bytes
+received in packet history then calculate using s.
 
- 1) CCID 3 is probably restricted in its speed by the HZ parameter, i.e. trying to send
-    more than HZ packets per second will likely lead to bursts. I found that the traffic
-    shaping subsystem has similar problems, as the comments in the manpage of tc-tbf(8) 
-    indicate. So if we can make the system work predictably up to 15 Mbits/sec (HDTV bandwidth),
-    I'd say that this would be pretty good (meaning to leave the rest for experimental / research
-    extensions). It may have been not wise to expect very high bandwiths.
+Also fix up comments as it is not returning usecs but packet interval.
 
- 2) The following might cause problems:
-       * when the softirq for sending runs, it sends a whole bunch of packets
-       * each device has its own hardware queue
-       * additionally, each device has another Qdisc (FIFO) queue of usually 1000 packets
-     This may distort transmit packet spacings; a colleague further said that when the
-     buffers / queues are mostly full (as at top speed), then the whole processing slows 
-     down (may be a hint for the too-high RTT estimates: in my test runs I get e.g. 5msec 
-     instead of 0.1msec)
+Tidy up debugging a little too.
 
- 3) We may get more predictable results with datagram-based bandwidth tests. I don't know the
-    internals of iperf, but it seems that at the moment it tries to pipe as much data through
-    the link as it is able to, so that during slow-start at some time X gets close to 
-    X_crit = packet_size_in_bytes * HZ. When using iperf as in `iperf -u', the bandwidth
-    could be restricted, to be within the range controllable by CCID 3.
-
-
-Gerrit
-
-
-
-Quoting Ian McDonald:
-|  Hi there Gerrit,
-|  
-|  I've been thinking a bit about this and can see what's happening here
-|  and with delays in general. There's a case here that I can't see the
-|  RFC covering and I'll send to the IETF list a follow up to this one.
-|  
-|  It appears that in this case the sender can't keep up with the allowed
-|  transmit rate so the negative credit gets bigger and bigger. This is
-|  OK until we actually get some loss and then we won't be able to back
-|  off quickly.
-|  
-|  The other scenario that this causes a problem if we don't reset t_nom
-|  is where we have idle periods. If we go idle for 10 seconds then we
-|  could potentially send heaps at that point to catch t_nom up. This
-|  doesn't seem right.
-|  
-|  Ian
-|  
-|  On 16/01/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-|  > Here is a log which I took after dropping the 3d patch which resets t_nom when tnom < t_now.
-|  > It shows that the negative credit does not clear, hence all packets are sent in one huge burst.
-|  >
-|  >
-|  > [   75.646215] ccid3_hc_tx_update_x: X_prev#743226, X_now#728510, X_calc=0, X_recv864255
-|  > [   75.646218] ccid3_update_send_interval: t_ipiY, delta), s15, X#728510
-|  > [   75.646223] ccid3_hc_tx_packet_recv: client(f651c080), RTTD98us (sampleU17us), s15, p=0, X_calc=0, X_recv864255, X#728510
-|  > [   75.646264] ccid3_hc_tx_send_packet: delay=-14235
-|  > [   75.646314] ccid3_hc_tx_send_packet: delay=-14226
-|  > [   75.646451] ccid3_hc_tx_send_packet: delay=-14304
-|  
-|  
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
+index fec5ba3..5026802 100644
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -251,18 +251,19 @@ static int dccp_li_hist_interval_new(struct list_head *list,
+ 
+ /* calculate first loss interval
+  *
+- * returns estimated loss interval in usecs */
++ * returns estimated loss interval */
+ 
+ static u32 dccp_li_calc_first_li(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 	struct dccp_rx_hist_entry *entry, *next, *tail = NULL;
+-	u32 x_recv, p;
++	u32 x_recv, p, bytes_recv;
+ 	suseconds_t rtt, delta;
+ 	struct timeval tstamp = { 0, };
+ 	int interval = 0;
+ 	int win_count = 0;
+ 	int step = 0;
++	int pkt_count = 0;
+ 	u64 fval;
+ 
+ 	list_for_each_entry_safe(entry, next, &hcrx->ccid3hcrx_hist,
+@@ -278,6 +279,7 @@ static u32 dccp_li_calc_first_li(struct sock *sk, struct sk_buff *skb)
+ 				break;
+ 			case 1:
+ 				interval = win_count - entry->dccphrx_ccval;
++				pkt_count++;
+ 				if (interval < 0)
+ 					interval += TFRC_WIN_COUNT_LIMIT;
+ 				if (interval > 4)
+@@ -307,9 +309,7 @@ found:
+ 	delta = timeval_delta(&tstamp, &tail->dccphrx_tstamp);
+ 	DCCP_BUG_ON(delta < 0);
+ 
+-	rtt = delta * 4 / interval;
+-	dccp_pr_debug("%s(%p), approximated RTT to %dus\n",
+-		       dccp_role(sk), sk, (int)rtt);
++	rtt = hcrx->ccid3hcrx_rtt;
+ 
+ 	/*
+ 	 * Determine the length of the first loss interval via inverse lookup.
+@@ -328,7 +328,13 @@ found:
+ 	delta = timeval_delta(&tstamp, &hcrx->ccid3hcrx_tstamp_last_feedback);
+ 	DCCP_BUG_ON(delta <= 0);
+ 
+-	x_recv = scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
++	bytes_recv = hcrx->ccid3hcrx_s * pkt_count;
++
++	dccp_pr_debug("%s(%p), rtt=%dus, delta=%dus, bytes_recv=%u "
++	              "pkt_count=%d\n", dccp_role(sk), sk, (int)rtt,
++		      (int)delta, bytes_recv, pkt_count);
++
++	x_recv = scaled_div32(bytes_recv, delta);
+ 	if (x_recv = 0) {		/* would also trigger divide-by-zero */
+ 		DCCP_WARN("X_recv=0\n");
+ 		if ((x_recv = hcrx->ccid3hcrx_x_recv) = 0) {
