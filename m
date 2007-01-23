@@ -1,93 +1,72 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 05 Jan 2007 13:22:23 +0000
-Subject: Re: [PATCH 1/5]: DCCP Fix use of invalid loss intervals
-Message-Id: <200701051322.24178@strip-the-willow>
+Date: Tue, 23 Jan 2007 15:40:51 +0000
+Subject: [PATCH 2/7]: Wrap computation of RFC3390-initial rate into separate function
+Message-Id: <200701231540.51401@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200612201544.22122.ian.mcdonald@jandi.co.nz>
-In-Reply-To: <200612201544.22122.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Eddie,
+[CCID 3]: Wrap computation of RFC3390-initial rate into separate function
 
-thanks a lot for looking into this and I think we should take this on board and find 
-a different solution to achieve the same purpose, but without comparison against ~0 or ~0U.
+The CCID 3 and TFRC specs (RFC 4342, RFC 3448, draft-3448bis) make frequent
+reference to the computation of the RFC-3390 initial sending rate:
 
-|  But the two bit patterns are the same, and the comparison will promote 
-|  them both to unsigned.
-Using both signed and unsigned can lead to very subtle bugs. As a recent example, we have had
-real problems because time differences (signed type) was implicitly converted to unsigned.
+  1. Initial sending rate when RTT is known (RFC 4342, p. 6)
+  2. Response to Idle/Application-Limited periods (RFC 4342, 5.1)
 
-The use of ~0U appears in the following functions:
-	* to mark a loss interval as empty in dccp_li_hist_interval_new
-	* to find non-empty loss intervals in dccp_li_hist_calc_i_mean
-	* to mark an empty first loss interval in ccid3_hc_rx_calc_first_li
-          (also connected with catching error conditions)
+This warrants putting the code into its own function, for later code reuse.
 
-Sometimes the conversion happens through the return type, sometimes directly: it is not obvious
-to see what happens here.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |   24 ++++++++++++++++++------
+ 1 file changed, 18 insertions(+), 6 deletions(-)
 
-So I agree with Eddie and think we should find a different way of identifying empty loss intervals;
-or check each part of the code to make sure it will be safe. 
-
-I can also see the point Ian makes, in that this will require some work - hence added as ToDo item on 
-http://linux-net.osdl.org/index.php/TODO#DCCP
-
-Gerrit
-
-
-|  Try running the following program:
-|  
-|  int main (int c, char **v)
-|  {
-|       if (~0 != ~0U)
-|  	printf("not equal as unknown");
-|       if ((int) ~0 != (int) ~0U)
-|  	printf("not equal as ints");
-|       if ((unsigned) ~0 != (unsigned) ~0U)
-|  	printf("not equal as unsigneds");
-|       if ((int) ~0 != (unsigned) ~0U)
-|  	printf("not equal as int/unsigned");
-|       if ((unsigned) ~0 != (int) ~0U)
-|  	printf("not equal as unsigned/int");
-|  }
-|  
-|  It prints nothing.
-|  
-|  If one of the two numbers is 64-bit, your analysis works.  Maybe I'm 
-|  missing something but I don't think so...
-|  Eddie
-|  
-|  
-|  
-|  Ian McDonald wrote:
-|  > On 1/5/07, Eddie Kohler <kohler@cs.ucla.edu> wrote:
-|  >> Ian (catching up slowly slowly), here is a nit as nitty as they come.
-|  >>
-|  >> This diff seems strange to me, since ~ actually does the same thing on
-|  >> integers and unsigned integers.  (This code:
-|  >>
-|  >>      printf("%u %u\n", ~0, ~0U);
-|  >>
-|  >> will print the same thing twice.)
-|  >>
-|  >> Perhaps dccplih_interval is a 64-bit number?  In which case you want to
-|  >> say something like ~0ULL?
-|  >>
-|  >> Eddie
-|  > 
-|  > Printing gives them the same result as you are using a %u mask. If you
-|  > do it with a %d mask you will get a different result.
-|  > 
-|  > And that is the issue dccp_lih_interval is unsigned 32 bit and ~0 is a
-|  > signed number and is large negative and they therefore can't be equal.
-|  > 
-|  > Ian
-|  -
-|  To unsubscribe from this list: send the line "unsubscribe dccp" in
-|  the body of a message to majordomo@vger.kernel.org
-|  More majordomo info at  http://vger.kernel.org/majordomo-info.html
-|  
-|  
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -81,6 +81,21 @@ static void ccid3_hc_tx_set_state(struct
+ }
+ 
+ /*
++ *	Compute the initial sending rate X_init according to RFC 3390:
++ *		w_init   =    min(4 * MSS, max(2 * MSS, 4380 bytes))
++ *		X_init   =    w_init / RTT
++ *	For consistency with other parts of the code, X_init is scaled by 2^6.
++ */
++static inline u64 rfc3390_initial_rate(struct sock *sk)
++{
++	const struct dccp_sock *dp = dccp_sk(sk);
++	__u32 w_init = min(4 * dp->dccps_mss_cache,
++			   max(2 * dp->dccps_mss_cache, 4380U));
++
++	return	scaled_div(w_init << 6, ccid3_hc_tx_sk(sk)->ccid3hctx_rtt);
++}
++
++/*
+  * Recalculate t_ipi and delta (should be called whenver X changes)
+  */
+ static inline void ccid3_update_send_interval(struct ccid3_hc_tx_sock *hctx)
+@@ -471,19 +486,16 @@ static void ccid3_hc_tx_packet_recv(stru
+ 			/*
+ 			 * Larger Initial Windows [RFC 4342, sec. 5]
+ 			 */
+-			__u32 w_init = min(4 * dp->dccps_mss_cache,
+-					   max(2 * dp->dccps_mss_cache, 4380U));
+ 			hctx->ccid3hctx_rtt  = r_sample;
+-			hctx->ccid3hctx_x    = scaled_div(w_init << 6, r_sample);
++			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
+ 			hctx->ccid3hctx_t_ld = now;
+ 
+ 			ccid3_update_send_interval(hctx);
+ 
+-			ccid3_pr_debug("%s(%p), s=%u, MSS=%u, w_init=%u, "
++			ccid3_pr_debug("%s(%p), s=%u, MSS=%u, "
+ 				       "R_sample=%dus, X=%llu\n", dccp_role(sk),
+ 				       sk, hctx->ccid3hctx_s,
+-				       dp->dccps_mss_cache, w_init,
+-				       (int)r_sample,
++				       dp->dccps_mss_cache, (int)r_sample,
+ 				       hctx->ccid3hctx_x >> 6);
+ 
+ 			ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
