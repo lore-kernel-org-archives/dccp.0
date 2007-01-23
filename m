@@ -1,46 +1,92 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 08 Jan 2007 09:29:47 +0000
-Subject: Re: [PATCH-UPDATE]: 3f_CCID3_refactor_loss_interval_code_McDonald.diff
-Message-Id: <200701080929.47990@strip-the-willow>
+Date: Tue, 23 Jan 2007 15:40:46 +0000
+Subject: [PATCHv2 1/7]: Remove build warnings
+Message-Id: <200701231540.46450@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200701051455.16936@strip-the-willow>
-In-Reply-To: <200701051455.16936@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting Ian McDonald:
-|  On 1/6/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-|  > I would like to retract the change in the interface of update_li which we discussed recently.
-|  >
-|  > The reason is that the caller supplies `loss' parameters (a loss sequence number and a loss
-|  > CCVal); the fact that in the current implementation this coincides with the fields
-|  >
-|  >        hccrx->ccid3hcrx_seqno_nonloss and
-|  >        hcrx->ccid3hcrx_ccval_nonloss
-|  >
-|  > in ccid3_hc_rx_detect_loss is more of a coincidence.
-|  
-|  I disagree with you on this. It's not a coincidence at all. I planned
-|  the code that way. It "happens" to have the right values because I put
-|  them there.
-|  
-|  > I have been going over this code several
-|  > times and come to the conclusion that not changing the interface of update_li is the cleanest
-|  > way. I have uploaded this to the online directory, below are the differences to Ian's original.
-|  >
-|  >
-|  I disagree with this. However I can see some confusion because we are
-|  equating nonloss and loss variables and the variables are named badly
-|  in the loss interval code. What I've done is stuck with my original
-|  patch but changed the variable names seq_loss and win_loss to
-|  seq_nonloss and win_nonloss respectively.
-|  
-|  I've posted the new version online. Can you now use this one please?
-You are right - the way it is used corresponds to the highest sequence number received before the loss.
-Therefore of course it is nonloss what we are storing. Thanks for the explanation, I have downloaded
-your patch, refreshed it with regard to offset etc, acked, and uploaded again as 3f.
+[CCID 3]: Remove build warnings
 
-Thanks
-Gerrit
+This 
+ 1) Clears the following sparc64 build warning:
+    warning: format "%ld" expects type "long int", but argument 3 has type "suseconds_t"
+
+ 2) Makes the use of "%llu" consistent for all u64/__u64 datatypes.
+    Thanks to Ian McDonald for this.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |   22 ++++++++++++----------
+ 1 file changed, 12 insertions(+), 10 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -139,8 +139,10 @@ static void ccid3_hc_tx_update_x(struct 
+ 
+ 	if (hctx->ccid3hctx_x != old_x) {
+ 		ccid3_pr_debug("X_prev=%llu, X_now=%llu, X_calc=%u, "
+-			       "X_recv=%llu\n", old_x >> 6, hctx->ccid3hctx_x >> 6,
+-			       hctx->ccid3hctx_x_calc, hctx->ccid3hctx_x_recv >> 6);
++			       "X_recv=%llu\n",
++			       old_x >> 6, hctx->ccid3hctx_x >> 6,
++			       hctx->ccid3hctx_x_calc,
++			       hctx->ccid3hctx_x_recv >> 6);
+ 
+ 		ccid3_update_send_interval(hctx);
+ 	}
+@@ -212,10 +214,10 @@ static void ccid3_hc_tx_no_feedback_time
+ 					(((__u64)hctx->ccid3hctx_s) << 6) /
+ 								    TFRC_T_MBI);
+ 
+-		ccid3_pr_debug("%s(%p, state=%s), updated tx rate to %u "
++		ccid3_pr_debug("%s(%p, state=%s), updated tx rate to %llu "
+ 			       "bytes/s\n", dccp_role(sk), sk,
+ 			       ccid3_tx_state_name(hctx->ccid3hctx_state),
+-			       (unsigned)(hctx->ccid3hctx_x >> 6));
++			       hctx->ccid3hctx_x >> 6);
+ 		/* The value of R is still undefined and so we can not recompute
+ 		 * the timout value. Keep initial value as per [RFC 4342, 5]. */
+ 		t_nfb = TFRC_INITIAL_TIMEOUT;
+@@ -478,11 +480,11 @@ static void ccid3_hc_tx_packet_recv(stru
+ 			ccid3_update_send_interval(hctx);
+ 
+ 			ccid3_pr_debug("%s(%p), s=%u, MSS=%u, w_init=%u, "
+-				       "R_sample=%dus, X=%u\n", dccp_role(sk),
++				       "R_sample=%dus, X=%llu\n", dccp_role(sk),
+ 				       sk, hctx->ccid3hctx_s,
+ 				       dp->dccps_mss_cache, w_init,
+ 				       (int)r_sample,
+-				       (unsigned)(hctx->ccid3hctx_x >> 6));
++				       hctx->ccid3hctx_x >> 6);
+ 
+ 			ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
+ 		} else {
+@@ -498,13 +500,13 @@ static void ccid3_hc_tx_packet_recv(stru
+ 			ccid3_hc_tx_update_x(sk, &now);
+ 
+ 			ccid3_pr_debug("%s(%p), RTT=%uus (sample=%dus), s=%u, "
+-				       "p=%u, X_calc=%u, X_recv=%u, X=%u\n",
++				       "p=%u, X_calc=%u, X_recv=%llu, X=%llu\n",
+ 				       dccp_role(sk),
+ 				       sk, hctx->ccid3hctx_rtt, (int)r_sample,
+ 				       hctx->ccid3hctx_s, hctx->ccid3hctx_p,
+ 				       hctx->ccid3hctx_x_calc,
+-				       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
+-				       (unsigned)(hctx->ccid3hctx_x >> 6));
++				       hctx->ccid3hctx_x_recv >> 6,
++				       hctx->ccid3hctx_x >> 6);
+ 		}
+ 
+ 		/* unschedule no feedback timer */
+@@ -897,7 +899,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 		DCCP_BUG_ON(r_sample < 0);
+ 		if (unlikely(r_sample <= t_elapsed))
+ 			DCCP_WARN("r_sample=%ldus, t_elapsed=%ldus\n",
+-				  r_sample, t_elapsed);
++				  (long)r_sample, (long)t_elapsed);
+ 		else
+ 			r_sample -= t_elapsed;
+ 		CCID3_RTT_SANITY_CHECK(r_sample);
