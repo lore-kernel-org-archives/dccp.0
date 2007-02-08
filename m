@@ -1,47 +1,61 @@
 From: Eddie Kohler <kohler@cs.ucla.edu>
-Date: Thu, 08 Feb 2007 05:50:35 +0000
-Subject: Re: [PATCH 1/1] DCCP: Fix up t_nom - FOLLOW-UP
-Message-Id: <45CABA2B.80503@cs.ucla.edu>
+Date: Thu, 08 Feb 2007 01:20:54 +0000
+Subject: Re: RFC 4342 Erratum: use Request/Response RTT
+Message-Id: <45CA7AF6.7050702@cs.ucla.edu>
 List-Id: <dccp.vger.kernel.org>
-References: <200701101021.38920@strip-the-willow>
-In-Reply-To: <200701101021.38920@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
->> You want it to return microseconds precisely so you can distinguish 
->> between
->> cases that require a timer and cases that require something 
->> lighterweight,
->> like a simple rescheduling.  If you pre-truncate the information to
->> millisecond granularity there's no way to distinguish between "send 
->> NOW" and
->> "send pretty soon but not now".  Just divide by 1000 when you actually
->> schedule the timer.
->>
-> I'm not sure about this. If you reschedule you've got no guarantee
-> when you get your next timeslice.
+Hi Gerrit,
 
-You've got no GUARANTEE of when you get your next timeslice, but in most 
-cases it will be soon.  As opposed to scheduling a timer 1ms in the 
-future, where you KNOW you won't run for 1ms, as you say.
+I don't actually completely understand where you're coming from.  The initial 
+send rate is not 1 packet per second, it is 2-4 packets per RTT, as per 
+RFC4342.  So the initial t_ipi is going to be s/X, where X = 2-4 packets per RTT.
 
-Gerrit's problem is burstiness at the level of milliseconds.  The only 
-way to solve this is to run at sub-millisecond granularity.  Use hi-res 
-timers, or easier, use existing mechanisms for running code frequently: 
-i.e., leaving the code runnable.
+If you follow the logic through RFC3448 4.2-4.4, you will see that due to this 
+line,
+
+              If (t_now - tld >= R)
+                  X = max(min(2*X, 2*X_recv), s/R);
+                  tld = t_now;
+
+(where tld is initialized to -1 as regards section 4.2), the sending rate X 
+becomes 1 packet/RTT (= s/R) as soon as a round-trip time sample is available. 
+  The erratum allows the implementer to sidestep all of this silliness by 
+simply starting at X = 2-4 packets/RTT, since the RTT sample is available 
+immediately.
 
 Eddie
 
 
-> I also think that timers probably
-> aren't that heavy in Linux as it probably weights the scheduler. If
-> you ask for something 5 msecs in future you are guaranteed it won't go
-> off before then but sometime after..
+Gerrit Renker wrote:
+> Hi Eddie,
 > 
-> Probably one to test some time but I can't see this affecting things
-> too much and bigger bugs to fry at present probably. But certainly
-> worth checking at some point.
+> following a discussion with Ian, it became clear that the best way to fix
+> some of the outstanding scheduling problems is to implement the Erratum to
+> RFC 4342 and use the initial Request/Response handshake as basis for calculating t_ipi.
 > 
-> Ian
+> I am referring to this posting (sorry the original was no longer in the inbox):
+>  http://www.mail-archive.com/dccp@vger.kernel.org/msg01319.html
+> 
+> and was using the RFC 4340/2 erratum page:
+>  http://www.read.cs.ucla.edu/dccp/rfc4340errata
+> 
+> Now, having spent almost half a day to come up with a solution for initial RTT
+> estimates, I found that there are still several things open/unclear:
+> 
+>  * RFC 3448, 4.2 specifies an initial sending rate of 1 packet per second
+>  * RFC 3448, 4.6 specifies t_ipi = s/X => still gives 1 second
+>  * I can't find an override-clause in RFC 4342 for this
+> 
+> Question: Is the aim to use section 4.2 of RFC 3448 and if yes, to what extent 
+>           (this section has quite a few changes to other parts of the algorithm, too).
+> 
+> Can you please clarify, maybe I have got the wrong erratum. 
+> 
+> It would be good to have this clear - so as to implement it.
+> 
+> 
+> Gerrit
