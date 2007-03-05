@@ -1,48 +1,29 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 20 Mar 2007 21:45:56 +0000
-Subject: Re: debugging messages
-Message-Id: <5640c7e00703201445k4420e07eg1a73772b7733e91c@mail.gmail.com>
+From: Sally Floyd <sallyfloyd@mac.com>
+Date: Mon, 05 Mar 2007 04:06:05 +0000
+Subject: Re: [dccp] Re: CCID 3 question: length of the `open' loss interval I_0
+Message-Id: <748e4dd1f6f6eb0c0929affbbabc97cd@mac.com>
 List-Id: <dccp.vger.kernel.org>
-References: <fca78b970703200401s6ccb3ed4q73c002e495d10659@mail.gmail.com>
-In-Reply-To: <fca78b970703200401s6ccb3ed4q73c002e495d10659@mail.gmail.com>
+References: <200701091321.00592@strip-the-willow>
+In-Reply-To: <200701091321.00592@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 3/20/07, patrick andrieux <patrick.andrieux@gmail.com> wrote:
-> Hi list !
->
-> I'm trying to find out where debug messages are print out, like
-> ccid3_pr_debug(...), DCCP_WARN(...), ....
-> I compiled the latest kernel 2.6.20-3, with all DCCP options enabled
-> (DCCP debug messages, ccid2/3 debugging messages, ....) and with all
-> DCCP patches applied. But I still don't find any messages in log from
-> /var/log/ .
-> Did I missed something ?
-> How can I get these messages ?
->
-> Thanks.
->
-> regards,
-> Patrick.
-> -
+Eddie -
 
-Hi there Patrick,
+(Apologies, I am getting to email later and later...)
 
-First of all you need to turn on debugging when you load the module
-e.g. put something like this in /etc/modprobe.d/network
-options dccp_ccid3 ccid3_debug=1
-options dccp dccp_debug=1
+> However, to be honest, I'd say that RFC3448 appears to define it as 
+> "number of packets received since last loss event".  I think this is a 
+> misstatement in RFC3448 and should be considered for fixing in 
+> RFC3448bis.  Every other loss interval is defined as a length in 
+> sequence space INCLUDING lost and marked packets (RFC3448 5.3).
 
-and then make sure you're catching debug message in your
-/etc/syslog.conf file with a line something like:
-*.*         -/var/log/syslog
+Yep.  Fixed.
 
-NB These file locations are for Debian. Look for the equivalent in your distro.
+Many thanks.
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+- Sally
+http://www.icir.org/floyd/
+
