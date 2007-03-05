@@ -1,85 +1,107 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 05 Mar 2007 16:42:40 +0000
+From: Andre Noll <maan@systemlinux.org>
+Date: Mon, 05 Mar 2007 18:59:07 +0000
 Subject: Re: kernel BUG at kernel/timer.c:407!
-Message-Id: <200703051642.40711@strip-the-willow>
+Message-Id: <20070305185907.GX22572@skl-net.de>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="ga5bsqHr1s/xcZEm"
 List-Id: <dccp.vger.kernel.org>
 References: <20070305143240.GW22572@skl-net.de>
 In-Reply-To: <20070305143240.GW22572@skl-net.de>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-SGkgQW5kcmUsCgp0aGFuayB5b3UgZm9yIHByb3ZpZGluZyBhIGRldGFpbGVkIHJlcG9ydC4KClRo
-ZSBtZW50aW9uZWQgcGF0Y2ggYXZvaWRzIHNlbmRpbmcgcmVjZWl2ZWQgaW5mb3JtYXRpb24gdG8g
-Ym90aCByeC90eCBoYWx2ZXMKb2YgYSBDQ0lELiBUaGVyZSBhcmUgdHdvIHBvc3NpYmlsaXRpZXM6
-CiAoYSkgVGhlIHBhdGNoIGl0c2VsZiBoYXMgYSBidWcKICAgICBUaGUgcGF0Y2ggaGFzIGJlZW4g
-dGVzdGVkIGV4dGVuc2l2ZWx5IG92ZXIgbW9udGhzIChidXQgdXNpbmcgbWFpbmx5CiAgICAgQ0NJ
-RDMsIGFzIENDSUQyIGdhdmUgYmFkIHBlcmZvcm1hbmNlKQogICAgICAgICAgICAgICAgICAgICAg
-ICAgICAgICAgICAgICAgICAgICAgICAgICBvcgogKGIpIFRoZXJlIGlzIGEgcHJvYmxlbSBpbiB0
-aGUgQ0NJRDIgY29kZSwgc2luY2UgdGhlcmUgaGF2ZSBiZWVuIG1hbnkKICAgICBrZXJuZWwgY2hh
-bmdlcyBhbmQgdGhlIGNvZGUgd2FzIG5vdCBzbyBtdWNoIG1haW50YWluZWQuCgpJIHdvdWxkIG11
-Y2ggcmF0aGVyIGh1bnQgZG93biB0aGlzIGJ1ZyB0aGFuIHJldmVydCB0aGlzIHBhdGNoLCBzaW5j
-ZSByZXZlcnRpbmcgaXQKbWVhbnMgdGhhdCBhbG1vc3QgdHdpY2UgdGhlIHdvcmsgaXMgZG9uZSBw
-ZXIgZWFjaCBwYWNrZXQgYW5kIHRydWx5IGJpZGlyZWN0aW9uYWwKY29ubmVjdGlvbnMgYXJlIG5v
-dCBjdXJyZW50bHkgc3VwcG9ydGVkLgoKV2l0aCBpbml0aWFsIHRlc3RzIGhlcmUgSSBjb3VsZCBu
-b3QgcmVwcm9kdWNlIHRoZSBidWcgYW5kIGhhZCBkaWZmaWN1bHRpZXMgCnNpbmNlIEkgaGF2ZSBu
-b3QgYWxsIHJlcXVpcmVkIGxpYnJhcmllcyBmb3IgcGFyYXNsYXNoLgoKMS4gSSBzZWUgeW91IGFy
-ZSB1c2luZyBsb29wYmFjayAoMTI3LjAuMC4xKSB3aGVyZSBwYWNrZXRzIGFyZSByb3V0ZWQgYmFj
-awogICBpbnRlcm5hbGx5OiBkb2VzIHRoZSBidWcgcGVyc2lzdCB3aGVuIENDSUQyIHNlbmRlciBh
-bmQgQ0NJRDIgcmVjZWl2ZXIKICAgYXJlIG9uIGRpZmZlcmVudCBob3N0cz8KCjIuIFRoaXMgaXMg
-dXNpbmcgQ0NJRDIsIHdoaWNoIGhhcyBub3QgYmVlbiBtYWludGFpbmVkIGZvciBhIHdoaWxlLiBD
-YW4KICAgeW91IHBsZWFzZSB0cnkgQ0NJRCAzIGFsc28sIGUuZy4gYnkgdXNpbmcgdGhlIGZvbGxv
-d2luZyBzeXNjdGxzOgogICAKICAgc3lzY3RsIC13IG5ldC5kY2NwLmRlZmF1bHQucnhfY2NpZD0z
-IAogICBzeXNjdGwgLXcgbmV0LmRjY3AuZGVmYXVsdC50eF9jY2lkPTMKICAgc3lzY3RsIC13IG5l
-dC5kY2NwLmRlZmF1bHQudHhfcWxlbj01CiAgIHN5c2N0bCAtdyBuZXQuZGNjcC5kZWZhdWx0LnNl
-cV93aW5kb3cQMAogICBzeXNjdGwgLXcgbmV0LmRjY3AuZGVmYXVsdC5zZW5kX2Fja3ZlYz0wCgoz
-LiBDYXZlYXQ6IGBTZXJ2ZXInIGxpc3RlbnMsIGBDbGllbnQnIGNvbm5lY3RzLiBJIGNvdWxkIG5v
-dCBidWlsZCB0aGUgcGFyYXNsYXNoIGFwcAogICBkdWUgdG8gbWlzc2luZyBsaWJyYXJpZXMsIGJ1
-dCBmb3VuZCB0aGF0IGRjY3BfcmVjdl9vcGVuIGNhbGxzIGNvbm5lY3QgaW4gZGNjcF9yZWN2LmMK
-ICAgd2hpbGUgZGNjcF9vcGVuKCkgaW4gZGNjcF9zZW5kLmMgY2FsbHMgbGlzdGVuKCkuIEl0IHNl
-ZW1zIHRoYXQgdGhlIHJvbGVzIGFyZSByZXZlcnNlZCwKICAgaXMgaXQgcG9zc2libGUgdG8gc3dh
-cCB0aGlzIGluIHRoZSBhcHBsaWNhdGlvbiBhbmQgZG9lcyB0aGUgcHJvYmxlbSBwZXJzaXN0PwoK
-NC4gTm90d2l0aHN0YW5kaW5nICgzKSwgdGhlIEJVRygpIGNvbmRpdGlvbiBpbiBtb2RfdGltZXIg
-c2hvdWxkIG5vdCBiZSB0cmlnZ2VyZWQsIHNvCiAgIGFueSBmdXJ0aGVyIGluZm9ybWF0aW9uIC0g
-aW4gcGFydGljdWxhciB0aGUgdGVzdHMgaW4gKDEsMikgd291bGQgYmUgZ29vZCB0byBkby4KIAoK
-R2Vycml0IAoKfCAgY2NpZDJfaGNfdHhfc2VuZF9wYWNrZXQ6IHBpcGU9MSBjd25kPTEKfCAgLS0t
-LS0tLS0tLS0tWyBjdXQgaGVyZSBdLS0tLS0tLS0tLS0tCnwgIGtlcm5lbCBCVUcgYXQga2VybmVs
-L3RpbWVyLmM6NDA3IQp8ICBpbnZhbGlkIG9wY29kZTogMDAwMCBbIzFdCnwgIFBSRUVNUFQgCnwg
-IENQVTogICAgMAp8ICBFSVA6ICAgIDAwNjA6WzxjMDEyNGFjZT5dICAgIE5vdCB0YWludGVkIFZM
-SQp8ICBFRkxBR1M6IDAwMjEwMjQ2ICAgKDIuNi4yMC4xICMxMikKfCAgRUlQIGlzIGF0IG1vZF90
-aW1lcisweDI4LzB4MmMKfCAgZWF4OiBjMTU4MDdkNCAgIGVieDogYzE1ODA0MTQgICBlY3g6IDAw
-MDAwMDAwICAgZWR4OiBmZmZiZGExMQp8ICBlc2k6IGMxNTgwNDE0ICAgZWRpOiBkZWE3NTY0NCAg
-IGVicDogZGM2MzdkYjggICBlc3A6IGRjNjM3ZGI4CnwgIGRzOiAwMDdiICAgZXM6IDAwN2IgICBz
-czogMDA2OAp8ICBQcm9jZXNzIHBhcmFfc2VydmVyIChwaWQ6IDEwODUsIHRp3DYzNjAwMCB0YXNr
-3jVkZjAzMCB0YXNrLnRp3DYzNjAwMCkKfCAgU3RhY2s6IGRjNjM3ZGM0IGMwMzY5YjY2IDAwMDAw
-MDAxIGRjNjM3ZGY4IGMwNDA3ZGRjIGRjNjM3ZGUwIGMxNTgwNGJjIDAwMjAwMjkyIAp8ICAgICAg
-ICAgZGM2MzdkZTQgYzA0MTU4OGMgYzE1ODA0YjAgZGM2MzdkZjggMDAwMDAwMDAgZGVhNzU2NDQg
-YzE1ODA0MTQgZGM3YjJlYzQgCnwgICAgICAgICBkYzYzN2UxYyBjMDQwOTcxZCBkYzYzN2UwOCBk
-YzYzN2U4YyAwMDAwMDAwMCAwMDAwMDAwMCBjMDUyOTc4MCBjMTU4MDQxNCAKfCAgQ2FsbCBUcmFj
-ZToKfCAgIFs8YzAxMDNjM2I+XSBzaG93X3RyYWNlX2xvZ19sdmwrMHgxYS8weDMwCnwgICBbPGMw
-MTAzY2YyPl0gc2hvd19zdGFja19sb2dfbHZsKzB4OGQvMHhhYQp8ICAgWzxjMDEwM2YwNz5dIHNo
-b3dfcmVnaXN0ZXJzKzB4MWE4LzB4MzEyCnwgICBbPGMwMTA0MjEwPl0gZGllKzB4MTA5LzB4MjI2
-CnwgICBbPGMwMTA0M2FiPl0gZG9fdHJhcCsweDdlLzB4YjQKfCAgIFs8YzAxMDQ2ODQ+XSBkb19p
-bnZhbGlkX29wKzB4YTMvMHhhZAp8ICAgWzxjMDQxNWI1Yz5dIGVycm9yX2NvZGUrMHg3NC8weDdj
-CnwgICBbPGMwMzY5YjY2Pl0gc2tfcmVzZXRfdGltZXIrMHhmLzB4MTkKfCAgIFs8YzA0MDdkZGM+
-XSBkY2NwX3dyaXRlX3htaXQrMHgyMjQvMHgyMmMKfCAgIFs8YzA0MDk3MWQ+XSBkY2NwX3NlbmRt
-c2crMHgxMGEvMHgxNWEKfCAgIFs8YzAzYTllMjY+XSBpbmV0X3NlbmRtc2crMHg0NC8weDU1Cnwg
-ICBbPGMwMzY2NjZhPl0gZG9fc29ja193cml0ZSsweDlhLzB4YTkKfCAgIFs8YzAzNjY2ZTM+XSBz
-b2NrX2Fpb193cml0ZSsweDZhLzB4N2IKfCAgIFs8YzAxNWFmYzY+XSBkb19zeW5jX3dyaXRlKzB4
-YzcvMHgxMTYKfCAgIFs8YzAxNWIxOTc+XSB2ZnNfd3JpdGUrMHgxODIvMHgxODcKfCAgIFs8YzAx
-NWIyM2Q+XSBzeXNfd3JpdGUrMHgzZC8weDY0CnwgICBbPGMwMTAyZmE0Pl0gc3lzY2FsbF9jYWxs
-KzB4Ny8weGIKfCAgID09PT09PT09PT09VGhlIEJVRyBpcyBjYXVzZWQgdmlhIHRoZSBmb2xsb3dp
-bmcgY2hhaW46IAoKMS4gZGNjcF93cml0ZV94bWl0KHNrLCAwKSAoZHVlIHRvICFibG9jaykKMS4g
-ZGNjcF9zZW5kbXNnCjIuIGNjaWQyX2hjX3R4X3NlbmRfcGFja2V0IC0+IHdpdGggaGN0eC0+Y2Np
-ZDJoY3R4X3BpcGUgPj0gaGN0eC0+Y2NpZDJoY3R4X2N3bmQKICAgKHNlZSBhYm92ZSwgcGlwZT1j
-d25kPTEpID0+IHJldHVybnMgMQozLiBpbiBkY2NwX3dyaXRlX3htaXQoc2ssIDApOgogICBpZiAo
-IWJsb2NrKSB7ICAgICAgICAgICAgICAgICAvKiB0aGlzIGlzIHRydWUgaGVyZSAqLwoJCXNrX3Jl
-c2V0X3RpbWVyKHNrLCAmZHAtPmRjY3BzX3htaXRfdGltZXIsCiAgIAkJCQltc2Vjc190b19qaWZm
-aWVzKGVycikramlmZmllcykKICAgPT4gQlVHKCkKfCAgIDw3PmRjY3Bfc2V0X3N0YXRlOiBsaXN0
-ZW4oYzE1ODAwMzApIExJU1RFTiAgICAgLT4gQ0xPU0VEClRoaXMgbWF5IGJlIGEgY2x1ZTogdGhp
-cyBzb2NrZXQgaGFzIG5vdCBnb25lIHBhc3QgbGlzdGVuIHN0YXRlIChpLmUuIG5vdCBlbnRlcmVk
-IHNlcnZlcikKCi0KVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxpc3Q6IHNlbmQgdGhlIGxpbmUg
-InVuc3Vic2NyaWJlIGRjY3AiIGluCnRoZSBib2R5IG9mIGEgbWVzc2FnZSB0byBtYWpvcmRvbW9A
-dmdlci5rZXJuZWwub3JnCk1vcmUgbWFqb3Jkb21vIGluZm8gYXQgIGh0dHA6Ly92Z2VyLmtlcm5l
-bC5vcmcvbWFqb3Jkb21vLWluZm8uaHRtbA==
+
+--ga5bsqHr1s/xcZEm
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
+Content-Transfer-Encoding: quoted-printable
+
+On 16:42, Gerrit Renker wrote:
+
+> I would much rather hunt down this bug than revert this patch, since reve=
+rting it
+> means that almost twice the work is done per each packet and truly bidire=
+ctional
+> connections are not currently supported.
+
+Agreed. Let's try to find the bug.
+
+> With initial tests here I could not reproduce the bug and had difficultie=
+s=20
+> since I have not all required libraries for paraslash.
+
+You only need libssl-dev to reproduce the bug. All the other libraries
+are optional and configure should detect what is installed on your
+system.
+
+> 1. I see you are using loopback (127.0.0.1) where packets are routed back
+>    internally: does the bug persist when CCID2 sender and CCID2 receiver
+>    are on different hosts?
+
+Not so easy to find out because I only have one machine and no
+internet at home, and no kernel with dccp support at work. I'll see
+what I can do.
+
+> 2. This is using CCID2, which has not been maintained for a while. Can
+>    you please try CCID 3 also, e.g. by using the following sysctls:
+>   =20
+>    sysctl -w net.dccp.default.rx_ccid=3D3=20
+>    sysctl -w net.dccp.default.tx_ccid=3D3
+>    sysctl -w net.dccp.default.tx_qlen=3D5
+>    sysctl -w net.dccp.default.seq_window=3D100
+>    sysctl -w net.dccp.default.send_ackvec=3D0
+
+Will do this today in the evening and report again tomorrow.
+=20
+> 3. Caveat: `Server' listens, `Client' connects. I could not build the par=
+aslash app
+>    due to missing libraries, but found that dccp_recv_open calls connect =
+in dccp_recv.c
+>    while dccp_open() in dccp_send.c calls listen(). It seems that the rol=
+es are reversed,
+>    is it possible to swap this in the application and does the problem pe=
+rsist?
+
+Well, that's possible, but IMHO does not make much sense: The server
+app waits for incoming connections (not neccessary only dccp) and
+responds by sending the audio stream to the client. That's how it's
+supposed to be, no?
+
+> The BUG is caused via the following chain:=20
+>=20
+> 1. dccp_write_xmit(sk, 0) (due to !block)
+> 1. dccp_sendmsg
+> 2. ccid2_hc_tx_send_packet -> with hctx->ccid2hctx_pipe >=3D hctx->ccid2h=
+ctx_cwnd
+>    (see above, pipe=3Dcwnd=3D1) =3D=3D> returns 1
+> 3. in dccp_write_xmit(sk, 0):
+>    if (!block) {                 /* this is true here */
+> 		sk_reset_timer(sk, &dp->dccps_xmit_timer,
+>    				msecs_to_jiffies(err)+jiffies)
+>    =3D=3D> BUG()
+> |   <7>dccp_set_state: listen(c1580030) LISTEN     -> CLOSED
+> This may be a clue: this socket has not gone past listen state (i.e. not =
+entered server)
+
+Yes, the bug happens in para_server just at the moment the first client
+connects. No data is transfered to the client. I'll look into the kernel
+dccp code a bit this evening as well.
+
+Thanks for your help
+Andre
+--=20
+The only person who always got his work done by Friday was Robinson Crusoe
+
+--ga5bsqHr1s/xcZEm
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: Digital signature
+Content-Disposition: inline
+
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.1 (GNU/Linux)
+
+iD8DBQFF7Gh7Wto1QDEAkw8RAla/AJ9AHPPI7JIaahLeAepRmNQ/QxgkHwCfTErm
+/fa2Zi2SewTV3QZASPqQ/E4=
+=4jw6
+-----END PGP SIGNATURE-----
+
+--ga5bsqHr1s/xcZEm--
