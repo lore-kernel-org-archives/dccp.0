@@ -1,272 +1,85 @@
-From: Andre Noll <maan@systemlinux.org>
-Date: Mon, 05 Mar 2007 14:32:40 +0000
-Subject: kernel BUG at kernel/timer.c:407!
-Message-Id: <20070305143240.GW22572@skl-net.de>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="hOh8F6DNH/RZBSFD"
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 05 Mar 2007 16:42:40 +0000
+Subject: Re: kernel BUG at kernel/timer.c:407!
+Message-Id: <200703051642.40711@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
+References: <20070305143240.GW22572@skl-net.de>
+In-Reply-To: <20070305143240.GW22572@skl-net.de>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-
---hOh8F6DNH/RZBSFD
-Content-Type: text/plain; charset=us-ascii
-Content-Disposition: inline
-Content-Transfer-Encoding: quoted-printable
-
-Hi
-
-In linux-2.6.20 and linux-2.6.21-pre1, the kernel oops shown below is
-repeatably triggered by paraslash's [1] dccp sender (which is based
-on Ian McDonald's dccp-cs-0.01.tar.bz2).
-
-git-bisect pointed out=20
-
-	bf58a381e8106fe73247c753e3da58fcb5eabd2e
-	[DCCP]: Only deliver to the CCID rx side in charge
-
-as the culprit. Reverting this commit, i.e. applying the patch below
-to linux-2.6.21-pre1, makes the problem go away.
-
-So this change seems to introduce a use of an uninitialized timer in
-the dccp kernel code. Does anybody know how to fix it?
-
-Thanks
-Andre
----
-dccp_feat_debug: ChangeL(CCID (1), 2)
-dccp_feat_debug: ChangeR(CCID (1), 2)
-dccp_feat_debug: ChangeL(Ack Ratio (5), 2)
-ccid2_change_cwnd: change cwnd to 1
-ccid2_change_srtt: change SRTT to -1
-ccid2_hc_tx_check_sanity: len of chain=3D0
-ccid2_hc_tx_check_sanity: total len=3D1024
-dccp_feat_debug: ChangeL(CCID (1), 2)
-dccp_feat_debug: ChangeR(CCID (1), 2)
-dccp_feat_debug: ChangeL(Ack Ratio (5), 2)
-ccid2_change_cwnd: change cwnd to 1
-ccid2_change_srtt: change SRTT to -1
-ccid2_hc_tx_check_sanity: len of chain=3D0
-ccid2_hc_tx_check_sanity: total len=3D1024
-dccp_set_state: client(c15807f8) CLOSED     -> REQUESTING
-dccp_insert_feat_opt: ChangeL(CCID (1), ...), length 1
-dccp_insert_feat_opt: ChangeR(CCID (1), ...), length 1
-dccp_insert_feat_opt: ChangeL(Ack Ratio (5), ...), length 1
-dccp_insert_options_feat: reset feat negotiation timer c15807f8
-dccp_v4_rcv:  REQUEST src=3D127.0.0.1@46800 dst=3D127.0.0.1@5001  seq=3D432=
-6915464
-dccp_feat_debug: ChangeL(Ack Ratio (5), 2)
-dccp_feat_debug: ChangeL(Ack Ratio (5), 2)
-dccp_feat_update: UNIMPLEMENTED: ChangeL(5, ...)
-dccp_feat_debug: ChangeL(Ack Ratio (5), 2)
-dccp_feat_debug: ChangeR(CCID (1), 2)
-dccp_feat_debug: ChangeL(CCID (1), 2)
-dccp_feat_reconcile: Will confirm 2
-dccp_feat_reconcile: won't ask for change of same feature
-dccp_feat_debug: ChangeL(CCID (1), 2)
-dccp_feat_debug: ChangeR(CCID (1), 2)
-dccp_feat_reconcile: Will confirm 2
-dccp_feat_reconcile: won't ask for change of same feature
-dccp_insert_feat_opt: ConfirmR(Ack Ratio (5), ...), length 1
-dccp_insert_feat_opt: ConfirmL(CCID (1), ...), length 2
-dccp_insert_feat_opt: ConfirmR(CCID (1), ...), length 2
-dccp_insert_feat_opt: ChangeL(Ack Ratio (5), ...), length 1
-dccp_v4_rcv: RESPONSE src=3D127.0.0.1@5001  dst=3D127.0.0.1@46800 seq=3D351=
-0785020, ack=3D4326915464
-dccp_feat_debug: ChangeL(Ack Ratio (5), 2)
-dccp_feat_debug: ChangeL(Ack Ratio (5), 2)
-dccp_feat_update: UNIMPLEMENTED: ChangeL(5, ...)
-dccp_feat_debug: ChangeL(Ack Ratio (5), 2)
-dccp_feat_debug: ConfirmR(CCID (1), 2)
-dccp_feat_confirm_recv: feature 1 found
-dccp_feat_debug: ChangeL(CCID (1), 2)
-dccp_feat_confirm_recv: clear feat negotiation timer c15807f8
-dccp_feat_debug: ConfirmL(CCID (1), 2)
-dccp_feat_confirm_recv: feature 1 found
-dccp_feat_debug: ChangeR(CCID (1), 2)
-dccp_feat_confirm_recv: clear feat negotiation timer c15807f8
-dccp_feat_debug: ConfirmR(Ack Ratio (5), 2)
-dccp_feat_confirm_recv: feature 5 found
-dccp_feat_debug: ChangeL(Ack Ratio (5), 2)
-dccp_feat_update: UNIMPLEMENTED: ChangeL(5, ...)
-dccp_feat_confirm_recv: clear feat negotiation timer c15807f8
-dccp_set_state: client(c15807f8) REQUESTING -> PARTOPEN
-dccp_insert_option_ackvec: client ACK Vector 0, len=3D1, ack_seqno=3D432691=
-5465, ack_ackno=3D3510785020
-dccp_insert_feat_opt: ConfirmR(Ack Ratio (5), ...), length 1
-dccp_v4_rcv:      ACK src=3D127.0.0.1@46800 dst=3D127.0.0.1@5001  seq=3D432=
-6915465, ack=3D3510785020
-ccid2_change_cwnd: change cwnd to 1
-ccid2_change_srtt: change SRTT to -1
-ccid2_hc_tx_check_sanity: len of chain=3D0
-ccid2_hc_tx_check_sanity: total len=3D1024
-dccp_feat_debug: ConfirmR(Ack Ratio (5), 2)
-dccp_feat_confirm_recv: feature 5 found
-dccp_feat_debug: ChangeL(Ack Ratio (5), 2)
-dccp_feat_update: UNIMPLEMENTED: ChangeL(5, ...)
-dccp_feat_confirm_recv: clear feat negotiation timer c1580414
-dccp_parse_options: server rx opt: ELAPSED_TIME=3D1
-dccp_set_state: server(c1580414) RESPOND    -> OPEN
-ccid2_hc_tx_send_packet: pipe=3D0 cwnd=3D1
-dccp_insert_option_ackvec: server ACK Vector 0, len=3D1, ack_seqno=3D351078=
-5021, ack_ackno=3D4326915465
-dccp_v4_rcv:  DATAACK src=3D127.0.0.1@5001  dst=3D127.0.0.1@46800 seq=3D351=
-0785021, ack=3D4326915465
-dccp_ackvec_check_rcv_ackvector: client ACK vector 0, len=3D1, ack_seqno=3D=
-4326915465, ack_ackno=3D3510785020, ACKED!
-dccp_parse_options: client rx opt: ELAPSED_TIME=3D29799
-ccid2_hc_tx_check_sanity: len of chain=3D0
-ccid2_hc_tx_check_sanity: total len=3D1024
-dccp_set_state: client(c15807f8) PARTOPEN   -> OPEN
-ccid2_hc_tx_check_sanity: len of chain=3D0
-ccid2_hc_tx_check_sanity: total len=3D1024
-ccid2_hc_tx_packet_sent: cwnd=3D1 pipe=3D1
-ccid2_start_rto_timer: setting RTO timeout=3D3000
-ccid2_hc_tx_packet_sent: pipe=3D1
-ccid2_hc_tx_packet_sent: Sent: seq=3D3510785021
-ccid2_hc_tx_packet_sent: out seq=3D3510785021 acked=3D0 time=3D4294695413
-ccid2_hc_tx_packet_sent: =3D=3D=3D=3D=3D=3D=3D=3D=3D
-ccid2_hc_tx_check_sanity: len of chain=3D1
-ccid2_hc_tx_check_sanity: total len=3D1024
-ccid2_hc_tx_send_packet: pipe=3D1 cwnd=3D1
-------------[ cut here ]------------
-kernel BUG at kernel/timer.c:407!
-invalid opcode: 0000 [#1]
-PREEMPT=20
-CPU:    0
-EIP:    0060:[<c0124ace>]    Not tainted VLI
-EFLAGS: 00210246   (2.6.20.1 #12)
-EIP is at mod_timer+0x28/0x2c
-eax: c15807d4   ebx: c1580414   ecx: 00000000   edx: fffbda11
-esi: c1580414   edi: dea75644   ebp: dc637db8   esp: dc637db8
-ds: 007b   es: 007b   ss: 0068
-Process para_server (pid: 1085, ti=3Ddc636000 task=3Dde5df030 task.ti=3Ddc6=
-36000)
-Stack: dc637dc4 c0369b66 00000001 dc637df8 c0407ddc dc637de0 c15804bc 00200=
-292=20
-       dc637de4 c041588c c15804b0 dc637df8 00000000 dea75644 c1580414 dc7b2=
-ec4=20
-       dc637e1c c040971d dc637e08 dc637e8c 00000000 00000000 c0529780 c1580=
-414=20
-Call Trace:
- [<c0103c3b>] show_trace_log_lvl+0x1a/0x30
- [<c0103cf2>] show_stack_log_lvl+0x8d/0xaa
- [<c0103f07>] show_registers+0x1a8/0x312
- [<c0104210>] die+0x109/0x226
- [<c01043ab>] do_trap+0x7e/0xb4
- [<c0104684>] do_invalid_op+0xa3/0xad
- [<c0415b5c>] error_code+0x74/0x7c
- [<c0369b66>] sk_reset_timer+0xf/0x19
- [<c0407ddc>] dccp_write_xmit+0x224/0x22c
- [<c040971d>] dccp_sendmsg+0x10a/0x15a
- [<c03a9e26>] inet_sendmsg+0x44/0x55
- [<c036666a>] do_sock_write+0x9a/0xa9
- [<c03666e3>] sock_aio_write+0x6a/0x7b
- [<c015afc6>] do_sync_write+0xc7/0x116
- [<c015b197>] vfs_write+0x182/0x187
- [<c015b23d>] sys_write+0x3d/0x64
- [<c0102fa4>] syscall_call+0x7/0xb
- =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D
-Code: 0b eb fe 55 8b 48 0c 89 e5 85 c9 74 1e 39 50 08 74 0b e8 15 ff ff ff =
-89 c1 5d 89 c8 c3 83 38 00 b9 01 00 00 00 74 eb 89 c8 5d c3 <0f> 0b eb fe 5=
-5 89 e5 83 ec 0c 89 5d f8 89 75 fc 89 c3 8b 00 31=20
-EIP: [<c0124ace>] mod_timer+0x28/0x2c SS:ESP 0068:dc637db8
- <7>dccp_set_state: listen(c1580030) LISTEN     -> CLOSED
-ccid2_hc_tx_kill_rto_timer: deleted RTO timer
-dccp_set_state: client(c15807f8) OPEN       -> CLOSING
-dccp_insert_option_ackvec: client ACK Vector 0, len=3D1, ack_seqno=3D432691=
-5466, ack_ackno=3D3510785021
-dccp_v4_rcv:    CLOSE src=3D127.0.0.1@46800 dst=3D127.0.0.1@5001  seq=3D432=
-6915466, ack=3D3510785021
-dccp_insert_option_ackvec: client ACK Vector 0, len=3D1, ack_seqno=3D432691=
-5467, ack_ackno=3D3510785021
-dccp_v4_rcv:    CLOSE src=3D127.0.0.1@46800 dst=3D127.0.0.1@5001  seq=3D432=
-6915467, ack=3D3510785021
-dccp_insert_option_ackvec: client ACK Vector 0, len=3D1, ack_seqno=3D432691=
-5468, ack_ackno=3D3510785021
-dccp_v4_rcv:    CLOSE src=3D127.0.0.1@46800 dst=3D127.0.0.1@5001  seq=3D432=
-6915468, ack=3D3510785021
-dccp_insert_option_ackvec: client ACK Vector 0, len=3D1, ack_seqno=3D432691=
-5469, ack_ackno=3D3510785021
-dccp_v4_rcv:    CLOSE src=3D127.0.0.1@46800 dst=3D127.0.0.1@5001  seq=3D432=
-6915469, ack=3D3510785021
----
-commit 26cea71dac43be2de14c2cd71bd5bfb1465dd386
-Author: Installations Account <install@meins.(none)>
-Date:   Wed Feb 28 23:06:26 2007 +0100
-
-    revert [bf58a381e8106fe73247c753e3da58fcb5eabd2e] [DCCP]: Only deliver =
-to the CCID rx side in charge
-   =20
-    As this causes an oops in mod_timer()
-
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 40402c5..3b168bd 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -542,7 +542,7 @@ static void ccid3_hc_tx_packet_recv(stru
- 				   jiffies + usecs_to_jiffies(t_nfb));
-=20
- 		/* set idle flag */
--		hctx->ccid3hctx_idle =3D 1;
-+		hctx->ccid3hctx_idle =3D 1;  =20
- 		break;
- 	case TFRC_SSTATE_NO_SENT:
- 		/*
-diff --git a/net/dccp/input.c b/net/dccp/input.c
-index 565bc80..6e4715e 100644
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -248,18 +248,8 @@ int dccp_rcv_established(struct sock *sk
- 			    DCCP_ACKVEC_STATE_RECEIVED))
- 		goto discard;
-=20
--	/*
--	 * Deliver to the CCID module in charge.
--	 * FIXME: Currently DCCP operates one-directional only, i.e. a listening
--	 *        server is not at the same time a connecting client. There is
--	 *        not much sense in delivering to both rx/tx sides at the moment
--	 *        (only one is active at a time); when moving to bidirectional
--	 *        service, this needs to be revised.
--	 */
--	if (dccp_sk(sk)->dccps_role =3D=3D DCCP_ROLE_SERVER)
--		ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
--	else
--		ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
-+	ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
-+	ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
-=20
- 	return __dccp_rcv_established(sk, skb, dh, len);
- discard:
-@@ -494,11 +484,8 @@ int dccp_rcv_state_process(struct sock *
- 				    DCCP_ACKVEC_STATE_RECEIVED))
- 			goto discard;
-=20
--		/* XXX see the comments in dccp_rcv_established about this */
--		if (dccp_sk(sk)->dccps_role =3D=3D DCCP_ROLE_SERVER)
--			ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
--		else
--			ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
-+		ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
-+		ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
- 	}
-=20
- 	/*
----
-[1] www.paraslash.org
---=20
-The only person who always got his work done by Friday was Robinson Crusoe
-
---hOh8F6DNH/RZBSFD
-Content-Type: application/pgp-signature; name="signature.asc"
-Content-Description: Digital signature
-Content-Disposition: inline
-
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.1 (GNU/Linux)
-
-iD8DBQFF7CoIWto1QDEAkw8RAlOSAKCjUb0/QOmfHpKqLXgJYw7uaRBYuACgmUNV
-EeqitHXd8r1m/0BvZG6NxkM=
-=5lip
------END PGP SIGNATURE-----
-
---hOh8F6DNH/RZBSFD--
+SGkgQW5kcmUsCgp0aGFuayB5b3UgZm9yIHByb3ZpZGluZyBhIGRldGFpbGVkIHJlcG9ydC4KClRo
+ZSBtZW50aW9uZWQgcGF0Y2ggYXZvaWRzIHNlbmRpbmcgcmVjZWl2ZWQgaW5mb3JtYXRpb24gdG8g
+Ym90aCByeC90eCBoYWx2ZXMKb2YgYSBDQ0lELiBUaGVyZSBhcmUgdHdvIHBvc3NpYmlsaXRpZXM6
+CiAoYSkgVGhlIHBhdGNoIGl0c2VsZiBoYXMgYSBidWcKICAgICBUaGUgcGF0Y2ggaGFzIGJlZW4g
+dGVzdGVkIGV4dGVuc2l2ZWx5IG92ZXIgbW9udGhzIChidXQgdXNpbmcgbWFpbmx5CiAgICAgQ0NJ
+RDMsIGFzIENDSUQyIGdhdmUgYmFkIHBlcmZvcm1hbmNlKQogICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICBvcgogKGIpIFRoZXJlIGlzIGEgcHJvYmxlbSBpbiB0
+aGUgQ0NJRDIgY29kZSwgc2luY2UgdGhlcmUgaGF2ZSBiZWVuIG1hbnkKICAgICBrZXJuZWwgY2hh
+bmdlcyBhbmQgdGhlIGNvZGUgd2FzIG5vdCBzbyBtdWNoIG1haW50YWluZWQuCgpJIHdvdWxkIG11
+Y2ggcmF0aGVyIGh1bnQgZG93biB0aGlzIGJ1ZyB0aGFuIHJldmVydCB0aGlzIHBhdGNoLCBzaW5j
+ZSByZXZlcnRpbmcgaXQKbWVhbnMgdGhhdCBhbG1vc3QgdHdpY2UgdGhlIHdvcmsgaXMgZG9uZSBw
+ZXIgZWFjaCBwYWNrZXQgYW5kIHRydWx5IGJpZGlyZWN0aW9uYWwKY29ubmVjdGlvbnMgYXJlIG5v
+dCBjdXJyZW50bHkgc3VwcG9ydGVkLgoKV2l0aCBpbml0aWFsIHRlc3RzIGhlcmUgSSBjb3VsZCBu
+b3QgcmVwcm9kdWNlIHRoZSBidWcgYW5kIGhhZCBkaWZmaWN1bHRpZXMgCnNpbmNlIEkgaGF2ZSBu
+b3QgYWxsIHJlcXVpcmVkIGxpYnJhcmllcyBmb3IgcGFyYXNsYXNoLgoKMS4gSSBzZWUgeW91IGFy
+ZSB1c2luZyBsb29wYmFjayAoMTI3LjAuMC4xKSB3aGVyZSBwYWNrZXRzIGFyZSByb3V0ZWQgYmFj
+awogICBpbnRlcm5hbGx5OiBkb2VzIHRoZSBidWcgcGVyc2lzdCB3aGVuIENDSUQyIHNlbmRlciBh
+bmQgQ0NJRDIgcmVjZWl2ZXIKICAgYXJlIG9uIGRpZmZlcmVudCBob3N0cz8KCjIuIFRoaXMgaXMg
+dXNpbmcgQ0NJRDIsIHdoaWNoIGhhcyBub3QgYmVlbiBtYWludGFpbmVkIGZvciBhIHdoaWxlLiBD
+YW4KICAgeW91IHBsZWFzZSB0cnkgQ0NJRCAzIGFsc28sIGUuZy4gYnkgdXNpbmcgdGhlIGZvbGxv
+d2luZyBzeXNjdGxzOgogICAKICAgc3lzY3RsIC13IG5ldC5kY2NwLmRlZmF1bHQucnhfY2NpZD0z
+IAogICBzeXNjdGwgLXcgbmV0LmRjY3AuZGVmYXVsdC50eF9jY2lkPTMKICAgc3lzY3RsIC13IG5l
+dC5kY2NwLmRlZmF1bHQudHhfcWxlbj01CiAgIHN5c2N0bCAtdyBuZXQuZGNjcC5kZWZhdWx0LnNl
+cV93aW5kb3cQMAogICBzeXNjdGwgLXcgbmV0LmRjY3AuZGVmYXVsdC5zZW5kX2Fja3ZlYz0wCgoz
+LiBDYXZlYXQ6IGBTZXJ2ZXInIGxpc3RlbnMsIGBDbGllbnQnIGNvbm5lY3RzLiBJIGNvdWxkIG5v
+dCBidWlsZCB0aGUgcGFyYXNsYXNoIGFwcAogICBkdWUgdG8gbWlzc2luZyBsaWJyYXJpZXMsIGJ1
+dCBmb3VuZCB0aGF0IGRjY3BfcmVjdl9vcGVuIGNhbGxzIGNvbm5lY3QgaW4gZGNjcF9yZWN2LmMK
+ICAgd2hpbGUgZGNjcF9vcGVuKCkgaW4gZGNjcF9zZW5kLmMgY2FsbHMgbGlzdGVuKCkuIEl0IHNl
+ZW1zIHRoYXQgdGhlIHJvbGVzIGFyZSByZXZlcnNlZCwKICAgaXMgaXQgcG9zc2libGUgdG8gc3dh
+cCB0aGlzIGluIHRoZSBhcHBsaWNhdGlvbiBhbmQgZG9lcyB0aGUgcHJvYmxlbSBwZXJzaXN0PwoK
+NC4gTm90d2l0aHN0YW5kaW5nICgzKSwgdGhlIEJVRygpIGNvbmRpdGlvbiBpbiBtb2RfdGltZXIg
+c2hvdWxkIG5vdCBiZSB0cmlnZ2VyZWQsIHNvCiAgIGFueSBmdXJ0aGVyIGluZm9ybWF0aW9uIC0g
+aW4gcGFydGljdWxhciB0aGUgdGVzdHMgaW4gKDEsMikgd291bGQgYmUgZ29vZCB0byBkby4KIAoK
+R2Vycml0IAoKfCAgY2NpZDJfaGNfdHhfc2VuZF9wYWNrZXQ6IHBpcGU9MSBjd25kPTEKfCAgLS0t
+LS0tLS0tLS0tWyBjdXQgaGVyZSBdLS0tLS0tLS0tLS0tCnwgIGtlcm5lbCBCVUcgYXQga2VybmVs
+L3RpbWVyLmM6NDA3IQp8ICBpbnZhbGlkIG9wY29kZTogMDAwMCBbIzFdCnwgIFBSRUVNUFQgCnwg
+IENQVTogICAgMAp8ICBFSVA6ICAgIDAwNjA6WzxjMDEyNGFjZT5dICAgIE5vdCB0YWludGVkIFZM
+SQp8ICBFRkxBR1M6IDAwMjEwMjQ2ICAgKDIuNi4yMC4xICMxMikKfCAgRUlQIGlzIGF0IG1vZF90
+aW1lcisweDI4LzB4MmMKfCAgZWF4OiBjMTU4MDdkNCAgIGVieDogYzE1ODA0MTQgICBlY3g6IDAw
+MDAwMDAwICAgZWR4OiBmZmZiZGExMQp8ICBlc2k6IGMxNTgwNDE0ICAgZWRpOiBkZWE3NTY0NCAg
+IGVicDogZGM2MzdkYjggICBlc3A6IGRjNjM3ZGI4CnwgIGRzOiAwMDdiICAgZXM6IDAwN2IgICBz
+czogMDA2OAp8ICBQcm9jZXNzIHBhcmFfc2VydmVyIChwaWQ6IDEwODUsIHRp3DYzNjAwMCB0YXNr
+3jVkZjAzMCB0YXNrLnRp3DYzNjAwMCkKfCAgU3RhY2s6IGRjNjM3ZGM0IGMwMzY5YjY2IDAwMDAw
+MDAxIGRjNjM3ZGY4IGMwNDA3ZGRjIGRjNjM3ZGUwIGMxNTgwNGJjIDAwMjAwMjkyIAp8ICAgICAg
+ICAgZGM2MzdkZTQgYzA0MTU4OGMgYzE1ODA0YjAgZGM2MzdkZjggMDAwMDAwMDAgZGVhNzU2NDQg
+YzE1ODA0MTQgZGM3YjJlYzQgCnwgICAgICAgICBkYzYzN2UxYyBjMDQwOTcxZCBkYzYzN2UwOCBk
+YzYzN2U4YyAwMDAwMDAwMCAwMDAwMDAwMCBjMDUyOTc4MCBjMTU4MDQxNCAKfCAgQ2FsbCBUcmFj
+ZToKfCAgIFs8YzAxMDNjM2I+XSBzaG93X3RyYWNlX2xvZ19sdmwrMHgxYS8weDMwCnwgICBbPGMw
+MTAzY2YyPl0gc2hvd19zdGFja19sb2dfbHZsKzB4OGQvMHhhYQp8ICAgWzxjMDEwM2YwNz5dIHNo
+b3dfcmVnaXN0ZXJzKzB4MWE4LzB4MzEyCnwgICBbPGMwMTA0MjEwPl0gZGllKzB4MTA5LzB4MjI2
+CnwgICBbPGMwMTA0M2FiPl0gZG9fdHJhcCsweDdlLzB4YjQKfCAgIFs8YzAxMDQ2ODQ+XSBkb19p
+bnZhbGlkX29wKzB4YTMvMHhhZAp8ICAgWzxjMDQxNWI1Yz5dIGVycm9yX2NvZGUrMHg3NC8weDdj
+CnwgICBbPGMwMzY5YjY2Pl0gc2tfcmVzZXRfdGltZXIrMHhmLzB4MTkKfCAgIFs8YzA0MDdkZGM+
+XSBkY2NwX3dyaXRlX3htaXQrMHgyMjQvMHgyMmMKfCAgIFs8YzA0MDk3MWQ+XSBkY2NwX3NlbmRt
+c2crMHgxMGEvMHgxNWEKfCAgIFs8YzAzYTllMjY+XSBpbmV0X3NlbmRtc2crMHg0NC8weDU1Cnwg
+ICBbPGMwMzY2NjZhPl0gZG9fc29ja193cml0ZSsweDlhLzB4YTkKfCAgIFs8YzAzNjY2ZTM+XSBz
+b2NrX2Fpb193cml0ZSsweDZhLzB4N2IKfCAgIFs8YzAxNWFmYzY+XSBkb19zeW5jX3dyaXRlKzB4
+YzcvMHgxMTYKfCAgIFs8YzAxNWIxOTc+XSB2ZnNfd3JpdGUrMHgxODIvMHgxODcKfCAgIFs8YzAx
+NWIyM2Q+XSBzeXNfd3JpdGUrMHgzZC8weDY0CnwgICBbPGMwMTAyZmE0Pl0gc3lzY2FsbF9jYWxs
+KzB4Ny8weGIKfCAgID09PT09PT09PT09VGhlIEJVRyBpcyBjYXVzZWQgdmlhIHRoZSBmb2xsb3dp
+bmcgY2hhaW46IAoKMS4gZGNjcF93cml0ZV94bWl0KHNrLCAwKSAoZHVlIHRvICFibG9jaykKMS4g
+ZGNjcF9zZW5kbXNnCjIuIGNjaWQyX2hjX3R4X3NlbmRfcGFja2V0IC0+IHdpdGggaGN0eC0+Y2Np
+ZDJoY3R4X3BpcGUgPj0gaGN0eC0+Y2NpZDJoY3R4X2N3bmQKICAgKHNlZSBhYm92ZSwgcGlwZT1j
+d25kPTEpID0+IHJldHVybnMgMQozLiBpbiBkY2NwX3dyaXRlX3htaXQoc2ssIDApOgogICBpZiAo
+IWJsb2NrKSB7ICAgICAgICAgICAgICAgICAvKiB0aGlzIGlzIHRydWUgaGVyZSAqLwoJCXNrX3Jl
+c2V0X3RpbWVyKHNrLCAmZHAtPmRjY3BzX3htaXRfdGltZXIsCiAgIAkJCQltc2Vjc190b19qaWZm
+aWVzKGVycikramlmZmllcykKICAgPT4gQlVHKCkKfCAgIDw3PmRjY3Bfc2V0X3N0YXRlOiBsaXN0
+ZW4oYzE1ODAwMzApIExJU1RFTiAgICAgLT4gQ0xPU0VEClRoaXMgbWF5IGJlIGEgY2x1ZTogdGhp
+cyBzb2NrZXQgaGFzIG5vdCBnb25lIHBhc3QgbGlzdGVuIHN0YXRlIChpLmUuIG5vdCBlbnRlcmVk
+IHNlcnZlcikKCi0KVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxpc3Q6IHNlbmQgdGhlIGxpbmUg
+InVuc3Vic2NyaWJlIGRjY3AiIGluCnRoZSBib2R5IG9mIGEgbWVzc2FnZSB0byBtYWpvcmRvbW9A
+dmdlci5rZXJuZWwub3JnCk1vcmUgbWFqb3Jkb21vIGluZm8gYXQgIGh0dHA6Ly92Z2VyLmtlcm5l
+bC5vcmcvbWFqb3Jkb21vLWluZm8uaHRtbA==
