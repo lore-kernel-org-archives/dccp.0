@@ -1,51 +1,32 @@
-From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Fri, 23 Mar 2007 03:03:25 +0000
-Subject: [PATCH 4/9] DCCP: Simplify dccp_li_hist_entry_new
-Message-Id: <200703231503.25645.ian.mcdonald@jandi.co.nz>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Tue, 06 Mar 2007 02:30:13 +0000
+Subject: Re: CCID 3 bounded by OS scheduling granularity
+Message-Id: <5640c7e00703051830v468f0bbdic1ad6c301e950145@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200703221606.41557.ian.mcdonald@jandi.co.nz>
-In-Reply-To: <200703221606.41557.ian.mcdonald@jandi.co.nz>
+References: <200701221424.36105@strip-the-willow>
+In-Reply-To: <200701221424.36105@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This simplifies dccp_li_hist_entry_new.
+On 1/23/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> I have performed experiments which confirm that
+>
+>  1) when t_ipi < t_gran, the transmit rate is effectively out of control
+>  2) when t_ipi > t_gran, the actual transmit rate is about a factor of 3
+>     higher than s/t_ipi would permit.
+>
+> http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/packet_scheduling/
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
----
-diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
-index 587fbab..5640905 100644
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -22,10 +22,9 @@
- static struct dccp_li_hist *ccid3_li_hist;
- 
- static inline struct dccp_li_hist_entry *
--		dccp_li_hist_entry_new(struct dccp_li_hist *hist,
--				       const gfp_t prio)
-+		dccp_li_hist_entry_new(void)
- {
--	return kmem_cache_alloc(hist->dccplih_slab, prio);
-+	return kmem_cache_alloc(ccid3_li_hist->dccplih_slab, GFP_ATOMIC);
- }
- 
- static struct dccp_li_hist *dccp_li_hist_new(const char *name)
-@@ -133,7 +132,7 @@ static int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
- 	int i;
- 
- 	for (i = 0; i < DCCP_LI_HIST_IVAL_F_LENGTH; i++) {
--		entry = dccp_li_hist_entry_new(hist, GFP_ATOMIC);
-+		entry = dccp_li_hist_entry_new();
- 		if (entry = NULL) {
- 			dccp_li_hist_purge(list);
- 			DCCP_BUG("loss interval list entry is NULL");
-@@ -278,7 +277,7 @@ void ccid3_hc_rx_update_li(struct sock *sk, u64 seq_loss, u8 win_loss)
- 		/* new loss event detected */
- 		/* calculate last interval length */
- 		seq_temp = dccp_delta_seqno(head->dccplih_seqno, seq_loss);
--		entry = dccp_li_hist_entry_new(ccid3_li_hist, GFP_ATOMIC);
-+		entry = dccp_li_hist_entry_new();
- 
- 		if (entry = NULL) {
- 			DCCP_BUG("out of memory - can not allocate entry");
+I've been going over this and wonder if you ever got to the bottom of
+it by instrumenting it or similar as it doesn't make sense to me....
+We add t_ipi to t_nom after each packet so even coarse grained
+scheduling shouldn't do this.
+
+Ian
+
+-- 
+Web: http://wand.net.nz/~iam4
+Blog: http://iansblog.jandi.co.nz
+WAND Network Research Group
