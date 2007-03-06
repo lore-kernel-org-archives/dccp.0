@@ -1,45 +1,67 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Mon, 26 Mar 2007 02:33:30 +0000
-Subject: Re: [PATCH 2/25]: Avoid accumulation of large send credit
-Message-Id: <5640c7e00703251933r60687293q936c6f4a31ec67ef@mail.gmail.com>
+From: "Arnaldo Carvalho de Melo" <acme@redhat.com>
+Date: Tue, 06 Mar 2007 16:11:43 +0000
+Subject: [PATCH 1/2][DCCP]: Correctly split CCID half connections
+Message-Id: <39e6f6c70703060811l21b9e3edm2da0346f920ff3cd@mail.gmail.com>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="----=_Part_164539_32035483.1173197503080"
 List-Id: <dccp.vger.kernel.org>
-References: <200703211844.12007@strip-the-willow>
-In-Reply-To: <200703211844.12007@strip-the-willow>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 3/22/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [CCID 3]: Avoid accumulation of large send credit
->
-> Problem:
-> --------
->  Large backlogs of packets which can be sent immediately currently accumulate
->  when (i) the application idles, or (ii) the application emits at a rate slower
->  than the allowed rate X/s, or (iii) due to scheduling inaccuracy (resolution
->  only up to HZ). The consequence is that a huge burst of packets can be sent
->  immediately, which violates the allowed sending rate and can (worst case)
->  choke the network.
->  NB: Corresponding paragraph on send credits recently added to rfc3448bis
->
-> Fix:
-> ----
->  Avoid any backlog of sending time which is greater than one whole t_ipi. This
->  permits the coarse-granularity bursts mentioned in [RFC 3448, 4.6], but disallows
->  the disproportionally large bursts.
+------=_Part_164539_32035483.1173197503080
+Content-Type: text/plain; charset=ISO-8859-1; format=flowed
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
 
-I think we should be going with greater than max(t_ipi, t_gran) as per
-discussion on IETF list and proposal by Sally Floyd
-http://www1.ietf.org/mail-archive/web/dccp/current/msg02281.html
+This fixes a bug caused by a previous patch, which causes DCCP servers in
+LISTEN state to not receive packets.
 
-I do know that Gerrit has some reservations around the whole
-granularity of scheduling issue and I will try and address these at
-some point but Eddie/Sally seem to be siding around allowing packet
-bursts as per how we read RFC spec.
+This patch changes the logic so that
+ * servers in either LISTEN or OPEN state get the RX half connection packets
+ * clients in OPEN state get the TX half connection packets
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+
+------=_Part_164539_32035483.1173197503080
+Content-Type: text/x-patch; 
+	name=0001-DCCP-Correctly-split-CCID-half-connections.patch; 
+	charset=ANSI_X3.4-1968
+Content-Transfer-Encoding: base64
+X-Attachment-Id: f_eyyjdpzl
+Content-Disposition: attachment; filename="0001-DCCP-Correctly-split-CCID-half-connections.patch"
+
+RnJvbSAyNTNhODZkYWU5YjAxYjJiZTE1ZWY4MzhhMTlkZTdjY2RlNTc1ZmI0IE1vbiBTZXAgMTcg
+MDA6MDA6MDAgMjAwMQpGcm9tOiBHZXJyaXQgUmVua2VyIDxnZXJyaXRAZXJnLmFiZG4uYWMudWs+
+CkRhdGU6IFR1ZSwgNiBNYXIgMjAwNyAxMzowMjozNSAtMDMwMApTdWJqZWN0OiBbUEFUQ0hdIFtE
+Q0NQXTogQ29ycmVjdGx5IHNwbGl0IENDSUQgaGFsZiBjb25uZWN0aW9ucwoKVGhpcyBmaXhlcyBh
+IGJ1ZyBjYXVzZWQgYnkgYSBwcmV2aW91cyBwYXRjaCwgd2hpY2ggY2F1c2VzIERDQ1Agc2VydmVy
+cyBpbgpMSVNURU4gc3RhdGUgdG8gbm90IHJlY2VpdmUgcGFja2V0cy4KClRoaXMgcGF0Y2ggY2hh
+bmdlcyB0aGUgbG9naWMgc28gdGhhdAogKiBzZXJ2ZXJzIGluIGVpdGhlciBMSVNURU4gb3IgT1BF
+TiBzdGF0ZSBnZXQgdGhlIFJYIGhhbGYgY29ubmVjdGlvbiBwYWNrZXRzCiAqIGNsaWVudHMgaW4g
+T1BFTiBzdGF0ZSBnZXQgdGhlIFRYIGhhbGYgY29ubmVjdGlvbiBwYWNrZXRzCgpTaWduZWQtb2Zm
+LWJ5OiBHZXJyaXQgUmVua2VyIDxnZXJyaXRAZXJnLmFiZG4uYWMudWs+ClNpZ25lZC1vZmYtYnk6
+IEFybmFsZG8gQ2FydmFsaG8gZGUgTWVsbyA8YWNtZUByZWRoYXQuY29tPgotLS0KIG5ldC9kY2Nw
+L2lucHV0LmMgfCAgIDEyICsrKysrKy0tLS0tLQogMSBmaWxlcyBjaGFuZ2VkLCA2IGluc2VydGlv
+bnMoKyksIDYgZGVsZXRpb25zKC0pCgpkaWZmIC0tZ2l0IGEvbmV0L2RjY3AvaW5wdXQuYyBiL25l
+dC9kY2NwL2lucHV0LmMKaW5kZXggNGRlZTQ2Mi4uMjg3MDk5ZiAxMDA2NDQKLS0tIGEvbmV0L2Rj
+Y3AvaW5wdXQuYworKysgYi9uZXQvZGNjcC9pbnB1dC5jCkBAIC0yNTYsMTAgKzI1NiwxMCBAQCBp
+bnQgZGNjcF9yY3ZfZXN0YWJsaXNoZWQoc3RydWN0IHNvY2sgKnNrLCBzdHJ1Y3Qgc2tfYnVmZiAq
+c2tiLAogCSAqICAgICAgICAob25seSBvbmUgaXMgYWN0aXZlIGF0IGEgdGltZSk7IHdoZW4gbW92
+aW5nIHRvIGJpZGlyZWN0aW9uYWwKIAkgKiAgICAgICAgc2VydmljZSwgdGhpcyBuZWVkcyB0byBi
+ZSByZXZpc2VkLgogCSAqLwotCWlmIChkY2NwX3NrKHNrKS0+ZGNjcHNfcm9sZSA9PSBEQ0NQX1JP
+TEVfU0VSVkVSKQotCQljY2lkX2hjX3J4X3BhY2tldF9yZWN2KGRwLT5kY2Nwc19oY19yeF9jY2lk
+LCBzaywgc2tiKTsKLQllbHNlCisJaWYgKGRjY3Bfc2soc2spLT5kY2Nwc19yb2xlID09IERDQ1Bf
+Uk9MRV9DTElFTlQpCiAJCWNjaWRfaGNfdHhfcGFja2V0X3JlY3YoZHAtPmRjY3BzX2hjX3R4X2Nj
+aWQsIHNrLCBza2IpOworCWVsc2UJLyogbGlzdGVuaW5nIG9yIGNvbm5lY3RlZCBzZXJ2ZXIgKi8K
+KwkJY2NpZF9oY19yeF9wYWNrZXRfcmVjdihkcC0+ZGNjcHNfaGNfcnhfY2NpZCwgc2ssIHNrYik7
+CiAKIAlyZXR1cm4gX19kY2NwX3Jjdl9lc3RhYmxpc2hlZChzaywgc2tiLCBkaCwgbGVuKTsKIGRp
+c2NhcmQ6CkBAIC00OTUsMTAgKzQ5NSwxMCBAQCBpbnQgZGNjcF9yY3Zfc3RhdGVfcHJvY2Vzcyhz
+dHJ1Y3Qgc29jayAqc2ssIHN0cnVjdCBza19idWZmICpza2IsCiAJCQlnb3RvIGRpc2NhcmQ7CiAK
+IAkJLyogWFhYIHNlZSB0aGUgY29tbWVudHMgaW4gZGNjcF9yY3ZfZXN0YWJsaXNoZWQgYWJvdXQg
+dGhpcyAqLwotCQlpZiAoZGNjcF9zayhzayktPmRjY3BzX3JvbGUgPT0gRENDUF9ST0xFX1NFUlZF
+UikKLQkJCWNjaWRfaGNfcnhfcGFja2V0X3JlY3YoZHAtPmRjY3BzX2hjX3J4X2NjaWQsIHNrLCBz
+a2IpOwotCQllbHNlCisJCWlmIChkY2NwX3NrKHNrKS0+ZGNjcHNfcm9sZSA9PSBEQ0NQX1JPTEVf
+Q0xJRU5UKQogCQkJY2NpZF9oY190eF9wYWNrZXRfcmVjdihkcC0+ZGNjcHNfaGNfdHhfY2NpZCwg
+c2ssIHNrYik7CisJCWVsc2UKKwkJCWNjaWRfaGNfcnhfcGFja2V0X3JlY3YoZHAtPmRjY3BzX2hj
+X3J4X2NjaWQsIHNrLCBza2IpOwogCX0KIAogCS8qCi0tIAoxLjUuMC4yCgo=
+------=_Part_164539_32035483.1173197503080--
