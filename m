@@ -1,131 +1,50 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 21 Mar 2007 18:45:36 +0000
-Subject: [PATCH 18/25]: Reduce time spent while write-lock is held
-Message-Id: <200703211845.36548@strip-the-willow>
+From: "Arnaldo Carvalho de Melo" <acme@redhat.com>
+Date: Tue, 06 Mar 2007 16:12:19 +0000
+Subject: [PATCH 2/2][DCCP]: Set RTO for newly created child socket
+Message-Id: <39e6f6c70703060812pf5dd272h5b7870978d364b18@mail.gmail.com>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="----=_Part_164563_30954705.1173197539111"
 List-Id: <dccp.vger.kernel.org>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[CCID 3]: Reduce time spent while write-lock is held
+------=_Part_164563_30954705.1173197539111
+Content-Type: text/plain; charset=ISO-8859-1; format=flowed
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
 
-This minimizes the time during which the `write_lock' is held: by using a
-temporary list_head and re-adjusting the pointers of the old list accordingly.
-The clean-up operation can then safely be done outside the lock, since the
-newly created list is then `homeless'.
-
- 1. For dccp_tx_hist_purge, this is conveniently done by using list_replace_init,
-
- 2. the case for dccp_tx_hist_purge_older is analogous and, in the absence of a
-    matching library function, done manually;
-
- 3. the `dangerous' function dccp_tx_hist_purge_older has been removed by 
-    merging its functionality into dccp_tx_hist_get_send_time.
+This mirrors a recent change in tcp_open_req_child, whereby the icsk_rto of the
+newly created child socket was not set (but rather on the parent socket). Same
+fix for DCCP.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/lib/packet_history.c |   47 +++++++++++++++++++-----------------
- net/dccp/ccids/lib/packet_history.h |    4 ---
- 2 files changed, 25 insertions(+), 26 deletions(-)
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -87,6 +87,16 @@ void dccp_tx_hist_delete(struct dccp_tx_
- 
- EXPORT_SYMBOL_GPL(dccp_tx_hist_delete);
- 
-+static void __dccp_tx_hist_wipe(struct list_head *head, struct kmem_cache *slab)
-+{
-+	struct dccp_tx_hist_entry *entry, *next;
-+
-+	list_for_each_entry_safe(entry, next, head, dccphtx_node) {
-+		list_del(&entry->dccphtx_node);
-+		kmem_cache_free(slab, entry);
-+	}
-+}
-+
- /**
-  *  dccp_tx_hist_get_send_time  -  Retrieve timestamp of sent packet
-  *
-@@ -101,6 +111,7 @@ int dccp_tx_hist_get_send_time(struct dc
- 			       struct timeval *t_send)
- {
- 	struct dccp_tx_hist_entry *entry;
-+	struct list_head free_this;
- 	int found = 0;
- 
- 	write_lock_bh(&dccp_tx_hist_lock);
-@@ -108,12 +119,20 @@ int dccp_tx_hist_get_send_time(struct dc
- 		if (entry->dccphtx_seqno = seq) {
- 			found = 1;
- 			*t_send = entry->dccphtx_tstamp;
-+			/* forget/free all entries older than this one */
-+			free_this.next		= entry->dccphtx_node.next;
-+			free_this.next->prev	= &free_this;
-+			free_this.prev		= list->prev;
-+			free_this.prev->next	= &free_this;
-+
-+			entry->dccphtx_node.next = list;
-+			list->prev		 = &entry->dccphtx_node;
- 			break;
- 		}
-+	write_unlock_bh(&dccp_tx_hist_lock);
- 
- 	if (found)
--		dccp_tx_hist_purge_older(hist, list, entry);
--	write_unlock_bh(&dccp_tx_hist_lock);
-+		__dccp_tx_hist_wipe(&free_this, hist->dccptxh_slab);
- 
- 	return found;
- }
-@@ -132,32 +151,16 @@ EXPORT_SYMBOL_GPL(dccp_tx_hist_add_entry
- 
- void dccp_tx_hist_purge(struct dccp_tx_hist *hist, struct list_head *list)
- {
--	struct dccp_tx_hist_entry *entry, *next;
-+	struct list_head free_this;
- 
- 	write_lock_bh(&dccp_tx_hist_lock);
--	list_for_each_entry_safe(entry, next, list, dccphtx_node) {
--		list_del_init(&entry->dccphtx_node);
--		dccp_tx_hist_entry_delete(hist, entry);
--	}
-+	list_replace_init(list, &free_this);
- 	write_unlock_bh(&dccp_tx_hist_lock);
--}
- 
--EXPORT_SYMBOL_GPL(dccp_tx_hist_purge);
--
--/* XXX careful, this one is not lock-protected */
--void dccp_tx_hist_purge_older(struct dccp_tx_hist *hist,
--			      struct list_head *list,
--			      struct dccp_tx_hist_entry *packet)
--{
--	struct dccp_tx_hist_entry *next;
--
--	list_for_each_entry_safe_continue(packet, next, list, dccphtx_node) {
--		list_del_init(&packet->dccphtx_node);
--		dccp_tx_hist_entry_delete(hist, packet);
--	}
-+	__dccp_tx_hist_wipe(&free_this, hist->dccptxh_slab);
- }
- 
--EXPORT_SYMBOL_GPL(dccp_tx_hist_purge_older);
-+EXPORT_SYMBOL_GPL(dccp_tx_hist_purge);
- 
- /*
-  * 	Receiver History Routines
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -95,10 +95,6 @@ static inline void dccp_tx_hist_entry_de
- extern void dccp_tx_hist_purge(struct dccp_tx_hist *hist,
- 			       struct list_head *list);
- 
--extern void dccp_tx_hist_purge_older(struct dccp_tx_hist *hist,
--				     struct list_head *list,
--				     struct dccp_tx_hist_entry *next);
--
- /*
-  * 	Receiver History data structures and declarations
-  */
+------=_Part_164563_30954705.1173197539111
+Content-Type: text/x-patch; 
+	name=0002-DCCP-Set-RTO-for-newly-created-child-socket.patch; 
+	charset=ANSI_X3.4-1968
+Content-Transfer-Encoding: base64
+X-Attachment-Id: f_eyyjgqgk
+Content-Disposition: attachment; filename="0002-DCCP-Set-RTO-for-newly-created-child-socket.patch"
+
+RnJvbSAyZDUzOTY4NzkxYjczMmNiYTQyYzNmZjJjMzcxMDYwYTM0OWRhMmQ3IE1vbiBTZXAgMTcg
+MDA6MDA6MDAgMjAwMQpGcm9tOiBHZXJyaXQgUmVua2VyIDxnZXJyaXRAZXJnLmFiZG4uYWMudWs+
+CkRhdGU6IFR1ZSwgNiBNYXIgMjAwNyAxMzowNTowOCAtMDMwMApTdWJqZWN0OiBbUEFUQ0hdIFtE
+Q0NQXTogU2V0IFJUTyBmb3IgbmV3bHkgY3JlYXRlZCBjaGlsZCBzb2NrZXQKClRoaXMgbWlycm9y
+cyBhIHJlY2VudCBjaGFuZ2UgaW4gdGNwX29wZW5fcmVxX2NoaWxkLCB3aGVyZWJ5IHRoZSBpY3Nr
+X3J0byBvZiB0aGUKbmV3bHkgY3JlYXRlZCBjaGlsZCBzb2NrZXQgd2FzIG5vdCBzZXQgKGJ1dCBy
+YXRoZXIgb24gdGhlIHBhcmVudCBzb2NrZXQpLiBTYW1lCmZpeCBmb3IgRENDUC4KClNpZ25lZC1v
+ZmYtYnk6IEdlcnJpdCBSZW5rZXIgPGdlcnJpdEBlcmcuYWJkbi5hYy51az4KU2lnbmVkLW9mZi1i
+eTogQXJuYWxkbyBDYXJ2YWxobyBkZSBNZWxvIDxhY21lQHJlZGhhdC5jb20+Ci0tLQogbmV0L2Rj
+Y3AvbWluaXNvY2tzLmMgfCAgICAyICstCiAxIGZpbGVzIGNoYW5nZWQsIDEgaW5zZXJ0aW9ucygr
+KSwgMSBkZWxldGlvbnMoLSkKCmRpZmYgLS1naXQgYS9uZXQvZGNjcC9taW5pc29ja3MuYyBiL25l
+dC9kY2NwL21pbmlzb2Nrcy5jCmluZGV4IDY2NTZiYjQuLjZkMjM1YjMgMTAwNjQ0Ci0tLSBhL25l
+dC9kY2NwL21pbmlzb2Nrcy5jCisrKyBiL25ldC9kY2NwL21pbmlzb2Nrcy5jCkBAIC0xMDMsNyAr
+MTAzLDcgQEAgc3RydWN0IHNvY2sgKmRjY3BfY3JlYXRlX29wZW5yZXFfY2hpbGQoc3RydWN0IHNv
+Y2sgKnNrLAogCiAJaWYgKG5ld3NrICE9IE5VTEwpIHsKIAkJY29uc3Qgc3RydWN0IGRjY3BfcmVx
+dWVzdF9zb2NrICpkcmVxID0gZGNjcF9yc2socmVxKTsKLQkJc3RydWN0IGluZXRfY29ubmVjdGlv
+bl9zb2NrICpuZXdpY3NrID0gaW5ldF9jc2soc2spOworCQlzdHJ1Y3QgaW5ldF9jb25uZWN0aW9u
+X3NvY2sgKm5ld2ljc2sgPSBpbmV0X2NzayhuZXdzayk7CiAJCXN0cnVjdCBkY2NwX3NvY2sgKm5l
+d2RwID0gZGNjcF9zayhuZXdzayk7CiAJCXN0cnVjdCBkY2NwX21pbmlzb2NrICpuZXdkbXNrID0g
+ZGNjcF9tc2sobmV3c2spOwogCi0tIAoxLjUuMC4yCgo=
+------=_Part_164563_30954705.1173197539111--
