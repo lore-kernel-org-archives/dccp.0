@@ -1,20 +1,86 @@
-From: David Miller <davem@davemloft.net>
-Date: Sun, 25 Mar 2007 04:01:43 +0000
-Subject: Re: [2.6 patch] make dccp_write_xmit_timer() static again
-Message-Id: <20070324.210143.97294360.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 07 Mar 2007 07:52:04 +0000
+Subject: [PATCHv3] [DCCP]: Revert changes which disallow bidirectional communication
+Message-Id: <200703070752.05125@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <20070324130652.GJ752@stusta.de>
-In-Reply-To: <20070324130652.GJ752@stusta.de>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Adrian Bunk <bunk@stusta.de>
-Date: Sat, 24 Mar 2007 14:06:52 +0100
+Thanks David, attached is a patch which applies on today's (rc3) tree.
+Arnaldo, please ignore the interdiff I sent, it is obsoleted by this patch.
 
-> dccp_write_xmit_timer() needlessly became global.
-> 
-> Signed-off-by: Adrian Bunk <bunk@stusta.de>
+-------------------> Patchv3 (applies on 2.6.20-rc3) <---------------
+[DCCP]: Revert patch which disables bidirectional mode
 
-Applied, thanks Adrian.
+This reverts an earlier patch which disabled bidirectional mode, meaning that
+a listening (passive) socket was not allowed to write to the other (active)
+end of the connection.
+
+This mode had been disabled when there were problems with CCID3, but it
+imposes a constraint on socket programming and thus hinders deployment.
+
+A change is included to ignore RX feedback received by the TX CCID3 module.
+
+Many thanks to Andre Noll for pointing out this issue.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |    7 +------
+ net/dccp/input.c       |   21 ++++-----------------
+ 2 files changed, 5 insertions(+), 23 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -554,12 +554,7 @@ static void ccid3_hc_tx_packet_recv(stru
+ 		/* set idle flag */
+ 		hctx->ccid3hctx_idle = 1;
+ 		break;
+-	case TFRC_SSTATE_NO_SENT:
+-		/*
+-		 * XXX when implementing bidirectional rx/tx check this again
+-		 */
+-		DCCP_WARN("Illegal ACK received - no packet sent\n");
+-		/* fall through */
++	case TFRC_SSTATE_NO_SENT:	/* fall through */
+ 	case TFRC_SSTATE_TERM:		/* ignore feedback when closing */
+ 		break;
+ 	}
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -250,18 +250,8 @@ int dccp_rcv_established(struct sock *sk
+ 			    DCCP_ACKVEC_STATE_RECEIVED))
+ 		goto discard;
+ 
+-	/*
+-	 * Deliver to the CCID module in charge.
+-	 * FIXME: Currently DCCP operates one-directional only, i.e. a listening
+-	 *        server is not at the same time a connecting client. There is
+-	 *        not much sense in delivering to both rx/tx sides at the moment
+-	 *        (only one is active at a time); when moving to bidirectional
+-	 *        service, this needs to be revised.
+-	 */
+-	if (dccp_sk(sk)->dccps_role = DCCP_ROLE_CLIENT)
+-		ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
+-	else	/* listening or connected server */
+-		ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
++	ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
++	ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
+ 
+ 	return __dccp_rcv_established(sk, skb, dh, len);
+ discard:
+@@ -504,11 +494,8 @@ int dccp_rcv_state_process(struct sock *
+ 				    DCCP_ACKVEC_STATE_RECEIVED))
+ 			goto discard;
+ 
+-		/* XXX see the comments in dccp_rcv_established about this */
+-		if (dccp_sk(sk)->dccps_role = DCCP_ROLE_CLIENT)
+-			ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
+-		else
+-			ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
++		ccid_hc_rx_packet_recv(dp->dccps_hc_rx_ccid, sk, skb);
++		ccid_hc_tx_packet_recv(dp->dccps_hc_tx_ccid, sk, skb);
+ 	}
+ 
+ 	/*
