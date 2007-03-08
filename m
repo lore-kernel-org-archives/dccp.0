@@ -1,46 +1,31 @@
-From: Andre Noll <maan@systemlinux.org>
-Date: Thu, 08 Mar 2007 08:40:14 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 08 Mar 2007 08:58:02 +0000
 Subject: Re: kernel BUG at kernel/timer.c:407!
-Message-Id: <20070308084014.GA25100@skl-net.de>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="GvXjxJ+pjyke8COw"
+Message-Id: <200703080858.02864@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <20070305143240.GW22572@skl-net.de>
 In-Reply-To: <20070305143240.GW22572@skl-net.de>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+Quoting Andre Noll:
+|  On 10:24, Andre Noll wrote:
+|  > > Can you confirm that, when the `culprit' patch is reverted (as per
+|  > > the first email), the bug disappears?
+|  > 
+|  > I double-checked this before sending the first mail, but I also will
+|  > try the patch you sent today and report tomorrow.
+|  
+|  I now can confirm that also with 2.6.21-rc3 your patch makes the bug
+|  go away, so feel free to add my Signed-Off.
 
---GvXjxJ+pjyke8COw
-Content-Type: text/plain; charset=us-ascii
-Content-Disposition: inline
-Content-Transfer-Encoding: quoted-printable
+Would have liked to do that since in effect you identified this issue.
+For a sign-off it is probably too late, but in any case it is noted in the
+commit message.
 
-On 10:24, Andre Noll wrote:
-> > Can you confirm that, when the `culprit' patch is reverted (as per
-> > the first email), the bug disappears?
->=20
-> I double-checked this before sending the first mail, but I also will
-> try the patch you sent today and report tomorrow.
+Glad to hear that the bug is remedied - that means two issues solved :)
 
-I now can confirm that also with 2.6.21-rc3 your patch makes the bug
-go away, so feel free to add my Signed-Off.
-
-Thanks
-Andre
---=20
-The only person who always got his work done by Friday was Robinson Crusoe
-
---GvXjxJ+pjyke8COw
-Content-Type: application/pgp-signature; name="signature.asc"
-Content-Description: Digital signature
-Content-Disposition: inline
-
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.1 (GNU/Linux)
-
-iD8DBQFF78vuWto1QDEAkw8RAiHMAJ9baIQIbM8XPEWjrZlDE8GdkTXM9wCdEpfs
-h0ZtogZOojZY0kOgo2QBI/A=
-=cnnR
------END PGP SIGNATURE-----
-
---GvXjxJ+pjyke8COw--
+Thanks again
+Gerrit
