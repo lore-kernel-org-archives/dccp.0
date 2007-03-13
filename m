@@ -1,58 +1,49 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 13 Mar 2007 07:31:26 +0000
+Date: Tue, 13 Mar 2007 07:58:56 +0000
 Subject: Re: [ANNOUNCE]: Patch Preview
-Message-Id: <200703130731.26644@strip-the-willow>
+Message-Id: <200703130758.56825@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200703121557.12709@strip-the-willow>
 In-Reply-To: <200703121557.12709@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-|  I started merging some, to speed up the process I'll accept some even
-|  with reservations on some aspects of it, such as:
-Please do let me know those reservations. I'd rather revise a patch several
-times than submitting something which is only half as good as could be.
-
-  
-|  1a_simplify_seqno_arithmetic.diff:
-|  
-|  - use of all upercase (ADD48, etc)
-|  - DCCP_MAX_SEQNO should really be something like whats in
-|  include/linux/kernel.h:
-|  
-|  #define INT_MAX         ((int)(~0U>>1))
-|  #define INT_MIN         (-INT_MAX - 1)
-|  #define UINT_MAX        (~0U)
-|  #define LONG_MAX        ((long)(~0UL>>1))
-|  #define LONG_MIN        (-LONG_MAX - 1)
-|  #define ULONG_MAX       (~0UL)
-|  #define LLONG_MAX       ((long long)(~0ULL>>1))
-|  #define LLONG_MIN       (-LLONG_MAX - 1)
-|  #define ULLONG_MAX      (~0ULL)
-|  
-|  But named UINT48_MAX or something in this direction, In fact I don't
-|  see why these things are in kernel.h, they probably would be better of
-|  in limits.h, like in userland.
-I fully agree, will re-submit a v2 later on. If you don't mind, I'd prefer
-to keep the long (LL) hex constants in the definition of INT48_MIN/UINT48_MAX.
-  
-  
-|  1e_dccp_inc_seqno-no-pointer-variant.diff:
-|  
-|  What is the point? INC48() is introduced but not used anywhere besides
-|  in dccp_inc_seqno, where there is no changes with this patch, does the
-|  other patches after this series use it?
-The purpose of the INC48() macro is to increment bitfield u64 counters
-(those which were declared as u64 ccidvariable:48, ... ). The macro is
-not currently used by the code, it had initially been used for a piece
-of code Ian wrote. Since no other patches are currently depend on it, 
-and since there are already the ADD48/SUB48 macros, I have dropped this
-patch - hope you are happy with this. 
-
-(Btw, follows48 (of patch 1d) is also no longer used and could be dropped, 
- but this can only be done when all other patches are applied).
-
-Many thanks for looking into this and for feedback 
-Gerrit
+fCAgSSdtIG5vdCBzbyBjb25maWRlbnQgd2hlbiBpdCBjb21lcyB0byB0aGUgZGVidWdnaW5nIGNv
+ZGUgd2hpY2ggaXMgd2h5CnwgIEkgZGlkbid0IGNvbW1lbnQuIE9uZSB0aGluZyBpcyBJIG5vdGlj
+ZSB0aGlzIGNvZGUgd2hpY2ggbG9va3MgbGlrZSBpdAp8ICBjb3VsZCBiZSB1c2VmdWwgaWYgcG9y
+dGVkIHRvIERDQ1A6CnwgIGh0dHA6Ly9tYXN0ZXIua2VybmVsLm9yZy9naXQvP3A9bGludXgva2Vy
+bmVsL2dpdC9kYXZlbS9uZXQtMi42LjIyLmdpdDthPWNvbW1pdDtojjIxMDFhOWZhYWI0M2RjZjMw
+N2Q0Njc4NGExZWRlNzk5N2ZlNzI5CnwgIAp8ICBUaGlzIGFsbG93cyB0dXJuaW5nIGRlYnVnIGNv
+ZGUgb24vb2ZmIGJ5IHN5c2N0bC4KR29vZCBpZGVhLCBidXQgSSB0aGluayB0aGF0IG1ha2VzIHRo
+aW5ncyB1bm5lY2Vzc2FyaWx5IGNvbXBsZXguIFdlIHdvdWxkIG5lZWQgCiAqIGEgc3lzY3RsIHN1
+YnRyZWUgb2YgbmV0LmRjY3AgZm9yIGVhY2ggbW9kdWxlIHdpc2hpbmcgdG8gZGVidWcgc29tZXRo
+aW5nIGFuZAogKiBhIHN5c2N0bCB2YXJpYWJsZSBmb3IgZWFjaCBzdWNoIG1vZHVsZQpUaGF0IG1h
+a2VzIHRoZSBjb2RlIG11Y2ggbW9yZSBjb21wbGV4LiBXaGF0IHRoaXMgcGF0Y2ggZG9lcyBpcyBt
+ZXJlbHkgdG8gc3dpdGNoCgogICJkZWJ1Z2dpbmcgaXMgYWx3YXlzIHR1cm5lZCBvbiB3aGVuIERD
+Q1AgYW5kIGl0cyBtb2R1bGVzIAogICBhcmUgYnVpbHQgc3RhdGljYWxseSBpbnRvIHRoZSBrZXJu
+ZWwiCgpvZmYsIGZvciB0aGUgcmVhc29ucyB0aGF0CiAoYSkgc29tZW9uZSB3aG8gYnVpbGRzIERD
+Q1Agc3RhdGljYWxseSBpbnRvIHRoZSBrZXJuZWwgaXMgbW9zdCBsaWtlbHkgbm90IGludGVyZXN0
+ZWQKICAgICBpbiBkZXZlbG9waW5nIGFuZC9vciBkZWJ1Z2dpbmcgdGhlIERDQ1AgbW9kdWxlIGFu
+ZAogKGIpIHdpbGwgbm90IG11Y2ggYXBwcmVjaWF0ZSBoaXMgc3lzbG9ncyBiZWluZyBmbG9vZGVk
+IGJ5IGRlYnVnZ2luZyBtZXNzYWdlcyB0dXJuZWQgCiAgICAgb24gYnkgZGVmYXVsdC4KCkJ1dCBh
+cyBzYWlkLCBJIGhhdmUgbm8gc3Ryb25nIG9waW5pb25zIGFib3V0IHRoaXMgcGF0Y2guCgp8ICBU
+aGUgbmV3IHBhdGNoZXMgc291bmQgZ3JlYXQgYnV0IEkgZmluZCB0aGVtIGhhcmQgdG8gcmV2aWV3
+IGFsbAp8ICBjb21iaW5lZC4gQXJuYWxkbyBoYXMgYXNrZWQgZm9yIGEgZ2l0IHRyZWUgSSBzZWUu
+IENhbiB0aGF0IGJlCnwgIHByb3ZpZGVkLCBvciBJIHByZWZlciB5b3VyIGRpcmVjdG9yeSBzdHJ1
+Y3R1cmUgb2YgcGF0Y2hlcyBzbyBJIGNhbgp8ICByZWFkIHRob3VnaCB0aGVtPyBZb3UgaW1wbGll
+ZCB0aGF0IHlvdSBoYWQgZG9uZSB0aGlzIGZvciBuZXcgcGF0Y2hlcwp8ICBidXQgSSBjYW4ndCBh
+Y3R1YWxseSBmaW5kIGl0LgpObyB0aGV5IGFyZSBub3QgbWVhbnQgZm9yIHJldmlldy4gVGhlIHNv
+bGUgcHVycG9zZSBpcywgc2luY2UgdGhlIG51bWJlciBvZiBpbmRpdmlkdWFsCnBhdGNoZXMgaXMg
+cXVpdGUgaGlnaCwgdG8gZ2V0IGFuIG92ZXJhbGwgcGljdHVyZS4gUGF0Y2hlcyB3aWxsIGJlIHN1
+Ym1pdHRlZCBhcyBzb29uCmFzIHRoZXJlIGlzIHRpbWUuIEkgYWxzbyBoYXZlIGEgbG90IG9mIGRv
+Y3VtZW50YXRpb24gdGhhdCBnb2VzIHdpdGggaXQsIHdpbGwgdXBsb2FkCnRoYXQgdmVyeSBzb29u
+IC0gdGhpcyBhbGxvd3MgYWxzbyB0byB1bmRlcnN0YW5kIHRoZSBkZXRhaWxzIGJldHRlci4gQW5k
+IGRvY3VtZW50YXRpb24KaXMgdGhlIG1vc3QgaW1wb3J0YW50IHRoaW5nIGhlcmUgLSBJIGhhdmUg
+c3BlbnQgYSBsb3Qgb2YgdGltZSBqdXN0IHdpdGggYSBzaGVldCBvZgpwYXBlcjogQ0NJRDMgaXMg
+c28gY29tcGxpY2F0ZWQgdGhhdCB3aXRob3V0IGEgZGlhZ3JhbSBvciBhIGZsb3djaGFydCBvbmUg
+Z2V0cyB2ZXJ5CnZlcnkgZWFzaWx5IGxvc3QuCi0KVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxp
+c3Q6IHNlbmQgdGhlIGxpbmUgInVuc3Vic2NyaWJlIGRjY3AiIGluCnRoZSBib2R5IG9mIGEgbWVz
+c2FnZSB0byBtYWpvcmRvbW9Admdlci5rZXJuZWwub3JnCk1vcmUgbWFqb3Jkb21vIGluZm8gYXQg
+IGh0dHA6Ly92Z2VyLmtlcm5lbC5vcmcvbWFqb3Jkb21vLWluZm8uaHRtbA==
