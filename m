@@ -1,124 +1,131 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 21 Mar 2007 18:45:15 +0000
-Subject: [PATCH 14/25]: Implement rfc3448bis changes to feedback reception
-Message-Id: <200703211845.15408@strip-the-willow>
+Date: Wed, 21 Mar 2007 18:45:36 +0000
+Subject: [PATCH 18/25]: Reduce time spent while write-lock is held
+Message-Id: <200703211845.36548@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[CCID 3]: Implement rfc3448bis changes to feedback reception
+[CCID 3]: Reduce time spent while write-lock is held
 
-This implements the algorithm to update the allowed sending rate X upon 
-receiving feedback packets, as described in draft rfc3448bis, 4.2/4.3.
+This minimizes the time during which the `write_lock' is held: by using a
+temporary list_head and re-adjusting the pointers of the old list accordingly.
+The clean-up operation can then safely be done outside the lock, since the
+newly created list is then `homeless'.
 
-Some changes (use of Larger Initial Windows) were already present, this patch
-adds the remaining ones. In particular:
+ 1. For dccp_tx_hist_purge, this is conveniently done by using list_replace_init,
 
- * use t_RTO to distinguish the case "initial feedback packet":
-   as per earlier patch, it uses "state = NO_FBACK" to imply that 
-     (a) either nofeedback timer expired (when t_RTO != 0) or
-     (b) initial feedback packet         (when t_RTO = 0);
- * no reduction of sending rate afer nofeedback timer expiry when p = 0;
- * implements the clause ``if [...] not the first packet after a nofeedback 
-   timer'' of draft rfc3448bis, 4.3.
+ 2. the case for dccp_tx_hist_purge_older is analogous and, in the absence of a
+    matching library function, done manually;
+
+ 3. the `dangerous' function dccp_tx_hist_purge_older has been removed by 
+    merging its functionality into dccp_tx_hist_get_send_time.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid3.c |   66 +++++++++++++++++++++++++------------------------
- 1 file changed, 35 insertions(+), 31 deletions(-)
+ net/dccp/ccids/lib/packet_history.c |   47 +++++++++++++++++++-----------------
+ net/dccp/ccids/lib/packet_history.h |    4 ---
+ 2 files changed, 25 insertions(+), 26 deletions(-)
 
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -419,7 +419,6 @@ static void ccid3_hc_tx_packet_sent(stru
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -87,6 +87,16 @@ void dccp_tx_hist_delete(struct dccp_tx_
  
- static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ EXPORT_SYMBOL_GPL(dccp_tx_hist_delete);
+ 
++static void __dccp_tx_hist_wipe(struct list_head *head, struct kmem_cache *slab)
++{
++	struct dccp_tx_hist_entry *entry, *next;
++
++	list_for_each_entry_safe(entry, next, head, dccphtx_node) {
++		list_del(&entry->dccphtx_node);
++		kmem_cache_free(slab, entry);
++	}
++}
++
+ /**
+  *  dccp_tx_hist_get_send_time  -  Retrieve timestamp of sent packet
+  *
+@@ -101,6 +111,7 @@ int dccp_tx_hist_get_send_time(struct dc
+ 			       struct timeval *t_send)
  {
--	const struct dccp_sock *dp = dccp_sk(sk);
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 	struct ccid3_options_received *opt_recv;
- 	struct dccp_tx_hist_entry *packet;
-@@ -481,41 +480,45 @@ static void ccid3_hc_tx_packet_recv(stru
- 	hctx->ccid3hctx_rtt = hctx->ccid3hctx_rtt = 0 ?  r_sample
- 			    : (9 * hctx->ccid3hctx_rtt + r_sample) / 10;
+ 	struct dccp_tx_hist_entry *entry;
++	struct list_head free_this;
+ 	int found = 0;
  
-+	/*
-+	 * Update allowed sending rate as per draft rfc3448bis, 4.2/4.3
-+	 */
- 	if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
--		/*
--		 * Larger Initial Windows [RFC 4342, sec. 5]
--		 */
--		hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
--		hctx->ccid3hctx_t_ld = now;
+ 	write_lock_bh(&dccp_tx_hist_lock);
+@@ -108,12 +119,20 @@ int dccp_tx_hist_get_send_time(struct dc
+ 		if (entry->dccphtx_seqno = seq) {
+ 			found = 1;
+ 			*t_send = entry->dccphtx_tstamp;
++			/* forget/free all entries older than this one */
++			free_this.next		= entry->dccphtx_node.next;
++			free_this.next->prev	= &free_this;
++			free_this.prev		= list->prev;
++			free_this.prev->next	= &free_this;
++
++			entry->dccphtx_node.next = list;
++			list->prev		 = &entry->dccphtx_node;
+ 			break;
+ 		}
++	write_unlock_bh(&dccp_tx_hist_lock);
+ 
+ 	if (found)
+-		dccp_tx_hist_purge_older(hist, list, entry);
+-	write_unlock_bh(&dccp_tx_hist_lock);
++		__dccp_tx_hist_wipe(&free_this, hist->dccptxh_slab);
+ 
+ 	return found;
+ }
+@@ -132,32 +151,16 @@ EXPORT_SYMBOL_GPL(dccp_tx_hist_add_entry
+ 
+ void dccp_tx_hist_purge(struct dccp_tx_hist *hist, struct list_head *list)
+ {
+-	struct dccp_tx_hist_entry *entry, *next;
++	struct list_head free_this;
+ 
+ 	write_lock_bh(&dccp_tx_hist_lock);
+-	list_for_each_entry_safe(entry, next, list, dccphtx_node) {
+-		list_del_init(&entry->dccphtx_node);
+-		dccp_tx_hist_entry_delete(hist, entry);
+-	}
++	list_replace_init(list, &free_this);
+ 	write_unlock_bh(&dccp_tx_hist_lock);
+-}
+ 
+-EXPORT_SYMBOL_GPL(dccp_tx_hist_purge);
 -
--		ccid3_update_send_interval(hctx);
+-/* XXX careful, this one is not lock-protected */
+-void dccp_tx_hist_purge_older(struct dccp_tx_hist *hist,
+-			      struct list_head *list,
+-			      struct dccp_tx_hist_entry *packet)
+-{
+-	struct dccp_tx_hist_entry *next;
 -
--		ccid3_pr_debug("%s(%p), s=%u, MSS=%u, "
--			       "R_sample=%uus, X=%u\n", dccp_role(sk),
--			       sk, hctx->ccid3hctx_s,
--			       dp->dccps_mss_cache, r_sample,
--			       (unsigned)(hctx->ccid3hctx_x >> 6));
+-	list_for_each_entry_safe_continue(packet, next, list, dccphtx_node) {
+-		list_del_init(&packet->dccphtx_node);
+-		dccp_tx_hist_entry_delete(hist, packet);
+-	}
++	__dccp_tx_hist_wipe(&free_this, hist->dccptxh_slab);
+ }
  
- 		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
--	} else {
+-EXPORT_SYMBOL_GPL(dccp_tx_hist_purge_older);
++EXPORT_SYMBOL_GPL(dccp_tx_hist_purge);
  
--		/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
--		if (hctx->ccid3hctx_p > 0)
--			hctx->ccid3hctx_x_calc -				tfrc_calc_x(hctx->ccid3hctx_s,
--					    hctx->ccid3hctx_rtt,
--					    hctx->ccid3hctx_p);
--		ccid3_hc_tx_update_x(sk, &now);
+ /*
+  * 	Receiver History Routines
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -95,10 +95,6 @@ static inline void dccp_tx_hist_entry_de
+ extern void dccp_tx_hist_purge(struct dccp_tx_hist *hist,
+ 			       struct list_head *list);
+ 
+-extern void dccp_tx_hist_purge_older(struct dccp_tx_hist *hist,
+-				     struct list_head *list,
+-				     struct dccp_tx_hist_entry *next);
 -
--		ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, "
--			       "p=%u, X_calc=%u, X_recv=%u, X=%u\n",
--			       dccp_role(sk),
--			       sk, hctx->ccid3hctx_rtt, r_sample,
--			       hctx->ccid3hctx_s, hctx->ccid3hctx_p,
--			       hctx->ccid3hctx_x_calc,
--			       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
--			       (unsigned)(hctx->ccid3hctx_x >> 6));
-+		if (hctx->ccid3hctx_t_rto = 0) {
-+			/*
-+			 * Initial feedback packet: Larger Initial Windows (4.2)
-+			 */
-+			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
-+			hctx->ccid3hctx_t_ld = now;
-+
-+			ccid3_update_send_interval(hctx);
-+
-+			goto done_computing_x;
-+
-+		} else if (hctx->ccid3hctx_p = 0) {
-+			/*
-+			 * First feedback after nofeedback timer expiry (4.3)
-+			 */
-+			goto done_computing_x;
-+		}
- 	}
-+	/* perform step (4) of draft rfc3448bis, section 4.3 */
-+	if (hctx->ccid3hctx_p > 0)
-+		hctx->ccid3hctx_x_calc = tfrc_calc_x(hctx->ccid3hctx_s,
-+						     hctx->ccid3hctx_rtt,
-+						     hctx->ccid3hctx_p);
-+	ccid3_hc_tx_update_x(sk, &now);
-+
-+done_computing_x:
-+	ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, p=%u, X_calc=%u, "
-+		       "X_recv=%u, X=%u\n", dccp_role(sk), sk,
-+		       hctx->ccid3hctx_rtt, r_sample, hctx->ccid3hctx_s,
-+		       hctx->ccid3hctx_p, hctx->ccid3hctx_x_calc,
-+		       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
-+		       (unsigned)(hctx->ccid3hctx_x >> 6));
- 
- 	/* unschedule no feedback timer */
- 	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
-@@ -526,6 +529,7 @@ static void ccid3_hc_tx_packet_recv(stru
- 	/*
- 	 * As we have calculated new ipi, delta, t_nom it is possible
- 	 * that we now can send a packet, so wake up dccp_wait_for_ccid
-+	 * (NB: This currently only happens in dccp_send_close)
- 	 */
- 	sk->sk_write_space(sk);
- 
+ /*
+  * 	Receiver History data structures and declarations
+  */
