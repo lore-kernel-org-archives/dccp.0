@@ -1,96 +1,150 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 13 Mar 2007 07:44:41 +0000
-Subject: [PATCH v2]: 1a_simplify_seqno_arithmetic.diff
-Message-Id: <200703130744.41879@strip-the-willow>
+Date: Wed, 21 Mar 2007 18:46:04 +0000
+Subject: [PATCH 23/25]: Unaligned pointer access
+Message-Id: <200703211846.04282@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Constants renamed as suggested and uploaded to 
-       http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog
-Patch 1e* has been dropped. Many thanks, Gerrit.
+[DCCP]: Unaligned pointer access
 
-------------------------------> Patch v2 <------------------------------------
-[DCCP]: 48-bit sequence number arithmetic
+This fixes `unaligned (read) access' errors of the type
 
-This patch 
- * organizes the sequence arithmetic functions into one corner of dccp.h
- * performs a small modification of dccp_set_seqno to make it more widely reusable
-   (now it is safe to use any number, since it performs modulo-2^48 assignment)
- * adds functions and generic macros for 48-bit sequence arithmetic:
- 	--48 bit complement
- 	--modulo-48 addition and modulo-48 subtraction
-	--dccp_inc_seqno now a special case of add48
-Constants renamed following a suggestion by Arnaldo. 
+ Kernel unaligned access at TPC[100f970c] dccp_parse_options+0x4f4/0x7e0 [dccp]
+ Kernel unaligned access at TPC[1011f2e4] ccid3_hc_tx_parse_options+0x1ac/0x380 [dccp_ccid3]
+ Kernel unaligned access at TPC[100f9898] dccp_parse_options+0x680/0x880 [dccp]
+
+by using the get_unaligned macro for parsing options.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/dccp.h |   47 +++++++++++++++++++++++++++--------------------
- 1 file changed, 27 insertions(+), 20 deletions(-)
+ net/dccp/ccids/ccid3.c |    9 +++++----
+ net/dccp/ccids/ccid3.h |    1 +
+ net/dccp/options.c     |   34 ++++++++++++++++++++++------------
+ 3 files changed, 28 insertions(+), 16 deletions(-)
 
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -92,6 +92,32 @@ extern int  sysctl_dccp_feat_send_ack_ve
- extern int  sysctl_dccp_feat_send_ndp_count;
- extern int  sysctl_dccp_tx_qlen;
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -40,6 +40,7 @@
+ #include <linux/time.h>
+ #include <linux/types.h>
+ #include <linux/tfrc.h>
++#include <asm/unaligned.h>
+ #include "../ccid.h"
  
-+/*
-+ *	48-bit sequence number arithmetic (signed and unsigned)
-+ */
-+#define INT48_MIN	  0x800000000000LL		/* 2^47	    */
-+#define UINT48_MAX	  0xFFFFFFFFFFFFLL		/* 2^48 - 1 */
-+#define COMPLEMENT48(x)	 (0x1000000000000LL - (x))	/* 2^48 - x */
-+#define TO_SIGNED48(x)	 (((x) < INT48_MIN)? (x) : -COMPLEMENT48( (x)))
-+#define TO_UNSIGNED48(x) (((x) >= 0)?	     (x) :  COMPLEMENT48(-(x)))
-+#define ADD48(a, b)	 (((a) + (b)) & UINT48_MAX)
-+#define SUB48(a, b)	 ADD48((a), COMPLEMENT48(b))
-+
-+static inline void dccp_set_seqno(u64 *seqno, u64 value)
-+{
-+	*seqno = value & UINT48_MAX;
-+}
-+
-+static inline void dccp_inc_seqno(u64 *seqno)
-+{
-+	*seqno = ADD48(*seqno, 1);
-+}
-+
-+static inline u64 dccp_delta_seqno(u64 seqno1, u64 seqno2)
-+{
-+	return ((seqno2 << 16) - (seqno1 << 16)) >> 16;
-+}
-+
- /* is seq1 < seq2 ? */
- static inline int before48(const u64 seq1, const u64 seq2)
- {
-@@ -314,26 +340,7 @@ static inline int dccp_packet_without_ac
- 	return type = DCCP_PKT_DATA || type = DCCP_PKT_REQUEST;
- }
+ /* Two seconds as per RFC 3448 4.2 */
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -14,6 +14,7 @@
+ #include <linux/dccp.h>
+ #include <linux/module.h>
+ #include <linux/types.h>
++#include <asm/unaligned.h>
+ #include <linux/kernel.h>
+ #include <linux/skbuff.h>
  
--#define DCCP_MAX_SEQNO ((((u64)1) << 48) - 1)
--#define DCCP_PKT_WITHOUT_ACK_SEQ (DCCP_MAX_SEQNO << 2)
--
--static inline void dccp_set_seqno(u64 *seqno, u64 value)
--{
--	if (value > DCCP_MAX_SEQNO)
--		value -= DCCP_MAX_SEQNO + 1;
--	*seqno = value;
--}
--
--static inline u64 dccp_delta_seqno(u64 seqno1, u64 seqno2)
--{
--	return ((seqno2 << 16) - (seqno1 << 16)) >> 16;
--}
--
--static inline void dccp_inc_seqno(u64 *seqno)
--{
--	if (++*seqno > DCCP_MAX_SEQNO)
--		*seqno = 0;
--}
-+#define DCCP_PKT_WITHOUT_ACK_SEQ (UINT48_MAX << 2)
+@@ -68,7 +69,7 @@ int dccp_parse_options(struct sock *sk, 
+ 	struct dccp_options_received *opt_recv = &dp->dccps_options_received;
+ 	unsigned char opt, len;
+ 	unsigned char *value;
+-	u32 elapsed_time;
++	u32 elapsed_time, opt_val;
+ 	int rc;
+ 	int mandatory = 0;
  
- static inline void dccp_hdr_set_seq(struct dccp_hdr *dh, const u64 gss)
- {
+@@ -155,7 +156,8 @@ int dccp_parse_options(struct sock *sk, 
+ 			if (len != 4)
+ 				goto out_invalid_option;
+ 
+-			opt_recv->dccpor_timestamp = ntohl(*(__be32 *)value);
++			opt_val = get_unaligned((u32 *)value);
++			opt_recv->dccpor_timestamp = ntohl(opt_val);
+ 
+ 			dp->dccps_timestamp_echo = opt_recv->dccpor_timestamp;
+ 			do_gettimeofday(&dp->dccps_timestamp_time);
+@@ -169,7 +171,8 @@ int dccp_parse_options(struct sock *sk, 
+ 			if (len != 4 && len != 6 && len != 8)
+ 				goto out_invalid_option;
+ 
+-			opt_recv->dccpor_timestamp_echo = ntohl(*(__be32 *)value);
++			opt_val = get_unaligned((u32 *)value);
++			opt_recv->dccpor_timestamp_echo = ntohl(opt_val);
+ 
+ 			dccp_pr_debug("%s rx opt: TIMESTAMP_ECHO=%u, len=%d, "
+ 				      "ackno=%llu",  dccp_role(sk),
+@@ -178,16 +181,20 @@ int dccp_parse_options(struct sock *sk, 
+ 				      (unsigned long long)
+ 				      DCCP_SKB_CB(skb)->dccpd_ack_seq);
+ 
++			value += 4;
+ 
+-			if (len = 4) {
++			if (len = 4) {		/* no elapsed time included */
+ 				dccp_pr_debug_cat("\n");
+ 				break;
+ 			}
+ 
+-			if (len = 6)
+-				elapsed_time = ntohs(*(__be16 *)(value + 4));
+-			else
+-				elapsed_time = ntohl(*(__be32 *)(value + 4));
++			if (len = 6) {		/* 2-byte elapsed time */
++				opt_val = get_unaligned((u16 *)value);
++				elapsed_time = ntohs((u16)opt_val);
++			} else {		/* 4-byte elapsed time */
++				opt_val = get_unaligned((u32 *)value);
++				elapsed_time = ntohl(opt_val);
++			}
+ 
+ 			dccp_pr_debug_cat(", ELAPSED_TIME=%d\n", elapsed_time);
+ 
+@@ -202,10 +209,13 @@ int dccp_parse_options(struct sock *sk, 
+ 			if (pkt_type = DCCP_PKT_DATA)
+ 				continue;
+ 
+-			if (len = 2)
+-				elapsed_time = ntohs(*(__be16 *)value);
+-			else
+-				elapsed_time = ntohl(*(__be32 *)value);
++			if (len = 2) {
++				opt_val = get_unaligned((u16 *)value);
++				elapsed_time = ntohs((u16)opt_val);
++			} else {
++				opt_val = get_unaligned((u32 *)value);
++				elapsed_time = ntohl(opt_val);
++			}
+ 
+ 			if (elapsed_time > opt_recv->dccpor_elapsed_time)
+ 				opt_recv->dccpor_elapsed_time = elapsed_time;
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -560,6 +560,7 @@ static int ccid3_hc_tx_parse_options(str
+ 	const struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	struct ccid3_options_received *opt_recv;
++	u32 opt_val;
+ 
+ 	BUG_ON(hctx = NULL);
+ 
+@@ -581,8 +582,8 @@ static int ccid3_hc_tx_parse_options(str
+ 				  dccp_role(sk), sk, len);
+ 			rc = -EINVAL;
+ 		} else {
+-			opt_recv->ccid3or_loss_event_rate -						ntohl(*(__be32 *)value);
++			opt_val = get_unaligned((u32 *)value);
++			opt_recv->ccid3or_loss_event_rate = ntohl(opt_val);
+ 			ccid3_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
+ 				       dccp_role(sk), sk,
+ 				       opt_recv->ccid3or_loss_event_rate);
+@@ -603,8 +604,8 @@ static int ccid3_hc_tx_parse_options(str
+ 				  dccp_role(sk), sk, len);
+ 			rc = -EINVAL;
+ 		} else {
+-			opt_recv->ccid3or_receive_rate -						ntohl(*(__be32 *)value);
++			opt_val = get_unaligned((u32 *)value);
++			opt_recv->ccid3or_receive_rate = ntohl(opt_val);
+ 			ccid3_pr_debug("%s(%p), RECEIVE_RATE=%u\n",
+ 				       dccp_role(sk), sk,
+ 				       opt_recv->ccid3or_receive_rate);
