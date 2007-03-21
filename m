@@ -1,85 +1,139 @@
-From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Thu, 22 Mar 2007 04:05:57 +0000
-Subject: [PATCH 3/9] DCCP: Simply dccp_li_hist_purge
-Message-Id: <200703221605.57777.ian.mcdonald@jandi.co.nz>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 21 Mar 2007 18:45:30 +0000
+Subject: [PATCH 17/25]: Locking for packet history TX list
+Message-Id: <200703211845.31099@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch removes a parameter from dccp_li_hist_purge and can therefore
-also remove an EXPORT_SYMBOL_GPL we introduced in a previous patch.
+[CCID 3]: Locking for packet history TX list
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Currently the packet history lists are accessed asynchronously from different
+contexts, but without any locking protection. This can lead to race conditions,
+corruption and facilitates unpredictable behaviour.
+
+In particular, this patch
+
+ 1) adds a R/W spinlock to protect the list against concurrent access;
+ 2) makes dccp_tx_hist_add_entry local to packet_history.c
+     - locking should only be visible in the source file, but not the header file.
+
+(NB - there are at the moment no pure readers for this list, so in principle a
+ normal spinlock could alternatively be used).
+
+                          D e t a i l s
+                          -------------
+ The question is whether to disable softirqs.
+
+ (1) dccp_tx_hist_get_send_time is called in the following, simplified manner:
+
+    ccid3_hc_tx_packet_recv  <-  dccp_v{4,6}_do_rcv  <-  dccp_v{4,6}_rcv
+                                                     <-  release_sock
+
+     dccp_v{4,6}_do_recv is called as backlog handler for dccp_v{4,6}_rcv, which 
+     means softirq context (via dccp_v{4,6}_rcv -> sk_receive_skb). The second 
+     alternative (release_sock) is in user context.
+
+ (2) dccp_tx_hist_purge is only called in ccid3_hc_tx_exit, in this manner:
+
+     ccid3_hc_tx_exit <- ccid_delete <- ccid_hc_tx_delete <- dccp_feat_update_ccid
+                                                          <- dccp_create_openreq_child
+                                                          <- dccp_init_sock
+                                                          <- dccp_destroy_sock
+
+     Since dccp_tx_hist_purge is called at the end of an old or a new connection, 
+     disabling softirqs is not strictly necessary.
+
+ (3) dccp_tx_hist_add_entry is called in mixed contexts:
+     ccid3_hc_tx_packet_sent <- dccp_write_xmit <- dccp_write_xmit_timer [Softirq]
+                                                <- dccp_send_close       [User Context]
+                                                <- dccp_sendmsg          [User Context]
+
+     Since the previous patch disables softirqs generally when ccid_hc_tx_packet_sent is
+     called, disabling softirqs here is also not strictly necessary.
+
+Due to the different context in (1) and so as not to make too many assumptions, I think 
+that the safest thing to do is to disable softirqs in all three cases. This prevents 
+strange problems should the code change somewhat in the future.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 14b48a7..5db5387 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -1004,7 +1004,7 @@ static void ccid3_hc_rx_exit(struct sock *sk)
- 	dccp_rx_hist_purge(ccid3_rx_hist, &hcrx->ccid3hcrx_hist);
- 
- 	/* Empty loss interval history */
--	dccp_li_hist_purge(ccid3_li_hist, &hcrx->ccid3hcrx_li_hist);
-+	dccp_li_hist_purge(&hcrx->ccid3hcrx_li_hist);
- }
- 
- static void ccid3_hc_rx_get_info(struct sock *sk, struct tcp_info *info)
-diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
-index 00dc997..ea5da09 100644
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -19,8 +19,7 @@
- #include "packet_history.h"
- #include "tfrc.h"
- 
--struct dccp_li_hist *ccid3_li_hist;
--EXPORT_SYMBOL_GPL(ccid3_li_hist);
-+static struct dccp_li_hist *ccid3_li_hist;
- 
- static inline struct dccp_li_hist_entry *
- 		dccp_li_hist_entry_new(struct dccp_li_hist *hist,
-@@ -78,13 +77,13 @@ static void dccp_li_hist_delete(struct dccp_li_hist *hist)
- 
- EXPORT_SYMBOL_GPL(dccp_li_hist_delete);
- 
--void dccp_li_hist_purge(struct dccp_li_hist *hist, struct list_head *list)
-+void dccp_li_hist_purge(struct list_head *list)
+ net/dccp/ccids/lib/packet_history.c |   17 +++++++++++++++++
+ net/dccp/ccids/lib/packet_history.h |    6 +-----
+ 2 files changed, 18 insertions(+), 5 deletions(-)
+
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -41,6 +41,8 @@
+ /*
+  * 	Transmitter History Routines
+  */
++DEFINE_RWLOCK(dccp_tx_hist_lock);
++
+ struct dccp_tx_hist *dccp_tx_hist_new(const char *name)
  {
- 	struct dccp_li_hist_entry *entry, *next;
+ 	struct dccp_tx_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
+@@ -101,6 +103,7 @@ int dccp_tx_hist_get_send_time(struct dc
+ 	struct dccp_tx_hist_entry *entry;
+ 	int found = 0;
  
- 	list_for_each_entry_safe(entry, next, list, dccplih_node) {
- 		list_del_init(&entry->dccplih_node);
--		kmem_cache_free(hist->dccplih_slab, entry);
-+		kmem_cache_free(ccid3_li_hist->dccplih_slab, entry);
- 	}
++	write_lock_bh(&dccp_tx_hist_lock);
+ 	list_for_each_entry(entry, list, dccphtx_node)
+ 		if (entry->dccphtx_seqno = seq) {
+ 			found = 1;
+@@ -110,24 +113,38 @@ int dccp_tx_hist_get_send_time(struct dc
+ 
+ 	if (found)
+ 		dccp_tx_hist_purge_older(hist, list, entry);
++	write_unlock_bh(&dccp_tx_hist_lock);
+ 
+ 	return found;
  }
  
-@@ -145,7 +144,7 @@ static int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
- 	for (i = 0; i < DCCP_LI_HIST_IVAL_F_LENGTH; i++) {
- 		entry = dccp_li_hist_entry_new(hist, GFP_ATOMIC);
- 		if (entry = NULL) {
--			dccp_li_hist_purge(hist, list);
-+			dccp_li_hist_purge(list);
- 			DCCP_BUG("loss interval list entry is NULL");
- 			return 0;
- 		}
-diff --git a/net/dccp/ccids/lib/loss_interval.h b/net/dccp/ccids/lib/loss_interval.h
-index 98daec0..ead0b58 100644
---- a/net/dccp/ccids/lib/loss_interval.h
-+++ b/net/dccp/ccids/lib/loss_interval.h
-@@ -30,12 +30,9 @@ struct dccp_li_hist_entry {
- 	u32		 dccplih_interval;
- };
+ EXPORT_SYMBOL_GPL(dccp_tx_hist_get_send_time);
  
--extern void dccp_li_hist_purge(struct dccp_li_hist *hist,
--			       struct list_head *list);
-+extern void dccp_li_hist_purge(struct list_head *list);
++void dccp_tx_hist_add_entry(struct list_head *list,
++			    struct dccp_tx_hist_entry *entry)
++{
++	write_lock_bh(&dccp_tx_hist_lock);
++	list_add(&entry->dccphtx_node, list);
++	write_unlock_bh(&dccp_tx_hist_lock);
++}
++
++EXPORT_SYMBOL_GPL(dccp_tx_hist_add_entry);
++
+ void dccp_tx_hist_purge(struct dccp_tx_hist *hist, struct list_head *list)
+ {
+ 	struct dccp_tx_hist_entry *entry, *next;
  
- extern u32 dccp_li_hist_calc_i_mean(struct list_head *list);
++	write_lock_bh(&dccp_tx_hist_lock);
+ 	list_for_each_entry_safe(entry, next, list, dccphtx_node) {
+ 		list_del_init(&entry->dccphtx_node);
+ 		dccp_tx_hist_entry_delete(hist, entry);
+ 	}
++	write_unlock_bh(&dccp_tx_hist_lock);
+ }
  
- void ccid3_hc_rx_update_li(struct sock *sk, u64 seq_loss, u8 win_loss);
--
--extern struct dccp_li_hist *ccid3_li_hist;
- #endif /* _DCCP_LI_HIST_ */
+ EXPORT_SYMBOL_GPL(dccp_tx_hist_purge);
+ 
++/* XXX careful, this one is not lock-protected */
+ void dccp_tx_hist_purge_older(struct dccp_tx_hist *hist,
+ 			      struct list_head *list,
+ 			      struct dccp_tx_hist_entry *packet)
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -83,11 +83,7 @@ static inline struct dccp_tx_hist_entry 
+ extern int dccp_tx_hist_get_send_time(struct dccp_tx_hist *, struct list_head *,
+ 				      u64 seq, struct timeval *t_send);
+ 
+-static inline void dccp_tx_hist_add_entry(struct list_head *list,
+-					  struct dccp_tx_hist_entry *entry)
+-{
+-	list_add(&entry->dccphtx_node, list);
+-}
++extern void dccp_tx_hist_add_entry(struct list_head *, struct dccp_tx_hist_entry *);
+ 
+ static inline void dccp_tx_hist_entry_delete(struct dccp_tx_hist *hist,
+ 					     struct dccp_tx_hist_entry *entry)
