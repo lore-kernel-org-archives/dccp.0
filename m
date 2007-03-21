@@ -1,30 +1,37 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 06 Mar 2007 09:52:01 +0000
-Subject: Re: CCID 3 bounded by OS scheduling granularity
-Message-Id: <200703060952.01629@strip-the-willow>
+Date: Wed, 21 Mar 2007 18:44:54 +0000
+Subject: [PATCH 10/25]: Shorten statement for updating p
+Message-Id: <200703211844.54487@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200701221424.36105@strip-the-willow>
-In-Reply-To: <200701221424.36105@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  > I have performed experiments which confirm that
-|  >
-|  >  1) when t_ipi < t_gran, the transmit rate is effectively out of control
-|  >  2) when t_ipi > t_gran, the actual transmit rate is about a factor of 3
-|  >     higher than s/t_ipi would permit.
-|  >
-|  > http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/packet_scheduling/
-|  
-|  I've been going over this and wonder if you ever got to the bottom of
-|  it by instrumenting it or similar as it doesn't make sense to me....
-|  We add t_ipi to t_nom after each packet so even coarse grained
-|  scheduling shouldn't do this.
-The graphs on that web page are actually the result of instrumenting the kernel.
-There are further instrumentation tests, the results of which are on 
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/impact_of_tx_queue_lenghts/
+[CCID 3]: Shorten statement for updating p
 
-The problem is not in adding t_ipi, but rather in schedule_timeout which works
-at HZ granularity.
+This shortens the statement for updating the loss event
+rate p when a feedback packet is received.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |    7 ++-----
+ 1 file changed, 2 insertions(+), 5 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -466,12 +466,9 @@ static void ccid3_hc_tx_packet_recv(stru
+ 	hctx->ccid3hctx_x_recv = opt_recv->ccid3or_receive_rate;
+ 	hctx->ccid3hctx_x_recv <<= 6;
+ 
+-	/* Update loss event rate */
++	/* Update loss event rate (scaled by 1e6), cf. RFC 4342, 8.5 */
+ 	pinv = opt_recv->ccid3or_loss_event_rate;
+-	if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
+-		hctx->ccid3hctx_p = 0;
+-	else				       /* can not exceed 100% */
+-		hctx->ccid3hctx_p = 1000000 / pinv;
++	hctx->ccid3hctx_p = (pinv = ~0U || pinv = 0)? 0 : scaled_div(1, pinv);
+ 
+ 	/*
+ 	 * Calculate new round trip sample as per [RFC 3448, 4.3] by
