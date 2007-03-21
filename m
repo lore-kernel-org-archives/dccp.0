@@ -1,64 +1,67 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 05 Mar 2007 09:49:49 +0000
-Subject: Re: [dccp] Question on resetting nominal send time
-Message-Id: <200703050949.49387@strip-the-willow>
+Date: Wed, 21 Mar 2007 18:44:43 +0000
+Subject: [PATCH 8/25]: Honour initial RTT estimate
+Message-Id: <200703211844.44041@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <5640c7e00701161351q19360335mf2862a31596ae94a@mail.gmail.com>
-In-Reply-To: <5640c7e00701161351q19360335mf2862a31596ae94a@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Eddie,
+[CCID 3]: Honour initial RTT estimate
 
-Sorry for the delay in responding.
+This is a small optimisation which improves the accuracy of TX
+RTT sampling when an initial RTT sample (e.g. from the intial
+Request/Response exchange) is available.
 
-|  What follows is a first cut at a solution. =A0Any thoughts from others??
-| =20
-|  If t_ipi is used to schedule transmissions, then the following equation =
-should=20
-|  be applied each time the application is scheduled:
-| =20
-|  =A0 =A0 t_ipi :=3D max(t_ipi, t_now - RTT/2)
-| =20
-|  This never lets t_ipi fall more than 1/2 RTT behind the current time. =
-=A0An=20
-|  application is still allowed to send packets in a small burst after an i=
-dle=20
-|  period, but the size of that burst is limited to RTT/2 worth of packets.
-| =20
-|  RTT/2 was chosen because senders can send 2*last_receive_rate in any RTT.
-| =20
-|  I am sure that this simple choice has disadvantages, such as little burs=
-ts at=20
-|  the beginnings of idle periods. =A0One could be more conservative and se=
-t e.g.
-| =20
-|  =A0 =A0 =A0t_ipi :=3D max(t_ipi, t_now - t_gran).
-| =20
-|  But I think RTT/2 might be OK. =A0Implementation experience would be pre=
-ferred.
-| =20
-|  This issue is really an implementation issue. =A0RFC3448 4.6 is not exac=
-tly=20
-|  normative; it discusses one way to achieve a send rate, not a required=20
-|  implementation. =A0So in some sense the implementer is free to choose an=
-ything=20
-|  reasonable.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |   13 ++++++-------
+ 1 file changed, 6 insertions(+), 7 deletions(-)
 
-In TFRC t_ipi is always smaller than RTT, so RTT/2 is an upper bound. I thi=
-nk it makes
-sense (from an implementation standpoint) to use one full t_ipi as upper bo=
-und. This
-is similar to your solution in that both values are less than RTT, and both=
- provide
-a means to stop large `packet storms'.=20
-The reason for chosing t_ipi is that the size of the large burst depends on=
- the number
-of full t_ipi intervals that fit into the time interval that the receiver i=
-s lagging=20
-behind (can send detailed derivation). But, as said, both choices are simil=
-ar.
-
-Gerrit
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -469,28 +469,29 @@ static void ccid3_hc_tx_packet_recv(stru
+ 		else				       /* can not exceed 100% */
+ 			hctx->ccid3hctx_p = 1000000 / pinv;
+ 
+-		skb_get_timestamp(skb, &now);
+-
+ 		/*
+ 		 * Calculate new round trip sample as per [RFC 3448, 4.3] by
+ 		 *	R_sample  =  (now - t_recvdata) - t_elapsed
+ 		 */
++		skb_get_timestamp(skb, &now);
+ 		r_sample = dccp_sample_rtt(sk, &now, &packet->dccphtx_tstamp);
+ 
+ 		/*
+-		 * Update RTT estimate by
+-		 * If (No feedback recv)
++		 * Update RTT estimate (honours RTT from SYN exchange):
++		 * If (No RTT sample so far)
+ 		 *    R = R_sample;
+ 		 * Else
+ 		 *    R = q * R + (1 - q) * R_sample;
+ 		 *
+ 		 * q is a constant, RFC 3448 recomments 0.9
+ 		 */
++		hctx->ccid3hctx_rtt = hctx->ccid3hctx_rtt = 0 ?  r_sample
++				    : (9 * hctx->ccid3hctx_rtt + r_sample) / 10;
++
+ 		if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
+ 			/*
+ 			 * Larger Initial Windows [RFC 4342, sec. 5]
+ 			 */
+-			hctx->ccid3hctx_rtt  = r_sample;
+ 			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
+ 			hctx->ccid3hctx_t_ld = now;
+ 
+@@ -504,8 +505,6 @@ static void ccid3_hc_tx_packet_recv(stru
+ 
+ 			ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
+ 		} else {
+-			hctx->ccid3hctx_rtt = (9 * hctx->ccid3hctx_rtt +
+-						   r_sample) / 10;
+ 
+ 			/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
+ 			if (hctx->ccid3hctx_p > 0)
