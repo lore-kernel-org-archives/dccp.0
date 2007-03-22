@@ -1,49 +1,50 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 13 Mar 2007 07:58:56 +0000
-Subject: Re: [ANNOUNCE]: Patch Preview
-Message-Id: <200703130758.56825@strip-the-willow>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Thu, 22 Mar 2007 04:06:41 +0000
+Subject: [PATCH 4/9] DCCP: Simplify dccp_li_hist_entry_new
+Message-Id: <200703221606.41557.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <200703121557.12709@strip-the-willow>
-In-Reply-To: <200703121557.12709@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-fCAgSSdtIG5vdCBzbyBjb25maWRlbnQgd2hlbiBpdCBjb21lcyB0byB0aGUgZGVidWdnaW5nIGNv
-ZGUgd2hpY2ggaXMgd2h5CnwgIEkgZGlkbid0IGNvbW1lbnQuIE9uZSB0aGluZyBpcyBJIG5vdGlj
-ZSB0aGlzIGNvZGUgd2hpY2ggbG9va3MgbGlrZSBpdAp8ICBjb3VsZCBiZSB1c2VmdWwgaWYgcG9y
-dGVkIHRvIERDQ1A6CnwgIGh0dHA6Ly9tYXN0ZXIua2VybmVsLm9yZy9naXQvP3A9bGludXgva2Vy
-bmVsL2dpdC9kYXZlbS9uZXQtMi42LjIyLmdpdDthPWNvbW1pdDtojjIxMDFhOWZhYWI0M2RjZjMw
-N2Q0Njc4NGExZWRlNzk5N2ZlNzI5CnwgIAp8ICBUaGlzIGFsbG93cyB0dXJuaW5nIGRlYnVnIGNv
-ZGUgb24vb2ZmIGJ5IHN5c2N0bC4KR29vZCBpZGVhLCBidXQgSSB0aGluayB0aGF0IG1ha2VzIHRo
-aW5ncyB1bm5lY2Vzc2FyaWx5IGNvbXBsZXguIFdlIHdvdWxkIG5lZWQgCiAqIGEgc3lzY3RsIHN1
-YnRyZWUgb2YgbmV0LmRjY3AgZm9yIGVhY2ggbW9kdWxlIHdpc2hpbmcgdG8gZGVidWcgc29tZXRo
-aW5nIGFuZAogKiBhIHN5c2N0bCB2YXJpYWJsZSBmb3IgZWFjaCBzdWNoIG1vZHVsZQpUaGF0IG1h
-a2VzIHRoZSBjb2RlIG11Y2ggbW9yZSBjb21wbGV4LiBXaGF0IHRoaXMgcGF0Y2ggZG9lcyBpcyBt
-ZXJlbHkgdG8gc3dpdGNoCgogICJkZWJ1Z2dpbmcgaXMgYWx3YXlzIHR1cm5lZCBvbiB3aGVuIERD
-Q1AgYW5kIGl0cyBtb2R1bGVzIAogICBhcmUgYnVpbHQgc3RhdGljYWxseSBpbnRvIHRoZSBrZXJu
-ZWwiCgpvZmYsIGZvciB0aGUgcmVhc29ucyB0aGF0CiAoYSkgc29tZW9uZSB3aG8gYnVpbGRzIERD
-Q1Agc3RhdGljYWxseSBpbnRvIHRoZSBrZXJuZWwgaXMgbW9zdCBsaWtlbHkgbm90IGludGVyZXN0
-ZWQKICAgICBpbiBkZXZlbG9waW5nIGFuZC9vciBkZWJ1Z2dpbmcgdGhlIERDQ1AgbW9kdWxlIGFu
-ZAogKGIpIHdpbGwgbm90IG11Y2ggYXBwcmVjaWF0ZSBoaXMgc3lzbG9ncyBiZWluZyBmbG9vZGVk
-IGJ5IGRlYnVnZ2luZyBtZXNzYWdlcyB0dXJuZWQgCiAgICAgb24gYnkgZGVmYXVsdC4KCkJ1dCBh
-cyBzYWlkLCBJIGhhdmUgbm8gc3Ryb25nIG9waW5pb25zIGFib3V0IHRoaXMgcGF0Y2guCgp8ICBU
-aGUgbmV3IHBhdGNoZXMgc291bmQgZ3JlYXQgYnV0IEkgZmluZCB0aGVtIGhhcmQgdG8gcmV2aWV3
-IGFsbAp8ICBjb21iaW5lZC4gQXJuYWxkbyBoYXMgYXNrZWQgZm9yIGEgZ2l0IHRyZWUgSSBzZWUu
-IENhbiB0aGF0IGJlCnwgIHByb3ZpZGVkLCBvciBJIHByZWZlciB5b3VyIGRpcmVjdG9yeSBzdHJ1
-Y3R1cmUgb2YgcGF0Y2hlcyBzbyBJIGNhbgp8ICByZWFkIHRob3VnaCB0aGVtPyBZb3UgaW1wbGll
-ZCB0aGF0IHlvdSBoYWQgZG9uZSB0aGlzIGZvciBuZXcgcGF0Y2hlcwp8ICBidXQgSSBjYW4ndCBh
-Y3R1YWxseSBmaW5kIGl0LgpObyB0aGV5IGFyZSBub3QgbWVhbnQgZm9yIHJldmlldy4gVGhlIHNv
-bGUgcHVycG9zZSBpcywgc2luY2UgdGhlIG51bWJlciBvZiBpbmRpdmlkdWFsCnBhdGNoZXMgaXMg
-cXVpdGUgaGlnaCwgdG8gZ2V0IGFuIG92ZXJhbGwgcGljdHVyZS4gUGF0Y2hlcyB3aWxsIGJlIHN1
-Ym1pdHRlZCBhcyBzb29uCmFzIHRoZXJlIGlzIHRpbWUuIEkgYWxzbyBoYXZlIGEgbG90IG9mIGRv
-Y3VtZW50YXRpb24gdGhhdCBnb2VzIHdpdGggaXQsIHdpbGwgdXBsb2FkCnRoYXQgdmVyeSBzb29u
-IC0gdGhpcyBhbGxvd3MgYWxzbyB0byB1bmRlcnN0YW5kIHRoZSBkZXRhaWxzIGJldHRlci4gQW5k
-IGRvY3VtZW50YXRpb24KaXMgdGhlIG1vc3QgaW1wb3J0YW50IHRoaW5nIGhlcmUgLSBJIGhhdmUg
-c3BlbnQgYSBsb3Qgb2YgdGltZSBqdXN0IHdpdGggYSBzaGVldCBvZgpwYXBlcjogQ0NJRDMgaXMg
-c28gY29tcGxpY2F0ZWQgdGhhdCB3aXRob3V0IGEgZGlhZ3JhbSBvciBhIGZsb3djaGFydCBvbmUg
-Z2V0cyB2ZXJ5CnZlcnkgZWFzaWx5IGxvc3QuCi0KVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxp
-c3Q6IHNlbmQgdGhlIGxpbmUgInVuc3Vic2NyaWJlIGRjY3AiIGluCnRoZSBib2R5IG9mIGEgbWVz
-c2FnZSB0byBtYWpvcmRvbW9Admdlci5rZXJuZWwub3JnCk1vcmUgbWFqb3Jkb21vIGluZm8gYXQg
-IGh0dHA6Ly92Z2VyLmtlcm5lbC5vcmcvbWFqb3Jkb21vLWluZm8uaHRtbA==
+This simplifies dccp_li_hist_entry_new.
+
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
+index ea5da09..d41bc58 100644
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -21,11 +21,9 @@
+ 
+ static struct dccp_li_hist *ccid3_li_hist;
+ 
+-static inline struct dccp_li_hist_entry *
+-		dccp_li_hist_entry_new(struct dccp_li_hist *hist,
+-				       const gfp_t prio)
++static inline struct dccp_li_hist_entry *dccp_li_hist_entry_new(void)
+ {
+-	return kmem_cache_alloc(hist->dccplih_slab, prio);
++	return kmem_cache_alloc(ccid3_li_hist->dccplih_slab, GFP_ATOMIC);
+ }
+ 
+ static inline void dccp_li_hist_entry_delete(struct dccp_li_hist *hist,
+@@ -142,7 +140,7 @@ static int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+ 	int i;
+ 
+ 	for (i = 0; i < DCCP_LI_HIST_IVAL_F_LENGTH; i++) {
+-		entry = dccp_li_hist_entry_new(hist, GFP_ATOMIC);
++		entry = dccp_li_hist_entry_new();
+ 		if (entry = NULL) {
+ 			dccp_li_hist_purge(list);
+ 			DCCP_BUG("loss interval list entry is NULL");
+@@ -287,7 +285,7 @@ void ccid3_hc_rx_update_li(struct sock *sk, u64 seq_loss, u8 win_loss)
+ 		/* new loss event detected */
+ 		/* calculate last interval length */
+ 		seq_temp = dccp_delta_seqno(head->dccplih_seqno, seq_loss);
+-		entry = dccp_li_hist_entry_new(ccid3_li_hist, GFP_ATOMIC);
++		entry = dccp_li_hist_entry_new();
+ 
+ 		if (entry = NULL) {
+ 			DCCP_BUG("out of memory - can not allocate entry");
