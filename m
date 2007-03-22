@@ -1,7 +1,7 @@
 From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Fri, 23 Mar 2007 03:06:49 +0000
-Subject: [PATCH 8/9] DCCP: Refactor dccp_li_hist_interval_new
-Message-Id: <200703231506.50129.ian.mcdonald@jandi.co.nz>
+Date: Thu, 22 Mar 2007 04:16:35 +0000
+Subject: [PATCH 8/9] DCCP: Refactor loss initialisation
+Message-Id: <200703221616.35515.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -18,20 +18,10 @@ Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
 diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
-index 35cae17..7908a73 100644
+index 9e7fbed..2001dd7 100644
 --- a/net/dccp/ccids/lib/loss_interval.c
 +++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -125,8 +125,7 @@ u32 dccp_li_hist_calc_i_mean(struct list_head *list)
- 
- EXPORT_SYMBOL_GPL(dccp_li_hist_calc_i_mean);
- 
--static int dccp_li_hist_interval_new(struct list_head *list,
--   const u64 seq_nonloss, const u8 win_nonloss)
-+static int dccp_li_hist_interval_new(struct list_head *list)
- {
- 	struct dccp_li_hist_entry *entry;
- 	int i;
-@@ -142,8 +141,6 @@ static int dccp_li_hist_interval_new(struct list_head *list,
+@@ -150,8 +150,6 @@ static int dccp_li_hist_interval_new(struct list_head *list,
  		list_add(&entry->dccplih_node, list);
  	}
  
@@ -40,15 +30,7 @@ index 35cae17..7908a73 100644
  	return 1;
  }
  
-@@ -257,13 +254,14 @@ void dccp_li_update_li(struct sock *sk)
- 	u8 win_nonloss = hcrx->ccid3hcrx_ccval_nonloss;
- 
- 	if (list_empty(&hcrx->ccid3hcrx_li_hist)) {
--		if (!dccp_li_hist_interval_new(&hcrx->ccid3hcrx_li_hist,
--		   seq_nonloss, win_nonloss))
-+		if (!dccp_li_hist_interval_new(&hcrx->ccid3hcrx_li_hist))
- 			return;
- 
+@@ -272,6 +270,8 @@ void dccp_li_update_li(struct sock *sk)
  		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
  		   struct dccp_li_hist_entry, dccplih_node);
  		head->dccplih_interval = dccp_li_calc_first_li(sk);
