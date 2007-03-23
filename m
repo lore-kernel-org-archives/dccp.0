@@ -1,23 +1,26 @@
 From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Thu, 22 Mar 2007 04:08:23 +0000
-Subject: [PATCH 6/9] DCCP: Simplify dccp_li_hist_interval_new
-Message-Id: <200703221608.23696.ian.mcdonald@jandi.co.nz>
+Date: Fri, 23 Mar 2007 03:05:22 +0000
+Subject: [PATCH 6/9] DCCP: simplify dccp_li_hist_interval_new
+Message-Id: <200703231505.22984.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
+References: <200703221608.23696.ian.mcdonald@jandi.co.nz>
+In-Reply-To: <200703221608.23696.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
 This simplifies dccp_li_hist_interval_new. Also removes an unneeded
-EXPORT_SYMBOL_GPL
+EXPORT_SYMBOL_GPL. Rename variables to reflect use and also fix one
+incorrect type.
 
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
 diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
-index 599cbf0..9825a8a 100644
+index e2d6a60..6c5a7a9 100644
 --- a/net/dccp/ccids/lib/loss_interval.c
 +++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -133,8 +133,8 @@ u32 dccp_li_hist_calc_i_mean(struct list_head *list)
+@@ -125,8 +125,8 @@ u32 dccp_li_hist_calc_i_mean(struct list_head *list)
  
  EXPORT_SYMBOL_GPL(dccp_li_hist_calc_i_mean);
  
@@ -28,7 +31,7 @@ index 599cbf0..9825a8a 100644
  {
  	struct dccp_li_hist_entry *entry;
  	int i;
-@@ -150,13 +150,11 @@ static int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+@@ -142,13 +142,11 @@ static int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
  		list_add(&entry->dccplih_node, list);
  	}
  
@@ -44,8 +47,12 @@ index 599cbf0..9825a8a 100644
  /* calculate first loss interval
   *
   * returns estimated loss interval in usecs */
-@@ -267,8 +265,8 @@ void ccid3_hc_rx_update_li(struct sock *sk)
- 	u64 win_nonloss = hcrx->ccid3hcrx_ccval_nonloss;
+@@ -256,11 +254,11 @@ void ccid3_hc_rx_update_li(struct sock *sk)
+ 	struct dccp_li_hist_entry *head;
+ 	u64 seq_temp;
+ 	u64 seq_nonloss = hcrx->ccid3hcrx_seqno_nonloss;
+-	u64 win_nonloss = hcrx->ccid3hcrx_ccval_nonloss;
++	u8 win_nonloss = hcrx->ccid3hcrx_ccval_nonloss;
  
  	if (list_empty(&hcrx->ccid3hcrx_li_hist)) {
 -		if (!dccp_li_hist_interval_new(ccid3_li_hist,
