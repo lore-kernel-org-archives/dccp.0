@@ -1,8 +1,10 @@
 From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Thu, 22 Mar 2007 04:02:07 +0000
+Date: Fri, 23 Mar 2007 02:56:12 +0000
 Subject: [PATCH 1/9] DCCP: Update copyright
-Message-Id: <200703221602.08088.ian.mcdonald@jandi.co.nz>
+Message-Id: <200703231456.12812.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
+References: <200703221602.08088.ian.mcdonald@jandi.co.nz>
+In-Reply-To: <200703221602.08088.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
