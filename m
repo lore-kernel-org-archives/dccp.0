@@ -1,8 +1,10 @@
 From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Thu, 22 Mar 2007 04:04:43 +0000
+Date: Fri, 23 Mar 2007 02:56:58 +0000
 Subject: [PATCH 2/9] DCCP: Shift code
-Message-Id: <200703221604.45206.ian.mcdonald@jandi.co.nz>
+Message-Id: <200703231456.59544.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
+References: <200703221604.45206.ian.mcdonald@jandi.co.nz>
+In-Reply-To: <200703221604.45206.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
@@ -10,7 +12,8 @@ To: dccp@vger.kernel.org
 
 This is just shifting code around and involves no renames except for module
 initialisation. Also add/remove static, includes, EXPORT_SYMBOL_GPL as
-needed.
+needed. We remove dccp_li_hist_entry_delete as it's not actually used
+anywhere!
 
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
@@ -214,10 +217,10 @@ index 2b38c60..14b48a7 100644
  module_exit(ccid3_module_exit);
  
 diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
-index 3829afc..00dc997 100644
+index 3829afc..d067d4a 100644
 --- a/net/dccp/ccids/lib/loss_interval.c
 +++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -14,9 +14,29 @@
+@@ -14,9 +14,22 @@
  #include <linux/module.h>
  #include <net/sock.h>
  #include "../../dccp.h"
@@ -237,18 +240,11 @@ index 3829afc..00dc997 100644
 +	return kmem_cache_alloc(hist->dccplih_slab, prio);
 +}
 +
-+static inline void dccp_li_hist_entry_delete(struct dccp_li_hist *hist,
-+					     struct dccp_li_hist_entry *entry)
-+{
-+	if (entry != NULL)
-+		kmem_cache_free(hist->dccplih_slab, entry);
-+}
-+
 +static struct dccp_li_hist *dccp_li_hist_new(const char *name)
  {
  	struct dccp_li_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
  	static const char dccp_li_hist_mask[] = "li_hist_%s";
-@@ -47,9 +67,7 @@ out_free_hist:
+@@ -47,9 +60,7 @@ out_free_hist:
  	goto out;
  }
  
@@ -259,7 +255,16 @@ index 3829afc..00dc997 100644
  {
  	const char* name = kmem_cache_name(hist->dccplih_slab);
  
-@@ -118,7 +136,7 @@ u32 dccp_li_hist_calc_i_mean(struct list_head *list)
+@@ -58,8 +69,6 @@ void dccp_li_hist_delete(struct dccp_li_hist *hist)
+ 	kfree(hist);
+ }
+ 
+-EXPORT_SYMBOL_GPL(dccp_li_hist_delete);
+-
+ void dccp_li_hist_purge(struct dccp_li_hist *hist, struct list_head *list)
+ {
+ 	struct dccp_li_hist_entry *entry, *next;
+@@ -118,7 +127,7 @@ u32 dccp_li_hist_calc_i_mean(struct list_head *list)
  
  EXPORT_SYMBOL_GPL(dccp_li_hist_calc_i_mean);
  
@@ -268,7 +273,7 @@ index 3829afc..00dc997 100644
     struct list_head *list, const u64 seq_loss, const u8 win_loss)
  {
  	struct dccp_li_hist_entry *entry;
-@@ -141,3 +159,174 @@ int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+@@ -141,3 +150,174 @@ int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
  }
  
  EXPORT_SYMBOL_GPL(dccp_li_hist_interval_new);
@@ -420,6 +425,7 @@ index 3829afc..00dc997 100644
 +		entry->dccplih_win_count = win_loss;
 +	}
 +}
++
 +EXPORT_SYMBOL_GPL(ccid3_hc_rx_update_li);
 +
 +static __init int li_module_init(void)
@@ -442,7 +448,6 @@ index 3829afc..00dc997 100644
 +	}
 +}
 +module_exit(li_module_exit);
-+
 diff --git a/net/dccp/ccids/lib/loss_interval.h b/net/dccp/ccids/lib/loss_interval.h
 index 1e48fe3..98daec0 100644
 --- a/net/dccp/ccids/lib/loss_interval.h
