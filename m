@@ -1,47 +1,42 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Mon, 26 Mar 2007 04:04:31 +0000
-Subject: Re: [PATCH 24/25]: Macro for moving average
-Message-Id: <5640c7e00703252104p7732f077rb6eb549fb968896a@mail.gmail.com>
+From: Adrian Bunk <bunk@stusta.de>
+Date: Sat, 24 Mar 2007 13:06:52 +0000
+Subject: [2.6 patch] make dccp_write_xmit_timer() static again
+Message-Id: <20070324130652.GJ752@stusta.de>
 List-Id: <dccp.vger.kernel.org>
-References: <200703211846.10823@strip-the-willow>
-In-Reply-To: <200703211846.10823@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 3/22/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [CCID 3]: Macro for moving average
->
-> The moving average computation occurs so frequently in the CCID 3 code that
-> it merits a macro of its own.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> ---
->  net/dccp/ccids/ccid3.c    |    8 +++-----
->  net/dccp/ccids/lib/tfrc.h |    8 ++++++++
->  2 files changed, 11 insertions(+), 5 deletions(-)
->
-> --- a/net/dccp/ccids/lib/tfrc.h
-> +++ b/net/dccp/ccids/lib/tfrc.h
-> @@ -37,6 +37,14 @@ static inline u32 scaled_div32(u64 a, u3
->         return result;
->  }
->
-> +/**
-> + * Macro for exponentially weighted moving average
-> + * @weight: Weight to be used as damping factor, in units of 1/10
-> + * Beware that @val is evaluated multiple times.
-> + */
-> +#define TFRC_EWMA(val, newval, weight) \
-> +       val = val? ((weight) * val + (10 - (weight)) * (newval)) / 10 : (newval)
-> +
-Just wondering why you pass weight when you only use 9 anyway and it
-just adds a step. Is it used in following patches with a different
-weight?
+dccp_write_xmit_timer() needlessly became global.
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+Signed-off-by: Adrian Bunk <bunk@stusta.de>
+
+---
+
+ net/dccp/dccp.h  |    1 -
+ net/dccp/timer.c |    2 +-
+ 2 files changed, 1 insertion(+), 2 deletions(-)
+
+--- linux-2.6.21-rc4-mm1/net/dccp/dccp.h.old	2007-03-23 23:39:37.000000000 +0100
++++ linux-2.6.21-rc4-mm1/net/dccp/dccp.h	2007-03-23 23:39:58.000000000 +0100
+@@ -191,7 +191,6 @@
+ 			   const enum dccp_pkt_type pkt_type);
+ 
+ extern void dccp_write_xmit(struct sock *sk, int block);
+-extern void dccp_write_xmit_timer(unsigned long data);
+ extern void dccp_write_space(struct sock *sk);
+ 
+ extern void dccp_init_xmit_timers(struct sock *sk);
+--- linux-2.6.21-rc4-mm1/net/dccp/timer.c.old	2007-03-23 23:40:07.000000000 +0100
++++ linux-2.6.21-rc4-mm1/net/dccp/timer.c	2007-03-23 23:40:14.000000000 +0100
+@@ -262,7 +262,7 @@
+ }
+ 
+ /* Transmit-delay timer: used by the CCIDs to delay actual send time */
+-void dccp_write_xmit_timer(unsigned long data)
++static void dccp_write_xmit_timer(unsigned long data)
+ {
+ 	struct sock *sk = (struct sock *)data;
+ 	struct dccp_sock *dp = dccp_sk(sk);
+
