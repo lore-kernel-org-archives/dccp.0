@@ -1,61 +1,71 @@
-From: Eddie Kohler <kohler@cs.ucla.edu>
-Date: Thu, 08 Feb 2007 01:20:54 +0000
-Subject: Re: RFC 4342 Erratum: use Request/Response RTT
-Message-Id: <45CA7AF6.7050702@cs.ucla.edu>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sat, 24 Mar 2007 21:29:24 +0000
+Subject: Re: [dccp] [Fwd: New Version Notification - draft-fairhurst-dccp-serv-codes-03.txt]
+Message-Id: <5640c7e00703241429i1314d092lf4aa29317e4b9c92@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Gerrit,
+On 3/6/07, Gorry Fairhurst <gorry@erg.abdn.ac.uk> wrote:
+> I have updated this I-D with corrections received from others and some
+> new additions to section 4.
+>
+> Comments and questions are welcome...
+>
+> best wishes,
+>
+> Gorry
+>
+> ---
+>
+> draft-fairhurst-dccp-serv-codes-03.txt.
+> http://www.ietf.org/internet-drafts/draft-fairhurst-dccp-serv-codes-03.txt
+>
 
-I don't actually completely understand where you're coming from.  The initial 
-send rate is not 1 packet per second, it is 2-4 packets per RTT, as per 
-RFC4342.  So the initial t_ipi is going to be s/X, where X = 2-4 packets per RTT.
+After debugging why iperf with service codes didn't work between a ppc
+eMac and an i386 machine I've got a comment to make on endian issues.
 
-If you follow the logic through RFC3448 4.2-4.4, you will see that due to this 
-line,
+I think that in section 5 we need to talk about host vs network order.
+In Linux at present we set the service code by a setsockopt and if it
+is not wrapped by htonl/ntohl then it will fail with bad service code
+on establishing the connection.
 
-              If (t_now - tld >= R)
-                  X = max(min(2*X, 2*X_recv), s/R);
-                  tld = t_now;
+The question is where should we do the translation from network to host order?
 
-(where tld is initialized to -1 as regards section 4.2), the sending rate X 
-becomes 1 packet/RTT (= s/R) as soon as a round-trip time sample is available. 
-  The erratum allows the implementer to sidestep all of this silliness by 
-simply starting at X = 2-4 packets/RTT, since the RTT sample is available 
-immediately.
+If we look at use of struct sockaddr_in in *nix that already uses
+htons for ports. If we were to extend this structure for service codes
+I think we should be consistent with that. However I'm not sure when
+it comes to socket options whether this is the right thing to do or
+not and would appreciate peoples feedback.
 
-Eddie
+I think the right thing to do over time is actually not to use socket
+options anyway but modify getaddrinfo as suggested. This would imply
+(to me at least) that we would need to add an additional field into
+/etc/services for the service code. Also other functions such as
+getnameinfo and getservent would need to be looked at - as suggested
+by my colleague Perry Lorier.
 
+To do this in /etc/services we would need to add a field for service
+code although this is interesting with aliases being the last field
+and there being multiple so two possible solutions I can think of:
+- if protocol dccp then put another slash and service code e.g. iperf
+5001/dccp/PERF
+- put it in another file
 
-Gerrit Renker wrote:
-> Hi Eddie,
-> 
-> following a discussion with Ian, it became clear that the best way to fix
-> some of the outstanding scheduling problems is to implement the Erratum to
-> RFC 4342 and use the initial Request/Response handshake as basis for calculating t_ipi.
-> 
-> I am referring to this posting (sorry the original was no longer in the inbox):
->  http://www.mail-archive.com/dccp@vger.kernel.org/msg01319.html
-> 
-> and was using the RFC 4340/2 erratum page:
->  http://www.read.cs.ucla.edu/dccp/rfc4340errata
-> 
-> Now, having spent almost half a day to come up with a solution for initial RTT
-> estimates, I found that there are still several things open/unclear:
-> 
->  * RFC 3448, 4.2 specifies an initial sending rate of 1 packet per second
->  * RFC 3448, 4.6 specifies t_ipi = s/X => still gives 1 second
->  * I can't find an override-clause in RFC 4342 for this
-> 
-> Question: Is the aim to use section 4.2 of RFC 3448 and if yes, to what extent 
->           (this section has quite a few changes to other parts of the algorithm, too).
-> 
-> Can you please clarify, maybe I have got the wrong erratum. 
-> 
-> It would be good to have this clear - so as to implement it.
-> 
-> 
-> Gerrit
+I prefer the first of the two as just one file and the change to
+format shouldn't break any existing apps due to only being used with
+dccp but we'd need to test.
+
+I would appreciate more discussion on this as we work together to sort
+the API. Hopefully we can do it in a manner that will work across
+Unix/Linux and BSD variants. I'm far from an expert (actually a novice
+network programmer) but I'm prepared to add a few more words to the
+document once there's more discussion to what I've just said.
+
+Ian
+-- 
+Web: http://wand.net.nz/~iam4
+Blog: http://iansblog.jandi.co.nz
+WAND Network Research Group
