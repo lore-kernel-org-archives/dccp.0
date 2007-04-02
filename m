@@ -1,26 +1,38 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Mon, 02 Apr 2007 18:22:14 +0000
-Subject: Re: [PATCH 0/9] DCCP: Revised patchset
-Message-Id: <5640c7e00704021122s23c019b2see23cc7e69364f62@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 02 Apr 2007 08:26:26 +0000
+Subject: Re: [PATCH 4/25]: Cheaper & smaller timestamping
+Message-Id: <200704020926.26151@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200703231502.22447.ian.mcdonald@jandi.co.nz>
-In-Reply-To: <200703231502.22447.ian.mcdonald@jandi.co.nz>
+References: <200703211844.22972@strip-the-willow>
+In-Reply-To: <200703211844.22972@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 4/3/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> |  This is a revised set of patches sent from yesterday
-> Thank you for the update. I went through each patch again and it blends in
-> fine with the set of patches that follow.
->
-> Many patches are later overridden, so only the copyright patch stands out
-> clearly. The other patches are `overlaid' because
->
-Yes I'm fine with that. The only purpose for this patchset really in
-the end is so Arnaldo can apply your patches!
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+|  > [DCCP]: Cheaper & smaller timestamping
+  
+|  A couple of comments though:
+|  - this is how I had the code originally in many cases and Arnaldo
+|  changed - can't remember why.
+Arnaldo's code uses a reference point, the skb_get_timestamp() also did
+that. May be useful against old incarnations across reboots.
+
+|  - we should be looking at using the new ktime as monotonic but that
+|  can be a task for another time.
+Excellent idea, this may allow to make CCID3 more precise.
+
+By sheer magic, skb_get_timestamp does this already, as I just saw:
+
+static inline void skb_get_timestamp(const struct sk_buff *skb, struct timeval *stamp)
+{
+	*stamp = ktime_to_timeval(skb->tstamp);
+}
+
+so we only need to replace the do_gettimeofday() at some time.
+
+I have another idea with regard to timestamps: the field
+          dccp_inetconnection.icsk_ack.lrcvtime 
+takes an __u32 timestamp - we could use this for the DCCP timestamp/timestamp echos,
+which are 4 bytes (currently this is done for initial SYN RTT).
+
