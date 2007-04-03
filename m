@@ -1,119 +1,75 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:18:07 +0000
-Subject: [PATCH 29/29] History access is redundant when sending feedback
-Message-Id: <20070412211807.GD21292@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 03 Apr 2007 09:59:26 +0000
+Subject: [PATCH v2]: Add socket option to query the current MPS
+Message-Id: <200704031059.27031@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is a simplification to reduce the number of history accesses: when
-receiving a new packet, the receiver needs to access the RX history twice:
+This is an update on the MPS-via getsockopt patch. I noted I had committed the same sin 
+here as fixed last Wednesday by Arnaldo for the CSCOV get/setsockopt patch.
 
- * first to create / add a new entry
- * then, when sending feedback, the just-created entry must be `found'
-   via history lookup.
+The inter-diff to the previous version of this patch is:
 
-Meaning that, for the same information, it first needs an exclusive
-write-access and then a (shared) read access. Without locking in between
-these calls, the history information may have already changed.
+@@ -588,6 +588,7 @@ static int do_dccp_getsockopt(struct soc
+                                               (__be32 __user *)optval, optlen);
+        case DCCP_SOCKOPT_GET_CUR_MPS:
+                val = dp->dccps_mss_cache;
++               len = sizeof(val);
+                break;
+        case DCCP_SOCKOPT_SEND_CSCOV:
+                val = dp->dccps_pcslen;
 
-This patch bypasses the double lookup by directly using the available data
-from skb.  In addition, some more informative debugging information was added.
+The v2 patch further applies on top of the CSCOV patch (although I have not yet seen it in 2.6.22).
 
-(NB: using the `packet' entry from rx_packet_recv() is not a good idea, since this
-     can interfer with the RX history garbage collection: the entry may be garbage-
-     collected at the same instant that send_feedback() tries to use it.)
+
+--------------------------------> Patch v2 <----------------------------------
+[DCCP]: Add socket option to query the current MPS
+
+This enables applications to query the current value of the Maximum Packet 
+Size via a socket option, suggested as a SHOULD in (RFC 4340, p. 102). 
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/ccid3.c |   35 ++++++++++++++---------------------
- 1 files changed, 14 insertions(+), 21 deletions(-)
+ Documentation/networking/dccp.txt |    3 +++
+ include/linux/dccp.h              |    1 +
+ net/dccp/proto.c                  |    4 ++++
+ 3 files changed, 8 insertions(+)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 26e8870..6e94496 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -745,15 +745,12 @@ static int ccid3_hc_rx_update_p(struct ccid3_hc_rx_sock *hcrx)
- 	return (hcrx->ccid3hcrx_pinv < pinv_prev);
- }
+--- a/Documentation/networking/dccp.txt
++++ b/Documentation/networking/dccp.txt
+@@ -41,6 +41,9 @@ the socket will fall back to 0 (which me
+ is present). Connecting sockets set at most one service option; for
+ listening sockets, multiple service codes can be specified.
  
--static void ccid3_hc_rx_send_feedback(struct sock *sk)
-+static void ccid3_hc_rx_send_feedback(struct sock *sk, struct sk_buff *skb)
- {
- 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
- 	struct dccp_sock *dp = dccp_sk(sk);
--	struct dccp_rx_hist_entry *packet;
--	struct timeval now;
--	suseconds_t delta;
--
--	ccid3_pr_debug("%s(%p) - entry \n", dccp_role(sk), sk);
-+	struct timeval now, t_recv;
-+	suseconds_t delta = 0;
- 
- 	do_gettimeofday(&now);
- 
-@@ -773,23 +770,19 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk)
- 		DCCP_BUG("%s(%p) - Illegal state TERM", dccp_role(sk), sk);
- 		return;
- 	}
-+	ccid3_pr_debug("Interval %ldusec, X_recv=%u, 1/p=%u\n", (long)delta,
-+		       hcrx->ccid3hcrx_x_recv, hcrx->ccid3hcrx_pinv);
- 
--	packet = dccp_rx_hist_find_data_packet(&hcrx->ccid3hcrx_hist);
--	if (unlikely(packet = NULL)) {
--		DCCP_WARN("%s(%p), no data packet in history!\n",
--			  dccp_role(sk), sk);
--		return;
--	}
-+	/* Elapsed time information [RFC 4340, 13.2] in units of 10 * usecs */
-+	skb_get_timestamp(skb, &t_recv);
-+	delta = timeval_delta(&now, &t_recv);
-+	DCCP_BUG_ON(delta < 0);
- 
-+	hcrx->ccid3hcrx_elapsed_time	     = delta / 10;
- 	hcrx->ccid3hcrx_tstamp_last_feedback = now;
--	hcrx->ccid3hcrx_ccval_last_counter   = packet->dccphrx_ccval;
-+	hcrx->ccid3hcrx_ccval_last_counter   = dccp_hdr(skb)->dccph_ccval;
- 	hcrx->ccid3hcrx_bytes_recv	     = 0;
- 
--	/* Elapsed time information [RFC 4340, 13.2] in units of 10 * usecs */
--	delta = timeval_delta(&now, &packet->dccphrx_tstamp);
--	DCCP_BUG_ON(delta < 0);
--	hcrx->ccid3hcrx_elapsed_time = delta / 10;
--
- 	dp->dccps_hc_rx_insert_options = 1;
- 	dccp_send_ack(sk);
- }
-@@ -1084,7 +1077,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		ccid3_pr_debug("%s(%p, state=%s), skb=%p, sending initial "
- 			       "feedback\n", dccp_role(sk), sk,
- 			       dccp_state_name(sk->sk_state), skb);
--		ccid3_hc_rx_send_feedback(sk);
-+		ccid3_hc_rx_send_feedback(sk, skb);
- 		ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
- 		return;
- 	case TFRC_RSTATE_DATA:
-@@ -1096,7 +1089,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		if ((timeval_delta(&now, &hcrx->ccid3hcrx_tstamp_last_ack) -
- 		     (suseconds_t)hcrx->ccid3hcrx_rtt) >= 0) {
- 			hcrx->ccid3hcrx_tstamp_last_ack = now;
--			ccid3_hc_rx_send_feedback(sk);
-+			ccid3_hc_rx_send_feedback(sk, skb);
- 		}
- 		return;
- 	case TFRC_RSTATE_TERM:
-@@ -1109,7 +1102,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		       dccp_role(sk), sk, dccp_state_name(sk->sk_state));
- 
- 	if (ccid3_hc_rx_update_p(hcrx))
--		ccid3_hc_rx_send_feedback(sk);
-+		ccid3_hc_rx_send_feedback(sk, skb);
- }
- 
- static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
--- 
-1.5.0.6
-
++DCCP_SOCKOPT_GET_CUR_MPS is read-only and retrieves the current maximum packet
++size (application payload size) in bytes, see RFC 4340, section 14.
++
+ DCCP_SOCKOPT_SEND_CSCOV and DCCP_SOCKOPT_RECV_CSCOV are used for setting the
+ partial checksum coverage (RFC 4340, sec. 9.2). The default is that checksums
+ always cover the entire packet and that only fully covered application data is
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -204,6 +204,7 @@ struct dccp_so_feat {
+ #define DCCP_SOCKOPT_SERVICE		2
+ #define DCCP_SOCKOPT_CHANGE_L		3
+ #define DCCP_SOCKOPT_CHANGE_R		4
++#define DCCP_SOCKOPT_GET_CUR_MPS	5
+ #define DCCP_SOCKOPT_SEND_CSCOV		10
+ #define DCCP_SOCKOPT_RECV_CSCOV		11
+ #define DCCP_SOCKOPT_CCID_RX_INFO	128
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -586,6 +586,10 @@ static int do_dccp_getsockopt(struct soc
+ 	case DCCP_SOCKOPT_SERVICE:
+ 		return dccp_getsockopt_service(sk, len,
+ 					       (__be32 __user *)optval, optlen);
++	case DCCP_SOCKOPT_GET_CUR_MPS:
++		val = dp->dccps_mss_cache;
++		len = sizeof(val);
++		break;
+ 	case DCCP_SOCKOPT_SEND_CSCOV:
+ 		val = dp->dccps_pcslen;
+ 		len = sizeof(val);
