@@ -1,191 +1,53 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:35:00 +0000
-Subject: [PATCH 19/43]: Recompute average loss interval
-Message-Id: <200704051635.01009@strip-the-willow>
+Date: Thu, 05 Apr 2007 15:37:30 +0000
+Subject: [PATCH 41/43]: Check for unread data on close
+Message-Id: <200704051637.30098@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[TFRC]: Recompute average loss interval
+[DCCP]: Check for unread data on close
 
-This 
- * adds routines for recomputing I_mean/p as required by TFRC;
- * places the average, I_mean, into the loss_hist structure;
- * supports continued detection of new loss intervals.
+This removes one FIXME with regard to close when there is still unread data.
+The mechanism is implemented similar to TCP: with regard to DCCP-specifics,
+a Reset with Code 2, "Aborted" is sent to the peer.
 
-The second point is in keeping with the objective: loss history management
-and computing the relevant data is a service exported by the module. Hence the
-module should have exclusive access to the average I_mean which it maintains
+This corresponds in part to RFC 4340, 8.1.1 and 8.1.5.
 
-Furthermore, any new packet is monitored against wrap-around of the window
-counter with respect to the current loss interval. 
-As described in RFC 4342, 10.2, this test is required in order to accurately
-determine whether two losses belong to different loss intervals.
-
-Finally, the weights have been re-adjusted to use the format suggested in
-[RFC 3448, 5.4]: using the ones of section 8 reduces accuracy ('smoothness');
-this could be reverted if people think that there is a gain in using mostly
-multiples of two (not too sure there is).
-
-Note: calc_i_mean is now static - the module user need not access/know it.
-      Instead, update_i_mean or handle_loss should be used to access it.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>    
 ---
- net/dccp/ccids/ccid3.c             |    2 
- net/dccp/ccids/lib/loss_interval.c |   86 +++++++++++++++++++++----------------
- net/dccp/ccids/lib/loss_interval.h |    5 +-
- 3 files changed, 55 insertions(+), 38 deletions(-)
+ net/dccp/proto.c |   10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
 
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -17,6 +17,8 @@
- #include "loss_interval.h"
- 
- static struct kmem_cache  *tfrc_lh_slab;
-+/* Loss Interval weights from [RFC 3448, 5.4], scaled by 10 */
-+static const int tfrc_lh_weights[NINTERVAL] = { 10, 10, 10, 10, 8, 6, 4, 2 };
- 
- /*
-  * Access macros: These require that at least one entry is present in lh,
-@@ -60,53 +62,65 @@ void tfrc_lh_cleanup(struct tfrc_loss_hi
- 
- EXPORT_SYMBOL_GPL(tfrc_lh_cleanup);
- 
--/* Weights used to calculate loss event rate */
--/*
-- * These are integers as per section 8 of RFC3448. We can then divide by 4 *
-- * when we use it.
-- */
--static const int tfrc_lh_weights[NINTERVAL] = { 4, 4, 4, 4, 3, 2, 1, 1 };
--
--u32 dccp_li_hist_calc_i_mean(struct list_head *list)
-+static void tfrc_lh_calc_i_mean(struct tfrc_loss_hist *lh)
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -918,6 +918,7 @@ void dccp_close(struct sock *sk, long ti
  {
--#ifndef DONE_WITH_TRANSITION /* XXX subsequent patch */
--	return 0;
--#else
--	struct dccp_li_hist_entry *li_entry, *li_next;
--	int i = 0;
--	u32 i_tot;
--	u32 i_tot0 = 0;
--	u32 i_tot1 = 0;
--	u32 w_tot  = 0;
--
--	list_for_each_entry_safe(li_entry, li_next, list, dccplih_node) {
--		if (li_entry->dccplih_interval != ~0U) {
--			i_tot0 += li_entry->dccplih_interval * dccp_li_hist_w[i];
--			w_tot  += dccp_li_hist_w[i];
--			if (i != 0)
--				i_tot1 += li_entry->dccplih_interval * dccp_li_hist_w[i - 1];
--		}
-+	u32 i_i, i_tot0 = 0, i_tot1 = 0, w_tot = 0;
-+	int i, k = tfrc_lh_length(lh) - 1; /* k is as in rfc3448bis, 5.4 */
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct sk_buff *skb;
++	u32 data_was_unread = 0;
+ 	int state;
  
-+	for (i=0; i <= k; i++) {
-+		i_i = tfrc_lh_get_interval(lh, i);
- 
--		if (++i > DCCP_LI_HIST_IVAL_F_LENGTH)
--			break;
-+		if (i < k) {
-+			i_tot0 += i_i * tfrc_lh_weights[i];
-+			w_tot  += tfrc_lh_weights[i];
-+		}
-+		if (i > 0)
-+			i_tot1 += i_i * tfrc_lh_weights[i-1];
+ 	lock_sock(sk);
+@@ -940,12 +941,17 @@ void dccp_close(struct sock *sk, long ti
+ 	 * descriptor close, not protocol-sourced closes, because the
+ 	  *reader process may not have drained the data yet!
+ 	 */
+-	/* FIXME: check for unread data */
+ 	while ((skb = __skb_dequeue(&sk->sk_receive_queue)) != NULL) {
++		data_was_unread += skb->len;
+ 		__kfree_skb(skb);
  	}
  
--	if (i != DCCP_LI_HIST_IVAL_F_LENGTH)
-+	BUG_ON(w_tot = 0);
-+	lh->i_mean = max(i_tot0, i_tot1) / w_tot;
-+}
-+
-+/**
-+ * tfrc_lh_update_i_mean  -  Update the `open' loss interval I_0
-+ * For recomputing p: returns `true' if p > p_prev  <=>  1/p < 1/p_prev
-+ */
-+u8 tfrc_lh_update_i_mean(struct tfrc_loss_hist *lh, struct sk_buff *skb)
-+{
-+	struct tfrc_loss_interval *cur = tfrc_lh_peek(lh);
-+	u32 old_i_mean = lh->i_mean;
-+	s64 length;
-+
-+	if (cur = NULL)			/* not initialised */
- 		return 0;
- 
--	i_tot = max(i_tot0, i_tot1);
-+	length = dccp_delta_seqno(cur->li_seqno, DCCP_SKB_CB(skb)->dccpd_seq);
- 
--	if (!w_tot) {
--		DCCP_WARN("w_tot = 0\n");
--		return 1;
--	}
-+	if (length - cur->li_length <= 0)	/* duplicate or reordered */
-+		return 0;
-+
-+	if (SUB16(dccp_hdr(skb)->dccph_ccval, cur->li_ccval) > 4)
-+		/*
-+		 * Implements RFC 4342, 10.2:
-+		 * If a packet S (skb) exists whose seqno comes `after' the one
-+		 * starting the current loss interval (cur) and if the modulo-16
-+		 * distance from C(cur) to C(S) is greater than 4, consider all
-+		 * subsequent packets as belonging to a new loss interval. This
-+		 * test is necessary since CCVal may wrap between intervals.
-+		 */
-+		cur->li_is_closed = 1;
-+
-+	if (tfrc_lh_length(lh) = 1)		/* due to RFC 3448, 6.3.1 */
-+		return 0;
-+
-+	cur->li_length = length;
-+	tfrc_lh_calc_i_mean(lh);
- 
--	return i_tot / w_tot;
--#endif
-+	return (lh->i_mean < old_i_mean);
- }
- 
--EXPORT_SYMBOL_GPL(dccp_li_hist_calc_i_mean);
-+EXPORT_SYMBOL_GPL(tfrc_lh_update_i_mean);
- 
- int __init li_init(void)
- {
---- a/net/dccp/ccids/lib/loss_interval.h
-+++ b/net/dccp/ccids/lib/loss_interval.h
-@@ -44,10 +44,12 @@ struct tfrc_loss_interval {
-  *  tfrc_loss_hist  -  Loss record database
-  *  @ring:	Circular queue managed in LIFO manner
-  *  @counter:	Current count of entries (can be more than %LIH_SIZE)
-+ *  @i_mean:	Current Average Loss Interval [RFC 3448, 5.4]
-  */
- struct tfrc_loss_hist {
- 	struct tfrc_loss_interval	*ring[LIH_SIZE];
- 	u8				counter;
-+	u32				i_mean;
- };
- 
- static inline void tfrc_lh_init(struct tfrc_loss_hist *lh)
-@@ -65,8 +67,7 @@ static inline u8 tfrc_lh_length(struct t
- 	return min(lh->counter, (u8)LIH_SIZE);
- }
- 
-+extern u8   tfrc_lh_update_i_mean(struct tfrc_loss_hist *lh, struct sk_buff *);
- extern void tfrc_lh_cleanup(struct tfrc_loss_hist *lh);
- 
--extern u32 dccp_li_hist_calc_i_mean(struct list_head *list);
--
- #endif /* _DCCP_LI_HIST_ */
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -728,7 +728,9 @@ static int ccid3_hc_rx_update_p(struct c
- 	struct list_head *li_hist = &hcrx->ccid3hcrx_li_hist;
- 	u32 pinv_prev = hcrx->ccid3hcrx_pinv;
- 
-+	/* XXX subsequent patch
- 	hcrx->ccid3hcrx_pinv = dccp_li_hist_calc_i_mean(li_hist);
-+	*/
- 	if (hcrx->ccid3hcrx_pinv = 0) {
- 		DCCP_BUG("non-empty LI history and yet I_mean = 0!");
- 		return 0;
+-	if (sock_flag(sk, SOCK_LINGER) && !sk->sk_lingertime) {
++	if (data_was_unread) {
++		/* Unread data was tossed, send an appropriate Reset Code */
++		DCCP_WARN("ABORT with %u bytes unread data\n", data_was_unread);
++		dccp_send_reset(sk, DCCP_RESET_CODE_ABORTED);
++		dccp_set_state(sk, DCCP_CLOSED);
++	} else if (sock_flag(sk, SOCK_LINGER) && !sk->sk_lingertime) {
+ 		/* Check zero linger _after_ checking for unread data. */
+ 		sk->sk_prot->disconnect(sk, 0);
+ 	} else	/* Passive/active close after all data has been read. */
