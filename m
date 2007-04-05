@@ -1,53 +1,44 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 12 Apr 2007 19:16:47 +0000
-Subject: Re: [ANNOUNCE]: General remarks on patch submission
-Message-Id: <5640c7e00704121216p34e45c11p1078b082da71d75e@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 05 Apr 2007 15:33:57 +0000
+Subject: [PATCH 10/43]: Provide fallback RTT value when none is available
+Message-Id: <200704051633.57832@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200704121219.41919@strip-the-willow>
-In-Reply-To: <200704121219.41919@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 4/12/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Folks,
->
-> please allow a few general comments to avoid further misunderstandings and complications.
->
-> Several of you are more from a research background than from a developer background. The diversity
-> on this list often creates communication differences which have a paralysing effect on progress:
->
->  * often a patch submission breaks out into a discussion thread which continues for weeks and
->    months, while the the patch meanwhile "brews" unchanged somewhere;
->
->  * often parties defend their arguments from a wide range of diverse perspectives:
->        o the draft/specification perspective;
->        o one's own research agenda;
->        o network safety;
->        o operational stability of the implementation.
->    Within one's scope one is of course right, but the perspectives are not all compatible.
->
->  * One can only one thing at a time: research discussions or fixing implementation problems.
->    There is only one time budget for both activities.
->
-This is Linux. People are free to do what they want and how they want
-it. It's up to the maintainer to decide what is bullshit comments and
-time wasting and what is useful.
+[DCCP]: Provide fallback RTT value when none is available
 
-I sometimes go on but I do so because I believe in things strongly.
-I've struggled to get my code in at times at the past and others like
-Arnaldo and David have told me bluntly when I'm wrong and I just feel
-stupid rather than blaming them.
+This implements RFC 4340, section 3.4:
 
-So in short just because you get pissed off with the likes of things
-that Eddie and I say I'm not going to change a damn thing. Look in the
-mirror. I appreciate all the work that you've done and think you've
-moved CCID3 forward more than me but this sort of email is totally
-unneeded. Lean to work with the Linux community.
+ "Each DCCP implementation thus defines a default round-trip time
+  for use when no estimate is  available.  This parameter should 
+  default to not less than 0.2 seconds [...]."
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+In addition, after consulting with a few TCP experts, the over-cautious upper
+bound of 4 seconds for an RTT sample has now been reduced to 3 seconds: to 
+match the initial TCP RTO value as specified in [RFC 1122, 4.2.3.1].
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/dccp.h |    7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -73,9 +73,12 @@ extern void dccp_time_wait(struct sock *
+ 
+ #define DCCP_RTO_MAX ((unsigned)(120 * HZ)) /* FIXME: using TCP value */
+ 
+-/* bounds for sampled RTT values from packet exchanges (in usec) */
++/*
++ * RTT sampling: sanity bounds and fallback RTT value from RFC 4340, section 3.4
++ */
+ #define DCCP_SANE_RTT_MIN	100
+-#define DCCP_SANE_RTT_MAX	(4 * USEC_PER_SEC)
++#define DCCP_FALLBACK_RTT	(USEC_PER_SEC / 5)
++#define DCCP_SANE_RTT_MAX	(3 * USEC_PER_SEC)
+ 
+ /* Maximal interval between probes for local resources.  */
+ #define DCCP_RESOURCE_PROBE_INTERVAL ((unsigned)(HZ / 2U))
