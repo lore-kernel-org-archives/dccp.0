@@ -1,71 +1,153 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 09 Apr 2007 09:58:45 +0000
-Subject: [PATCH 2/5]: Fix Reset/Sync-Flood Bug
-Message-Id: <200704091058.45617@strip-the-willow>
+Date: Thu, 05 Apr 2007 15:35:06 +0000
+Subject: [PATCH 20/43]: Insert and update routines for the Loss Interval Database
+Message-Id: <200704051635.06788@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Fix Reset/Sync-Flood Bug
+[TFRC]: Insert and update routines for the Loss Interval Database
 
-This updates sequence number checking with regard to RFC 4340, 7.5.4.
-Missing in the code was an exception for sequence-invalid Reset packets, 
-which get a Sync acknowledging GSR, instead of (as usual) P.seqno.
+This provides an `insert' function for the Loss Interval database. It only inserts
+when a loss is new, i.e. either 
+ * no loss record has been allocated before (uninitialised) or
+ * the most recent loss is in a different RTT than the last one.
 
-This can lead to an oscillating ping-pong flood of Reset packets. 
-
-In fact, it has been observed on the wire as follows:
-
- 1. client establishes connection to server;
- 2. before server can write to client, client crashes without notifying
-    the server (NB: now no longer possible due to ABORT function);
- 3. server sends DCCP-Data packet (has no ackno);
- 4. client generates Reset "No Connection", seqno=0, increments seqno;
- 5. server replies with Sync, using ackno = P.seqno;
- 6. client generates Reset "No Connection" with seqno = ackno + 1;
- 7. goto (5).
-
-The difference is that now in (5) the server uses GSR. 
-This causes the Reset sent by the client in (6) to become sequence-valid, 
-so that in (7) the vicious circle is broken; the Reset is then enqueued 
-and causes the socket to enter TIMEWAIT state.
-
-Thanks to Eddie Kohler for help with this bug.
+For this purpose, the test from  [RFC 4342, 10.2] is used.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/input.c |   14 +++++++++++---
- 1 file changed, 11 insertions(+), 3 deletions(-)
+ net/dccp/ccids/ccid3.c             |   49 -------------------------------------
+ net/dccp/ccids/lib/loss_interval.c |   49 +++++++++++++++++++++++++++++++++++++
+ net/dccp/ccids/lib/loss_interval.h |    2 +
+ 3 files changed, 51 insertions(+), 49 deletions(-)
 
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -129,9 +129,6 @@ static int dccp_check_seqno(struct sock 
- 	 *	  Update S.GSR, S.SWL, S.SWH
- 	 *	  If P.type != Sync,
- 	 *	     Update S.GAR
--	 *      Otherwise,
--	 *	  Send Sync packet acknowledging P.seqno
--	 *	  Drop packet and return
- 	 */
- 	lswl = dp->dccps_swl;
- 	lawl = dp->dccps_awl;
-@@ -162,6 +159,17 @@ static int dccp_check_seqno(struct sock 
- 							      : "exists",
- 			  (unsigned long long) lawl, (unsigned long long) ackno,
- 			  (unsigned long long) dp->dccps_awh);
-+		/*
-+		 *   Step 6: Check sequence numbers
-+		 *      Otherwise,
-+		 *         If P.type = Reset,
-+		 *            Send Sync packet acknowledging S.GSR
-+		 *         Otherwise,
-+		 *            Send Sync packet acknowledging P.seqno
-+		 *      Drop packet and return
-+		 */
-+		if (dh->dccph_type = DCCP_PKT_RESET)
-+			seqno = dp->dccps_gsr;
- 		dccp_send_sync(sk, seqno, DCCP_PKT_SYNC);
- 		return -1;
- 	}
+--- a/net/dccp/ccids/lib/loss_interval.h
++++ b/net/dccp/ccids/lib/loss_interval.h
+@@ -67,6 +67,8 @@ static inline u8 tfrc_lh_length(struct t
+ 	return min(lh->counter, (u8)LIH_SIZE);
+ }
+ 
++extern int  tfrc_lh_interval_new(struct tfrc_loss_hist *, struct tfrc_rx_hist *,
++				 u32 (*first_li)(struct sock *), struct sock *);
+ extern u8   tfrc_lh_update_i_mean(struct tfrc_loss_hist *lh, struct sk_buff *);
+ extern void tfrc_lh_cleanup(struct tfrc_loss_hist *lh);
+ 
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -122,6 +122,55 @@ u8 tfrc_lh_update_i_mean(struct tfrc_los
+ 
+ EXPORT_SYMBOL_GPL(tfrc_lh_update_i_mean);
+ 
++/* Determine if `new_loss' does begin a new loss interval [RFC 4342, 10.2] */
++static inline u8 tfrc_lh_is_new_loss(struct tfrc_loss_interval *cur,
++				     struct dccp_rx_hist_entry *new_loss)
++{
++	return	dccp_delta_seqno(cur->li_seqno, new_loss->dccphrx_seqno) > 0 &&
++		(cur->li_is_closed ||
++		 SUB16(new_loss->dccphrx_ccval, cur->li_ccval) > 4);
++}
++
++/** tfrc_lh_interval_new  -  Insert new record into the Loss Interval database
++ * @lh:		   Loss Interval database
++ * @rh:		   Receive history containing a fresh loss event
++ * @calc_first_li: Caller-dependent routine to compute length of first interval
++ * Updates I_mean and returns 1 if a new interval has in fact been added to @lh.
++ */
++int tfrc_lh_interval_new(struct tfrc_loss_hist *lh, struct tfrc_rx_hist *rh,
++			 u32 (*calc_first_li)(struct sock *), struct sock *sk)
++{
++	struct tfrc_loss_interval *cur = tfrc_lh_peek(lh), *new;
++
++	if (cur != NULL && !tfrc_lh_is_new_loss(cur, loss_prev(rh)))
++		return 0;
++
++	new = tfrc_lh_demand_next(lh);
++	if (unlikely(new = NULL)) {
++		DCCP_CRIT("Cannot allocate/add loss record.");
++		return 0;
++	}
++
++	new->li_seqno	  = loss_prev(rh)->dccphrx_seqno;
++	new->li_ccval	  = loss_prev(rh)->dccphrx_ccval;
++	new->li_is_closed = 0;
++
++	if (++lh->counter = 1)
++		lh->i_mean = new->li_length = (*calc_first_li)(sk);
++	else {
++		cur->li_length = dccp_delta_seqno(cur->li_seqno, new->li_seqno);
++		new->li_length = dccp_delta_seqno(new->li_seqno,
++						  last_rcv(rh)->dccphrx_seqno);
++		if (lh->counter > (2*LIH_SIZE))
++			lh->counter -= LIH_SIZE;
++
++		tfrc_lh_calc_i_mean(lh);
++	}
++	return 1;
++}
++
++EXPORT_SYMBOL_GPL(tfrc_lh_interval_new);
++
+ int __init li_init(void)
+ {
+ 	tfrc_lh_slab = kmem_cache_create("tfrc_loss_history",
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -860,55 +860,6 @@ static u32 ccid3_hc_rx_calc_first_li(str
+ 	return (p = 0)? ~0U : scaled_div(1, p);
+ }
+ 
+-static void ccid3_hc_rx_update_li(struct sock *sk, u64 seq_loss, u8 win_loss)
+-{
+-#if 0 /* XXX subsequent patch */
+-	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+-	struct dccp_li_hist_entry *head;
+-	u64 seq_temp;
+-
+-	if (list_empty(&hcrx->ccid3hcrx_li_hist)) {
+-		if (!dccp_li_hist_interval_new(ccid3_li_hist,
+-		   &hcrx->ccid3hcrx_li_hist, seq_loss, win_loss))
+-			return;
+-
+-		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
+-		   struct dccp_li_hist_entry, dccplih_node);
+-		head->dccplih_interval = ccid3_hc_rx_calc_first_li(sk);
+-	} else {
+-		struct dccp_li_hist_entry *entry;
+-		struct list_head *tail;
+-
+-		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
+-		   struct dccp_li_hist_entry, dccplih_node);
+-		/* FIXME win count check removed as was wrong */
+-		/* should make this check with receive history */
+-		/* and compare there as per section 10.2 of RFC4342 */
+-
+-		/* new loss event detected */
+-		/* calculate last interval length */
+-		seq_temp = dccp_delta_seqno(head->dccplih_seqno, seq_loss);
+-		entry = dccp_li_hist_entry_new(ccid3_li_hist, GFP_ATOMIC);
+-
+-		if (entry = NULL) {
+-			DCCP_BUG("out of memory - can not allocate entry");
+-			return;
+-		}
+-
+-		list_add(&entry->dccplih_node, &hcrx->ccid3hcrx_li_hist);
+-
+-		tail = hcrx->ccid3hcrx_li_hist.prev;
+-		list_del(tail);
+-		kmem_cache_free(ccid3_li_hist->dccplih_slab, tail);
+-
+-		/* Create the newest interval */
+-		entry->dccplih_seqno = seq_loss;
+-		entry->dccplih_interval = seq_temp;
+-		entry->dccplih_win_count = win_loss;
+-	}
+-#endif
+-}
+-
+ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
