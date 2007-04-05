@@ -1,163 +1,74 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:16:20 +0000
-Subject: [PATCH 16/29] Preparation to fit TX list locking
-Message-Id: <20070412211620.GQ21292@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 05 Apr 2007 15:36:48 +0000
+Subject: [PATCH 34/43]: Perform SHUT_RD and SHUT_WR on receiving close
+Message-Id: <200704051636.48463@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch prepares adding TX history locking by changing all
-functions which return a reference to a TX history object:
+[DCCP]: Perform SHUT_RD and SHUT_WR on receiving close
 
- 1) removal of dccp_tx_hist_head  -  nowhere used in the code;
- 2) change dccp_tx_hist_find_entry  -  the sole use is to look up a
-    timestamp for an Ack-ed packet; and then do garbage-collection.
+The first change is to close the write-end in addition to the read-end when
+a fin-like segment (Close or CloseReq) is received by DCCP. This accounts
+for the fact that DCCP, in contrast to TCP, does not have a half-close. I
+checked the specification - when a fin-like segment has been sent there is
+no guarantee at all that any further data will be processed.
 
-The latter function is changed to return the desired timestamp instead of
-a history object reference.
+Thus this patch performs SHUT_WR in addition to the SHUT_RD when a fin-like
+segment is encountered.
 
-Not returning object references is necessary, since otherwise lists could
-not be garbage-collected (or would have to use atomic reference counts).
-
-Furthermore, the garbage-collection is now integrated into (2), since it
-requires first a read access and then a write access at the same place in
-the list: giving up the lock here would permit race condition.
+The second change is minor; I noted that code appears twice in different
+places and think it makes sense to put this into a self-contained function.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/ccid3.c              |   18 +++++++-----------
- net/dccp/ccids/lib/packet_history.c |   27 +++++++++++++++++++++------
- net/dccp/ccids/lib/packet_history.h |   16 ++--------------
- 3 files changed, 30 insertions(+), 31 deletions(-)
+ net/dccp/input.c |   22 +++++++++++++++-------
+ 1 file changed, 15 insertions(+), 7 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 131001b..0029979 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -421,10 +421,9 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -19,16 +19,27 @@
+ #include "ccid.h"
+ #include "dccp.h"
+ 
+-static void dccp_fin(struct sock *sk, struct sk_buff *skb)
++static void dccp_enqueue_skb(struct sock *sk, struct sk_buff *skb)
  {
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 	struct ccid3_options_received *opt_recv;
--	struct dccp_tx_hist_entry *packet;
--	struct timeval now;
-+	struct timeval now, t_send;
- 	unsigned long t_nfb;
--	u32 pinv, r_sample;
-+	u32 pinv, r_sample, rc;
+-	sk->sk_shutdown |= RCV_SHUTDOWN;
+-	sock_set_flag(sk, SOCK_DONE);
+ 	__skb_pull(skb, dccp_hdr(skb)->dccph_doff * 4);
+ 	__skb_queue_tail(&sk->sk_receive_queue, skb);
+ 	skb_set_owner_r(skb, sk);
+ 	sk->sk_data_ready(sk, 0);
+ }
  
- 	BUG_ON(hctx = NULL);
- 
-@@ -440,10 +439,10 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	default:			return;
- 	}
- 
--	/* get packet from history to look up t_recvdata */
--	packet = dccp_tx_hist_find_entry(&hctx->ccid3hctx_hist,
--				         DCCP_SKB_CB(skb)->dccpd_ack_seq);
--	if (unlikely(packet = NULL)) {
-+	/* look up t_recvdata in packet history */
-+	rc = dccp_tx_hist_get_send_time(ccid3_tx_hist, &hctx->ccid3hctx_hist,
-+				        DCCP_SKB_CB(skb)->dccpd_ack_seq, &t_send);
-+	if (unlikely(!rc)) {
- 		DCCP_WARN("%s(%p), seqno %llu(%s) doesn't exist in history!\n",
- 			  dccp_role(sk), sk,
- 		          (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq,
-@@ -466,7 +465,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	 * R_sample  =  (t_now - t_recvdata) - t_elapsed
- 	 */
- 	skb_get_timestamp(skb, &now);
--	r_sample = dccp_sample_rtt(sk, &now, &packet->dccphtx_tstamp);
-+	r_sample = dccp_sample_rtt(sk, &now, &t_send);
- 
- 	/*
- 	 * Update RTT estimate (honours RTT from SYN exchange):
-@@ -523,9 +522,6 @@ done_computing_x:
- 	/* unschedule no feedback timer */
- 	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
- 
--	/* remove all packets older than the one acked from history */
--	dccp_tx_hist_purge_older(ccid3_tx_hist,
--				 &hctx->ccid3hctx_hist, packet);
- 	/*
- 	 * As we have calculated new ipi, delta, t_nom it is possible
- 	 * that we now can send a packet, so wake up dccp_wait_for_ccid
-diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
-index 2e8ef42..d149b19 100644
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -85,21 +85,36 @@ void dccp_tx_hist_delete(struct dccp_tx_hist *hist)
- 
- EXPORT_SYMBOL_GPL(dccp_tx_hist_delete);
- 
--struct dccp_tx_hist_entry *
--	dccp_tx_hist_find_entry(const struct list_head *list, const u64 seq)
-+/**
-+ *  dccp_tx_hist_get_send_time  -  Retrieve timestamp of sent packet
-+ *
-+ *  @hist:   history slab associated with TX history
-+ *  @list:   TX history list head
-+ *  @seq:    48-bit sequence number of packet in question
-+ *  @t_send: timestamp to be returned
-+ *  Returns 1 on success and then garbage-collects all older entries.
-+ */
-+int dccp_tx_hist_get_send_time(struct dccp_tx_hist *hist,
-+			       struct list_head *list, u64 seq,
-+			       struct timeval *t_send)
- {
--	struct dccp_tx_hist_entry *packet = NULL, *entry;
-+	struct dccp_tx_hist_entry *entry;
-+	int found = 0;
- 
- 	list_for_each_entry(entry, list, dccphtx_node)
- 		if (entry->dccphtx_seqno = seq) {
--			packet = entry;
-+			found = 1;
-+			*t_send = entry->dccphtx_tstamp;
- 			break;
- 		}
- 
--	return packet;
-+	if (found)
-+		dccp_tx_hist_purge_older(hist, list, entry);
++static void dccp_fin(struct sock *sk, struct sk_buff *skb)
++{
++	/*
++	 * On receiving Close/CloseReq, both RD/WR shutdown are performed.
++	 * RFC 4340, 8.3 says that we MAY send further Data/DataAcks after
++	 * receiving the closing segment, but there is no guarantee that such
++	 * data will be processed at all.
++	 */
++	sk->sk_shutdown = SHUTDOWN_MASK;
++	sock_set_flag(sk, SOCK_DONE);
++	dccp_enqueue_skb(sk, skb);
++}
 +
-+	return found;
- }
- 
--EXPORT_SYMBOL_GPL(dccp_tx_hist_find_entry);
-+EXPORT_SYMBOL_GPL(dccp_tx_hist_get_send_time);
- 
- void dccp_tx_hist_purge(struct dccp_tx_hist *hist, struct list_head *list)
+ static void dccp_rcv_close(struct sock *sk, struct sk_buff *skb)
  {
-diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
-index 330b58f..da81709 100644
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -80,20 +80,8 @@ static inline struct dccp_tx_hist_entry *
- 	return entry;
- }
- 
--static inline struct dccp_tx_hist_entry *
--			dccp_tx_hist_head(struct list_head *list)
--{
--	struct dccp_tx_hist_entry *head = NULL;
--
--	if (!list_empty(list))
--		head = list_entry(list->next, struct dccp_tx_hist_entry,
--				  dccphtx_node);
--	return head;
--}
--
--extern struct dccp_tx_hist_entry *
--			dccp_tx_hist_find_entry(const struct list_head *list,
--						const u64 seq);
-+extern int dccp_tx_hist_get_send_time(struct dccp_tx_hist *, struct list_head *,
-+				      u64 seq, struct timeval *t_send);
- 
- static inline void dccp_tx_hist_add_entry(struct list_head *list,
- 					  struct dccp_tx_hist_entry *entry)
--- 
-1.5.0.6
-
+ 	if (sk->sk_state = DCCP_CLOSEREQ) {
+@@ -176,10 +187,7 @@ static int __dccp_rcv_established(struct
+ 		 * FIXME: check if sk_receive_queue is full, schedule DATA_DROPPED
+ 		 * option if it is.
+ 		 */
+-		__skb_pull(skb, dh->dccph_doff * 4);
+-		__skb_queue_tail(&sk->sk_receive_queue, skb);
+-		skb_set_owner_r(skb, sk);
+-		sk->sk_data_ready(sk, 0);
++		dccp_enqueue_skb(sk, skb);
+ 		return 0;
+ 	case DCCP_PKT_ACK:
+ 		goto discard;
