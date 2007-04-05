@@ -1,71 +1,130 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:17:42 +0000
-Subject: [PATCH 26/29] Modulo-16 arithmetic for window counters
-Message-Id: <20070412211742.GA21292@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 05 Apr 2007 15:35:24 +0000
+Subject: [PATCH 23/43]: Fix and simplify header includes
+Message-Id: <200704051635.24472@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This implements modulo-16 arithmetic which is needed to compare
-the 4-bit CCID 3 window counter (CCVal) values; it respects
-circular wraparound and returns a-b mod 16.
+[TFRC]: Fix and simplify header includes
 
-Implemented as a macro, since required in several places.
+This updates the header-include structure so that any module wishing to use
+the service of the tfrc_lib module needs only include "tfrc.h" and has access
+to all declarations it needs.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/ccid3.c              |    4 +---
- net/dccp/ccids/lib/packet_history.c |    4 +---
- net/dccp/ccids/lib/packet_history.h |    3 ++-
- 3 files changed, 4 insertions(+), 7 deletions(-)
-
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 428aa92..6b1cc1b 100644
+ net/dccp/ccids/ccid3.c              |    2 --
+ net/dccp/ccids/ccid3.h              |    7 +++----
+ net/dccp/ccids/lib/loss_interval.c  |    5 +----
+ net/dccp/ccids/lib/loss_interval.h  |    1 -
+ net/dccp/ccids/lib/packet_history.c |    1 -
+ net/dccp/ccids/lib/packet_history.h |    6 ++----
+ net/dccp/ccids/lib/tfrc.h           |    5 +++++
+ 7 files changed, 11 insertions(+), 16 deletions(-)
+--- a/net/dccp/ccids/lib/loss_interval.h
++++ b/net/dccp/ccids/lib/loss_interval.h
+@@ -12,7 +12,6 @@
+  *  Software Foundation; either version 2 of the License, or (at your option)
+  *  any later version.
+  */
+-
+ #include <linux/list.h>
+ #include <linux/slab.h>
+ #include <linux/time.h>
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -841,9 +841,7 @@ static u32 ccid3_hc_rx_calc_first_li(struct sock *sk)
- 				step = 1;
- 				break;
- 			case 1:
--				interval = win_count - entry->dccphrx_ccval;
--				if (interval < 0)
--					interval += TFRC_WIN_COUNT_LIMIT;
-+				interval = SUB16(win_count, entry->dccphrx_ccval);
- 				if (interval > 4)
- 					goto found;
- 				break;
-diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
-index 02bf58f..13cae61 100644
+@@ -34,8 +34,6 @@
+  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+  */
+ #include "../dccp.h"
+-#include "lib/loss_interval.h"
+-#include "lib/tfrc.h"
+ #include "ccid3.h"
+ 
+ #ifdef CONFIG_IP_DCCP_CCID3_DEBUG
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -1,3 +1,5 @@
++#ifndef _DCCP_CCID3_H_
++#define _DCCP_CCID3_H_
+ /*
+  *  net/dccp/ccids/ccid3.h
+  *
+@@ -33,15 +35,12 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+  */
+-#ifndef _DCCP_CCID3_H_
+-#define _DCCP_CCID3_H_
+-
+ #include <linux/list.h>
+ #include <linux/time.h>
+ #include <linux/types.h>
+ #include <linux/tfrc.h>
+ #include <asm/unaligned.h>
+-#include "lib/packet_history.h"
++#include "lib/tfrc.h"
+ #include "../ccid.h"
+ 
+ /* Two seconds as per RFC 3448 4.2 */
 --- a/net/dccp/ccids/lib/packet_history.c
 +++ b/net/dccp/ccids/lib/packet_history.c
-@@ -291,9 +291,7 @@ void dccp_rx_hist_add_packet(struct dccp_rx_hist *hist,
- 					win_count = entry->dccphrx_ccval;
- 					break;
- 				case 2:
--					tmp = win_count - entry->dccphrx_ccval;
--					if (tmp < 0)
--						tmp += TFRC_WIN_COUNT_LIMIT;
-+					tmp = SUB16(win_count, entry->dccphrx_ccval);
- 					if (tmp > TFRC_WIN_COUNT_PER_RTT + 1) {
- 						/*
- 						 * We have found a packet older
-diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
-index 78ef50f..9a27665 100644
+@@ -33,7 +33,6 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+  */
+-
+ #include <linux/string.h>
+ #include "packet_history.h"
+ 
 --- a/net/dccp/ccids/lib/packet_history.h
 +++ b/net/dccp/ccids/lib/packet_history.h
-@@ -47,7 +47,8 @@
- #define TFRC_RECV_NUM_LATE_LOSS	 3
- 
- #define TFRC_WIN_COUNT_PER_RTT	 4
--#define TFRC_WIN_COUNT_LIMIT	16
-+/* Subtraction a-b modulo-16, respects circular wrap-around */
-+#define SUB16(a, b) (((a) + 16 - (b)) & 0xF)
- 
+@@ -1,3 +1,5 @@
++#ifndef _DCCP_PKT_HIST_
++#define _DCCP_PKT_HIST_
  /*
-  * 	Transmitter History data structures and declarations
--- 
-1.5.0.6
-
+  *  net/dccp/packet_history.h
+  *
+@@ -33,10 +35,6 @@
+  *  along with this program; if not, write to the Free Software
+  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+  */
+-
+-#ifndef _DCCP_PKT_HIST_
+-#define _DCCP_PKT_HIST_
+-
+ #include <linux/list.h>
+ #include <linux/slab.h>
+ #include <linux/time.h>
+--- a/net/dccp/ccids/lib/tfrc.h
++++ b/net/dccp/ccids/lib/tfrc.h
+@@ -16,6 +16,11 @@
+ #include <linux/types.h>
+ #include <asm/div64.h>
+ #include "../../dccp.h"
++/* internal includes that this module exports: */
++struct tfrc_rx_hist;
++struct tfrc_loss_hist;
++#include "loss_interval.h"
++#include "packet_history.h"
+ 
+ #ifdef CONFIG_IP_DCCP_TFRC_DEBUG
+ extern int tfrc_debug;
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -10,11 +10,8 @@
+  *  the Free Software Foundation; either version 2 of the License, or
+  *  (at your option) any later version.
+  */
+-
+-#include <linux/module.h>
+ #include <net/sock.h>
+-#include "../../dccp.h"
+-#include "loss_interval.h"
++#include "tfrc.h"
+ 
+ static struct kmem_cache  *tfrc_lh_slab;
+ /* Loss Interval weights from [RFC 3448, 5.4], scaled by 10 */
