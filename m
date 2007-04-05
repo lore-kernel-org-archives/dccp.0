@@ -1,51 +1,85 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 22:27:56 +0000
-Subject: [PATCH 1/3] Fix bug in the calculation of very low sending rates
-Message-Id: <20070412222755.GF21292@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 05 Apr 2007 15:37:05 +0000
+Subject: [PATCH 37/43]: Use maxiumum-RTO backoff from DCCP spec
+Message-Id: <200704051637.05406@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This fixes an error in the calculation of t_ipi when X converges towards
-very low sending rates (between 1 and 64 bytes per second).
+[DCCP]: Use maxiumum-RTO backoff from DCCP spec
 
-Although this case may not sound likely, it can be reproduced by connecting,
-hitting enter (1 byte sent) and waiting for some time, during which the
-nofeedback timer halves the sending rate until finally it reaches the region
-1..64 bytes/sec. Computing X is handled correctly (tested separately); but by
-dividing X _before_ entering the calculation of t_ipi, X becomes zero as
-a result.  This in turn triggers a BUG condition caught in scaled_div().
+This removes another Fixme, using the TCP maximum RTO rather than the value
+specified by the DCCP specification. Across the sections in RFC 4340, 64
+seconds is consistently suggested as maximum RTO backoff value; and this is
+the value which is now used.
 
-Fixed by replacing with equivalent statement and explicit typecast for good
-measure.
+I have checked both termination cases for retransmissions of Close/CloseReq: 
+with the default value 15 of `retries2', and an initial icsk_retransmit = 0,
+it takes about 614 seconds to declare a non-responding peer as dead, after
+which the final terminating Reset is sent. With the TCP maximum RTO value of
+120 seconds it takes (as might be expected) almost twice as long, about 23
+minutes.
 
-Calculation verified and effect of patch tested - reduced never below 1 byte
-per 64 seconds afterwards, i.e. not allowing divide-by-zero.
+         Detailed References [can be omitted from commit msg]
+         ----------------------------------------------------
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
----
- net/dccp/ccids/ccid3.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+Maximum RTO backoff affects the following sections of the code:
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index c3abd76..d7d9ce7 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -102,8 +102,8 @@ static inline u64 rfc3390_initial_rate(struct sock *sk)
- static inline void ccid3_update_send_interval(struct ccid3_hc_tx_sock *hctx)
- {
- 	/* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second) */
--	hctx->ccid3hctx_t_ipi = scaled_div(hctx->ccid3hctx_s,
--					   hctx->ccid3hctx_x >> 6);
-+	hctx->ccid3hctx_t_ipi = scaled_div32(((u64)hctx->ccid3hctx_s) << 6,
-+					     hctx->ccid3hctx_x);
+ * Feature negotiation
+   The section on feature negotiation in RFC 4340, section 6.6.3,
+   states that "Endpoints SHOULD use an exponential-backoff timer 
+   [...] and should back off to not less than 64 seconds."
+   The DCCP feature negotiation (options.c and in timer.c) use RTO_MAX
+   as upper bound, so using the new default of 64 seconds makes sense.
  
- 	/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
- 	hctx->ccid3hctx_delta = min_t(u32, hctx->ccid3hctx_t_ipi / 2,
--- 
-1.5.0.6
+ * Requests in the client-REQUEST state (section 8.1.1) are also subject
+   to an exponential backoff using the same upper bound.
+   This timer is set in dccp_connect(), using again RTO_MAX.
+ 
+ * Sending Close/CloseReq in the states CLOSING and CLOSEREQ (sec. 8.3) is
+   subject to the same maximum backoff of "not less than once every 64 seconds"
+   This is done in dccp_send_close, again using RTO_MAX.
 
+ * The dccp_response_timer() (used by dccp_keepalive_timer) also uses RTO_MAX.
+   This timer performs garbage-collection of older entries in the listen queue
+   in inet_csk_reqsk_queue_prune, where RTO_MAX sets the upper bound on expiry
+   of an entry. It is thus probably best to keep RTO_MAX consistent with the
+   other timeouts, i.e. use the same value here.
+ 
+ * Acks in client-PARTOPEN state (sec. 8.1.5) are also to be retransmitted
+   using a delayed-Ack timer. This is done in dccp_write_xmit().
+ 
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/dccp.h |   11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -71,7 +71,14 @@ extern void dccp_time_wait(struct sock *
+ /* RFC 1122, 4.2.3.1 initial RTO value */
+ #define DCCP_TIMEOUT_INIT ((unsigned)(3 * HZ))
+ 
+-#define DCCP_RTO_MAX ((unsigned)(120 * HZ)) /* FIXME: using TCP value */
++/*
++ * The maximum back-off value for retransmissions. This is needed for
++ *  - retransmitting client-Requests (sec. 8.1.1),
++ *  - retransmitting Close/CloseReq when closing (sec. 8.3),
++ *  - feature-negotiation retransmission (sec. 6.6.3),
++ *  - Acks in client-PARTOPEN state (sec. 8.1.5).
++ */
++#define DCCP_RTO_MAX ((unsigned)(64 * HZ))
+ 
+ /*
+  * RTT sampling: sanity bounds and fallback RTT value from RFC 4340, section 3.4
+@@ -439,7 +446,7 @@ static inline void timeval_add_usecs(str
+ {
+ 	tv->tv_usec += usecs;
+ 	while (tv->tv_usec >= USEC_PER_SEC) {
+-		tv->tv_sec++;
++
+ 		tv->tv_usec -= USEC_PER_SEC;
+ 	}
+ }
