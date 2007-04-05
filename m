@@ -1,234 +1,163 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:34:12 +0000
-Subject: [PATCH 12/43]: New RX History Step 5 - CCID3 packet reception
-Message-Id: <200704051634.12715@strip-the-willow>
+Date: Thu, 05 Apr 2007 15:32:52 +0000
+Subject: [PATCH 0/43]:  CCID3 fixes / standalone TFRC loss-detection and loss intervals database / DCCP closi
+Message-Id: <200704051632.52678@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[CCID 3]: New RX History Step 5 - CCID3 packet reception
+This is the completion of the CCID3 fixes begun with the last patch set, plus work on DCCP passive-close.
+I apologize for the mass of output. On the other hand, it is probably not that much, since I have been
+anxious to split each logical change into a separate patch. I have not always managed to eliminate overriding 
+by a later one, but tried to avoid this as good as possible.
 
-This patch continues with the integration of the new RX history structure.
-It takes care of
- 1. Receiver RTT sampling until first loss occurs (this replaces the existing
-    mechanism which was unreliable due to requiring timestamp/elapsed time
-    option from the sender; now uses the algorithm from RFC 4343, 8.1);
- 2. Recomputing p after the first loss occurred (RFC 3448, 6.1);
- 3. Marking history entries as `loss is indicated';
- 4. Sending first feedback (RFC 3448, 6.3; note the state transition is now
-    in ccid3_hc_rx_send_feedback());		
- 5. Loss detection wrt NDUPACK (RFC 4342, 6.1);
- 6. Tracking of the highest-received-seqno so far (used for loss detection).
+The patches divide into the following groups, the bulk of work is in II/III. All patches have been uploaded
+to http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/ , on top of the basic CCID3 patches.
 
-Due to the amount of required changes, (5) was split into a subsequent patch.
-As a byproduct, the socket struct again gets a little smaller.
+Due to the mass of outstanding patches, I offer to split them into separate directories and create 
+separate blocks of descriptions -- please do let me know if you would like to make use of this.
 
-Documentation on http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/ccid3_packet_reception/
+====================================================I. Basic CCID3 Patches
+===========
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/ccid3.c |  131 +++++++++++++++++++------------------------------
- net/dccp/ccids/ccid3.h |    4 -
- 2 files changed, 53 insertions(+), 82 deletions(-)
+Patch #1: Implements circular modulo-16 arithmetic for working with window counters.
 
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -133,10 +133,9 @@ enum ccid3_hc_rx_states {
-  *  @ccid3hcrx_s  -  Received packet size in bytes
-  *  @ccid3hcrx_bytes_recv  -  Total sum of DCCP payload bytes
-  *  @ccid3hcrx_x_recv  -  Receiver estimate of send rate (RFC 3448, sec. 4.3)
-- *  @ccid3hcrx_rtt  -  Receiver estimate of rtt (non-standard)
-+ *  @ccid3hcrx_rtt  -  Receiver estimate of RTT (RFC 4342, 8.1)
-  *  @ccid3hcrx_pinv  -  Reciprocal of Loss Event Rate p (RFC 4342, sec. 8.5)
-  *  @ccid3hcrx_tstamp_last_feedback  -  Time at which last feedback was sent
-- *  @ccid3hcrx_tstamp_last_ack  -  Time at which last feedback was sent
-  *  @ccid3hcrx_hist  -  Packet history exported by TFRC module
-  *  @ccid3hcrx_li_hist  -  Loss Interval History
-  *  @ccid3hcrx_elapsed_time  -  Time since packet reception
-@@ -150,7 +149,6 @@ struct ccid3_hc_rx_sock {
- 	u32				ccid3hcrx_rtt;
- 	u32				ccid3hcrx_pinv;
- 	struct timeval			ccid3hcrx_tstamp_last_feedback;
--	struct timeval			ccid3hcrx_tstamp_last_ack;
- 	struct tfrc_rx_hist		ccid3hcrx_hist;
- 	struct list_head		ccid3hcrx_li_hist;
- 	u32				ccid3hcrx_elapsed_time;
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -729,9 +729,6 @@ static int ccid3_hc_rx_update_p(struct c
- 	struct list_head *li_hist = &hcrx->ccid3hcrx_li_hist;
- 	u32 pinv_prev = hcrx->ccid3hcrx_pinv;
+Patch #2: Bug-fix: CCID3 receiver (hc_rx) does not set CCVal window counter.
+
+Patch #3: Remove the redundancy of keeping both p and p_inv = 1/p on the CCID3 socket.
+          The socket size shrinks a bit further and the code becomes simpler.
+
+Patch #4: Avoids redundant history access when copying received-packet information over
+          to send CCID3 feedback. Simplification and less prone to problems with 
+          concurrent access to data structures.
+
+Patch #5: Provide dedicated "tfrc_module.c" source file to mark structure of tfrc_lib;
+          and provide the missing "tfrc_pr_debug()" macro for debugging.
+
+====================================================II. New CCID3 RX History Structure |
+==================
+The RX history structure has been much revised, in particular it has been reduced to a fixed-size rinbuffer
+of size 4. This is the minimally required size to perform loss detection. In addition, a more robust form of
+receiver-based RTT sampling is also performed on top of this structure.
+As a result, more functionality becomes available with simpler code. 
+
  
--	if (list_empty(li_hist)) /* only empty if no loss so far, i.e. p = 0 */
--		return 0;
--
- 	hcrx->ccid3hcrx_pinv = dccp_li_hist_calc_i_mean(li_hist);
- 	if (hcrx->ccid3hcrx_pinv = 0) {
- 		DCCP_BUG("non-empty LI history and yet I_mean = 0!");
-@@ -755,6 +752,7 @@ static void ccid3_hc_rx_send_feedback(st
- 	case TFRC_RSTATE_NO_DATA:
- 		hcrx->ccid3hcrx_x_recv = 0;
- 		hcrx->ccid3hcrx_pinv   = ~0U;	/* see RFC 4342, 8.5 */
-+		ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
- 		break;
- 	case TFRC_RSTATE_DATA:
- 		delta = timeval_delta(&now,
-@@ -966,96 +964,73 @@ detect_out:
- static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- {
- 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
--	const struct dccp_options_received *opt_recv;
--	struct dccp_rx_hist_entry *packet;
--	struct timeval now;
--	u32 r_sample, rtt_prev;
--	int loss, payload_size;
-+	u32 sample, ndp = dccp_sk(sk)->dccps_options_received.dccpor_ndp,
-+	    payload_size = skb->len - dccp_hdr(skb)->dccph_doff * 4;
-+	u8  is_data_packet = dccp_data_packet(skb), do_feedback = 0;
- 
- 	BUG_ON(hcrx = NULL);
- 
--	opt_recv = &dccp_sk(sk)->dccps_options_received;
-+	spin_lock(&hcrx->ccid3hcrx_hist.lock);
- 
--	switch (DCCP_SKB_CB(skb)->dccpd_type) {
--	case DCCP_PKT_ACK:
--		if (hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA)
--			return;
--	case DCCP_PKT_DATAACK:
--		if (opt_recv->dccpor_timestamp_echo = 0)
--			break;
--		rtt_prev = hcrx->ccid3hcrx_rtt;
--		do_gettimeofday(&now);
--		r_sample = dccp_sample_rtt(sk, &now, NULL);
--
--		if (hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA)
--			hcrx->ccid3hcrx_rtt = r_sample;
--		else
--			hcrx->ccid3hcrx_rtt = (hcrx->ccid3hcrx_rtt * 9) / 10 +
--					      r_sample / 10;
--
--		if (rtt_prev != hcrx->ccid3hcrx_rtt)
--			ccid3_pr_debug("%s(%p), New RTT=%uus, elapsed time=%u\n",
--				       dccp_role(sk), sk, hcrx->ccid3hcrx_rtt,
--				       opt_recv->dccpor_elapsed_time);
--		break;
--	case DCCP_PKT_DATA:
--		break;
--	default: /* We're not interested in other packet types, move along */
--		return;
-+	if (unlikely(hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA)) {
-+		/* Handle initial feedback */
-+		if (is_data_packet) {
-+			do_feedback = 1;
-+			ccid3_hc_rx_update_s(hcrx, payload_size);
-+		}
-+		goto update_records;
- 	}
- 
--#if 0	/* XXX resolved by subsequent patch */
--	packet = dccp_rx_hist_entry_new(ccid3_rx_hist, sk, opt_recv->dccpor_ndp,
--					skb, GFP_ATOMIC);
--	if (unlikely(packet = NULL)) {
--		DCCP_WARN("%s(%p), Not enough mem to add rx packet "
--			  "to history, consider it lost!\n", dccp_role(sk), sk);
-+	if (tfrc_rx_duplicate(&hcrx->ccid3hcrx_hist, skb))
- 		return;
-+
-+	if (is_data_packet) {
-+		ccid3_hc_rx_update_s(hcrx, payload_size);
-+		hcrx->ccid3hcrx_bytes_recv += payload_size;
-+	}
-+
-+	/*
-+	 *	Handle pending losses and otherwise check for new loss
-+	 */
-+	if (tfrc_rx_loss_pending(&hcrx->ccid3hcrx_hist)) {
-+		/*
-+		 * Loss Handling
-+		 *
-+		 * XXX: part of subsequent patch
-+		 */
-+		goto sending_feedback;
- 	}
- 
--	loss = ccid3_hc_rx_detect_loss(sk, packet);
-+	if (tfrc_rx_new_loss_indicated(&hcrx->ccid3hcrx_hist, skb, ndp))
-+		goto update_records;
- 
--#endif
--	if (DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK)
--		return;
-+	/*
-+	 *	Handle data packets: RTT sampling and monitoring p
-+	 */
-+	if (unlikely(!is_data_packet))
-+		goto update_records;
- 
--	payload_size = skb->len - dccp_hdr(skb)->dccph_doff * 4;
--	ccid3_hc_rx_update_s(hcrx, payload_size);
-+	if (list_empty(&hcrx->ccid3hcrx_li_hist)) {  /* no loss so far: p = 0 */
- 
--	switch (hcrx->ccid3hcrx_state) {
--	case TFRC_RSTATE_NO_DATA:
--		ccid3_pr_debug("%s(%p, state=%s), skb=%p, sending initial "
--			       "feedback\n", dccp_role(sk), sk,
--			       dccp_state_name(sk->sk_state), skb);
--		ccid3_hc_rx_send_feedback(sk, skb);
--		ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
--		return;
--	case TFRC_RSTATE_DATA:
--		hcrx->ccid3hcrx_bytes_recv += payload_size;
--		if (loss)
--			break;
-+		sample = tfrc_rx_sample_rtt(&hcrx->ccid3hcrx_hist, skb);
-+		if (sample != 0)
-+			TFRC_EWMA(hcrx->ccid3hcrx_rtt, sample, 9);
- 
--		do_gettimeofday(&now);
--		if ((timeval_delta(&now, &hcrx->ccid3hcrx_tstamp_last_ack) -
--		     (suseconds_t)hcrx->ccid3hcrx_rtt) >= 0) {
--			hcrx->ccid3hcrx_tstamp_last_ack = now;
--			ccid3_hc_rx_send_feedback(sk, skb);
--		}
--		return;
--	case TFRC_RSTATE_TERM:
--		DCCP_BUG("%s(%p) - Illegal state TERM", dccp_role(sk), sk);
--		return;
--	}
-+	} else if (ccid3_hc_rx_update_p(hcrx))	/* recompute p; RFC 3448, 6.1 */
-+		do_feedback = 1;
- 
--	/* Dealing with packet loss */
--	ccid3_pr_debug("%s(%p, state=%s), data loss! Reacting...\n",
--		       dccp_role(sk), sk, dccp_state_name(sk->sk_state));
-+	/* check if the periodic once-per-RTT feedback is due; RFC 4342, 10.3 */
-+	if (SUB16(dccp_hdr(skb)->dccph_ccval, hcrx->ccid3hcrx_last_counter) > 3)
-+		do_feedback = 1;
- 
--	if (ccid3_hc_rx_update_p(hcrx))
--		ccid3_hc_rx_send_feedback(sk, skb);
-+update_records:
-+	tfrc_rx_hist_update(&hcrx->ccid3hcrx_hist, skb, ndp);
- 
--	/* Update highest received sequence number so far */
--	tfrc_rx_hist_update(&hcrx->ccid3hcrx_hist, skb, opt_recv->dccpor_ndp);
-+sending_feedback:
-+	spin_unlock(&hcrx->ccid3hcrx_hist.lock);
-+
-+	if (do_feedback)
-+		ccid3_hc_rx_send_feedback(sk, skb);
- }
- 
- static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
-@@ -1067,8 +1042,6 @@ static int ccid3_hc_rx_init(struct ccid 
- 	if (tfrc_rx_hist_init(&hcrx->ccid3hcrx_hist))
- 		return 1;
- 	INIT_LIST_HEAD(&hcrx->ccid3hcrx_li_hist);
--	do_gettimeofday(&hcrx->ccid3hcrx_tstamp_last_ack);
--	hcrx->ccid3hcrx_tstamp_last_feedback = hcrx->ccid3hcrx_tstamp_last_ack;
- 	hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA;
- 	hcrx->ccid3hcrx_s     = 0;
- 	hcrx->ccid3hcrx_rtt   = 0;
+Patch #6: New RX history infrastructure - data structures. 
+
+Patch #7: "Glue patch" to allow the transition, using mainly #if 0 ... to allow a transition.
+          This patch is entirely overwritten by later patches, but is necessary if people want
+          to test just the first 6 patches on their own.
+
+Patch #8: RX history constructor / destructor. 
+          NB: I left the old dccp_rx_hist_new() / dccp_rx_hist_delete() in case someone wants to
+              build some other RX history in the future; but in fact none of the code uses them now.
+
+Patch #9: Takes care of always-tracking the highest-received sequence number in the new RX structure.
+
+
+Patch #10: Fallback RTT value from RFC 4340, 4.3. Seems to be an oversight, we need a fallback RTT in
+           quite a few cases; this patch adds it for DCCP-wide use; plus update on RTT sanity-check.
+
+Patch #11: Receiver RTT sampling algorithm - I fine-tuned the algorithm from RFC 4342 for robustness.
+
+Patch #12: Integrate new RX history structure with CCID3 packet reception (hc_rx). Now has all the 
+           features and checks required by RFC 3448/4342 on receiving a new CCID3 packet.
+
+Patch #13: Add loss detection, complete with handling reordering/late arrival and filling of seqno holes.
+
+Patch #14: Loss detection continued - recycling of loss records under bursts of losses.
+
+Patch #15: Removes the old RX history functions which have been replaced.
+
+====================================================II. New CCID3 Loss Intervals Database Structure |
+========================This implements an entirely new loss intervals database which interfaces with the RX history structure.
+It is also part of the tfrc_lib module and so has the added benefit that (i) loss detection, (ii)
+detection whether a loss is indeed new and (iii) adding a new loss interval record to the LI database
+can all be done in one step - as a service provided by the tfrc_lib module.
+A nice feature is on-demand allocation, i.e. loss-free connections have very little memory consumption.
+
+
+Patch #16: Basic ringbuffer structure (just declarations and some inline test/initialisation functions).
+
+Patch #17: Access macros to encapsulate access to the internals of the structure.
+
+Patch #18: Slab cache on-demand allocation and de-allocation. There is one central slab cache which works
+           as `array factory' for all clients. No memory is allocated when the connection is loss-free.
+
+Patch #19: Routines for computing and updating I_mean as required by RFC 3448, 6. Since this is a TFRC
+           mechanism, it is also provided and exported as a service of the tfrc_lib module.
+
+Patch #20: Insert and Update routines for the LI database, as well as support for CCVal-based decision
+           whether a loss is new (using the test from RFC 4342, 10.2).
+
+Patch #21: Makes calculation of first loss interval local to the client of the tfrc_lib module. This is
+           better since the caller knows better its own variables.
+
+Patch #22: Integrate the Loss Interval database with RX history so that they can talk to each other.
+
+Patch #23: Fix header #includes so that services exported by tfrc_lib become accessible.
+
+Patch #24: Hook up the new LI database with CCID3.
+
+
+====================================================III. Miscellaneous CCID3 patches |
+=================
+
+Patch #25: Update copyrights - this is Ian's patch. I have added University of Aberdeen; they paid for this work.
+
+Patch #26: Simplifies an often-repeated test for NULL by doing it centrally in the conversion/cast function.
+
+Patch #27: Bug fix - handle CCID3 "Idle and Application-Limited Periods" correctly. This wasn't done correctly
+           in the current code. The actual interface is open to debate/modularisation. For now, I have used the
+           definition of idleness from rfc3448bis -- found this a useful one.
+
+Patch #28: Bug fix - X_recv was not computed over the last R_m seconds as required by RFC 3448, 6. The solution
+           used by this patch also makes the feedback handling more transparent, by using explicit states.
+
+Patch #29: Axe a few chars from the long variable name hcrx->ccid3hcrx_tstamp_last_feedback.
+
+
+====================================================IV. Work on DCCP States |
+============This contains updates to the internal naming and handling of states. It clarifies the interrelation with 
+TCP statenames, and adds the two new states PASSIVE_1/PASSIVE_2 which are necessary to handle passive-close
+correctly (blurb is on http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/closing_states/ )
+During the past days I have been leaning over backwards to try and make this break. I could not find any
+way to create a crashing or sick termination, it terminates cleanly in many settings now. But it could still
+be that I missed something, I'd be grateful for any comments and suggestions.
+
+
+Patch #30: Insert a divider to the DCCP-states enum, to separate specific from general states.
+
+Patch #31: Decouples PARTOPEN from TCP-specific stream-states, as suggested by a FIXME-comment.
+
+Patch #32: Implement dedicated PASSIVE_1/2 states to support passive-close.
+
+Patch #33: Integrate the new states from #32 and add necessary state transitions.
+
+Patch #34: Perform both SHUT_RD and SHUT_WR on close (to respect DCCP's absence of half-close).
+
+Patch #35: When the node is in state CLOSING, no more data is accepted (in the same spirit as #34).
+
+Patch #36: Shift retransmit timer for active-close from proto.c into output.c.
+
+Patch #37: Use the maximum RTO from RFC spec (64 secs instead of TCP 120 sec); another Fixme.
+
+Patch #38: Support for server holding TIMEWAIT state - as in the RFC
+
+Patch #39: Protect against Reset/Sync floods. This will happen when client crashes during connection.
+
+Patch #40: Collapse repeated `len' statements into one.
+
+====================================================IV. Work on DCCP abnormal termination |
+===================Some missing bits are added to support active reset when a client crashes or is terminated with a SO_LINGER
+time of 0; the API now behaves as in TCP.
+
+Patch #41: Check for unread data on close (same handling now as in TCP).
+
+Patch #42: Implement TCP-like ABORT function.
+
+====================================================V. Last |
+====
+Patch #43: Update API Documentation.
