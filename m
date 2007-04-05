@@ -1,99 +1,73 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 09 Apr 2007 09:58:39 +0000
-Subject: [PATCH 1/4]: Shorten variable names in dccp_check_seqno
-Message-Id: <200704091058.39907@strip-the-willow>
+Date: Thu, 05 Apr 2007 15:35:12 +0000
+Subject: [PATCH 21/43]: Let calling module compute First Loss Interval
+Message-Id: <200704051635.12467@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Shorten variable names in dccp_check_seqno
+[TFRC]: Let calling module compute First Loss Interval
 
-This patch is in part required by the next patch; it
+TFRC [RFC 3448] requires a synthetic value of the first loss interval length.
+Since computing this value requires access to the internals of the calling 
+module (parameters s, RTT, and X_recv), it is better to let the calling module
+compute the First Loss Interval length.
 
- * replaces 6 instances of `DCCP_SKB_CB(skb)->dccpd_seq' with `seqno';
- * replaces 7 instances of `DCCP_SKB_CB(skb)->dccpd_ack_seq' with `ackno';
- * replaces 1 use of dccp_inc_seqno() by unfolding `ADD48' macro in place.
+Therefore, to highlight this, the function has been renamed into
+`ccid3_first_li' (due to a max line length of 80 characters); the code has
+been arranged and comments tidied up, but no functional change results.
 
-No changes in algorithm, all changes are text replacement/substitution.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk> 
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/input.c |   40 +++++++++++++++++-----------------------
- 1 file changed, 17 insertions(+), 23 deletions(-)
+ net/dccp/ccids/ccid3.c |   23 ++++++++++-------------
+ 1 file changed, 10 insertions(+), 13 deletions(-)
 
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -95,7 +95,8 @@ static int dccp_check_seqno(struct sock 
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -812,11 +812,16 @@ static int ccid3_hc_rx_insert_options(st
+ 	return 0;
+ }
+ 
+-/* calculate first loss interval
++/** ccid3_first_li  -  Implements [RFC 3448, 6.3.1]
+  *
+- * returns estimated loss interval in usecs */
+-
+-static u32 ccid3_hc_rx_calc_first_li(struct sock *sk)
++ * Determine the length of the first loss interval via inverse lookup.
++ * Assume that X_recv can be computed by the throughput equation
++ *		    s
++ *	X_recv = --------
++ *		 R * fval
++ * Find some p such that f(p) = fval; return 1/p (scaled).
++ */
++static u32 ccid3_first_li(struct sock *sk)
  {
- 	const struct dccp_hdr *dh = dccp_hdr(skb);
- 	struct dccp_sock *dp = dccp_sk(sk);
--	u64 lswl, lawl;
-+	u64 lswl, lawl, seqno = DCCP_SKB_CB(skb)->dccpd_seq,
-+			ackno = DCCP_SKB_CB(skb)->dccpd_ack_seq;
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 	u32 x_recv, p;
+@@ -824,14 +829,6 @@ static u32 ccid3_hc_rx_calc_first_li(str
+ 	struct timeval tstamp;
+ 	u64 fval;
  
- 	/*
- 	 *   Step 5: Prepare sequence numbers for Sync
-@@ -111,11 +112,9 @@ static int dccp_check_seqno(struct sock 
- 	 */
- 	if (dh->dccph_type = DCCP_PKT_SYNC ||
- 	    dh->dccph_type = DCCP_PKT_SYNCACK) {
--		if (between48(DCCP_SKB_CB(skb)->dccpd_ack_seq,
--			      dp->dccps_awl, dp->dccps_awh) &&
--		    dccp_delta_seqno(dp->dccps_swl,
--				     DCCP_SKB_CB(skb)->dccpd_seq) >= 0)
--			dccp_update_gsr(sk, DCCP_SKB_CB(skb)->dccpd_seq);
-+		if (between48(ackno, dp->dccps_awl, dp->dccps_awh) &&
-+		    dccp_delta_seqno(dp->dccps_swl, seqno) >= 0)
-+			dccp_update_gsr(sk, seqno);
- 		else
- 			return -1;
- 	}
-@@ -140,35 +139,30 @@ static int dccp_check_seqno(struct sock 
- 	if (dh->dccph_type = DCCP_PKT_CLOSEREQ ||
- 	    dh->dccph_type = DCCP_PKT_CLOSE ||
- 	    dh->dccph_type = DCCP_PKT_RESET) {
--		lswl = dp->dccps_gsr;
--		dccp_inc_seqno(&lswl);
-+		lswl = ADD48(dp->dccps_gsr, 1);
- 		lawl = dp->dccps_gar;
- 	}
+-	/*
+-	 * Determine the length of the first loss interval via inverse lookup.
+-	 * Assume that X_recv can be computed by the throughput equation
+-	 *		    s
+-	 *	X_recv = --------
+-	 *		 R * fval
+-	 * Find some p such that f(p) = fval; return 1/p [RFC 3448, 6.3.1].
+-	 */
+ 	if (hcrx->ccid3hcrx_rtt = 0) {
+ 		DCCP_WARN("No RTT estimate available, using 0.2sec fallback\n");
+ 		hcrx->ccid3hcrx_rtt = DCCP_FALLBACK_RTT;
+@@ -842,7 +839,7 @@ static u32 ccid3_hc_rx_calc_first_li(str
+ 	DCCP_BUG_ON(delta <= 0);
  
--	if (between48(DCCP_SKB_CB(skb)->dccpd_seq, lswl, dp->dccps_swh) &&
--	    (DCCP_SKB_CB(skb)->dccpd_ack_seq = DCCP_PKT_WITHOUT_ACK_SEQ ||
--	     between48(DCCP_SKB_CB(skb)->dccpd_ack_seq,
--		       lawl, dp->dccps_awh))) {
--		dccp_update_gsr(sk, DCCP_SKB_CB(skb)->dccpd_seq);
-+	if (between48(seqno, lswl, dp->dccps_swh) &&
-+	    (ackno = DCCP_PKT_WITHOUT_ACK_SEQ ||
-+	     between48(ackno, lawl, dp->dccps_awh))) {
-+		dccp_update_gsr(sk, seqno);
- 
- 		if (dh->dccph_type != DCCP_PKT_SYNC &&
--		    (DCCP_SKB_CB(skb)->dccpd_ack_seq !-		     DCCP_PKT_WITHOUT_ACK_SEQ))
--			dp->dccps_gar = DCCP_SKB_CB(skb)->dccpd_ack_seq;
-+		    (ackno != DCCP_PKT_WITHOUT_ACK_SEQ))
-+			dp->dccps_gar = ackno;
- 	} else {
- 		DCCP_WARN("DCCP: Step 6 failed for %s packet, "
- 			  "(LSWL(%llu) <= P.seqno(%llu) <= S.SWH(%llu)) and "
- 			  "(P.ackno %s or LAWL(%llu) <= P.ackno(%llu) <= S.AWH(%llu), "
- 			  "sending SYNC...\n",  dccp_packet_name(dh->dccph_type),
--			  (unsigned long long) lswl,
--			  (unsigned long long) DCCP_SKB_CB(skb)->dccpd_seq,
-+			  (unsigned long long) lswl, (unsigned long long) seqno,
- 			  (unsigned long long) dp->dccps_swh,
--			  (DCCP_SKB_CB(skb)->dccpd_ack_seq =
--				DCCP_PKT_WITHOUT_ACK_SEQ) ? "doesn't exist" : "exists",
--			  (unsigned long long) lawl,
--			  (unsigned long long) DCCP_SKB_CB(skb)->dccpd_ack_seq,
-+			  (ackno = DCCP_PKT_WITHOUT_ACK_SEQ) ? "doesn't exist"
-+							      : "exists",
-+			  (unsigned long long) lawl, (unsigned long long) ackno,
- 			  (unsigned long long) dp->dccps_awh);
--		dccp_send_sync(sk, DCCP_SKB_CB(skb)->dccpd_seq, DCCP_PKT_SYNC);
-+		dccp_send_sync(sk, seqno, DCCP_PKT_SYNC);
- 		return -1;
- 	}
- 
+ 	x_recv = scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
+-	if (x_recv = 0) {		/* would also trigger divide-by-zero */
++	if (x_recv = 0) {
+ 		DCCP_WARN("X_recv=0\n");
+ 		if ((x_recv = hcrx->ccid3hcrx_x_recv) = 0) {
+ 			DCCP_BUG("stored value of X_recv is zero");
