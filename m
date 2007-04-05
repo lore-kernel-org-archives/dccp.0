@@ -1,51 +1,64 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:13:53 +0000
-Subject: [PATCH 01/29] Fix bug in the calculation of very low sending rates
-Message-Id: <20070412211353.GB21292@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 05 Apr 2007 15:33:52 +0000
+Subject: [PATCH 9/43]: New RX History Step 3 - Track highest seqno
+Message-Id: <200704051633.52248@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This fixes an error in the calculation of t_ipi when X converges towards
-very low sending rates (between 1 and 64 bytes per second).
+[CCID 3]: New RX History Step 3 - Track highest seqno
 
-Although this case may not sound likely, it can be reproduced by connecting,
-hitting enter (1 byte sent) and waiting for some time, during which the
-nofeedback timer halves the sending rate until finally it reaches the region
-1..64 bytes/sec. Computing X is handled correctly (tested separately); but by
-dividing X _before_ entering the calculation of t_ipi, X becomes zero as
-a result.  This in turn triggers a BUG condition caught in scaled_div().
+The receiver needs to track the highest sequence number (and corresponding
+CCVal / timestamp) received so far.
 
-Fixed by replacing with equivalent statement and explicit typecast for good
-measure.
-
-Calculation verified and effect of patch tested - reduced never below 1 byte
-per 64 seconds afterwards, i.e. not allowing divide-by-zero.
+This is implemented with this patch, which updates the `non_loss' entry of
+the CCID 3 RX history with the details of the currently received packet.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/ccid3.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ net/dccp/ccids/ccid3.c              |    3 +++
+ net/dccp/ccids/lib/packet_history.h |   19 +++++++++++++++++++
+ 2 files changed, 22 insertions(+)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index c3abd76..d7d9ce7 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -102,8 +102,8 @@ static inline u64 rfc3390_initial_rate(struct sock *sk)
- static inline void ccid3_update_send_interval(struct ccid3_hc_tx_sock *hctx)
- {
- 	/* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second) */
--	hctx->ccid3hctx_t_ipi = scaled_div(hctx->ccid3hctx_s,
--					   hctx->ccid3hctx_x >> 6);
-+	hctx->ccid3hctx_t_ipi = scaled_div32(((u64)hctx->ccid3hctx_s) << 6,
-+					     hctx->ccid3hctx_x);
+@@ -1107,6 +1107,9 @@ static void ccid3_hc_rx_packet_recv(stru
  
- 	/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
- 	hctx->ccid3hctx_delta = min_t(u32, hctx->ccid3hctx_t_ipi / 2,
--- 
-1.5.0.6
-
+ 	if (ccid3_hc_rx_update_p(hcrx))
+ 		ccid3_hc_rx_send_feedback(sk, skb);
++
++	/* Update highest received sequence number so far */
++	tfrc_rx_hist_update(&hcrx->ccid3hcrx_hist, skb, opt_recv->dccpor_ndp);
+ }
+ 
+ static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -202,6 +202,25 @@ static inline void tfrc_rx_hist_swap(str
+ 	*b = tmp;
+ }
+ 
++static inline void dccp_rx_hist_entry_from_skb(struct dccp_rx_hist_entry *new,
++					       struct sk_buff *skb, u32 ndp)
++{
++	const struct dccp_hdr *dh = dccp_hdr(skb);
++
++	new->dccphrx_seqno = DCCP_SKB_CB(skb)->dccpd_seq;
++	new->dccphrx_ccval = dh->dccph_ccval;
++	new->dccphrx_type  = dh->dccph_type;
++	new->dccphrx_ndp   = ndp;
++	skb_get_timestamp(skb, &new->dccphrx_tstamp);
++}
++
++/* commit packet details of skb to history (record highest received seqno) */
++static inline void tfrc_rx_hist_update(struct tfrc_rx_hist *h,
++				       struct sk_buff *skb, u32 ndp)
++{
++	dccp_rx_hist_entry_from_skb(last_rcv(h), skb, ndp);
++}
++
+ extern int  tfrc_rx_hist_init(struct tfrc_rx_hist *);
+ extern void tfrc_rx_hist_cleanup(struct tfrc_rx_hist *);
+ 
