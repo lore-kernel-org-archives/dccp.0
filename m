@@ -1,127 +1,64 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:16:03 +0000
-Subject: [PATCH 14/29] Implement rfc3448bis changes to feedback reception
-Message-Id: <20070412211603.GO21292@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 05 Apr 2007 15:36:31 +0000
+Subject: [PATCH 31/43]: Make PARTOPEN an autonomous state
+Message-Id: <200704051636.31280@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This implements the algorithm to update the allowed sending rate X upon
-receiving feedback packets, as described in draft rfc3448bis, 4.2/4.3.
+[DCCP]: Make PARTOPEN an autonomous state
 
-Some changes (use of Larger Initial Windows) were already present, this patch
-adds the remaining ones. In particular:
+This decouples PARTOPEN from TCP-specific stream-states, as suggested by
+the FIXME-comment.
 
- * use t_RTO to distinguish the case "initial feedback packet":
-   as per earlier patch, it uses "state = NO_FBACK" to imply that
-     (a) either nofeedback timer expired (when t_RTO != 0) or
-     (b) initial feedback packet         (when t_RTO = 0);
- * no reduction of sending rate afer nofeedback timer expiry when p = 0;
- * implements the clause ``if [...] not the first packet after a nofeedback
-   timer'' of draft rfc3448bis, 4.3.
+The code has been checked with regard to dependency on PARTOPEN and FIN_WAIT1
+states (to which PARTOPEN previously was mapped): there is no difference, as
+PARTOPEN is always referred to directly (i.e. not via the mapping to TCP state).
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>	
 ---
- net/dccp/ccids/ccid3.c |   64 +++++++++++++++++++++++++----------------------
- 1 files changed, 34 insertions(+), 30 deletions(-)
+ include/linux/dccp.h |   12 ++----------
+ 1 file changed, 2 insertions(+), 10 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 63ac4ae..131001b 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -419,7 +419,6 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more,
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -228,15 +228,6 @@ struct dccp_so_feat {
+ enum dccp_state {
+ 	DCCP_OPEN	= TCP_ESTABLISHED,
+ 	DCCP_REQUESTING	= TCP_SYN_SENT,
+-	DCCP_PARTOPEN	= TCP_FIN_WAIT1, /* FIXME:
+-					    This mapping is horrible, but TCP has
+-					    no matching state for DCCP_PARTOPEN,
+-					    as TCP_SYN_RECV is already used by
+-					    DCCP_RESPOND, why don't stop using TCP
+-					    mapping of states? OK, now we don't use
+-					    sk_stream_sendmsg anymore, so doesn't
+-					    seem to exist any reason for us to
+-					    do the TCP mapping here */
+ 	DCCP_LISTEN	= TCP_LISTEN,
+ 	DCCP_RESPOND	= TCP_SYN_RECV,
+ 	DCCP_CLOSING	= TCP_CLOSING,
+@@ -244,6 +235,7 @@ enum dccp_state {
+ 	DCCP_CLOSED	= TCP_CLOSE,
+ 	/* Everything below here is specific to DCCP only */
+ 	DCCP_INTRINSICS = TCP_MAX_STATES,
++	DCCP_PARTOPEN,
+ 	DCCP_MAX_STATES
+ };
  
- static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- {
--	const struct dccp_sock *dp = dccp_sk(sk);
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 	struct ccid3_options_received *opt_recv;
- 	struct dccp_tx_hist_entry *packet;
-@@ -481,41 +480,45 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	hctx->ccid3hctx_rtt = hctx->ccid3hctx_rtt = 0 ?  r_sample
- 			    : (9 * hctx->ccid3hctx_rtt + r_sample) / 10;
+@@ -253,12 +245,12 @@ enum dccp_state {
+ enum {
+ 	DCCPF_OPEN	 = TCPF_ESTABLISHED,
+ 	DCCPF_REQUESTING = TCPF_SYN_SENT,
+-	DCCPF_PARTOPEN	 = TCPF_FIN_WAIT1,
+ 	DCCPF_LISTEN	 = TCPF_LISTEN,
+ 	DCCPF_RESPOND	 = TCPF_SYN_RECV,
+ 	DCCPF_CLOSING	 = TCPF_CLOSING,
+ 	DCCPF_TIME_WAIT	 = TCPF_TIME_WAIT,
+ 	DCCPF_CLOSED	 = TCPF_CLOSE,
++	DCCPF_PARTOPEN	 = (1 << (u8)DCCP_PARTOPEN),
+ };
  
-+	/*
-+	 * Update allowed sending rate as per draft rfc3448bis, 4.2/4.3
-+	 */
- 	if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
--		/*
--		 * Larger Initial Windows [RFC 4342, sec. 5]
--		 */
--		hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
--		hctx->ccid3hctx_t_ld = now;
- 
--		ccid3_update_send_interval(hctx);
-+		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
- 
--		ccid3_pr_debug("%s(%p), s=%u, MSS=%u, "
--			       "R_sample=%uus, X=%u\n", dccp_role(sk),
--			       sk, hctx->ccid3hctx_s,
--			       dp->dccps_mss_cache, r_sample,
--			       (unsigned)(hctx->ccid3hctx_x >> 6));
-+		if (hctx->ccid3hctx_t_rto = 0) {
-+			/*
-+			 * Initial feedback packet: Larger Initial Windows (4.2)
-+			 */
-+			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
-+			hctx->ccid3hctx_t_ld = now;
- 
--		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
--	} else {
-+			ccid3_update_send_interval(hctx);
- 
--		/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
--		if (hctx->ccid3hctx_p > 0)
--			hctx->ccid3hctx_x_calc -				tfrc_calc_x(hctx->ccid3hctx_s,
--					    hctx->ccid3hctx_rtt,
--					    hctx->ccid3hctx_p);
--		ccid3_hc_tx_update_x(sk, &now);
--
--		ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, "
--			       "p=%u, X_calc=%u, X_recv=%u, X=%u\n",
--			       dccp_role(sk),
--			       sk, hctx->ccid3hctx_rtt, r_sample,
--			       hctx->ccid3hctx_s, hctx->ccid3hctx_p,
--			       hctx->ccid3hctx_x_calc,
--			       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
--			       (unsigned)(hctx->ccid3hctx_x >> 6));
-+			goto done_computing_x;
-+
-+		} else if (hctx->ccid3hctx_p = 0) {
-+			/*
-+			 * First feedback after nofeedback timer expiry (4.3)
-+			 */
-+			goto done_computing_x;
-+		}
- 	}
-+	/* perform step (4) of draft rfc3448bis, section 4.3 */
-+	if (hctx->ccid3hctx_p > 0)
-+		hctx->ccid3hctx_x_calc = tfrc_calc_x(hctx->ccid3hctx_s,
-+						     hctx->ccid3hctx_rtt,
-+						     hctx->ccid3hctx_p);
-+	ccid3_hc_tx_update_x(sk, &now);
-+
-+done_computing_x:
-+	ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, p=%u, X_calc=%u, "
-+		       "X_recv=%u, X=%u\n", dccp_role(sk), sk,
-+		       hctx->ccid3hctx_rtt, r_sample, hctx->ccid3hctx_s,
-+		       hctx->ccid3hctx_p, hctx->ccid3hctx_x_calc,
-+		       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
-+		       (unsigned)(hctx->ccid3hctx_x >> 6));
- 
- 	/* unschedule no feedback timer */
- 	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
-@@ -526,6 +529,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	/*
- 	 * As we have calculated new ipi, delta, t_nom it is possible
- 	 * that we now can send a packet, so wake up dccp_wait_for_ccid
-+	 * (NB: This currently only happens in dccp_send_close)
- 	 */
- 	sk->sk_write_space(sk);
- 
--- 
-1.5.0.6
-
+ static inline struct dccp_hdr *dccp_hdr(const struct sk_buff *skb)
