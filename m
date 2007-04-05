@@ -1,78 +1,116 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:36:59 +0000
-Subject: [PATCH 36/43]: Shift the retransmit timer for active-close into output.c
-Message-Id: <200704051636.59765@strip-the-willow>
+Date: Thu, 05 Apr 2007 15:33:24 +0000
+Subject: [PATCH 4/43]: History access is redundant when sending feedback
+Message-Id: <200704051633.24469@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Shift the retransmit timer for active-close into output.c
+[CCID 3]: History access is redundant when sending feedback
 
-When performing active close, RFC 4340, 8.3. requires to retransmit the
-Close/CloseReq with a backoff-retransmit timer starting at intially 2 RTTs.
+This is a simplification to reduce the number of history accesses: when
+receiving a new packet, the receiver needs to access the RX history twice:
 
-This patch shifts the existing code for active-close retransmit timer
-into output.c, so that the retransmit timer is started when the first
-Close/CloseReq is sent. Previously, the timer was started when, after
-releasing the socket in dccp_close(), the actively-closing side had not yet
-reached the CLOSED/TIMEWAIT state.
+ * first to create / add a new entry
+ * then, when sending feedback, the just-created entry must be `found'
+   via history lookup.
 
-The patch further reduces the initial timeout from 3 seconds to the required
-2 RTTs, where - in absence of a known RTT - the fallback value specified in
-RFC 4340, 3.4 is used.
+Meaning that, for the same information, it first needs an exclusive
+write-access and then a (shared) read access. Without locking in between
+these calls, the history information may have already changed.
+
+This patch bypasses the double lookup by directly using the available data
+from skb.  In addition, some more informative debugging information was added.
+
+
+(NB: using the `packet' entry from rx_packet_recv() is not a good idea, since this 
+     can interfer with the RX history garbage collection: the entry may be garbage-
+     collected at the same instant that send_feedback() tries to use it.)
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/output.c |   12 +++++++++++-
- net/dccp/proto.c  |   18 ------------------
- 2 files changed, 11 insertions(+), 19 deletions(-)
+ net/dccp/ccids/ccid3.c |   35 ++++++++++++++---------------------
+ 1 file changed, 14 insertions(+), 21 deletions(-)
 
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -967,24 +967,6 @@ adjudge_to_death:
- 	if (state != DCCP_CLOSED && sk->sk_state = DCCP_CLOSED)
- 		goto out;
- 
--	/*
--	 * The last release_sock may have processed the CLOSE or RESET
--	 * packet moving sock to CLOSED state, if not we have to fire
--	 * the CLOSE/CLOSEREQ retransmission timer, see "8.3. Termination"
--	 * in draft-ietf-dccp-spec-11. -acme
--	 */
--	if (sk->sk_state = DCCP_CLOSING) {
--		/* FIXME: should start at 2 * RTT */
--		/* Timer for repeating the CLOSE/CLOSEREQ until an answer. */
--		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
--					  inet_csk(sk)->icsk_rto,
--					  DCCP_RTO_MAX);
--#if 0
--		/* Yeah, we should use sk->sk_prot->orphan_count, etc */
--		dccp_set_state(sk, DCCP_CLOSED);
--#endif
--	}
--
- 	if (sk->sk_state = DCCP_CLOSED)
- 		inet_csk_destroy_sock(sk);
- 
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -566,7 +566,17 @@ void dccp_send_close(struct sock *sk, co
- 		dccp_write_xmit(sk, 1);
- 		dccp_skb_entail(sk, skb);
- 		dccp_transmit_skb(sk, skb_clone(skb, prio));
--		/* FIXME do we need a retransmit timer here? */
-+		/*
-+		 * Retransmission timer for active-close: RFC 4340, 8.3 requires
-+		 * to retransmit the Close/CloseReq until the CLOSING/CLOSEREQ
-+		 * state can be left. The initial timeout is 2 RTTs.
-+		 * Since we do not always have a CCID with RTT measurements, we
-+		 * use the fallback RTT from [RFC 4340, 3.4] (200ms).
-+		 */
-+		inet_csk(sk)->icsk_rto +				2 * usecs_to_jiffies(DCCP_FALLBACK_RTT);
-+		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
-+					  inet_csk(sk)->icsk_rto, DCCP_RTO_MAX);
- 	} else
- 		dccp_transmit_skb(sk, skb);
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -745,15 +745,12 @@ static int ccid3_hc_rx_update_p(struct c
+ 	return (hcrx->ccid3hcrx_pinv < pinv_prev);
  }
+ 
+-static void ccid3_hc_rx_send_feedback(struct sock *sk)
++static void ccid3_hc_rx_send_feedback(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 	struct dccp_sock *dp = dccp_sk(sk);
+-	struct dccp_rx_hist_entry *packet;
+-	struct timeval now;
+-	suseconds_t delta;
+-
+-	ccid3_pr_debug("%s(%p) - entry \n", dccp_role(sk), sk);
++	struct timeval now, t_recv;
++	suseconds_t delta = 0;
+ 
+ 	do_gettimeofday(&now);
+ 
+@@ -773,23 +770,19 @@ static void ccid3_hc_rx_send_feedback(st
+ 		DCCP_BUG("%s(%p) - Illegal state TERM", dccp_role(sk), sk);
+ 		return;
+ 	}
++	ccid3_pr_debug("Interval %ldusec, X_recv=%u, 1/p=%u\n", (long)delta,
++		       hcrx->ccid3hcrx_x_recv, hcrx->ccid3hcrx_pinv);
+ 
+-	packet = dccp_rx_hist_find_data_packet(&hcrx->ccid3hcrx_hist);
+-	if (unlikely(packet = NULL)) {
+-		DCCP_WARN("%s(%p), no data packet in history!\n",
+-			  dccp_role(sk), sk);
+-		return;
+-	}
++	/* Elapsed time information [RFC 4340, 13.2] in units of 10 * usecs */
++	skb_get_timestamp(skb, &t_recv);
++	delta = timeval_delta(&now, &t_recv);
++	DCCP_BUG_ON(delta < 0);
+ 
++	hcrx->ccid3hcrx_elapsed_time	     = delta / 10;
+ 	hcrx->ccid3hcrx_tstamp_last_feedback = now;
+-	hcrx->ccid3hcrx_ccval_last_counter   = packet->dccphrx_ccval;
++	hcrx->ccid3hcrx_ccval_last_counter   = dccp_hdr(skb)->dccph_ccval;
+ 	hcrx->ccid3hcrx_bytes_recv	     = 0;
+ 
+-	/* Elapsed time information [RFC 4340, 13.2] in units of 10 * usecs */
+-	delta = timeval_delta(&now, &packet->dccphrx_tstamp);
+-	DCCP_BUG_ON(delta < 0);
+-	hcrx->ccid3hcrx_elapsed_time = delta / 10;
+-
+ 	dp->dccps_hc_rx_insert_options = 1;
+ 	dccp_send_ack(sk);
+ }
+@@ -1084,7 +1077,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 		ccid3_pr_debug("%s(%p, state=%s), skb=%p, sending initial "
+ 			       "feedback\n", dccp_role(sk), sk,
+ 			       dccp_state_name(sk->sk_state), skb);
+-		ccid3_hc_rx_send_feedback(sk);
++		ccid3_hc_rx_send_feedback(sk, skb);
+ 		ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
+ 		return;
+ 	case TFRC_RSTATE_DATA:
+@@ -1096,7 +1089,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 		if ((timeval_delta(&now, &hcrx->ccid3hcrx_tstamp_last_ack) -
+ 		     (suseconds_t)hcrx->ccid3hcrx_rtt) >= 0) {
+ 			hcrx->ccid3hcrx_tstamp_last_ack = now;
+-			ccid3_hc_rx_send_feedback(sk);
++			ccid3_hc_rx_send_feedback(sk, skb);
+ 		}
+ 		return;
+ 	case TFRC_RSTATE_TERM:
+@@ -1109,7 +1102,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 		       dccp_role(sk), sk, dccp_state_name(sk->sk_state));
+ 
+ 	if (ccid3_hc_rx_update_p(hcrx))
+-		ccid3_hc_rx_send_feedback(sk);
++		ccid3_hc_rx_send_feedback(sk, skb);
+ }
+ 
+ static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
