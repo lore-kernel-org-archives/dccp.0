@@ -1,38 +1,82 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:17:51 +0000
-Subject: [PATCH 27/29] Receiver does not set CCVal
-Message-Id: <20070412211751.GB21292@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 05 Apr 2007 15:35:18 +0000
+Subject: [PATCH 22/43]: Integrate RX history loss detection with loss interval update
+Message-Id: <200704051635.18471@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This removes an unnecessary statement, since the receiver of a half-connection
-does not set window counter values: as specified in RFCs 3448 and 4342,
-the sender provides the RTT estimates to the receiver [RFC 3448, 3.2.1], which
-in the particular case of CCID3 means that only the sender sets window counters
-[RFC 4342, sections 5 and 8.1].
+[TFRC]: Integrate RX history loss detection with loss interval update
+
+This adds the missing link between
+
+ * TFRC loss detection as provided by the RX history code and
+ * Loss Intervals update whenever a new loss is detected.
+
+Handling is conform to the TFRC semantics and conveniently transparent
+to the caller: only the function tfrc_rx_handle_loss() need be called.
+
+A test module is available on request which shows that the transfer from
+RX history loss event into a newly created loss interval entry works.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/ccid3.c |    2 --
- 1 files changed, 0 insertions(+), 2 deletions(-)
+ net/dccp/ccids/lib/packet_history.c |   22 ++++++++++++++--------
+ net/dccp/ccids/lib/packet_history.h |    4 +++-
+ 2 files changed, 17 insertions(+), 9 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 6b1cc1b..e7d2b62 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -792,8 +792,6 @@ static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
- 	if (!(sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN))
- 		return 0;
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -216,7 +216,9 @@ static inline void tfrc_rx_hist_update(s
+ 	dccp_rx_hist_entry_from_skb(last_rcv(h), skb, ndp);
+ }
  
--	DCCP_SKB_CB(skb)->dccpd_ccval = hcrx->ccid3hcrx_ccval_last_counter;
--
- 	if (dccp_packet_without_ack(skb))
- 		return 0;
+-extern int  tfrc_rx_handle_loss(struct tfrc_rx_hist *, struct sk_buff *, u32);
++extern int  tfrc_rx_handle_loss(struct tfrc_rx_hist *, struct tfrc_loss_hist *,
++				struct sk_buff *skb, u32 ndp,
++				u32 (*first_li)(struct sock *), struct sock *);
+ extern u32  tfrc_rx_sample_rtt(struct tfrc_rx_hist *, struct sk_buff *);
+ extern int  tfrc_rx_hist_init(struct tfrc_rx_hist *);
+ extern void tfrc_rx_hist_cleanup(struct tfrc_rx_hist *);
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -385,13 +385,19 @@ static void __three_after_loss(struct tf
  
--- 
-1.5.0.6
-
+ /**
+  *  tfrc_rx_handle_loss  -  Loss detection and further processing
+- *  @h:	      The non-empty history object
+- *  @skb:     Currently received packet
+- *  @ndp:     The NDP count belonging to skb
+- *  Returns 1 when caller should send feedback, 0 otherwise.
++ *  @h:             The non-empty RX history object
++ *  @lh:            Loss Intervals database to update
++ *  @skb:           Currently received packet
++ *  @ndp:           The NDP count belonging to @skb
++ *  @calc_first_li: Caller-dependent computation of first loss interval in @lh
++ *  Chooses action according to pending loss, updates LI database when a new
++ *  loss was detected, and does required post-processing. Returns 1 when caller
++ *  should send feedback, 0 otherwise.
+  */
+ int tfrc_rx_handle_loss(struct tfrc_rx_hist *h,
+-			struct sk_buff *skb, u32 ndp)
++			struct tfrc_loss_hist *lh,
++			struct sk_buff *skb, u32 ndp,
++			u32 (*calc_first_li)(struct sock *), struct sock *sk)
+ {
+ 	int is_new_loss = 0;
+ 
+@@ -401,9 +407,9 @@ int tfrc_rx_handle_loss(struct tfrc_rx_h
+ 		DCCP_BUG("invalid loss_count %d", h->loss_count);
+ 	else if (__two_after_loss(h, skb, ndp)) {
+ 		/*
+-		 * XXX part of subsequent patch
+-		is_new_loss = update_li(li_hist, loss_prev(h));
+-		*/
++		 * Update Loss Interval database and recycle RX records
++		 */
++		is_new_loss = tfrc_lh_interval_new(lh, h, calc_first_li, sk);
+ 		__three_after_loss(h);
+ 	}
+ 	return is_new_loss;
