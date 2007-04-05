@@ -1,85 +1,191 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:37:05 +0000
-Subject: [PATCH 37/43]: Use maxiumum-RTO backoff from DCCP spec
-Message-Id: <200704051637.05406@strip-the-willow>
+Date: Thu, 05 Apr 2007 15:35:00 +0000
+Subject: [PATCH 19/43]: Recompute average loss interval
+Message-Id: <200704051635.01009@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Use maxiumum-RTO backoff from DCCP spec
+[TFRC]: Recompute average loss interval
 
-This removes another Fixme, using the TCP maximum RTO rather than the value
-specified by the DCCP specification. Across the sections in RFC 4340, 64
-seconds is consistently suggested as maximum RTO backoff value; and this is
-the value which is now used.
+This 
+ * adds routines for recomputing I_mean/p as required by TFRC;
+ * places the average, I_mean, into the loss_hist structure;
+ * supports continued detection of new loss intervals.
 
-I have checked both termination cases for retransmissions of Close/CloseReq: 
-with the default value 15 of `retries2', and an initial icsk_retransmit = 0,
-it takes about 614 seconds to declare a non-responding peer as dead, after
-which the final terminating Reset is sent. With the TCP maximum RTO value of
-120 seconds it takes (as might be expected) almost twice as long, about 23
-minutes.
+The second point is in keeping with the objective: loss history management
+and computing the relevant data is a service exported by the module. Hence the
+module should have exclusive access to the average I_mean which it maintains
 
-         Detailed References [can be omitted from commit msg]
-         ----------------------------------------------------
+Furthermore, any new packet is monitored against wrap-around of the window
+counter with respect to the current loss interval. 
+As described in RFC 4342, 10.2, this test is required in order to accurately
+determine whether two losses belong to different loss intervals.
 
-Maximum RTO backoff affects the following sections of the code:
+Finally, the weights have been re-adjusted to use the format suggested in
+[RFC 3448, 5.4]: using the ones of section 8 reduces accuracy ('smoothness');
+this could be reverted if people think that there is a gain in using mostly
+multiples of two (not too sure there is).
 
- * Feature negotiation
-   The section on feature negotiation in RFC 4340, section 6.6.3,
-   states that "Endpoints SHOULD use an exponential-backoff timer 
-   [...] and should back off to not less than 64 seconds."
-   The DCCP feature negotiation (options.c and in timer.c) use RTO_MAX
-   as upper bound, so using the new default of 64 seconds makes sense.
- 
- * Requests in the client-REQUEST state (section 8.1.1) are also subject
-   to an exponential backoff using the same upper bound.
-   This timer is set in dccp_connect(), using again RTO_MAX.
- 
- * Sending Close/CloseReq in the states CLOSING and CLOSEREQ (sec. 8.3) is
-   subject to the same maximum backoff of "not less than once every 64 seconds"
-   This is done in dccp_send_close, again using RTO_MAX.
+Note: calc_i_mean is now static - the module user need not access/know it.
+      Instead, update_i_mean or handle_loss should be used to access it.
 
- * The dccp_response_timer() (used by dccp_keepalive_timer) also uses RTO_MAX.
-   This timer performs garbage-collection of older entries in the listen queue
-   in inet_csk_reqsk_queue_prune, where RTO_MAX sets the upper bound on expiry
-   of an entry. It is thus probably best to keep RTO_MAX consistent with the
-   other timeouts, i.e. use the same value here.
- 
- * Acks in client-PARTOPEN state (sec. 8.1.5) are also to be retransmitted
-   using a delayed-Ack timer. This is done in dccp_write_xmit().
- 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/dccp.h |   11 +++++++++--
- 1 file changed, 9 insertions(+), 2 deletions(-)
+ net/dccp/ccids/ccid3.c             |    2 
+ net/dccp/ccids/lib/loss_interval.c |   86 +++++++++++++++++++++----------------
+ net/dccp/ccids/lib/loss_interval.h |    5 +-
+ 3 files changed, 55 insertions(+), 38 deletions(-)
 
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -71,7 +71,14 @@ extern void dccp_time_wait(struct sock *
- /* RFC 1122, 4.2.3.1 initial RTO value */
- #define DCCP_TIMEOUT_INIT ((unsigned)(3 * HZ))
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -17,6 +17,8 @@
+ #include "loss_interval.h"
  
--#define DCCP_RTO_MAX ((unsigned)(120 * HZ)) /* FIXME: using TCP value */
-+/*
-+ * The maximum back-off value for retransmissions. This is needed for
-+ *  - retransmitting client-Requests (sec. 8.1.1),
-+ *  - retransmitting Close/CloseReq when closing (sec. 8.3),
-+ *  - feature-negotiation retransmission (sec. 6.6.3),
-+ *  - Acks in client-PARTOPEN state (sec. 8.1.5).
-+ */
-+#define DCCP_RTO_MAX ((unsigned)(64 * HZ))
+ static struct kmem_cache  *tfrc_lh_slab;
++/* Loss Interval weights from [RFC 3448, 5.4], scaled by 10 */
++static const int tfrc_lh_weights[NINTERVAL] = { 10, 10, 10, 10, 8, 6, 4, 2 };
  
  /*
-  * RTT sampling: sanity bounds and fallback RTT value from RFC 4340, section 3.4
-@@ -439,7 +446,7 @@ static inline void timeval_add_usecs(str
+  * Access macros: These require that at least one entry is present in lh,
+@@ -60,53 +62,65 @@ void tfrc_lh_cleanup(struct tfrc_loss_hi
+ 
+ EXPORT_SYMBOL_GPL(tfrc_lh_cleanup);
+ 
+-/* Weights used to calculate loss event rate */
+-/*
+- * These are integers as per section 8 of RFC3448. We can then divide by 4 *
+- * when we use it.
+- */
+-static const int tfrc_lh_weights[NINTERVAL] = { 4, 4, 4, 4, 3, 2, 1, 1 };
+-
+-u32 dccp_li_hist_calc_i_mean(struct list_head *list)
++static void tfrc_lh_calc_i_mean(struct tfrc_loss_hist *lh)
  {
- 	tv->tv_usec += usecs;
- 	while (tv->tv_usec >= USEC_PER_SEC) {
--		tv->tv_sec++;
-+
- 		tv->tv_usec -= USEC_PER_SEC;
+-#ifndef DONE_WITH_TRANSITION /* XXX subsequent patch */
+-	return 0;
+-#else
+-	struct dccp_li_hist_entry *li_entry, *li_next;
+-	int i = 0;
+-	u32 i_tot;
+-	u32 i_tot0 = 0;
+-	u32 i_tot1 = 0;
+-	u32 w_tot  = 0;
+-
+-	list_for_each_entry_safe(li_entry, li_next, list, dccplih_node) {
+-		if (li_entry->dccplih_interval != ~0U) {
+-			i_tot0 += li_entry->dccplih_interval * dccp_li_hist_w[i];
+-			w_tot  += dccp_li_hist_w[i];
+-			if (i != 0)
+-				i_tot1 += li_entry->dccplih_interval * dccp_li_hist_w[i - 1];
+-		}
++	u32 i_i, i_tot0 = 0, i_tot1 = 0, w_tot = 0;
++	int i, k = tfrc_lh_length(lh) - 1; /* k is as in rfc3448bis, 5.4 */
+ 
++	for (i=0; i <= k; i++) {
++		i_i = tfrc_lh_get_interval(lh, i);
+ 
+-		if (++i > DCCP_LI_HIST_IVAL_F_LENGTH)
+-			break;
++		if (i < k) {
++			i_tot0 += i_i * tfrc_lh_weights[i];
++			w_tot  += tfrc_lh_weights[i];
++		}
++		if (i > 0)
++			i_tot1 += i_i * tfrc_lh_weights[i-1];
  	}
+ 
+-	if (i != DCCP_LI_HIST_IVAL_F_LENGTH)
++	BUG_ON(w_tot = 0);
++	lh->i_mean = max(i_tot0, i_tot1) / w_tot;
++}
++
++/**
++ * tfrc_lh_update_i_mean  -  Update the `open' loss interval I_0
++ * For recomputing p: returns `true' if p > p_prev  <=>  1/p < 1/p_prev
++ */
++u8 tfrc_lh_update_i_mean(struct tfrc_loss_hist *lh, struct sk_buff *skb)
++{
++	struct tfrc_loss_interval *cur = tfrc_lh_peek(lh);
++	u32 old_i_mean = lh->i_mean;
++	s64 length;
++
++	if (cur = NULL)			/* not initialised */
+ 		return 0;
+ 
+-	i_tot = max(i_tot0, i_tot1);
++	length = dccp_delta_seqno(cur->li_seqno, DCCP_SKB_CB(skb)->dccpd_seq);
+ 
+-	if (!w_tot) {
+-		DCCP_WARN("w_tot = 0\n");
+-		return 1;
+-	}
++	if (length - cur->li_length <= 0)	/* duplicate or reordered */
++		return 0;
++
++	if (SUB16(dccp_hdr(skb)->dccph_ccval, cur->li_ccval) > 4)
++		/*
++		 * Implements RFC 4342, 10.2:
++		 * If a packet S (skb) exists whose seqno comes `after' the one
++		 * starting the current loss interval (cur) and if the modulo-16
++		 * distance from C(cur) to C(S) is greater than 4, consider all
++		 * subsequent packets as belonging to a new loss interval. This
++		 * test is necessary since CCVal may wrap between intervals.
++		 */
++		cur->li_is_closed = 1;
++
++	if (tfrc_lh_length(lh) = 1)		/* due to RFC 3448, 6.3.1 */
++		return 0;
++
++	cur->li_length = length;
++	tfrc_lh_calc_i_mean(lh);
+ 
+-	return i_tot / w_tot;
+-#endif
++	return (lh->i_mean < old_i_mean);
  }
+ 
+-EXPORT_SYMBOL_GPL(dccp_li_hist_calc_i_mean);
++EXPORT_SYMBOL_GPL(tfrc_lh_update_i_mean);
+ 
+ int __init li_init(void)
+ {
+--- a/net/dccp/ccids/lib/loss_interval.h
++++ b/net/dccp/ccids/lib/loss_interval.h
+@@ -44,10 +44,12 @@ struct tfrc_loss_interval {
+  *  tfrc_loss_hist  -  Loss record database
+  *  @ring:	Circular queue managed in LIFO manner
+  *  @counter:	Current count of entries (can be more than %LIH_SIZE)
++ *  @i_mean:	Current Average Loss Interval [RFC 3448, 5.4]
+  */
+ struct tfrc_loss_hist {
+ 	struct tfrc_loss_interval	*ring[LIH_SIZE];
+ 	u8				counter;
++	u32				i_mean;
+ };
+ 
+ static inline void tfrc_lh_init(struct tfrc_loss_hist *lh)
+@@ -65,8 +67,7 @@ static inline u8 tfrc_lh_length(struct t
+ 	return min(lh->counter, (u8)LIH_SIZE);
+ }
+ 
++extern u8   tfrc_lh_update_i_mean(struct tfrc_loss_hist *lh, struct sk_buff *);
+ extern void tfrc_lh_cleanup(struct tfrc_loss_hist *lh);
+ 
+-extern u32 dccp_li_hist_calc_i_mean(struct list_head *list);
+-
+ #endif /* _DCCP_LI_HIST_ */
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -728,7 +728,9 @@ static int ccid3_hc_rx_update_p(struct c
+ 	struct list_head *li_hist = &hcrx->ccid3hcrx_li_hist;
+ 	u32 pinv_prev = hcrx->ccid3hcrx_pinv;
+ 
++	/* XXX subsequent patch
+ 	hcrx->ccid3hcrx_pinv = dccp_li_hist_calc_i_mean(li_hist);
++	*/
+ 	if (hcrx->ccid3hcrx_pinv = 0) {
+ 		DCCP_BUG("non-empty LI history and yet I_mean = 0!");
+ 		return 0;
