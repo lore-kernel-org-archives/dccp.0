@@ -1,53 +1,20 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:34:48 +0000
-Subject: [PATCH 17/43]: Loss-intervals access-macros and -functions
-Message-Id: <200704051634.48274@strip-the-willow>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sat, 07 Apr 2007 23:40:38 +0000
+Subject: Re: [PATCH 17/43]: Loss-intervals access-macros and -functions
+Message-Id: <5640c7e00704071640w7e41717cn5aeb1aa4f11569c6@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <200704051634.48274@strip-the-willow>
+In-Reply-To: <200704051634.48274@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[TFRC]: Loss-intervals access-macros and -functions
-
-Access to the Loss Interval Records is not direct, but (like in object-oriented
-programming) via functions.
-
-The macros are for unprotected access, the functions implement safety checks
-which ensure that the macros are called in a sane state.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/lib/loss_interval.c |   21 +++++++++++++++++++++
- 1 file changed, 21 insertions(+)
-
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -16,6 +16,27 @@
- #include "../../dccp.h"
- #include "loss_interval.h"
- 
-+/*
-+ * Access macros: These require that at least one entry is present in lh,
-+ * and implement array semantics (0 is first, n-1 is the last of n entries).
-+ */
-+#define __lih_index(lh, n)	LIH_INDEX((lh)->counter - (n) - 1)
-+#define __lih_entry(lh, n)	(lh)->ring[__lih_index(lh, n)]
-+#define __curr_entry(lh)	(lh)->ring[LIH_INDEX((lh)->counter - 1)]
-+#define __next_entry(lh)	(lh)->ring[LIH_INDEX((lh)->counter)]
-+
-+/* given i with 0 <= i <= k, return I_i as per the rfc3448bis notation */
-+static inline u32 tfrc_lh_get_interval(struct tfrc_loss_hist *lh, u8 i)
-+{
-+	BUG_ON(i >= lh->counter);
-+	return __lih_entry(lh, i)->li_length;
-+}
-+
-+static inline struct tfrc_loss_interval *tfrc_lh_peek(struct tfrc_loss_hist *lh)
-+{
-+	return lh->counter ? __curr_entry(lh) : NULL;
-+}
-+
- struct dccp_li_hist *dccp_li_hist_new(const char *name)
- {
- #if 0	/* XXX also subsequent patch */
+On 4/6/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [TFRC]: Loss-intervals access-macros and -functions
+>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+-- 
+Web: http://wand.net.nz/~iam4/
+Blog: http://iansblog.jandi.co.nz
+WAND Network Research Group
