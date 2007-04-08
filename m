@@ -1,146 +1,20 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:35:43 +0000
-Subject: [PATCH 25/43]: Update copyrights of CCID3/TFRC files
-Message-Id: <200704051635.44084@strip-the-willow>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sun, 08 Apr 2007 05:12:09 +0000
+Subject: Re: [PATCH 25/43]: Update copyrights of CCID3/TFRC files
+Message-Id: <5640c7e00704072212j43cf1cf3uc1b44082fdf8c89e@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <200704051635.44084@strip-the-willow>
+In-Reply-To: <200704051635.44084@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Update copyrights of CCID3/TFRC files
+On 4/6/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [DCCP]: Update copyrights of CCID3/TFRC files
 
-1. A substantial amount of time has gone into improving CCID3/TFRC.  
-   Funding for this work was provided by The Unversity of Aberdeen, UK, which 
-   is hereby acknowledged as sponsor.
-
-2. All copyrights of work contributed WAND research group have been updated, 
-   using a recently submitted patch by Ian McDonald. 
-
-3. Corrected one outdated description in packet_history.h. 
-
-Please verify that copyright changes have indeed been updated correctly.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/ccid3.c              |    5 +++--
- net/dccp/ccids/ccid3.h              |    3 ++-
- net/dccp/ccids/lib/loss_interval.c  |    5 +++--
- net/dccp/ccids/lib/loss_interval.h  |    5 +++--
- net/dccp/ccids/lib/packet_history.c |    3 ++-
- net/dccp/ccids/lib/packet_history.h |    5 ++---
- net/dccp/ccids/lib/tfrc.h           |    9 +++++----
- net/dccp/ccids/lib/tfrc_module.c    |    2 ++
- 8 files changed, 22 insertions(+), 15 deletions(-)
-
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -1,8 +1,9 @@
- /*
-  *  net/dccp/ccids/ccid3.c
-  *
-- *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
-- *  Copyright (c) 2005-6 Ian McDonald <ian.mcdonald@jandi.co.nz>
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
-+ *  Copyright (c) 2005-7 Ian McDonald <ian.mcdonald@jandi.co.nz>
-  *
-  *  An implementation of the DCCP protocol
-  *
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -3,7 +3,8 @@
- /*
-  *  net/dccp/ccids/ccid3.h
-  *
-- *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
-  *
-  *  An implementation of the DCCP protocol
-  *
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -1,8 +1,9 @@
- /*
-  *  net/dccp/ccids/lib/loss_interval.c
-  *
-- *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
-- *  Copyright (c) 2005-6 Ian McDonald <ian.mcdonald@jandi.co.nz>
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
-+ *  Copyright (c) 2005-7 Ian McDonald <ian.mcdonald@jandi.co.nz>
-  *  Copyright (c) 2005 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-  *
-  *  This program is free software; you can redistribute it and/or modify
---- a/net/dccp/ccids/lib/loss_interval.h
-+++ b/net/dccp/ccids/lib/loss_interval.h
-@@ -3,8 +3,9 @@
- /*
-  *  net/dccp/ccids/lib/loss_interval.h
-  *
-- *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
-- *  Copyright (c) 2005 Ian McDonald <ian.mcdonald@jandi.co.nz>
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
-+ *  Copyright (c) 2005-7 Ian McDonald <ian.mcdonald@jandi.co.nz>
-  *  Copyright (c) 2005 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-  *
-  *  This program is free software; you can redistribute it and/or modify it
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -1,7 +1,8 @@
- /*
-  *  net/dccp/packet_history.c
-  *
-- *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
-  *
-  *  An implementation of the DCCP protocol
-  *
---- a/net/dccp/ccids/lib/tfrc.h
-+++ b/net/dccp/ccids/lib/tfrc.h
-@@ -3,10 +3,11 @@
- /*
-  *  net/dccp/ccids/lib/tfrc.h
-  *
-- *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
-- *  Copyright (c) 2005 Ian McDonald <ian.mcdonald@jandi.co.nz>
-- *  Copyright (c) 2005 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-- *  Copyright (c) 2003 Nils-Erik Mattsson, Joacim Haggmark, Magnus Erixzon
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
-+ *  Copyright (c) 2005-6 Ian McDonald <ian.mcdonald@jandi.co.nz>
-+ *  Copyright (c) 2005   Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-+ *  Copyright (c) 2003   Nils-Erik Mattsson, Joacim Haggmark, Magnus Erixzon
-  *
-  *  This program is free software; you can redistribute it and/or modify
-  *  it under the terms of the GNU General Public License as published by
---- a/net/dccp/ccids/lib/tfrc_module.c
-+++ b/net/dccp/ccids/lib/tfrc_module.c
-@@ -1,5 +1,7 @@
- /*
-  * TFRC: main module holding the pieces of the TFRC library together
-+ *
-+ * Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-  */
- #include <linux/module.h>
- #include <linux/moduleparam.h>
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -1,12 +1,11 @@
- #ifndef _DCCP_PKT_HIST_
- #define _DCCP_PKT_HIST_
- /*
-- *  net/dccp/packet_history.h
-+ *  Packet RX/TX history data structures and routines for TFRC-based protocols.
-  *
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-  *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
-  *
-- *  An implementation of the DCCP protocol
-- *
-  *  This code has been developed by the University of Waikato WAND
-  *  research group. For further information please see http://www.wand.net.nz/
-  *  or e-mail Ian McDonald - ian.mcdonald@jandi.co.nz
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+-- 
+Web: http://wand.net.nz/~iam4/
+Blog: http://iansblog.jandi.co.nz
+WAND Network Research Group
