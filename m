@@ -1,63 +1,55 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:33:07 +0000
-Subject: [PATCH 1/43]: Modulo-16 arithmetic for window counters
-Message-Id: <200704051633.07480@strip-the-willow>
+Date: Mon, 09 Apr 2007 09:59:01 +0000
+Subject: [PATCH 5/5]: Send Reset upon Sync in state REQUEST
+Message-Id: <200704091059.01152@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[CCID 3]: Modulo-16 arithmetic for window counters
+[DCCP]: Send Reset upon Sync in state REQUEST
 
-This implements modulo-16 arithmetic which is needed to compare
-the 4-bit CCID 3 window counter (CCVal) values; it respects
-circular wraparound and returns a-b mod 16.
+This makes a small update so that the code corresponds to RFC 4340, 7.5.4,
+which has the exception that a Sync received in state REQUEST generates
+a Reset (not a SyncAck).
 
-Implemented as a macro, since required in several places.
+This is almost already supported by dccp_rcv_request_sent_state_process(),
+including the correct Reset Code number 4 ("Packet Error"); all that has to be
+done (and is done here) is shifting the if-statement a few lines further down.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+(To test this case: replace DCCP_PKT_RESPONSE with DCCP_PKT_SYNC 
+                    in dccp_make_response.)
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>     
 ---
- net/dccp/ccids/ccid3.c              |    4 +---
- net/dccp/ccids/lib/packet_history.c |    4 +---
- net/dccp/ccids/lib/packet_history.h |    3 ++-
- 3 files changed, 4 insertions(+), 7 deletions(-)
+ net/dccp/input.c |    9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)
 
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -47,7 +47,8 @@
- #define TFRC_RECV_NUM_LATE_LOSS	 3
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -575,11 +575,6 @@ int dccp_rcv_state_process(struct sock *
+ 		return 0;
+ 	}
  
- #define TFRC_WIN_COUNT_PER_RTT	 4
--#define TFRC_WIN_COUNT_LIMIT	16
-+/* Subtraction a-b modulo-16, respects circular wrap-around */
-+#define SUB16(a,b)		(((a) + 16 - (b)) & 0xF)
+-	if (unlikely(dh->dccph_type = DCCP_PKT_SYNC)) {
+-		dccp_send_sync(sk, dcb->dccpd_seq, DCCP_PKT_SYNCACK);
+-		goto discard;
+-	}
+-
+ 	switch (sk->sk_state) {
+ 	case DCCP_CLOSED:
+ 		dcb->dccpd_reset_code = DCCP_RESET_CODE_NO_CONNECTION;
+@@ -610,8 +605,12 @@ int dccp_rcv_state_process(struct sock *
+ 			sk_wake_async(sk, 0, POLL_OUT);
+ 			break;
+ 		}
++	} else if (unlikely(dh->dccph_type = DCCP_PKT_SYNC)) {
++		dccp_send_sync(sk, dcb->dccpd_seq, DCCP_PKT_SYNCACK);
++		goto discard;
+ 	}
  
- /*
-  * 	Transmitter History data structures and declarations
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -841,9 +841,7 @@ static u32 ccid3_hc_rx_calc_first_li(str
- 				step = 1;
- 				break;
- 			case 1:
--				interval = win_count - entry->dccphrx_ccval;
--				if (interval < 0)
--					interval += TFRC_WIN_COUNT_LIMIT;
-+				interval = SUB16(win_count, entry->dccphrx_ccval);
- 				if (interval > 4)
- 					goto found;
- 				break;
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -291,9 +291,7 @@ void dccp_rx_hist_add_packet(struct dccp
- 					win_count = entry->dccphrx_ccval;
- 					break;
- 				case 2:
--					tmp = win_count - entry->dccphrx_ccval;
--					if (tmp < 0)
--						tmp += TFRC_WIN_COUNT_LIMIT;
-+					tmp = SUB16(win_count, entry->dccphrx_ccval);
- 					if (tmp > TFRC_WIN_COUNT_PER_RTT + 1) {
- 						/*
- 						 * We have found a packet older
++
+ 	if (!queued) {
+ discard:
+ 		__kfree_skb(skb);
