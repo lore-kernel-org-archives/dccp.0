@@ -1,130 +1,99 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:35:24 +0000
-Subject: [PATCH 23/43]: Fix and simplify header includes
-Message-Id: <200704051635.24472@strip-the-willow>
+Date: Mon, 09 Apr 2007 09:58:39 +0000
+Subject: [PATCH 1/4]: Shorten variable names in dccp_check_seqno
+Message-Id: <200704091058.39907@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[TFRC]: Fix and simplify header includes
+[DCCP]: Shorten variable names in dccp_check_seqno
 
-This updates the header-include structure so that any module wishing to use
-the service of the tfrc_lib module needs only include "tfrc.h" and has access
-to all declarations it needs.
+This patch is in part required by the next patch; it
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+ * replaces 6 instances of `DCCP_SKB_CB(skb)->dccpd_seq' with `seqno';
+ * replaces 7 instances of `DCCP_SKB_CB(skb)->dccpd_ack_seq' with `ackno';
+ * replaces 1 use of dccp_inc_seqno() by unfolding `ADD48' macro in place.
+
+No changes in algorithm, all changes are text replacement/substitution.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk> 
 ---
- net/dccp/ccids/ccid3.c              |    2 --
- net/dccp/ccids/ccid3.h              |    7 +++----
- net/dccp/ccids/lib/loss_interval.c  |    5 +----
- net/dccp/ccids/lib/loss_interval.h  |    1 -
- net/dccp/ccids/lib/packet_history.c |    1 -
- net/dccp/ccids/lib/packet_history.h |    6 ++----
- net/dccp/ccids/lib/tfrc.h           |    5 +++++
- 7 files changed, 11 insertions(+), 16 deletions(-)
---- a/net/dccp/ccids/lib/loss_interval.h
-+++ b/net/dccp/ccids/lib/loss_interval.h
-@@ -12,7 +12,6 @@
-  *  Software Foundation; either version 2 of the License, or (at your option)
-  *  any later version.
-  */
--
- #include <linux/list.h>
- #include <linux/slab.h>
- #include <linux/time.h>
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -34,8 +34,6 @@
-  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-  */
- #include "../dccp.h"
--#include "lib/loss_interval.h"
--#include "lib/tfrc.h"
- #include "ccid3.h"
+ net/dccp/input.c |   40 +++++++++++++++++-----------------------
+ 1 file changed, 17 insertions(+), 23 deletions(-)
+
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -95,7 +95,8 @@ static int dccp_check_seqno(struct sock 
+ {
+ 	const struct dccp_hdr *dh = dccp_hdr(skb);
+ 	struct dccp_sock *dp = dccp_sk(sk);
+-	u64 lswl, lawl;
++	u64 lswl, lawl, seqno = DCCP_SKB_CB(skb)->dccpd_seq,
++			ackno = DCCP_SKB_CB(skb)->dccpd_ack_seq;
  
- #ifdef CONFIG_IP_DCCP_CCID3_DEBUG
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -1,3 +1,5 @@
-+#ifndef _DCCP_CCID3_H_
-+#define _DCCP_CCID3_H_
- /*
-  *  net/dccp/ccids/ccid3.h
-  *
-@@ -33,15 +35,12 @@
-  *  along with this program; if not, write to the Free Software
-  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-  */
--#ifndef _DCCP_CCID3_H_
--#define _DCCP_CCID3_H_
--
- #include <linux/list.h>
- #include <linux/time.h>
- #include <linux/types.h>
- #include <linux/tfrc.h>
- #include <asm/unaligned.h>
--#include "lib/packet_history.h"
-+#include "lib/tfrc.h"
- #include "../ccid.h"
+ 	/*
+ 	 *   Step 5: Prepare sequence numbers for Sync
+@@ -111,11 +112,9 @@ static int dccp_check_seqno(struct sock 
+ 	 */
+ 	if (dh->dccph_type = DCCP_PKT_SYNC ||
+ 	    dh->dccph_type = DCCP_PKT_SYNCACK) {
+-		if (between48(DCCP_SKB_CB(skb)->dccpd_ack_seq,
+-			      dp->dccps_awl, dp->dccps_awh) &&
+-		    dccp_delta_seqno(dp->dccps_swl,
+-				     DCCP_SKB_CB(skb)->dccpd_seq) >= 0)
+-			dccp_update_gsr(sk, DCCP_SKB_CB(skb)->dccpd_seq);
++		if (between48(ackno, dp->dccps_awl, dp->dccps_awh) &&
++		    dccp_delta_seqno(dp->dccps_swl, seqno) >= 0)
++			dccp_update_gsr(sk, seqno);
+ 		else
+ 			return -1;
+ 	}
+@@ -140,35 +139,30 @@ static int dccp_check_seqno(struct sock 
+ 	if (dh->dccph_type = DCCP_PKT_CLOSEREQ ||
+ 	    dh->dccph_type = DCCP_PKT_CLOSE ||
+ 	    dh->dccph_type = DCCP_PKT_RESET) {
+-		lswl = dp->dccps_gsr;
+-		dccp_inc_seqno(&lswl);
++		lswl = ADD48(dp->dccps_gsr, 1);
+ 		lawl = dp->dccps_gar;
+ 	}
  
- /* Two seconds as per RFC 3448 4.2 */
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -33,7 +33,6 @@
-  *  along with this program; if not, write to the Free Software
-  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-  */
--
- #include <linux/string.h>
- #include "packet_history.h"
+-	if (between48(DCCP_SKB_CB(skb)->dccpd_seq, lswl, dp->dccps_swh) &&
+-	    (DCCP_SKB_CB(skb)->dccpd_ack_seq = DCCP_PKT_WITHOUT_ACK_SEQ ||
+-	     between48(DCCP_SKB_CB(skb)->dccpd_ack_seq,
+-		       lawl, dp->dccps_awh))) {
+-		dccp_update_gsr(sk, DCCP_SKB_CB(skb)->dccpd_seq);
++	if (between48(seqno, lswl, dp->dccps_swh) &&
++	    (ackno = DCCP_PKT_WITHOUT_ACK_SEQ ||
++	     between48(ackno, lawl, dp->dccps_awh))) {
++		dccp_update_gsr(sk, seqno);
  
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -1,3 +1,5 @@
-+#ifndef _DCCP_PKT_HIST_
-+#define _DCCP_PKT_HIST_
- /*
-  *  net/dccp/packet_history.h
-  *
-@@ -33,10 +35,6 @@
-  *  along with this program; if not, write to the Free Software
-  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-  */
--
--#ifndef _DCCP_PKT_HIST_
--#define _DCCP_PKT_HIST_
--
- #include <linux/list.h>
- #include <linux/slab.h>
- #include <linux/time.h>
---- a/net/dccp/ccids/lib/tfrc.h
-+++ b/net/dccp/ccids/lib/tfrc.h
-@@ -16,6 +16,11 @@
- #include <linux/types.h>
- #include <asm/div64.h>
- #include "../../dccp.h"
-+/* internal includes that this module exports: */
-+struct tfrc_rx_hist;
-+struct tfrc_loss_hist;
-+#include "loss_interval.h"
-+#include "packet_history.h"
+ 		if (dh->dccph_type != DCCP_PKT_SYNC &&
+-		    (DCCP_SKB_CB(skb)->dccpd_ack_seq !-		     DCCP_PKT_WITHOUT_ACK_SEQ))
+-			dp->dccps_gar = DCCP_SKB_CB(skb)->dccpd_ack_seq;
++		    (ackno != DCCP_PKT_WITHOUT_ACK_SEQ))
++			dp->dccps_gar = ackno;
+ 	} else {
+ 		DCCP_WARN("DCCP: Step 6 failed for %s packet, "
+ 			  "(LSWL(%llu) <= P.seqno(%llu) <= S.SWH(%llu)) and "
+ 			  "(P.ackno %s or LAWL(%llu) <= P.ackno(%llu) <= S.AWH(%llu), "
+ 			  "sending SYNC...\n",  dccp_packet_name(dh->dccph_type),
+-			  (unsigned long long) lswl,
+-			  (unsigned long long) DCCP_SKB_CB(skb)->dccpd_seq,
++			  (unsigned long long) lswl, (unsigned long long) seqno,
+ 			  (unsigned long long) dp->dccps_swh,
+-			  (DCCP_SKB_CB(skb)->dccpd_ack_seq =
+-				DCCP_PKT_WITHOUT_ACK_SEQ) ? "doesn't exist" : "exists",
+-			  (unsigned long long) lawl,
+-			  (unsigned long long) DCCP_SKB_CB(skb)->dccpd_ack_seq,
++			  (ackno = DCCP_PKT_WITHOUT_ACK_SEQ) ? "doesn't exist"
++							      : "exists",
++			  (unsigned long long) lawl, (unsigned long long) ackno,
+ 			  (unsigned long long) dp->dccps_awh);
+-		dccp_send_sync(sk, DCCP_SKB_CB(skb)->dccpd_seq, DCCP_PKT_SYNC);
++		dccp_send_sync(sk, seqno, DCCP_PKT_SYNC);
+ 		return -1;
+ 	}
  
- #ifdef CONFIG_IP_DCCP_TFRC_DEBUG
- extern int tfrc_debug;
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -10,11 +10,8 @@
-  *  the Free Software Foundation; either version 2 of the License, or
-  *  (at your option) any later version.
-  */
--
--#include <linux/module.h>
- #include <net/sock.h>
--#include "../../dccp.h"
--#include "loss_interval.h"
-+#include "tfrc.h"
- 
- static struct kmem_cache  *tfrc_lh_slab;
- /* Loss Interval weights from [RFC 3448, 5.4], scaled by 10 */
