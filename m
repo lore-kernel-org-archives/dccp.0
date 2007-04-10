@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Tue, 10 Apr 2007 15:29:17 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Tue, 10 Apr 2007 23:20:40 +0000
 Subject: Re: [PATCH 39/43]: Protect against Reset/Sync floods due to buggy applications
-Message-Id: <39e6f6c70704100829i50d99065q2a0bf9535ee39efa@mail.gmail.com>
+Message-Id: <5640c7e00704101620t3353a873ke328e4da3e0eb30c@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200704051637.18198@strip-the-willow>
 In-Reply-To: <200704051637.18198@strip-the-willow>
@@ -10,39 +10,21 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 4/10/07, Eddie Kohler <kohler@cs.ucla.edu> wrote:
-> Hi Gerrit,
+On 4/9/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+>  * the bug and its cause are documented on
+>       http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/seqno_bug/
+>    (in short, the Sync did not acknowledge GSR, but rather P.seqno);
 >
-> Gerrit Renker wrote:
-> > Listen Eddie,
-> >
-> > I am not interested in your offline email. All further such email will
-> > be directed back to the list.
-> >
-> > Eddie Kohler wrote:
-> > |  Glad to help!
-> > |  E
->
-> As you requested, this mail is being cc'd to the kernel mailing list.
->
-> In future, every time I send you a three-word note, I will make sure to cc the
-> kernel mailing list.
->
-> I deeply, deeply apologize for whatever it is I have done this time to make
-> you angry, although I have no idea what that could be.  I hereby acknowledge
-> all of your many thousands of contributions to the DCCP kernel implementation.
->
-> All hail Gerrit!!~*$716617*&!197`987(*&!(*&(*@!&(*#&(*@!
 
-Oh, the fun, keep up the good work on reviewing the patches, as usual
-for the not so recent past I've been unable to participate fully, and
-was feeling ashamed for that, but in hindsight its not that bad, at
-least the patches can brew in this so joyfull exchange of messages, at
-some point I'll just jump in and read those messages to harvest the
-patches for inclusion in mainline, as such I really hope that all
-interested parties look at Gerrit and Ian patches and test and report
-with it on top of mainline.
+Yes I had noticed that bug also at times and never quite got around to
+fixing it. Will have to read more about rate limiting though as I'm
+not convinced normally about rate limiting schemes etc as they
+invariably end up causing problems when doing things like running a
+huge server with lots of connections. However as I said, haven't read
+it yet so might be wrong on your intent.
 
-Best Regards,
-
-- Arnaldo
+Ian
+-- 
+Web: http://wand.net.nz/~iam4/
+Blog: http://iansblog.jandi.co.nz
+WAND Network Research Group
