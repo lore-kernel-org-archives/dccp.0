@@ -1,35 +1,68 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Fri, 13 Apr 2007 13:05:30 +0000
-Subject: Re: [PATCH 4/25]: Cheaper & smaller timestamping
-Message-Id: <39e6f6c70704130605h3c2bdc97u73ebb9caf66b3054@mail.gmail.com>
+From: Eddie Kohler <kohler@cs.ucla.edu>
+Date: Tue, 10 Apr 2007 17:21:46 +0000
+Subject: Re: [PATCH 1/25]: Fix bug in the calculation of very low sending
+Message-Id: <461BC7AA.2050109@cs.ucla.edu>
 List-Id: <dccp.vger.kernel.org>
-References: <200703211844.22972@strip-the-willow>
-In-Reply-To: <200703211844.22972@strip-the-willow>
+References: <200703211844.06124@strip-the-willow>
+In-Reply-To: <200703211844.06124@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 4/13/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Quoting Arnaldo Carvalho de Melo:
-> |  > I have tested on various i386 instances (where it is `long') and on sparc64 (where it is `int', as
-> |  > in parisc). I was just calculating - there is indeed a chance to produce overflow, since we add
-> |  > in timeval_add_usecs (since it is a signed type, the same problem seems to reappear in timeval_sub_usecs).
-> |  >
-> |  > I don't have accurate figures at the moment with regard to overflow, but I assume that it is better to revert
-> |  > this patch?
-> |  >
-> |  > There is a related question - with the new timesystem, should we convert to __get_realtime_clock_ts(), as
-> |  > the comment above do_gettimeofday() says in kernel/timer.c ?
-> |  >
-> |  > I would be glad for clarification, since there are quite a few patches to update.
-> |
-> |  I'd say leave the dccp_timestamp alone for now, I have to read a bit
-> |  more on the new time system and what was done on the net schedulers,
-> |  etc before being able to say something meaningful on this aspect.
-> |
-> Just to be on the safe side then I will revert this patch 4/25 so that everything again uses dccp_epoch, ok?
+I'm surprised that this case occurs:
 
-Yes
+Gerrit Renker wrote:
+> [CCID 3]: Fix bug in the calculation of very low sending rates
+> 
+> This fixes an error in the calculation of t_ipi when X converges towards
+> very low sending rates (between 1 and 64 bytes per second).
+> 
+> Although this case may not sound likely, it can be reproduced by connecting,
+> hitting enter (1 byte sent) and waiting for some time, during which the
+> nofeedback timer halves the sending rate until finally it reaches the region
+> 1..64 bytes/sec. Computing X is handled correctly (tested separately); but by
+> dividing X _before_ entering the calculation of t_ipi, X becomes zero as
+> a result.  This in turn triggers a BUG condition caught in scaled_div().
 
-- Arnaldo
+According to RFC 4342, the allowed sending rate should never be reduced 
+below the TCP initial sending rate of two or four packets per RTT, 
+depending on the packet size, as the result of an idle or slow period.
+
+Hitting enter and then waiting is an idle period.
+
+Since X is the allowed transmit rate, it seems Linux implementation is 
+not following this at the moment; but perhaps there is code elsewhere 
+handling this case?
+
+Eddie
+
+
+> Fixed by replacing with equivalent statement and explicit typecast for good
+> measure.
+> 
+> Calculation verified and effect of patch tested - reduced never below 1 byte
+> per 64 seconds afterwards, i.e. not allowing divide-by-zero.
+> 
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+> ---
+>  net/dccp/ccids/ccid3.c |    4 ++--
+>  1 file changed, 2 insertions(+), 2 deletions(-)
+> 
+> --- a/net/dccp/ccids/ccid3.c
+> +++ b/net/dccp/ccids/ccid3.c
+> @@ -102,8 +102,8 @@ static inline u64 rfc3390_initial_rate(s
+>  static inline void ccid3_update_send_interval(struct ccid3_hc_tx_sock *hctx)
+>  {
+>  	/* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second) */
+> -	hctx->ccid3hctx_t_ipi = scaled_div(hctx->ccid3hctx_s,
+> -					   hctx->ccid3hctx_x >> 6);
+> +	hctx->ccid3hctx_t_ipi = scaled_div32(((u64)hctx->ccid3hctx_s) << 6,
+> +					     hctx->ccid3hctx_x);
+>  
+>  	/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
+>  	hctx->ccid3hctx_delta = min_t(u32, hctx->ccid3hctx_t_ipi / 2,
+> -
+> To unsubscribe from this list: send the line "unsubscribe dccp" in
+> the body of a message to majordomo@vger.kernel.org
+> More majordomo info at  http://vger.kernel.org/majordomo-info.html
