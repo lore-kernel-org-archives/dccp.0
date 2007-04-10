@@ -1,84 +1,61 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:15:46 +0000
-Subject: [PATCH 12/29] Use t_RTO as indicator for feedback reception
-Message-Id: <20070412211546.GM21292@ghostprotocols.net>
+From: Jan Engelhardt <jengelh@linux01.gwdg.de>
+Date: Tue, 10 Apr 2007 21:07:50 +0000
+Subject: [PATCH 08/30] Use menuconfig objects - DCCP
+Message-Id: <Pine.LNX.4.61.0704102305291.32056@yvahk01.tjqt.qr>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
- This patch uses t_RTO instead of ccid3hctx_state to check whether upon
- expiry of the nofeedback timer feedback has been received yet.
 
- Justification:
+Use menuconfigs instead of menus, so the whole menu can be disabled at        
+once instead of going through all options.
 
-  Functionally, there is no change yet using this patch, but it is necessary
-  for the support of nofeedback handling as per rfc3448bis (subsequent patch).
+Signed-off-by: Jan Engelhardt <jengelh@gmx.de>
 
-  The main advantage is that ccid3hctx_state can now be used to toggle between
-  the reception of feedback and no feedback as in "the nofeedback timer has
-  expired". This is more efficient, since the state "packet sent but no initial
-  feedback" happens only once during the lifetime of a connection, whereas the
-  other state change (feedback <-> nofeedback timer expires) happens often.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
----
- net/dccp/ccids/ccid3.c |   19 ++++++++++---------
- 1 files changed, 10 insertions(+), 9 deletions(-)
-
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index e166f5c..471db59 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -244,9 +244,6 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
- 			       "bytes/s\n", dccp_role(sk), sk,
- 			       ccid3_tx_state_name(hctx->ccid3hctx_state),
- 			       (unsigned)(hctx->ccid3hctx_x >> 6));
--		/* The value of R is still undefined and so we can not recompute
--		 * the timout value. Keep initial value as per [RFC 4342, 5]. */
--		t_nfb = TFRC_INITIAL_TIMEOUT;
- 		ccid3_update_send_interval(hctx);
- 		break;
- 	case TFRC_SSTATE_FBACK:
-@@ -278,12 +275,6 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
- 		}
- 		/* Now recalculate X [RFC 3448, 4.3, step (4)] */
- 		ccid3_hc_tx_update_x(sk, &now);
--		/*
--		 * Schedule no feedback timer to expire in
--		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
--		 * See comments in packet_recv() regarding the value of t_RTO.
--		 */
--		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
- 		break;
- 	case TFRC_SSTATE_NO_SENT:
- 		DCCP_BUG("%s(%p) - Illegal state NO_SENT", dccp_role(sk), sk);
-@@ -294,6 +285,15 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+Index: linux-2.6.21-rc5/net/dccp/Kconfig
+=================================--- linux-2.6.21-rc5.orig/net/dccp/Kconfig
++++ linux-2.6.21-rc5/net/dccp/Kconfig
+@@ -1,8 +1,6 @@
+-menu "DCCP Configuration (EXPERIMENTAL)"
+-	depends on INET && EXPERIMENTAL
+-
+-config IP_DCCP
++menuconfig IP_DCCP
+ 	tristate "The DCCP Protocol (EXPERIMENTAL)"
++	depends on INET && EXPERIMENTAL
+ 	---help---
+ 	  Datagram Congestion Control Protocol (RFC 4340)
  
- 	hctx->ccid3hctx_idle = 1;
+@@ -19,19 +17,20 @@ config IP_DCCP
  
-+	/*
-+	 * Set new timeout for the nofeedback timer.
-+	 * See comments in packet_recv() regarding the value of t_RTO.
-+	 */
-+	if (unlikely(hctx->ccid3hctx_t_rto = 0))	/* no feedback yet */
-+		t_nfb = TFRC_INITIAL_TIMEOUT;
-+	else
-+		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
+ 	  If in doubt, say N.
+ 
++if IP_DCCP
 +
- restart_timer:
- 	sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
- 			   jiffies + usecs_to_jiffies(t_nfb));
-@@ -631,6 +631,7 @@ static int ccid3_hc_tx_init(struct ccid *ccid, struct sock *sk)
+ config INET_DCCP_DIAG
+-	depends on IP_DCCP && INET_DIAG
++	depends on INET_DIAG
+ 	def_tristate y if (IP_DCCP = y && INET_DIAG = y)
+ 	def_tristate m
  
- 	hctx->ccid3hctx_s     = 0;
- 	hctx->ccid3hctx_rtt   = 0;
-+	hctx->ccid3hctx_t_rto = 0;
- 	hctx->ccid3hctx_state = TFRC_SSTATE_NO_SENT;
- 	INIT_LIST_HEAD(&hctx->ccid3hctx_hist);
+ config IP_DCCP_ACKVEC
+-	depends on IP_DCCP
+ 	bool
  
--- 
-1.5.0.6
-
+ source "net/dccp/ccids/Kconfig"
+ 
+ menu "DCCP Kernel Hacking"
+-	depends on IP_DCCP && DEBUG_KERNEL=y
++	depends on DEBUG_KERNEL=y
+ 
+ config IP_DCCP_DEBUG
+ 	bool "DCCP debug messages"
+@@ -61,4 +60,4 @@ config NET_DCCPPROBE
+ 
+ endmenu
+ 
+-endmenu
++endif # IP_DDCP
+#<EOF>
