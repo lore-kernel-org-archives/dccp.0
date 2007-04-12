@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:31:39 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Thu, 12 Apr 2007 21:50:30 +0000
 Subject: Re: [PATCH 07/29] Use skb timestamp for receiver side
-Message-Id: <39e6f6c70704121431g7fbe9f2bj34a352a0f1d490c@mail.gmail.com>
+Message-Id: <5640c7e00704121450i7d78da2et30e450e453d80030@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20070412211454.GH21292@ghostprotocols.net>
 In-Reply-To: <20070412211454.GH21292@ghostprotocols.net>
@@ -10,7 +10,7 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 4/12/07, David Miller <davem@davemloft.net> wrote:
+On 4/13/07, David Miller <davem@davemloft.net> wrote:
 > From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 > Date: Thu, 12 Apr 2007 18:14:54 -0300
 >
@@ -32,8 +32,30 @@ On 4/12/07, David Miller <davem@davemloft.net> wrote:
 >
 > Please find a better way.
 
-Well, there seems to be just one better way, to timestamp the packet
-as soon as it enters the dccp stack, in dccp_v[46]_rcv, and consider
-the time from the driver -> ip v[46] -> dccp_v[46]_ as "in the wire".
+I didn't know this time stamping was expensive but I knew the way we
+were trying to optimise LAN is wrong. I say LAN because a few
+microseconds or even milliseconds difference on a WAN link makes
+bugger all difference in throughput. DCCP takes into account operating
+system granularity etc and if we are running lossless (i.e. receiver
+can cope with receiving link at full speed) then we can transmit at
+line speed. I've tested this myself.
 
-- Arnaldo
+This illustrates a trend by you Gerrit to try and micro-optimise what
+you perceive as bottlenecks and not realise the impact. You have been
+also promoting possible use of hrtimers which would be even worse for
+example in far of terms of loading a system.
+
+Gerrit - you send us a missive on how we should humbly accept your
+patches and stop arguing with you. Obviously Eddie (co-author of DCCP
+spec) and myself (converted DCCP CCID3 to Linux 2.6) aren't good
+enough. Maybe now Dave Miller says something you will listen or do you
+need Linus Torvalds to tell you to stop being a fucking idiot at
+times? Yes you write lots of good code but you write some bad code at
+times also. I probably write more bad code than you and less volume of
+code but I try to listen. Stop pretending to be a deity.
+
+Ian
+-- 
+Web: http://wand.net.nz/~iam4/
+Blog: http://iansblog.jandi.co.nz
+WAND Network Research Group
