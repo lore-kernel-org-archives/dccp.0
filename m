@@ -1,63 +1,95 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:34:29 +0000
-Subject: [PATCH 14/43]: CCID3 Packet Reception Step 6b  -  Detection of burst-losses
-Message-Id: <200704051634.30034@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Thu, 12 Apr 2007 21:17:05 +0000
+Subject: [PATCH 21/29] Wait for CCID
+Message-Id: <20070412211705.GV21292@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[CCID 3]: CCID3 Packet Reception Step 6b  -  Detection of burst-losses
+This performs a minor optimisation: when ccid_hc_tx_send_packet returns a value
+greater than zero, then the same call previously was done again at the begin of
+the while loop in dccp_wait_for_ccid.
 
-This completes the loss detection algorithm by providing a cleanup function
-which recycles the RX history entries for continued loss detection when 
-required. This test is necessary since otherwise bursts of packet losses
-will not be detected correctly.
+This patch exploits the available information and schedule-timeouts directly
+instead.
 
-This code has also been verified using a test module.
+Documentation also added.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/lib/packet_history.c |   30 +++++++++++++++++++++++++++---
- 1 file changed, 27 insertions(+), 3 deletions(-)
+ net/dccp/output.c |   34 +++++++++++++++++++---------------
+ 1 files changed, 19 insertions(+), 15 deletions(-)
 
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -471,9 +471,33 @@ static int __two_after_loss(struct tfrc_
- /* recycle RX history records to continue loss detection if necessary */
- static void __three_after_loss(struct tfrc_rx_hist *h)
- {
--	/* XXX do nothing for now, this is part of a subsequent patch */
--	h->loss_start = hist_index(h, 3);
--	h->loss_count = 0;
-+	/*
-+	 * The distance between S0 and S1 is always greater than 1 and the NDP
-+	 * count of S1 is smaller than this distance. Otherwise there would
-+	 * have been no loss. Hence it is only necessary to see whether there
-+	 * are further missing data packets between S1/S2 and S2/S3.
-+	 */
-+	int d2 = tfrc_rx_hist_delta_seqno(h, 1, 2),
-+	    d3 = tfrc_rx_hist_delta_seqno(h, 2, 3),
-+	    n2 = hist_entry(h, 2)->dccphrx_ndp,
-+	    n3 = hist_entry(h, 3)->dccphrx_ndp;
-+
-+	if (d2 = 1 || n2 >= d2) {	/* S2 is successor to S1 */
-+
-+		if (d3 = 1 || n3 >= d3) {
-+			/* S3 is successor of S2: entire hole is filled */
-+			h->loss_start = hist_index(h, 3);
-+			h->loss_count = 0;
-+		} else {
-+			/* gap between S2 and S3 */
-+			h->loss_start = hist_index(h, 2);
-+			h->loss_count = 1;
-+		}
-+
-+	} else {			/* gap between S1 and S2 */
-+		h->loss_start = hist_index(h, 1);
-+		h->loss_count = 2;
-+	}
- }
+diff --git a/net/dccp/output.c b/net/dccp/output.c
+index 0978bc2..9ca44cb 100644
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -174,34 +174,38 @@ void dccp_write_space(struct sock *sk)
  
  /**
+  * dccp_wait_for_ccid - Wait for ccid to tell us we can send a packet
+- * @sk: socket to wait for
++ * @sk:    socket to wait for
++ * @skb:   current skb to pass on for waiting
++ * @delay: sleep timeout in milliseconds (> 0)
++ * This function is called by default when the socket is closed, and
++ * when a non-zero linger time is set on the socket. For consistency
+  */
+-static int dccp_wait_for_ccid(struct sock *sk, struct sk_buff *skb)
++static int dccp_wait_for_ccid(struct sock *sk, struct sk_buff *skb, int delay)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	DEFINE_WAIT(wait);
+-	unsigned long delay;
++	unsigned long jiffdelay;
+ 	int rc;
+ 
+-	while (1) {
++	do {
++		dccp_pr_debug("delayed send by %d msec\n", delay);
++		jiffdelay = msecs_to_jiffies(delay);
++
+ 		prepare_to_wait(sk->sk_sleep, &wait, TASK_INTERRUPTIBLE);
+ 
++		sk->sk_write_pending++;
++		release_sock(sk);
++		schedule_timeout(jiffdelay);
++		lock_sock(sk);
++		sk->sk_write_pending--;
++
+ 		if (sk->sk_err)
+ 			goto do_error;
+ 		if (signal_pending(current))
+ 			goto do_interrupted;
+ 
+ 		rc = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb);
+-		if (rc <= 0)
+-			break;
+-		dccp_pr_debug("delayed send by %d msec\n", rc);
+-		delay = msecs_to_jiffies(rc);
+-		sk->sk_write_pending++;
+-		release_sock(sk);
+-		schedule_timeout(delay);
+-		lock_sock(sk);
+-		sk->sk_write_pending--;
+-	}
++	} while ((delay = rc) > 0);
+ out:
+ 	finish_wait(sk->sk_sleep, &wait);
+ 	return rc;
+@@ -228,7 +232,7 @@ void dccp_write_xmit(struct sock *sk, int block)
+ 						msecs_to_jiffies(err)+jiffies);
+ 				break;
+ 			} else
+-				err = dccp_wait_for_ccid(sk, skb);
++				err = dccp_wait_for_ccid(sk, skb, err);
+ 			if (err && err != -EINTR)
+ 				DCCP_BUG("err=%d after dccp_wait_for_ccid", err);
+ 		}
+-- 
+1.5.0.6
+
