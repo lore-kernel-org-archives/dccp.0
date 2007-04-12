@@ -1,273 +1,210 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:14:37 +0000
-Subject: [PATCH 05/29] Cheaper & smaller timestamping
-Message-Id: <20070412211437.GF21292@ghostprotocols.net>
+Date: Thu, 12 Apr 2007 21:17:57 +0000
+Subject: [PATCH 28/29] Use a function to update p_inv, and p is never used
+Message-Id: <20070412211757.GC21292@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Currently dccp_timestamp calculates timestamps relative to an offset computed
-at initialisation time.  This patch reduces the cost of timestamping by removing
-the offset computation. This affords the advantages that
+This
+ 1) concentrates previously scattered computation of p_inv into one function;
+ 2) removes the `p' element of the CCID3 RX sock (it is redundant);
+ 3) makes the tfrc_rx_info structure standalone, only used on demand.
 
- * there are now fewer instructions per single timestamp;
- * the size of the dccp_sock becomes smaller (minus @dccps_epoch).
+The reason for (2) is that the code essentially only uses p_inv = 1/p. It does not
+need p, since all the relevant information is already in p_inv.
+The motivation for (3) is that the embedded info structure will not be used often,
+so that the extra cost of keeping p in synch with p_inv (which has to be done at
+each packet reception) is overhead most of the time.
 
-(NB: Using a reference epoch is not strictly necessary, since all known timestamping
-     operations in DCCP only need relative time differences, but not absolute time.
-     I have tested this patch for a while on different platforms, found no problems.)
+Advantages that this buys:
+
+ * the RX sock loses further weight;
+ * computation of p_inv is no longer scattered in different places;
+ * not having to keep p in sync with p_inv speeds up computation
+   (important, as p_inv has to be recomputed for each new data packet);
+ * several test cases can now be removed since all is in one function;
+ * the send_feedback and packet_recv code becomes simpler.
+
+Committer note: Reorganized the struct a bit using pahole so that we can save
+                8 bytes on 64bit architectures, before it was 104 bytes, with
+                my change it got down to 96.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- include/linux/dccp.h                |    1 -
- net/dccp/ackvec.c                   |    4 ++--
- net/dccp/ccids/ccid3.c              |   18 +++++++++---------
- net/dccp/ccids/lib/packet_history.h |    2 +-
- net/dccp/dccp.h                     |    2 --
- net/dccp/input.c                    |    2 +-
- net/dccp/minisocks.c                |    1 -
- net/dccp/options.c                  |   22 +++-------------------
- net/dccp/proto.c                    |    1 -
- 9 files changed, 16 insertions(+), 37 deletions(-)
+ net/dccp/ccids/ccid3.c |   57 +++++++++++++++++++++++++----------------------
+ net/dccp/ccids/ccid3.h |   21 +++++++----------
+ 2 files changed, 39 insertions(+), 39 deletions(-)
 
-diff --git a/include/linux/dccp.h b/include/linux/dccp.h
-index fda2148..c297212 100644
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -511,7 +511,6 @@ struct dccp_sock {
- 	struct ccid			*dccps_hc_rx_ccid;
- 	struct ccid			*dccps_hc_tx_ccid;
- 	struct dccp_options_received	dccps_options_received;
--	struct timeval			dccps_epoch;
- 	enum dccp_role			dccps_role:2;
- 	__u8				dccps_hc_rx_insert_options:1;
- 	__u8				dccps_hc_tx_insert_options:1;
-diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-index 01030f3..a2bf318 100644
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -82,7 +82,7 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
- 	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
- 		return -1;
- 
--	dccp_timestamp(sk, &now);
-+	do_gettimeofday(&now);
- 	elapsed_time = timeval_delta(&now, &av->dccpav_time) / 10;
- 
- 	if (elapsed_time != 0 &&
-@@ -321,7 +321,7 @@ int dccp_ackvec_add(struct dccp_ackvec *av, const struct sock *sk,
- 	}
- 
- 	av->dccpav_buf_ackno = ackno;
--	dccp_timestamp(sk, &av->dccpav_time);
-+	do_gettimeofday(&av->dccpav_time);
- out:
- 	return 0;
- 
 diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index c623761..b756e95 100644
+index e7d2b62..26e8870 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -273,7 +273,7 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
- 							      (2 * TFRC_T_MBI));
+@@ -726,6 +726,25 @@ static inline void ccid3_hc_rx_update_s(struct ccid3_hc_rx_sock *hcrx, int len)
+ 		hcrx->ccid3hcrx_s = tfrc_ewma(hcrx->ccid3hcrx_s, len, 9);
+ }
  
- 			if (hctx->ccid3hctx_p = 0)
--				dccp_timestamp(sk, &now);
-+				do_gettimeofday(&now);
- 		} else {
- 			hctx->ccid3hctx_x_recv = hctx->ccid3hctx_x_calc;
- 			hctx->ccid3hctx_x_recv <<= 4;
-@@ -325,7 +325,7 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
- 	if (unlikely(skb->len = 0))
- 		return -EBADMSG;
- 
--	dccp_timestamp(sk, &now);
-+	do_gettimeofday(&now);
- 
- 	switch (hctx->ccid3hctx_state) {
- 	case TFRC_SSTATE_NO_SENT:
-@@ -418,7 +418,7 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more,
- 	}
- 	dccp_tx_hist_add_entry(&hctx->ccid3hctx_hist, packet);
- 
--	dccp_timestamp(sk, &now);
-+	do_gettimeofday(&now);
- 	packet->dccphtx_tstamp = now;
- 	packet->dccphtx_seqno  = dccp_sk(sk)->dccps_gss;
- 	packet->dccphtx_rtt    = hctx->ccid3hctx_rtt;
-@@ -469,7 +469,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		else				       /* can not exceed 100% */
- 			hctx->ccid3hctx_p = 1000000 / pinv;
- 
--		dccp_timestamp(sk, &now);
-+		do_gettimeofday(&now);
- 
- 		/*
- 		 * Calculate new round trip sample as per [RFC 3448, 4.3] by
-@@ -751,7 +751,7 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk)
- 
- 	ccid3_pr_debug("%s(%p) - entry \n", dccp_role(sk), sk);
- 
--	dccp_timestamp(sk, &now);
-+	do_gettimeofday(&now);
- 
++/* returns: 1 when p > p_prev (i.e. when feedback is required); 0 else */
++static int ccid3_hc_rx_update_p(struct ccid3_hc_rx_sock *hcrx)
++{
++	struct list_head *li_hist = &hcrx->ccid3hcrx_li_hist;
++	u32 pinv_prev = hcrx->ccid3hcrx_pinv;
++
++	if (list_empty(li_hist)) /* only empty if no loss so far, i.e. p = 0 */
++		return 0;
++
++	hcrx->ccid3hcrx_pinv = dccp_li_hist_calc_i_mean(li_hist);
++	if (hcrx->ccid3hcrx_pinv = 0) {
++		DCCP_BUG("non-empty LI history and yet I_mean = 0!");
++		return 0;
++	}
++
++	/* exploit that  p > p_prev  <=>  1/p < 1/p_prev  */
++	return (hcrx->ccid3hcrx_pinv < pinv_prev);
++}
++
+ static void ccid3_hc_rx_send_feedback(struct sock *sk)
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+@@ -741,6 +760,7 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk)
  	switch (hcrx->ccid3hcrx_state) {
  	case TFRC_RSTATE_NO_DATA:
-@@ -903,7 +903,7 @@ found:
- 		return ~0;
- 	}
+ 		hcrx->ccid3hcrx_x_recv = 0;
++		hcrx->ccid3hcrx_pinv   = ~0U;	/* see RFC 4342, 8.5 */
+ 		break;
+ 	case TFRC_RSTATE_DATA:
+ 		delta = timeval_delta(&now,
+@@ -770,14 +790,6 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk)
+ 	DCCP_BUG_ON(delta < 0);
+ 	hcrx->ccid3hcrx_elapsed_time = delta / 10;
  
--	dccp_timestamp(sk, &tstamp);
-+	do_gettimeofday(&tstamp);
- 	delta = timeval_delta(&tstamp, &hcrx->ccid3hcrx_tstamp_last_feedback);
- 	DCCP_BUG_ON(delta <= 0);
- 
-@@ -1050,7 +1050,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		if (opt_recv->dccpor_timestamp_echo = 0)
- 			break;
- 		rtt_prev = hcrx->ccid3hcrx_rtt;
--		dccp_timestamp(sk, &now);
-+		do_gettimeofday(&now);
- 		r_sample = dccp_sample_rtt(sk, &now, NULL);
- 
- 		if (hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA)
-@@ -1099,7 +1099,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		if (loss)
- 			break;
- 
--		dccp_timestamp(sk, &now);
-+		do_gettimeofday(&now);
- 		if ((timeval_delta(&now, &hcrx->ccid3hcrx_tstamp_last_ack) -
- 		     (suseconds_t)hcrx->ccid3hcrx_rtt) >= 0) {
- 			hcrx->ccid3hcrx_tstamp_last_ack = now;
-@@ -1142,7 +1142,7 @@ static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
- 	hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA;
- 	INIT_LIST_HEAD(&hcrx->ccid3hcrx_hist);
- 	INIT_LIST_HEAD(&hcrx->ccid3hcrx_li_hist);
--	dccp_timestamp(sk, &hcrx->ccid3hcrx_tstamp_last_ack);
-+	do_gettimeofday(&hcrx->ccid3hcrx_tstamp_last_ack);
- 	hcrx->ccid3hcrx_tstamp_last_feedback = hcrx->ccid3hcrx_tstamp_last_ack;
- 	hcrx->ccid3hcrx_s   = 0;
- 	hcrx->ccid3hcrx_rtt = 0;
-diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
-index 60d00f0..b40b9f9 100644
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -151,7 +151,7 @@ static inline struct dccp_rx_hist_entry *
- 		entry->dccphrx_ccval = dh->dccph_ccval;
- 		entry->dccphrx_type  = dh->dccph_type;
- 		entry->dccphrx_ndp   = ndp;
--		dccp_timestamp(sk, &entry->dccphrx_tstamp);
-+		do_gettimeofday(&entry->dccphrx_tstamp);
- 	}
- 
- 	return entry;
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index d8ad27b..b00fc7a 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -401,8 +401,6 @@ extern int dccp_insert_option(struct sock *sk, struct sk_buff *skb,
- 			       unsigned char option,
- 			       const void *value, unsigned char len);
- 
--extern void dccp_timestamp(const struct sock *sk, struct timeval *tv);
+-	if (hcrx->ccid3hcrx_p = 0)
+-		hcrx->ccid3hcrx_pinv = ~0U;	/* see RFC 4342, 8.5 */
+-	else if (hcrx->ccid3hcrx_p > 1000000) {
+-		DCCP_WARN("p (%u) > 100%%\n", hcrx->ccid3hcrx_p);
+-		hcrx->ccid3hcrx_pinv = 1;	/* use 100% in this case */
+-	} else
+-		hcrx->ccid3hcrx_pinv = 1000000 / hcrx->ccid3hcrx_p;
 -
- static inline suseconds_t timeval_usecs(const struct timeval *tv)
- {
- 	return tv->tv_sec * USEC_PER_SEC + tv->tv_usec;
-diff --git a/net/dccp/input.c b/net/dccp/input.c
-index da6ec18..fc087fc 100644
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -304,7 +304,7 @@ static int dccp_rcv_request_sent_state_process(struct sock *sk,
- 		if (dp->dccps_options_received.dccpor_timestamp_echo) {
- 			struct timeval now;
+ 	dp->dccps_hc_rx_insert_options = 1;
+ 	dccp_send_ack(sk);
+ }
+@@ -1016,7 +1028,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	const struct dccp_options_received *opt_recv;
+ 	struct dccp_rx_hist_entry *packet;
+ 	struct timeval now;
+-	u32 p_prev, r_sample, rtt_prev;
++	u32 r_sample, rtt_prev;
+ 	int loss, payload_size;
  
--			dccp_timestamp(sk, &now);
-+			do_gettimeofday(&now);
- 			dp->dccps_syn_rtt = dccp_sample_rtt(sk, &now, NULL);
- 		}
+ 	BUG_ON(hcrx = NULL);
+@@ -1096,22 +1108,8 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	ccid3_pr_debug("%s(%p, state=%s), data loss! Reacting...\n",
+ 		       dccp_role(sk), sk, dccp_state_name(sk->sk_state));
  
-diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
-index 6d235b3..0596099 100644
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -112,7 +112,6 @@ struct sock *dccp_create_openreq_child(struct sock *sk,
- 		newdp->dccps_service_list  = NULL;
- 		newdp->dccps_service	   = dreq->dreq_service;
- 		newicsk->icsk_rto	   = DCCP_TIMEOUT_INIT;
--		do_gettimeofday(&newdp->dccps_epoch);
- 
- 		if (dccp_feat_clone(sk, newsk))
- 			goto out_free;
-diff --git a/net/dccp/options.c b/net/dccp/options.c
-index 34d536d..72c11ef 100644
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -158,7 +158,7 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
- 			opt_recv->dccpor_timestamp = ntohl(*(__be32 *)value);
- 
- 			dp->dccps_timestamp_echo = opt_recv->dccpor_timestamp;
--			dccp_timestamp(sk, &dp->dccps_timestamp_time);
-+			do_gettimeofday(&dp->dccps_timestamp_time);
- 
- 			dccp_pr_debug("%s rx opt: TIMESTAMP=%u, ackno=%llu\n",
- 				      dccp_role(sk), opt_recv->dccpor_timestamp,
-@@ -370,28 +370,12 @@ int dccp_insert_option_elapsed_time(struct sock *sk, struct sk_buff *skb,
- 
- EXPORT_SYMBOL_GPL(dccp_insert_option_elapsed_time);
- 
--void dccp_timestamp(const struct sock *sk, struct timeval *tv)
--{
--	const struct dccp_sock *dp = dccp_sk(sk);
+-	p_prev = hcrx->ccid3hcrx_p;
 -
--	do_gettimeofday(tv);
--	tv->tv_sec  -= dp->dccps_epoch.tv_sec;
--	tv->tv_usec -= dp->dccps_epoch.tv_usec;
+-	/* Calculate loss event rate */
+-	if (!list_empty(&hcrx->ccid3hcrx_li_hist)) {
+-		u32 i_mean = dccp_li_hist_calc_i_mean(&hcrx->ccid3hcrx_li_hist);
 -
--	while (tv->tv_usec < 0) {
--		tv->tv_sec--;
--		tv->tv_usec += USEC_PER_SEC;
+-		/* Scaling up by 1000000 as fixed decimal */
+-		if (i_mean != 0)
+-			hcrx->ccid3hcrx_p = 1000000 / i_mean;
+-	} else
+-		DCCP_BUG("empty loss history");
+-
+-	if (hcrx->ccid3hcrx_p > p_prev) {
++	if (ccid3_hc_rx_update_p(hcrx))
+ 		ccid3_hc_rx_send_feedback(sk);
+-		return;
 -	}
--}
--
--EXPORT_SYMBOL_GPL(dccp_timestamp);
--
- int dccp_insert_option_timestamp(struct sock *sk, struct sk_buff *skb)
+ }
+ 
+ static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
+@@ -1165,6 +1163,11 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
  {
- 	struct timeval tv;
- 	__be32 now;
+ 	const struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 	const void *val;
++	struct tfrc_rx_info rx_info = {
++		.tfrcrx_x_recv	= hcrx->ccid3hcrx_x_recv,
++		.tfrcrx_rtt	= hcrx->ccid3hcrx_rtt,
++		.tfrcrx_p	= scaled_div(1, hcrx->ccid3hcrx_pinv)
++	};
  
--	dccp_timestamp(sk, &tv);
-+	do_gettimeofday(&tv);
- 	now = htonl(timeval_usecs(&tv) / 10);
- 	/* yes this will overflow but that is the point as we want a
- 	 * 10 usec 32 bit timer which mean it wraps every 11.9 hours */
-@@ -411,7 +395,7 @@ static int dccp_insert_option_timestamp_echo(struct sock *sk,
- 	int len, elapsed_time_len;
- 	unsigned char *to;
+ 	/* Listen socks doesn't have a private CCID block */
+ 	if (sk->sk_state = DCCP_LISTEN)
+@@ -1172,10 +1175,10 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
  
--	dccp_timestamp(sk, &now);
-+	do_gettimeofday(&now);
- 	elapsed_time = timeval_delta(&now, &dp->dccps_timestamp_time) / 10;
- 	elapsed_time_len = dccp_elapsed_time_len(elapsed_time);
- 	len = 6 + elapsed_time_len;
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 6607b7b..7337e39 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -172,7 +172,6 @@ int dccp_init_sock(struct sock *sk, const __u8 ctl_sock_initialized)
- 	struct inet_connection_sock *icsk = inet_csk(sk);
+ 	switch (optname) {
+ 	case DCCP_SOCKOPT_CCID_RX_INFO:
+-		if (len < sizeof(hcrx->ccid3hcrx_tfrc))
++		if (len < sizeof(rx_info))
+ 			return -EINVAL;
+-		len = sizeof(hcrx->ccid3hcrx_tfrc);
+-		val = &hcrx->ccid3hcrx_tfrc;
++		len = sizeof(rx_info);
++		val = &rx_info;
+ 		break;
+ 	default:
+ 		return -ENOPROTOOPT;
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index fbef100..8099e23 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -127,39 +127,36 @@ enum ccid3_hc_rx_states {
  
- 	dccp_minisock_init(&dp->dccps_minisock);
--	do_gettimeofday(&dp->dccps_epoch);
+ /** struct ccid3_hc_rx_sock - CCID3 receiver half-connection socket
+  *
+- *  @ccid3hcrx_x_recv  -  Receiver estimate of send rate (RFC 3448 4.3)
+- *  @ccid3hcrx_rtt  -  Receiver estimate of rtt (non-standard)
+- *  @ccid3hcrx_p  -  current loss event rate (RFC 3448 5.4)
+  *  @ccid3hcrx_seqno_nonloss  -  Last received non-loss sequence number
+  *  @ccid3hcrx_ccval_nonloss  -  Last received non-loss Window CCVal
+  *  @ccid3hcrx_ccval_last_counter  -  Tracks window counter (RFC 4342, 8.1)
+  *  @ccid3hcrx_state  -  receiver state, one of %ccid3_hc_rx_states
++ *  @ccid3hcrx_s  -  Received packet size in bytes
+  *  @ccid3hcrx_bytes_recv  -  Total sum of DCCP payload bytes
++ *  @ccid3hcrx_x_recv  -  Receiver estimate of send rate (RFC 3448, sec. 4.3)
++ *  @ccid3hcrx_rtt  -  Receiver estimate of rtt (non-standard)
++ *  @ccid3hcrx_pinv  -  Reciprocal of Loss Event Rate p (RFC 4342, sec. 8.5)
+  *  @ccid3hcrx_tstamp_last_feedback  -  Time at which last feedback was sent
+  *  @ccid3hcrx_tstamp_last_ack  -  Time at which last feedback was sent
+  *  @ccid3hcrx_hist  -  Packet history
+  *  @ccid3hcrx_li_hist  -  Loss Interval History
+- *  @ccid3hcrx_s  -  Received packet size in bytes
+- *  @ccid3hcrx_pinv  -  Inverse of Loss Event Rate (RFC 4342, sec. 8.5)
+  *  @ccid3hcrx_elapsed_time  -  Time since packet reception
+  */
+ struct ccid3_hc_rx_sock {
+-	struct tfrc_rx_info		ccid3hcrx_tfrc;
+-#define ccid3hcrx_x_recv		ccid3hcrx_tfrc.tfrcrx_x_recv
+-#define ccid3hcrx_rtt			ccid3hcrx_tfrc.tfrcrx_rtt
+-#define ccid3hcrx_p			ccid3hcrx_tfrc.tfrcrx_p
+ 	u64				ccid3hcrx_seqno_nonloss:48,
+ 					ccid3hcrx_ccval_nonloss:4,
+ 					ccid3hcrx_ccval_last_counter:4;
+ 	enum ccid3_hc_rx_states		ccid3hcrx_state:8;
+ 	u32				ccid3hcrx_bytes_recv;
++	u32				ccid3hcrx_x_recv;
++	u32				ccid3hcrx_rtt;
++	u32				ccid3hcrx_pinv;
++	u32				ccid3hcrx_elapsed_time;
++	u16				ccid3hcrx_s;
+ 	struct timeval			ccid3hcrx_tstamp_last_feedback;
+ 	struct timeval			ccid3hcrx_tstamp_last_ack;
+ 	struct list_head		ccid3hcrx_hist;
+ 	struct list_head		ccid3hcrx_li_hist;
+-	u16				ccid3hcrx_s;
+-	u32				ccid3hcrx_pinv;
+-	u32				ccid3hcrx_elapsed_time;
+ };
  
- 	/*
- 	 * FIXME: We're hardcoding the CCID, and doing this at this point makes
+ static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
 -- 
 1.5.0.6
 
