@@ -1,265 +1,158 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:36:42 +0000
-Subject: [PATCH 33/43]: Basic support for passive-close
-Message-Id: <200704051636.42765@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Thu, 12 Apr 2007 21:17:19 +0000
+Subject: [PATCH 23/29] Unaligned pointer access
+Message-Id: <20070412211719.GX21292@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Basic support for passive-close
+This fixes `unaligned (read) access' errors of the type
 
-This implements necessary state transitions for the two forms of passive-close
+ Kernel unaligned access at TPC[100f970c] dccp_parse_options+0x4f4/0x7e0 [dccp]
+ Kernel unaligned access at TPC[1011f2e4] ccid3_hc_tx_parse_options+0x1ac/0x380 [dccp_ccid3]
+ Kernel unaligned access at TPC[100f9898] dccp_parse_options+0x680/0x880 [dccp]
 
- * PASSIVE_1, which is entered when a host receives Close;
- * PASSIVE_2, which is entered when a client receives CloseReq.
-
-The handling is such that these passive connection-termination requests are
-enqueued as `fin' packets so that dccp_recvmsg() can later detect them. The
-only thing I am not entirely sure about is the wake_async in dccp_rcv_closereq();
-this has been copied from dccp_rcv_close() (but looks ok from the principle).
-
-The completed state transition diagram is on 
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/closing_states/
-
-NB: Regrettably, it is no longer easily possible to use a table-based transition as
-    before. The reason is that the role of the host (server or client) also plays a
-    `role' in the state transition. Therefore DCCP_ACTION_FIN has also been removed.
-    Another difference is that the transition into DCCP_CLOSED is now after sending
-    the Close/CloseReq.
+by using the get_unaligned macro for parsing options.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- include/linux/dccp.h |    1 
- net/dccp/input.c     |   34 +++++++++++-----
- net/dccp/proto.c     |  108 ++++++++++++++++++++++++++++++++++++---------------
- 3 files changed, 102 insertions(+), 41 deletions(-)
+ net/dccp/ccids/ccid3.c |    9 +++++----
+ net/dccp/ccids/ccid3.h |    1 +
+ net/dccp/options.c     |   34 ++++++++++++++++++++++------------
+ 3 files changed, 28 insertions(+), 16 deletions(-)
 
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -55,6 +55,9 @@ EXPORT_SYMBOL_GPL(dccp_hashinfo);
- /* the maximum queue length for tx in packets. 0 is no limit */
- int sysctl_dccp_tx_qlen __read_mostly = 5;
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 590c002..9474331 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -560,6 +560,7 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
+ 	const struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	struct ccid3_options_received *opt_recv;
++	u32 opt_val;
  
-+/* Forward Declarations. */
-+static void dccp_handle_passive_close(struct sock *sk);
-+
- void dccp_set_state(struct sock *sk, const int state)
- {
- 	const int oldstate = sk->sk_state;
-@@ -71,7 +74,8 @@ void dccp_set_state(struct sock *sk, con
- 		break;
+ 	BUG_ON(hctx = NULL);
  
- 	case DCCP_CLOSED:
--		if (oldstate = DCCP_CLOSING || oldstate = DCCP_OPEN)
-+		if (oldstate = DCCP_CLOSING  ||
-+		    oldstate = DCCP_CLOSEREQ || oldstate = DCCP_OPEN)
- 			DCCP_INC_STATS(DCCP_MIB_ESTABRESETS);
+@@ -581,8 +582,8 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
+ 				  dccp_role(sk), sk, len);
+ 			rc = -EINVAL;
+ 		} else {
+-			opt_recv->ccid3or_loss_event_rate -						ntohl(*(__be32 *)value);
++			opt_val = get_unaligned((u32 *)value);
++			opt_recv->ccid3or_loss_event_rate = ntohl(opt_val);
+ 			ccid3_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
+ 				       dccp_role(sk), sk,
+ 				       opt_recv->ccid3or_loss_event_rate);
+@@ -603,8 +604,8 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
+ 				  dccp_role(sk), sk, len);
+ 			rc = -EINVAL;
+ 		} else {
+-			opt_recv->ccid3or_receive_rate -						ntohl(*(__be32 *)value);
++			opt_val = get_unaligned((u32 *)value);
++			opt_recv->ccid3or_receive_rate = ntohl(opt_val);
+ 			ccid3_pr_debug("%s(%p), RECEIVE_RATE=%u\n",
+ 				       dccp_role(sk), sk,
+ 				       opt_recv->ccid3or_receive_rate);
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index 8d31b38..fbef100 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -40,6 +40,7 @@
+ #include <linux/time.h>
+ #include <linux/types.h>
+ #include <linux/tfrc.h>
++#include <asm/unaligned.h>
+ #include "../ccid.h"
  
- 		sk->sk_prot->unhash(sk);
-@@ -721,19 +725,26 @@ int dccp_recvmsg(struct kiocb *iocb, str
+ /* Two seconds as per RFC 3448 4.2 */
+diff --git a/net/dccp/options.c b/net/dccp/options.c
+index 72c11ef..3e11f18 100644
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -14,6 +14,7 @@
+ #include <linux/dccp.h>
+ #include <linux/module.h>
+ #include <linux/types.h>
++#include <asm/unaligned.h>
+ #include <linux/kernel.h>
+ #include <linux/skbuff.h>
  
- 		dh = dccp_hdr(skb);
+@@ -68,7 +69,7 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
+ 	struct dccp_options_received *opt_recv = &dp->dccps_options_received;
+ 	unsigned char opt, len;
+ 	unsigned char *value;
+-	u32 elapsed_time;
++	u32 elapsed_time, opt_val;
+ 	int rc;
+ 	int mandatory = 0;
  
--		if (dh->dccph_type = DCCP_PKT_DATA ||
--		    dh->dccph_type = DCCP_PKT_DATAACK)
-+		switch (dh->dccph_type) {
-+		case DCCP_PKT_DATA:
-+		case DCCP_PKT_DATAACK:
- 			goto found_ok_skb;
+@@ -155,7 +156,8 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
+ 			if (len != 4)
+ 				goto out_invalid_option;
  
--		if (dh->dccph_type = DCCP_PKT_RESET ||
--		    dh->dccph_type = DCCP_PKT_CLOSE) {
--			dccp_pr_debug("found fin ok!\n");
-+		case DCCP_PKT_CLOSE:
-+		case DCCP_PKT_CLOSEREQ:
-+			if (!(flags & MSG_PEEK))
-+				dccp_handle_passive_close(sk);
-+			/* fall through */
-+		case DCCP_PKT_RESET:
-+			dccp_pr_debug("found fin (%s) ok!\n",
-+				      dccp_packet_name(dh->dccph_type));
- 			len = 0;
- 			goto found_fin_ok;
-+		default:
-+			dccp_pr_debug("packet_type=%s\n",
-+				      dccp_packet_name(dh->dccph_type));
-+			sk_eat_skb(sk, skb, 0);
- 		}
--		dccp_pr_debug("packet_type=%s\n",
--			      dccp_packet_name(dh->dccph_type));
--		sk_eat_skb(sk, skb, 0);
- verify_sock_status:
- 		if (sock_flag(sk, SOCK_DONE)) {
- 			len = 0;
-@@ -835,28 +846,64 @@ out:
+-			opt_recv->dccpor_timestamp = ntohl(*(__be32 *)value);
++			opt_val = get_unaligned((u32 *)value);
++			opt_recv->dccpor_timestamp = ntohl(opt_val);
  
- EXPORT_SYMBOL_GPL(inet_dccp_listen);
+ 			dp->dccps_timestamp_echo = opt_recv->dccpor_timestamp;
+ 			do_gettimeofday(&dp->dccps_timestamp_time);
+@@ -169,7 +171,8 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
+ 			if (len != 4 && len != 6 && len != 8)
+ 				goto out_invalid_option;
  
--static const unsigned char dccp_new_state[] = {
--	/* current state:   new state:      action:	*/
--	[0]		  = DCCP_CLOSED,
--	[DCCP_OPEN]	  = DCCP_CLOSING | DCCP_ACTION_FIN,
--	[DCCP_REQUESTING] = DCCP_CLOSED,
--	[DCCP_PARTOPEN]	  = DCCP_CLOSING | DCCP_ACTION_FIN,
--	[DCCP_LISTEN]	  = DCCP_CLOSED,
--	[DCCP_RESPOND]	  = DCCP_CLOSED,
--	[DCCP_CLOSING]	  = DCCP_CLOSED,
--	[DCCP_TIME_WAIT]  = DCCP_CLOSED,
--	[DCCP_CLOSED]	  = DCCP_CLOSED,
--};
--
--static int dccp_close_state(struct sock *sk)
-+void dccp_handle_passive_close(struct sock *sk)
- {
--	const int next = dccp_new_state[sk->sk_state];
--	const int ns = next & DCCP_STATE_MASK;
-+	switch (sk->sk_state) {
-+	case DCCP_PASSIVE_1:
-+		/* Node (client or server) has received Close packet. */
-+		dccp_set_state(sk, DCCP_CLOSED);
-+		dccp_send_reset(sk, DCCP_RESET_CODE_CLOSED);
-+		break;
-+	case DCCP_PASSIVE_2:
-+		/*
-+		 * Client passive-close by receiving a CloseReq packet.
-+		 * We need to set `active' when sending the Close, since 8.3 in
-+		 * RFC 4340 requires nodes in the CLOSING state to retransmit
-+		 * the Close/CloseReq packets. A conforming peer implementation
-+		 * will in turn retransmit its CloseReq packets as well.
-+		 */
-+		dccp_set_state(sk, DCCP_CLOSING);
-+		dccp_send_close(sk, 1);
-+		break;
-+	default:
-+		return;
-+	}
-+}
+-			opt_recv->dccpor_timestamp_echo = ntohl(*(__be32 *)value);
++			opt_val = get_unaligned((u32 *)value);
++			opt_recv->dccpor_timestamp_echo = ntohl(opt_val);
  
--	if (ns != sk->sk_state)
--		dccp_set_state(sk, ns);
-+static void dccp_handle_close(struct sock *sk)
-+{
-+	u8 next_state = DCCP_CLOSED;
+ 			dccp_pr_debug("%s rx opt: TIMESTAMP_ECHO=%u, len=%d, "
+ 				      "ackno=%llu", dccp_role(sk),
+@@ -178,16 +181,20 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
+ 				      (unsigned long long)
+ 				      DCCP_SKB_CB(skb)->dccpd_ack_seq);
  
--	return next & DCCP_ACTION_FIN;
-+	switch (sk->sk_state) {
-+	case DCCP_CLOSED:
-+		return;
-+	case DCCP_PASSIVE_1:
-+	case DCCP_PASSIVE_2:
-+		dccp_handle_passive_close(sk);
-+		break;
-+	case DCCP_PARTOPEN:
-+		/*
-+		 * Clear PARTOPEN timer [RFC 4340, 8.1.5]; we will be sending a
-+		 * Close presently, which will be (re-)transmitted anyhow (8.3).
-+		 */
-+		dccp_pr_debug("Stop PARTOPEN timer (%p)\n", sk);
-+		inet_csk_clear_xmit_timer(sk, ICSK_TIME_DACK);
-+		/* fall through */
-+	case DCCP_OPEN:
-+		/*
-+		 * An active close need only be sent in these two states
-+		 */
-+		dccp_send_close(sk, 1);
-+
-+		if (dccp_sk(sk)->dccps_role = DCCP_ROLE_SERVER)
-+			next_state = DCCP_CLOSEREQ;
-+		else
-+			next_state = DCCP_CLOSING;
-+		/* fall through */
-+	default:
-+		dccp_set_state(sk, next_state);
-+		break;
-+	}
- }
++			value += 4;
  
- void dccp_close(struct sock *sk, long timeout)
-@@ -893,9 +940,8 @@ void dccp_close(struct sock *sk, long ti
- 	if (sock_flag(sk, SOCK_LINGER) && !sk->sk_lingertime) {
- 		/* Check zero linger _after_ checking for unread data. */
- 		sk->sk_prot->disconnect(sk, 0);
--	} else if (dccp_close_state(sk)) {
--		dccp_send_close(sk, 1);
--	}
-+	} else	/* Passive/active close after all data has been read. */
-+		dccp_handle_close(sk);
+-			if (len = 4) {
++			if (len = 4) {		/* no elapsed time included */
+ 				dccp_pr_debug_cat("\n");
+ 				break;
+ 			}
  
- 	sk_stream_wait_close(sk, timeout);
+-			if (len = 6)
+-				elapsed_time = ntohs(*(__be16 *)(value + 4));
+-			else
+-				elapsed_time = ntohl(*(__be32 *)(value + 4));
++			if (len = 6) {		/* 2-byte elapsed time */
++				opt_val = get_unaligned((u16 *)value);
++				elapsed_time = ntohs((u16)opt_val);
++			} else {		/* 4-byte elapsed time */
++				opt_val = get_unaligned((u32 *)value);
++				elapsed_time = ntohl(opt_val);
++			}
  
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -31,10 +31,23 @@ static void dccp_fin(struct sock *sk, st
+ 			dccp_pr_debug_cat(", ELAPSED_TIME=%d\n", elapsed_time);
  
- static void dccp_rcv_close(struct sock *sk, struct sk_buff *skb)
- {
--	dccp_send_reset(sk, DCCP_RESET_CODE_CLOSED);
--	dccp_fin(sk, skb);
--	dccp_set_state(sk, DCCP_CLOSED);
--	sk_wake_async(sk, 1, POLL_HUP);
-+	if (sk->sk_state = DCCP_CLOSEREQ) {
-+		/* Server performed active close */
-+		dccp_send_reset(sk, DCCP_RESET_CODE_CLOSED);
-+		dccp_done(sk);
-+	} else {
-+		/*
-+		 * Passive-close: Only the first Close is enqueued, there is no
-+		 * point in putting several Closes on the queue - in case of an
-+		 * application bug, the input queue may not be emptied at all.
-+		 * In this case we wait until the peer sends the terminal Reset.
-+		 */
-+		if (sk->sk_state != DCCP_PASSIVE_1) {
-+			dccp_fin(sk, skb);
-+			dccp_set_state(sk, DCCP_PASSIVE_1);
-+		}
-+		sk_wake_async(sk, 1, POLL_HUP);
-+	}
- }
+@@ -202,10 +209,13 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
+ 			if (pkt_type = DCCP_PKT_DATA)
+ 				continue;
  
- static void dccp_rcv_closereq(struct sock *sk, struct sk_buff *skb)
-@@ -50,9 +63,12 @@ static void dccp_rcv_closereq(struct soc
- 		return;
- 	}
+-			if (len = 2)
+-				elapsed_time = ntohs(*(__be16 *)value);
+-			else
+-				elapsed_time = ntohl(*(__be32 *)value);
++			if (len = 2) {
++				opt_val = get_unaligned((u16 *)value);
++				elapsed_time = ntohs((u16)opt_val);
++			} else {
++				opt_val = get_unaligned((u32 *)value);
++				elapsed_time = ntohl(opt_val);
++			}
  
--	if (sk->sk_state != DCCP_CLOSING)
--		dccp_set_state(sk, DCCP_CLOSING);
--	dccp_send_close(sk, 0);
-+	/* Do not enqueue CloseReq twice: see comments above for PASSIVE_1 */
-+	if (sk->sk_state != DCCP_PASSIVE_2) {
-+		dccp_fin(sk, skb);
-+		dccp_set_state(sk, DCCP_PASSIVE_2);
-+	}
-+	sk_wake_async(sk, 1, POLL_HUP);
- }
- 
- static void dccp_event_ack_recv(struct sock *sk, struct sk_buff *skb)
-@@ -181,7 +197,7 @@ static int __dccp_rcv_established(struct
- 		return 0;
- 	case DCCP_PKT_CLOSEREQ:
- 		dccp_rcv_closereq(sk, skb);
--		goto discard;
-+		return 0;
- 	case DCCP_PKT_CLOSE:
- 		dccp_rcv_close(sk, skb);
- 		return 0;
-@@ -534,7 +550,7 @@ int dccp_rcv_state_process(struct sock *
- 		goto discard;
- 	} else if (dh->dccph_type = DCCP_PKT_CLOSEREQ) {
- 		dccp_rcv_closereq(sk, skb);
--		goto discard;
-+		return 0;
- 	} else if (dh->dccph_type = DCCP_PKT_CLOSE) {
- 		dccp_rcv_close(sk, skb);
- 		return 0;
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -259,7 +259,6 @@ enum dccp_state {
- };
- 
- #define DCCP_STATE_MASK 0x1f
--#define DCCP_ACTION_FIN (1<<7)
- 
- enum {
- 	DCCPF_OPEN	 = TCPF_ESTABLISHED,
+ 			if (elapsed_time > opt_recv->dccpor_elapsed_time)
+ 				opt_recv->dccpor_elapsed_time = elapsed_time;
+-- 
+1.5.0.6
+
