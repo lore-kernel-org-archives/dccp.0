@@ -1,118 +1,163 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:37:10 +0000
-Subject: [PATCH 38/43]: Support for server holding timewait state
-Message-Id: <200704051637.11092@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Thu, 12 Apr 2007 21:16:20 +0000
+Subject: [PATCH 16/29] Preparation to fit TX list locking
+Message-Id: <20070412211620.GQ21292@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Support for server holding timewait state
+This patch prepares adding TX history locking by changing all
+functions which return a reference to a TX history object:
 
-This adds a socket option and signalling support for the case where the server
-holds timewait state on closing the connection, as described in RFC 4340, 8.3.
+ 1) removal of dccp_tx_hist_head  -  nowhere used in the code;
+ 2) change dccp_tx_hist_find_entry  -  the sole use is to look up a
+    timestamp for an Ack-ed packet; and then do garbage-collection.
 
-Since holding timewait state at the server is the non-usual case, it is enabled
-via a socket option. Documentation for this socket option has been added.
+The latter function is changed to return the desired timestamp instead of
+a history object reference.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>     
+Not returning object references is necessary, since otherwise lists could
+not be garbage-collected (or would have to use atomic reference counts).
+
+Furthermore, the garbage-collection is now integrated into (2), since it
+requires first a read access and then a write access at the same place in
+the list: giving up the lock here would permit race condition.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- Documentation/networking/dccp.txt |    6 ++++++
- include/linux/dccp.h              |    3 +++
- net/dccp/output.c                 |    6 ++++--
- net/dccp/proto.c                  |   13 ++++++++++++-
- 4 files changed, 25 insertions(+), 3 deletions(-)
+ net/dccp/ccids/ccid3.c              |   18 +++++++-----------
+ net/dccp/ccids/lib/packet_history.c |   27 +++++++++++++++++++++------
+ net/dccp/ccids/lib/packet_history.h |   16 ++--------------
+ 3 files changed, 30 insertions(+), 31 deletions(-)
 
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -559,8 +559,10 @@ void dccp_send_close(struct sock *sk, co
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 131001b..0029979 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -421,10 +421,9 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	struct ccid3_options_received *opt_recv;
+-	struct dccp_tx_hist_entry *packet;
+-	struct timeval now;
++	struct timeval now, t_send;
+ 	unsigned long t_nfb;
+-	u32 pinv, r_sample;
++	u32 pinv, r_sample, rc;
  
- 	/* Reserve space for headers and prepare control bits. */
- 	skb_reserve(skb, sk->sk_prot->max_header);
--	DCCP_SKB_CB(skb)->dccpd_type = dp->dccps_role = DCCP_ROLE_CLIENT ?
--					DCCP_PKT_CLOSE : DCCP_PKT_CLOSEREQ;
-+	if (dp->dccps_role = DCCP_ROLE_SERVER && !dp->dccps_server_timewait)
-+		DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_CLOSEREQ;
-+	else
-+		DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_CLOSE;
+ 	BUG_ON(hctx = NULL);
  
- 	if (active) {
- 		dccp_write_xmit(sk, 1);
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -205,6 +205,7 @@ struct dccp_so_feat {
- #define DCCP_SOCKOPT_CHANGE_L		3
- #define DCCP_SOCKOPT_CHANGE_R		4
- #define DCCP_SOCKOPT_GET_CUR_MPS	5
-+#define DCCP_SOCKOPT_SERVER_TIMEWAIT	6
- #define DCCP_SOCKOPT_SEND_CSCOV		10
- #define DCCP_SOCKOPT_RECV_CSCOV		11
- #define DCCP_SOCKOPT_CCID_RX_INFO	128
-@@ -493,6 +494,7 @@ struct dccp_ackvec;
-  * @dccps_role - role of this sock, one of %dccp_role
-  * @dccps_hc_rx_insert_options - receiver wants to add options when acking
-  * @dccps_hc_tx_insert_options - sender wants to add options when sending
-+ * @dccps_server_timewait - server holds timewait state on close (RFC 4340, 8.3)
-  * @dccps_xmit_timer - timer for when CCID is not ready to send
-  * @dccps_syn_rtt - RTT sample from Request/Response exchange (in usecs)
-  */
-@@ -528,6 +530,7 @@ struct dccp_sock {
- 	enum dccp_role			dccps_role:2;
- 	__u8				dccps_hc_rx_insert_options:1;
- 	__u8				dccps_hc_tx_insert_options:1;
-+	__u8				dccps_server_timewait:1;
- 	struct timer_list		dccps_xmit_timer;
- };
+@@ -440,10 +439,10 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	default:			return;
+ 	}
  
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -495,6 +495,12 @@ static int do_dccp_setsockopt(struct soc
- 						     (struct dccp_so_feat __user *)
- 						     optval);
- 		break;
-+	case DCCP_SOCKOPT_SERVER_TIMEWAIT:
-+		if (dp->dccps_role != DCCP_ROLE_SERVER)
-+			err = -EOPNOTSUPP;
-+		else
-+			dp->dccps_server_timewait = (val > 0);
-+		break;
- 	case DCCP_SOCKOPT_SEND_CSCOV:	/* sender side, RFC 4340, sec. 9.2 */
- 		if (val < 0 || val > 15)
- 			err = -EINVAL;
-@@ -597,6 +603,10 @@ static int do_dccp_getsockopt(struct soc
- 		val = dp->dccps_mss_cache;
- 		len = sizeof(val);
- 		break;
-+	case DCCP_SOCKOPT_SERVER_TIMEWAIT:
-+		val = dp->dccps_server_timewait;
-+		len = sizeof(val);
-+		break;
- 	case DCCP_SOCKOPT_SEND_CSCOV:
- 		val = dp->dccps_pcslen;
- 		len = sizeof(val);
-@@ -895,7 +905,8 @@ static void dccp_handle_close(struct soc
- 		 */
- 		dccp_send_close(sk, 1);
+-	/* get packet from history to look up t_recvdata */
+-	packet = dccp_tx_hist_find_entry(&hctx->ccid3hctx_hist,
+-				         DCCP_SKB_CB(skb)->dccpd_ack_seq);
+-	if (unlikely(packet = NULL)) {
++	/* look up t_recvdata in packet history */
++	rc = dccp_tx_hist_get_send_time(ccid3_tx_hist, &hctx->ccid3hctx_hist,
++				        DCCP_SKB_CB(skb)->dccpd_ack_seq, &t_send);
++	if (unlikely(!rc)) {
+ 		DCCP_WARN("%s(%p), seqno %llu(%s) doesn't exist in history!\n",
+ 			  dccp_role(sk), sk,
+ 		          (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq,
+@@ -466,7 +465,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	 * R_sample  =  (t_now - t_recvdata) - t_elapsed
+ 	 */
+ 	skb_get_timestamp(skb, &now);
+-	r_sample = dccp_sample_rtt(sk, &now, &packet->dccphtx_tstamp);
++	r_sample = dccp_sample_rtt(sk, &now, &t_send);
  
--		if (dccp_sk(sk)->dccps_role = DCCP_ROLE_SERVER)
-+		if (dccp_sk(sk)->dccps_role = DCCP_ROLE_SERVER &&
-+		    ! dccp_sk(sk)->dccps_server_timewait	  )
- 			next_state = DCCP_CLOSEREQ;
- 		else
- 			next_state = DCCP_CLOSING;
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -44,6 +44,12 @@ listening sockets, multiple service code
- DCCP_SOCKOPT_GET_CUR_MPS is read-only and retrieves the current maximum packet
- size (application payload size) in bytes, see RFC 4340, section 14.
+ 	/*
+ 	 * Update RTT estimate (honours RTT from SYN exchange):
+@@ -523,9 +522,6 @@ done_computing_x:
+ 	/* unschedule no feedback timer */
+ 	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
  
-+DCCP_SOCKOPT_SERVER_TIMEWAIT enables the server (listening socket) to hold
-+timewait state when closing the connection (RFC 4340, 8.3). The usual case is
-+that the closing server sends a CloseReq, whereupon the client holds timewait
-+state. When this boolean socket option is on, the server sends a Close instead
-+and will enter TIMEWAIT. This option must be set after accept() returns.
+-	/* remove all packets older than the one acked from history */
+-	dccp_tx_hist_purge_older(ccid3_tx_hist,
+-				 &hctx->ccid3hctx_hist, packet);
+ 	/*
+ 	 * As we have calculated new ipi, delta, t_nom it is possible
+ 	 * that we now can send a packet, so wake up dccp_wait_for_ccid
+diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
+index 2e8ef42..d149b19 100644
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -85,21 +85,36 @@ void dccp_tx_hist_delete(struct dccp_tx_hist *hist)
+ 
+ EXPORT_SYMBOL_GPL(dccp_tx_hist_delete);
+ 
+-struct dccp_tx_hist_entry *
+-	dccp_tx_hist_find_entry(const struct list_head *list, const u64 seq)
++/**
++ *  dccp_tx_hist_get_send_time  -  Retrieve timestamp of sent packet
++ *
++ *  @hist:   history slab associated with TX history
++ *  @list:   TX history list head
++ *  @seq:    48-bit sequence number of packet in question
++ *  @t_send: timestamp to be returned
++ *  Returns 1 on success and then garbage-collects all older entries.
++ */
++int dccp_tx_hist_get_send_time(struct dccp_tx_hist *hist,
++			       struct list_head *list, u64 seq,
++			       struct timeval *t_send)
+ {
+-	struct dccp_tx_hist_entry *packet = NULL, *entry;
++	struct dccp_tx_hist_entry *entry;
++	int found = 0;
+ 
+ 	list_for_each_entry(entry, list, dccphtx_node)
+ 		if (entry->dccphtx_seqno = seq) {
+-			packet = entry;
++			found = 1;
++			*t_send = entry->dccphtx_tstamp;
+ 			break;
+ 		}
+ 
+-	return packet;
++	if (found)
++		dccp_tx_hist_purge_older(hist, list, entry);
 +
- DCCP_SOCKOPT_SEND_CSCOV and DCCP_SOCKOPT_RECV_CSCOV are used for setting the
- partial checksum coverage (RFC 4340, sec. 9.2). The default is that checksums
- always cover the entire packet and that only fully covered application data is
++	return found;
+ }
+ 
+-EXPORT_SYMBOL_GPL(dccp_tx_hist_find_entry);
++EXPORT_SYMBOL_GPL(dccp_tx_hist_get_send_time);
+ 
+ void dccp_tx_hist_purge(struct dccp_tx_hist *hist, struct list_head *list)
+ {
+diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
+index 330b58f..da81709 100644
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -80,20 +80,8 @@ static inline struct dccp_tx_hist_entry *
+ 	return entry;
+ }
+ 
+-static inline struct dccp_tx_hist_entry *
+-			dccp_tx_hist_head(struct list_head *list)
+-{
+-	struct dccp_tx_hist_entry *head = NULL;
+-
+-	if (!list_empty(list))
+-		head = list_entry(list->next, struct dccp_tx_hist_entry,
+-				  dccphtx_node);
+-	return head;
+-}
+-
+-extern struct dccp_tx_hist_entry *
+-			dccp_tx_hist_find_entry(const struct list_head *list,
+-						const u64 seq);
++extern int dccp_tx_hist_get_send_time(struct dccp_tx_hist *, struct list_head *,
++				      u64 seq, struct timeval *t_send);
+ 
+ static inline void dccp_tx_hist_add_entry(struct list_head *list,
+ 					  struct dccp_tx_hist_entry *entry)
+-- 
+1.5.0.6
+
