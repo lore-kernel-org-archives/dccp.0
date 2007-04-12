@@ -1,39 +1,137 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 11 Apr 2007 09:20:14 +0000
-Subject: Fwd: Re: [PATCH 27/43]: Accurately determine idle & application-limited periods
-Message-Id: <200704111020.14419@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Thu, 12 Apr 2007 21:16:38 +0000
+Subject: [PATCH 18/29] Reduce time spent while write-lock is held
+Message-Id: <20070412211638.GS21292@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-> [CCID3]: Accurately determine idle & application-limited periods
-<snip>
-> +/**
-> + *  ccid3_hc_tx_idle  -  Whether sender is idle or application-limited
-> + *  @now: Current time needs to be supplied
-> + *  Returns the number of full RTTs during which the sender has been idle.
-> + */
-> +static int ccid3_hc_tx_idle(struct ccid3_hc_tx_sock *hctx, struct timeval *now)
-> +{
-> +       struct timeval last_send;
+This minimizes the time during which the `write_lock' is held: by using a
+temporary list_head and re-adjusting the pointers of the old list accordingly.
+The clean-up operation can then safely be done outside the lock, since the
+newly created list is then `homeless'.
 
-Maybe this would be better called ccid3_hc_tx_idle_rtt to indicate
-what is happening here.
+ 1. For dccp_tx_hist_purge, this is conveniently done by using list_replace_init,
 
->          */
-> -       if (unlikely(hctx->ccid3hctx_idle)) {
-> +       if (ccid3_hc_tx_idle(hctx, now) >= 2) {
+ 2. the case for dccp_tx_hist_purge_older is analogous and, in the absence of a
+    matching library function, done manually;
 
-See what I mean? You're left wondering - what does this code do? It
-makes some sense if you check comment above but not totally obvious.
+ 3. the `dangerous' function dccp_tx_hist_purge_older has been removed by
+    merging its functionality into dccp_tx_hist_get_send_time.
 
-Code seems OK but not yet tested it all.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+---
+ net/dccp/ccids/lib/packet_history.c |   47 ++++++++++++++++++----------------
+ net/dccp/ccids/lib/packet_history.h |    4 ---
+ 2 files changed, 25 insertions(+), 26 deletions(-)
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-
+diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
+index a5dc450..02bf58f 100644
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -87,6 +87,16 @@ void dccp_tx_hist_delete(struct dccp_tx_hist *hist)
+ 
+ EXPORT_SYMBOL_GPL(dccp_tx_hist_delete);
+ 
++static void __dccp_tx_hist_wipe(struct list_head *head, struct kmem_cache *slab)
++{
++	struct dccp_tx_hist_entry *entry, *next;
++
++	list_for_each_entry_safe(entry, next, head, dccphtx_node) {
++		list_del(&entry->dccphtx_node);
++		kmem_cache_free(slab, entry);
++	}
++}
++
+ /**
+  *  dccp_tx_hist_get_send_time  -  Retrieve timestamp of sent packet
+  *
+@@ -101,6 +111,7 @@ int dccp_tx_hist_get_send_time(struct dccp_tx_hist *hist,
+ 			       struct timeval *t_send)
+ {
+ 	struct dccp_tx_hist_entry *entry;
++	struct list_head free_this;
+ 	int found = 0;
+ 
+ 	write_lock_bh(&dccp_tx_hist_lock);
+@@ -108,12 +119,20 @@ int dccp_tx_hist_get_send_time(struct dccp_tx_hist *hist,
+ 		if (entry->dccphtx_seqno = seq) {
+ 			found = 1;
+ 			*t_send = entry->dccphtx_tstamp;
++			/* forget/free all entries older than this one */
++			free_this.next		= entry->dccphtx_node.next;
++			free_this.next->prev	= &free_this;
++			free_this.prev		= list->prev;
++			free_this.prev->next	= &free_this;
++
++			entry->dccphtx_node.next = list;
++			list->prev		 = &entry->dccphtx_node;
+ 			break;
+ 		}
++	write_unlock_bh(&dccp_tx_hist_lock);
+ 
+ 	if (found)
+-		dccp_tx_hist_purge_older(hist, list, entry);
+-	write_unlock_bh(&dccp_tx_hist_lock);
++		__dccp_tx_hist_wipe(&free_this, hist->dccptxh_slab);
+ 
+ 	return found;
+ }
+@@ -132,32 +151,16 @@ EXPORT_SYMBOL_GPL(dccp_tx_hist_add_entry);
+ 
+ void dccp_tx_hist_purge(struct dccp_tx_hist *hist, struct list_head *list)
+ {
+-	struct dccp_tx_hist_entry *entry, *next;
++	struct list_head free_this;
+ 
+ 	write_lock_bh(&dccp_tx_hist_lock);
+-	list_for_each_entry_safe(entry, next, list, dccphtx_node) {
+-		list_del_init(&entry->dccphtx_node);
+-		dccp_tx_hist_entry_delete(hist, entry);
+-	}
++	list_replace_init(list, &free_this);
+ 	write_unlock_bh(&dccp_tx_hist_lock);
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_tx_hist_purge);
+ 
+-/* XXX careful, this one is not lock-protected */
+-void dccp_tx_hist_purge_older(struct dccp_tx_hist *hist,
+-			      struct list_head *list,
+-			      struct dccp_tx_hist_entry *packet)
+-{
+-	struct dccp_tx_hist_entry *next;
+-
+-	list_for_each_entry_safe_continue(packet, next, list, dccphtx_node) {
+-		list_del_init(&packet->dccphtx_node);
+-		dccp_tx_hist_entry_delete(hist, packet);
+-	}
++	__dccp_tx_hist_wipe(&free_this, hist->dccptxh_slab);
+ }
+ 
+-EXPORT_SYMBOL_GPL(dccp_tx_hist_purge_older);
++EXPORT_SYMBOL_GPL(dccp_tx_hist_purge);
+ 
+ /*
+  * 	Receiver History Routines
+diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
+index 402ac90..6208188 100644
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -95,10 +95,6 @@ static inline void dccp_tx_hist_entry_delete(struct dccp_tx_hist *hist,
+ extern void dccp_tx_hist_purge(struct dccp_tx_hist *hist,
+ 			       struct list_head *list);
+ 
+-extern void dccp_tx_hist_purge_older(struct dccp_tx_hist *hist,
+-				     struct list_head *list,
+-				     struct dccp_tx_hist_entry *next);
+-
+ /*
+  * 	Receiver History data structures and declarations
+  */
 -- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+1.5.0.6
+
