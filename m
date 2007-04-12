@@ -1,64 +1,48 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:33:52 +0000
-Subject: [PATCH 9/43]: New RX History Step 3 - Track highest seqno
-Message-Id: <200704051633.52248@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Thu, 12 Apr 2007 21:15:34 +0000
+Subject: [PATCH 11/29] Set idle state after nofeedback timer expiry
+Message-Id: <20070412211534.GL21292@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[CCID 3]: New RX History Step 3 - Track highest seqno
+This corrects a mistake with regard to draft rfc3448bis: the `idle' state was
+mistakenly entered before the allowed sending rate X was recomputed. With
+regard to draft rfc3448bis, section 4.3 / step (4) (implemented by
+ccid3_hc_tx_update_x), which caused erroneous calculation.
 
-The receiver needs to track the highest sequence number (and corresponding
-CCVal / timestamp) received so far.
-
-This is implemented with this patch, which updates the `non_loss' entry of
-the CCID 3 RX history with the details of the currently received packet.
+Fixed by: moving the update to the `idle' state to the end of no_feedback_timer.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/ccid3.c              |    3 +++
- net/dccp/ccids/lib/packet_history.h |   19 +++++++++++++++++++
- 2 files changed, 22 insertions(+)
+ net/dccp/ccids/ccid3.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index c3711e1..e166f5c 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -1107,6 +1107,9 @@ static void ccid3_hc_rx_packet_recv(stru
+@@ -233,8 +233,6 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+ 	ccid3_pr_debug("%s(%p, state=%s) - entry \n", dccp_role(sk), sk,
+ 		       ccid3_tx_state_name(hctx->ccid3hctx_state));
  
- 	if (ccid3_hc_rx_update_p(hcrx))
- 		ccid3_hc_rx_send_feedback(sk, skb);
-+
-+	/* Update highest received sequence number so far */
-+	tfrc_rx_hist_update(&hcrx->ccid3hcrx_hist, skb, opt_recv->dccpor_ndp);
- }
+-	hctx->ccid3hctx_idle = 1;
+-
+ 	switch (hctx->ccid3hctx_state) {
+ 	case TFRC_SSTATE_NO_FBACK:
+ 		/* RFC 3448, 4.4: Halve send rate directly */
+@@ -294,6 +292,8 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+ 		goto out;
+ 	}
  
- static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -202,6 +202,25 @@ static inline void tfrc_rx_hist_swap(str
- 	*b = tmp;
- }
- 
-+static inline void dccp_rx_hist_entry_from_skb(struct dccp_rx_hist_entry *new,
-+					       struct sk_buff *skb, u32 ndp)
-+{
-+	const struct dccp_hdr *dh = dccp_hdr(skb);
++	hctx->ccid3hctx_idle = 1;
 +
-+	new->dccphrx_seqno = DCCP_SKB_CB(skb)->dccpd_seq;
-+	new->dccphrx_ccval = dh->dccph_ccval;
-+	new->dccphrx_type  = dh->dccph_type;
-+	new->dccphrx_ndp   = ndp;
-+	skb_get_timestamp(skb, &new->dccphrx_tstamp);
-+}
-+
-+/* commit packet details of skb to history (record highest received seqno) */
-+static inline void tfrc_rx_hist_update(struct tfrc_rx_hist *h,
-+				       struct sk_buff *skb, u32 ndp)
-+{
-+	dccp_rx_hist_entry_from_skb(last_rcv(h), skb, ndp);
-+}
-+
- extern int  tfrc_rx_hist_init(struct tfrc_rx_hist *);
- extern void tfrc_rx_hist_cleanup(struct tfrc_rx_hist *);
- 
+ restart_timer:
+ 	sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
+ 			   jiffies + usecs_to_jiffies(t_nfb));
+-- 
+1.5.0.6
+
