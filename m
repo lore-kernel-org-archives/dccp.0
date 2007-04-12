@@ -1,53 +1,57 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 05 Apr 2007 15:37:30 +0000
-Subject: [PATCH 41/43]: Check for unread data on close
-Message-Id: <200704051637.30098@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Thu, 12 Apr 2007 21:17:34 +0000
+Subject: [PATCH 25/29] Add test function for data packets
+Message-Id: <20070412211734.GZ21292@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Check for unread data on close
+This adds a function which returns `true' when an skb contains one of the packet
+types specified in [RFC 4340, 7.7] as `data packet'.
 
-This removes one FIXME with regard to close when there is still unread data.
-The mechanism is implemented similar to TCP: with regard to DCCP-specifics,
-a Reset with Code 2, "Aborted" is sent to the peer.
+NB - Resisted the temptation to define
+     int dccp_non_data_packet(skb) { return !dccp_data_packet(skb); },
+     since maybe someone will define new packet types.
 
-This corresponds in part to RFC 4340, 8.1.1 and 8.1.5.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>    
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/proto.c |   10 ++++++++--
- 1 file changed, 8 insertions(+), 2 deletions(-)
+ net/dccp/dccp.h |   12 ++++++++++++
+ 1 files changed, 12 insertions(+), 0 deletions(-)
 
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -918,6 +918,7 @@ void dccp_close(struct sock *sk, long ti
+diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
+index b00fc7a..0dc4b7e 100644
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -320,6 +320,7 @@ struct dccp_skb_cb {
+ 
+ #define DCCP_SKB_CB(__skb) ((struct dccp_skb_cb *)&((__skb)->cb[0]))
+ 
++/* RFC 4340, sec. 7.7 */
+ static inline int dccp_non_data_packet(const struct sk_buff *skb)
  {
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	struct sk_buff *skb;
-+	u32 data_was_unread = 0;
- 	int state;
+ 	const __u8 type = DCCP_SKB_CB(skb)->dccpd_type;
+@@ -332,6 +333,17 @@ static inline int dccp_non_data_packet(const struct sk_buff *skb)
+ 	       type = DCCP_PKT_SYNCACK;
+ }
  
- 	lock_sock(sk);
-@@ -940,12 +941,17 @@ void dccp_close(struct sock *sk, long ti
- 	 * descriptor close, not protocol-sourced closes, because the
- 	  *reader process may not have drained the data yet!
- 	 */
--	/* FIXME: check for unread data */
- 	while ((skb = __skb_dequeue(&sk->sk_receive_queue)) != NULL) {
-+		data_was_unread += skb->len;
- 		__kfree_skb(skb);
- 	}
- 
--	if (sock_flag(sk, SOCK_LINGER) && !sk->sk_lingertime) {
-+	if (data_was_unread) {
-+		/* Unread data was tossed, send an appropriate Reset Code */
-+		DCCP_WARN("ABORT with %u bytes unread data\n", data_was_unread);
-+		dccp_send_reset(sk, DCCP_RESET_CODE_ABORTED);
-+		dccp_set_state(sk, DCCP_CLOSED);
-+	} else if (sock_flag(sk, SOCK_LINGER) && !sk->sk_lingertime) {
- 		/* Check zero linger _after_ checking for unread data. */
- 		sk->sk_prot->disconnect(sk, 0);
- 	} else	/* Passive/active close after all data has been read. */
++/* RFC 4340, sec. 7.7 */
++static inline int dccp_data_packet(const struct sk_buff *skb)
++{
++	const __u8 type = DCCP_SKB_CB(skb)->dccpd_type;
++
++	return type = DCCP_PKT_DATA	 ||
++	       type = DCCP_PKT_DATAACK  ||
++	       type = DCCP_PKT_REQUEST  ||
++	       type = DCCP_PKT_RESPONSE;
++}
++
+ static inline int dccp_packet_without_ack(const struct sk_buff *skb)
+ {
+ 	const __u8 type = DCCP_SKB_CB(skb)->dccpd_type;
+-- 
+1.5.0.6
+
