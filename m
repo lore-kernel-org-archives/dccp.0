@@ -1,20 +1,26 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 13 Apr 2007 08:23:14 +0000
-Subject: Re: [PATCH 24/25]: Macro for moving average
-Message-Id: <200704130923.14459@strip-the-willow>
+Date: Fri, 13 Apr 2007 12:03:02 +0000
+Subject: Sensitivity of TFRC throughput equation wrt to changes of RTT
+Message-Id: <200704131303.03072@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200703211846.10823@strip-the-willow>
-In-Reply-To: <200703211846.10823@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  I don't like macros that receive as a parameter something that will be
-|  changed, its more readable to have it as a inline function and return
-|  the new value, even if the resulting code uses more characters, so I'm
-|  applying the attached patch and will take care of the fallout, that is
-|  small from what I grepped at the_whole_lot.
-You are right (please see other comment), I wasn't overly happy with this one.
-Your change makes it much better and avoids future problems due to someone
-misinterpreting the macro arguments. Many thanks indeed.
+The comment by Dave brought me back to check what a change of
+a factor of 10 does to the throughput in TFRC. 
+
+RFC 3448 gives in section 8 the following alternative format
+of the throughput equation (which is directly responsible for
+the alllowed sending rate X):
+
+              s
+      X =  --------
+           R * f(p)
+
+This shows that the dependence is reciprocal. Thus using an RTT
+which differs by a factor of 10 to account for in-stack processing
+results an a throughput reduction of factor 10.
+
+In other words, 90 Mbits/sec becomes 9 Mbits/sec.
