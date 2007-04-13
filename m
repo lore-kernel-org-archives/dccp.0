@@ -1,48 +1,75 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:15:34 +0000
-Subject: [PATCH 11/29] Set idle state after nofeedback timer expiry
-Message-Id: <20070412211534.GL21292@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 13 Apr 2007 17:57:29 +0000
+Subject: [PATCHv2 08/29] Honour initial RTT estimate
+Message-Id: <200704131857.29383@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This corrects a mistake with regard to draft rfc3448bis: the `idle' state was
-mistakenly entered before the allowed sending rate X was recomputed. With
-regard to draft rfc3448bis, section 4.3 / step (4) (implemented by
-ccid3_hc_tx_update_x), which caused erroneous calculation.
+I am resubmitting this patch since David pulled it out
+this morning and had issues with it - this is to show
+that there is no more reliance on skb_get_timestamp.
 
-Fixed by: moving the update to the `idle' state to the end of no_feedback_timer.
+There is a related issue, for which an update will also be provided.
+
+------------------> Patch v2 <--------------------------
+[CCID 3]: Honour initial RTT estimate
+
+This is a small optimisation which improves the accuracy of TX
+RTT sampling when an initial RTT sample (e.g. from the intial
+Request/Response exchange) is available.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/ccids/ccid3.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ net/dccp/ccids/ccid3.c |   13 ++++++-------
+ 1 file changed, 6 insertions(+), 7 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index c3711e1..e166f5c 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -233,8 +233,6 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
- 	ccid3_pr_debug("%s(%p, state=%s) - entry \n", dccp_role(sk), sk,
- 		       ccid3_tx_state_name(hctx->ccid3hctx_state));
+@@ -469,28 +469,29 @@ static void ccid3_hc_tx_packet_recv(stru
+ 		else				       /* can not exceed 100% */
+ 			hctx->ccid3hctx_p = 1000000 / pinv;
  
--	hctx->ccid3hctx_idle = 1;
+-		dccp_timestamp(sk, &now);
 -
- 	switch (hctx->ccid3hctx_state) {
- 	case TFRC_SSTATE_NO_FBACK:
- 		/* RFC 3448, 4.4: Halve send rate directly */
-@@ -294,6 +292,8 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
- 		goto out;
- 	}
+ 		/*
+ 		 * Calculate new round trip sample as per [RFC 3448, 4.3] by
+ 		 *	R_sample  =  (now - t_recvdata) - t_elapsed
+ 		 */
++		dccp_timestamp(sk, &now);
+ 		r_sample = dccp_sample_rtt(sk, &now, &packet->dccphtx_tstamp);
  
-+	hctx->ccid3hctx_idle = 1;
+ 		/*
+-		 * Update RTT estimate by
+-		 * If (No feedback recv)
++		 * Update RTT estimate (honours RTT from SYN exchange):
++		 * If (No RTT sample so far)
+ 		 *    R = R_sample;
+ 		 * Else
+ 		 *    R = q * R + (1 - q) * R_sample;
+ 		 *
+ 		 * q is a constant, RFC 3448 recomments 0.9
+ 		 */
++		hctx->ccid3hctx_rtt = hctx->ccid3hctx_rtt = 0 ?  r_sample
++				    : (9 * hctx->ccid3hctx_rtt + r_sample) / 10;
 +
- restart_timer:
- 	sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
- 			   jiffies + usecs_to_jiffies(t_nfb));
--- 
-1.5.0.6
-
+ 		if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
+ 			/*
+ 			 * Larger Initial Windows [RFC 4342, sec. 5]
+ 			 */
+-			hctx->ccid3hctx_rtt  = r_sample;
+ 			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
+ 			hctx->ccid3hctx_t_ld = now;
+ 
+@@ -504,8 +505,6 @@ static void ccid3_hc_tx_packet_recv(stru
+ 
+ 			ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
+ 		} else {
+-			hctx->ccid3hctx_rtt = (9 * hctx->ccid3hctx_rtt +
+-						   r_sample) / 10;
+ 
+ 			/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
+ 			if (hctx->ccid3hctx_p > 0)
