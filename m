@@ -1,7 +1,7 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 13 Apr 2007 09:27:16 +0000
+From: David Miller <davem@davemloft.net>
+Date: Fri, 13 Apr 2007 09:37:48 +0000
 Subject: Re: [PATCH 07/29] Use skb timestamp for receiver side
-Message-Id: <200704131027.16739@strip-the-willow>
+Message-Id: <20070413.023748.55502299.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
 References: <20070412211454.GH21292@ghostprotocols.net>
 In-Reply-To: <20070412211454.GH21292@ghostprotocols.net>
@@ -10,26 +10,22 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Sorry, I misread the email. Please see below.
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 13 Apr 2007 10:27:16 +0100
 
-|  You want the scheduling delays and other issues that can
-|  delay DCCP input packet processing to get factored into
-|  the RTT, so that the sender will pace properly.
-|  
-|  Trying to get perfect timestamping and RTT measurements,
-|  and ignoring scheduling delays, is quite foolhardy and shows
-|  a lack of understanding of how queueing really works.
-CCID3 uses the sampled RTT value as input into an equation so any
-inaccuracies will multiply. I observed a difference of about 10.
+> CCID3 uses the sampled RTT value as input into an equation so any
+> inaccuracies will multiply. I observed a difference of about 10.
 
-Currently the performance of CCID3 severely sucks and I tried every 
-bit to make it better. Obviously this is not the right way.
+This would indicate a bug in the equation if such small variances
+cause it to explode so easily.
 
-Your comments are helpful, thank you. 
+RTTs modulate constantly, that's why they are smoothed out (at least
+in TCP), to kill the noise and figure out what part of the signal
+is real :-)
 
-I will revert all RX/TX timestamps and I think there is no need to
-take the timestamp in the dccp receive input function. 
+> By taking the timestamp in the CCID3 handler, it will include all
+> processing overhead, slowing the sending rate further down in
+> proportion to that difference.
 
-By taking the timestamp in the CCID3 handler, it will include all 
-processing overhead, slowing the sending rate further down in proportion 
-to that difference.
+Sarcastic much? :-/
+
