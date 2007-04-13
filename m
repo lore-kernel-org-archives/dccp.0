@@ -1,7 +1,7 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 13 Apr 2007 20:27:54 +0000
+From: David Miller <davem@davemloft.net>
+Date: Fri, 13 Apr 2007 20:43:56 +0000
 Subject: Re: Sensitivity of TFRC throughput equation wrt to changes of RTT
-Message-Id: <200704132127.54939@strip-the-willow>
+Message-Id: <20070413.134356.18297036.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
 References: <200704131303.03072@strip-the-willow>
 In-Reply-To: <200704131303.03072@strip-the-willow>
@@ -10,41 +10,31 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting David Miller:
-|  From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-|  Date: Fri, 13 Apr 2007 13:03:02 +0100
-|  
-|  > RFC 3448 gives in section 8 the following alternative format
-|  > of the throughput equation (which is directly responsible for
-|  > the alllowed sending rate X):
-|  > 
-|  >               s
-|  >       X =  --------
-|  >            R * f(p)
-|  > 
-|  > This shows that the dependence is reciprocal. Thus using an RTT
-|  > which differs by a factor of 10 to account for in-stack processing
-|  > results an a throughput reduction of factor 10.
-|  > 
-|  > In other words, 90 Mbits/sec becomes 9 Mbits/sec.
-|  
-|  What I'd like to know in all this is why the RTT influences the
-|  sending rate at all in such a manner.  Please teach me :)
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sat, 14 Apr 2007 07:52:32 +1200
 
-I wished someone could tell me that. Ian is right, the formula is used
-after the first loss, but the idea is that the sender `overshoots' and then
-reduces after the first loss due to overestimating the bandwidth.
+> Which comes into play when we have loss. When we have no loss, or a
+> long period of non-loss we can send as fast as we want according to
+> the spec. This should normally be the case on LANs where the RTT makes
+> a far bigger difference.
 
-So it would try to see the pipe as 20Gbit, experience some loss, and then
-reduce proportionally to RTT and f(p). 
+This is correct, also there is another related issue I should
+have mentioned.
 
-We have more problems of the same nature as with using interface timestamps.
+Congestion control on LANs and very small RTTs arguably does not make
+much sense.  Many very smart networking folk have argued this.
 
-I am really not sure that CCID3 can be implemented well without a lot of
-real-time and system load requirements - if you have any suggestions or
-know of similar problem areas, input would be very welcome.
+The reason is that any congestion you detect on a LAN will go away
+long before you can even react to it in a protocol stack.
 
-  
-|  TCP doesn't have any of these problems, and we use incredibly coarse
-|  timestamping for RTTs.  We get jiffies granularity at best, with many
-|  in-stack delays, and we still send at full line rate over large RTTs.
+Alexey Kuznetsov once was trying to come up with a statistical
+theoretical model to justify this in some tangible way, but he
+never came up with anything concrete.
+
+It's funny but the RTT measurements of TCP have a minimum which
+is established by the timer granularity limitations of the original
+TCP implementation in BSD.  See the TCP_RTO_MIN clamping we do
+in the Linux TCP stack.
+
+Although originally an implementation side-effect, it plays into
+the LAN issues I discussed above.
