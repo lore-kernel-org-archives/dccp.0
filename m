@@ -1,20 +1,55 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 10 Apr 2007 23:41:19 +0000
-Subject: Re: [PATCH 26/43]: Move NULL-protection into function
-Message-Id: <5640c7e00704101641y4400d247kb4df8c0536bc7af2@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 13 Apr 2007 17:25:14 +0000
+Subject: [PATCH-UPDATE]: Changes after retracting timestamping patches
+Message-Id: <200704131825.14989@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200704051635.49337@strip-the-willow>
-In-Reply-To: <200704051635.49337@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 4/6/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [CCID3]: Move NULL-protection into function
->
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+Following the earlier discussions of patches, here is the update
+after removing the skb_get_timestamp() patches.
+
+I. Changes
+=====
+
+The following patches have been withdrawn:
+
+ * 6b_Timestamp_Without-Epoch.diff
+        http://www.mail-archive.com/dccp@vger.kernel.org/msg01643.html
+
+ * 6d_CCID3-TX-Use-net_timestamp.diff
+        http://www.mail-archive.com/dccp@vger.kernel.org/msg01644.html
+
+ * 6e_CCID3-RX-Use-net_timestamp.diff
+        http://www.mail-archive.com/dccp@vger.kernel.org/msg01645.html
+
+All subsequent patches which depended on these patches
+have been modified using the following vim-expressions:
+
+	s#skb_get_timestamp(skb,#dccp_timestamp(sk,#gc
+	s#do_gettimeofday(#dccp_timestamp(sk,#gc
+
+There are no other changes, which is why the patches
+are not resubmitted. The number of patches in the first
+patch has reduced from 25 to 19 (3 were committed, 3 withdrawn).
+
+The following patch has changed in addition to the above:
+ 
+ 9f_CCID3-Macro-for-Moving-Average.diff
+
+ This now uses the code sent by Arnaldo on 
+   http://www.mail-archive.com/dccp@vger.kernel.org/msg01662.html
+ and has been renamed into 9f_CCID3-Inline-for-Moving-Average.diff
+
+
+II. Updates
+=====All 66 updated patches have been uploaded to 
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog
+
+The entire updated changeset is again in
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/patch-backlog/the_whole_lot.tar.gz
+
+I have further updated the combined patch sets on 
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/patches_working-set/
