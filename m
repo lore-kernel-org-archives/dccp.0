@@ -1,57 +1,36 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 15:36:02 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 13 Apr 2007 18:48:02 +0000
 Subject: Re: [PATCH 19/25]: Remove unused fields in packet history structure
-Message-Id: <39e6f6c70704120836s61a8d0eh44ed9bd1396d25b3@mail.gmail.com>
+Message-Id: <200704131948.03194@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200703211845.41809@strip-the-willow>
 In-Reply-To: <200703211845.41809@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On 3/26/07, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> On 3/22/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> > [CCID 3]: Remove unused fields in packet history structure
-> >
-> Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Quoting Arnaldo Carvalho de Melo:
+|  struct dccp_tx_hist_entry {
+|  =A0 =A0 =A0 =A0 struct list_head =A0 =A0 =A0 =A0 =A0 dccphtx_node; =A0 =
+=A0 =A0 =A0 /* =A0 =A0 0 =A0 =A016 */
+|  =A0 =A0 =A0 =A0 u64 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0dccph=
+tx_seqno; =A0 =A0 =A0 =A0/* =A0 =A016 =A0 =A0 8 */
+|  =A0 =A0 =A0 =A0 struct timeval =A0 =A0 =A0 =A0 =A0 =A0 dccphtx_tstamp; =
+=A0 =A0 =A0 /* =A0 =A024 =A0 =A016 */
+|  }; /* size: 40, cachelines: 1 */
+|  =A0 =A0/* last cacheline: 40 bytes */
+|  [acme@mica net-2.6.22]$
+| =20
+|  I wonder if we could make this a single linked list, lemme see.. I
+|  think so, and by doing that we get the struct down to 32 bytes, making
+|  it cacheline friendly, and also simplify the operations, i.e. that
+|  opencoded list operation would just go away, will leave this for
+|  later, in a TODO file.
+This is an excellent idea - I have just checked. It works, there is no sort=
+ing
+and just LIFO order.=20
 
-Indeed it reduced the size:
-
-[acme@mica net-2.6.22]$ cat /tmp/before
-/* <eb7c> /home/acme/git/net-2.6.22/net/dccp/ccids/lib/packet_history.h:55 */
-struct dccp_tx_hist_entry {
-        struct list_head           dccphtx_node;         /*     0    16 */
-        u64                        dccphtx_seqno:48;     /*    16     8 */
-        u64                        dccphtx_sent:1;       /*    16     8 */
-
-        /* XXX 15 bits hole, try to pack */
-
-        u32                        dccphtx_rtt;          /*    24     4 */
-
-        /* XXX 4 bytes hole, try to pack */
-
-        struct timeval             dccphtx_tstamp;       /*    32    16 */
-}; /* size: 48, cachelines: 1 */
-   /* sum members: 44, holes: 1, sum holes: 4 */
-   /* bit holes: 1, sum bit holes: 15 bits */
-   /* last cacheline: 48 bytes */
-[acme@mica net-2.6.22]$ pahole -e
-../build/mica/net-2.6.22/net/dccp/ccids/ccid3.o dccp_tx_hist_entry /*
-<eb7c> /home/acme/git/net-2.6.22/net/dccp/ccids/lib/packet_history.h:55
-*/
-struct dccp_tx_hist_entry {
-        struct list_head           dccphtx_node;         /*     0    16 */
-        u64                        dccphtx_seqno;        /*    16     8 */
-        struct timeval             dccphtx_tstamp;       /*    24    16 */
-}; /* size: 40, cachelines: 1 */
-   /* last cacheline: 40 bytes */
-[acme@mica net-2.6.22]$
-
-I wonder if we could make this a single linked list, lemme see.. I
-think so, and by doing that we get the struct down to 32 bytes, making
-it cacheline friendly, and also simplify the operations, i.e. that
-opencoded list operation would just go away, will leave this for
-later, in a TODO file.
-
-- Arnaldo
+Will you be working on this or would you like me to update this in terms of=
+=20
+struct hlist_head?
