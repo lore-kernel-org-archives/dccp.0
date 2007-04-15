@@ -1,7 +1,7 @@
-From: Eddie Kohler <kohler@cs.ucla.edu>
-Date: Sat, 14 Apr 2007 05:43:46 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sun, 15 Apr 2007 16:15:32 +0000
 Subject: Re: Sensitivity of TFRC throughput equation wrt to changes of RTT
-Message-Id: <46206A12.2030208@cs.ucla.edu>
+Message-Id: <200704151715.32852@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200704131303.03072@strip-the-willow>
 In-Reply-To: <200704131303.03072@strip-the-willow>
@@ -10,17 +10,25 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-I can't resist:
+Many thanks indeed for the input - referred to in the other 
+email as well.
+  
+|  So my primary suggstion is to accept that there is a limit to
+|  how accurate you can get timestamps, there is also a specific
+|  regime under which fine-RTT measurements matter, and therefore
+|  the algorithm chosen has to match that reality.
+|  
+I think that by building on such realities we stand a better chance
+of arriving at a workable solution than by blindly trying to cast
+a specification into code.
 
-David Miller wrote:
->> I am really not sure that CCID3 can be implemented well without a lot of
->> real-time and system load requirements - if you have any suggestions or
->> know of similar problem areas, input would be very welcome.
-> 
-> I wonder what a DCCP implementation on old BSD would do with it's
-> super-coarse timers :-)
+There is some revision to be done where your input is very helpful. 
 
-Such a DCCP would do exactly what several people have suggested tens of times 
-by now, namely send in bursts... which would be fine.  (Or at least better.)
+I hope that Eddie will incorporate/pick up the point to bypass the congestion
+control when RTTs are low. 
 
-Eddie
+Ian and Eddie seem to have differing opinions regarding RTT accuracy
+and I think I also need to check. ( If only we could use jiffie-based algorithm, 
+that would axe the cost of all these gettimeofdays (they still exist, even 
+after retracting the skb_get_timestamp patches). There is this really nice TCP
+algorithm which doesn't use timestamps, tcp_rcv_rtt_update() in tcp_input.c . )
