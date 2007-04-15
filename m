@@ -1,41 +1,49 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sun, 15 Apr 2007 15:56:44 +0000
+Date: Sun, 15 Apr 2007 16:23:15 +0000
 Subject: Re: [PATCH 2/25]: Avoid accumulation of large send credit
-Message-Id: <200704151656.44957@strip-the-willow>
+Message-Id: <200704151723.15084@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200703211844.12007@strip-the-willow>
 In-Reply-To: <200703211844.12007@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-Quoting Ian McDonald:
-|  It's not totally pointless Dave because it is a rate based protocol
-|  not a window based protocol and you've got the real issue of slow
-|  receivers especially when we use a whole lot of CPU... It's not
-|  network congestion but still should be dealt with. There's probably
-|  other scenarios too - e.g. I can think of a 10 Mbit radio link between
-|  two buildings that run on 100 Mbit internally. TCP works fine as no
-|  acks will stop transmission but a rate based one will keep on
-|  trying.... Although this isn't a local switch as you mention but it is
-|  low RTT.
-I think that we can use quite a lot of that input, but it requires some
-thinking - which IMO is what you are trying to say here. And agrees with
-what I am trying to say - we need some revision so that we don't end up
-coding RFC 3448 blindly.
+|  Thus the RTT measurement is EXPLICITLY fed in to the throughput=20
+|  equation. =A0In TCP the RTT measurement mostly just feeds in to the RTO,=
+ which=20
+|  is why the protocol's behavior is less sensitive to the measurement.
+| =20
+|  DCCP *MIGHT* work just fine with the inflated RTT measurements (i.e. the=
+ RTT=20
+|  including IP processing) but there is yet another gerrit missive to work=
+=20
+|  through to see how real that complaint is.
+| =20
+|  A less aggressive version of "turn off RTT for LANs" would be simply to =
 
+|  subtract an estimate of the IP<->card path's cost from the measured coar=
+se=20
+|  RTT. =A0This would fix the problem. =A0If you used a stable minimum esti=
+mate, the=20
+|  RTT would naturally "inflate" when the host was busy, which as Ian point=
+s out=20
+|  is what we actually want. =A0How to obtain an estimate? =A0Probably anyt=
+hing would=20
+|  do, including something derived at boot time from BogoMIPS.
+Such an estimate is difficult to obtain - I get completely different result=
+s on
+different computers; depending on the card (ee100 with NAPI is fine, my che=
+apo RTL 8139
+on the other hand makes a lot of noise). Some practical figures are:
 
-|  Eddie - I would like to work on this more in answer to your question.
-|  I'll see what I can do over the next weeks once I get a paper out of
-|  the way (or when I get bored with it!). Gerrit's work is nearly there.
-|  What I'd like to do is work on this whole granularity/out of control
-|  thing he keeps referring to. I am not convinced but I need to put up
-|  or shut up by replicating some of his work and fixing the bugs or
-|  admitting I'm wrong.
-I think it is less a question of wrong/not wrong but rather "works/doesn't work".
+ * when the timestamps get taken at arrive time, the RTT values are very cl=
+ose to what ping
+   reports (e.g. 100 ... 1,100 usec on a LAN);
 
-Since the patches (apart from one minor improvement) do not touch the packet
-scheduling engine in net/dccp/output.c, can I suggest to work through the submitted
-set of patches first? They fix other problems and I think that they make CCID3
-quite a bit more lightweight. This would simplify working on that problem, too. Ok?
+ * when the timestamps get taken in the CCID3 module, the RTT values are ro=
+ughly up to 10
+   times larger (5 milliseconds on a link with a 500usec link RTT was frequ=
+ently the case)
+
