@@ -1,80 +1,41 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Thu, 12 Apr 2007 21:16:11 +0000
-Subject: [PATCH 15/29] Disable softirq when sending and notifying CCID
-Message-Id: <20070412211611.GP21292@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 16 Apr 2007 19:44:48 +0000
+Subject: [PATCH 1/1]: Retraction of timestamps - Cleanups
+Message-Id: <200704162044.48664@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This disables softirqs when performing the CCID-specific send operation
-in dccp_write_xmit, so that actual sending, and calling the CCID post-send
-routine becomes an atomic unit.
+Apologies for this late follow-up. I have spent an entire
+day going through the patches again, checking again the
+changes made on Friday.
 
-Why this needs to be done:
+I had missed one or two instances of skb_get_timestamp, these
+were better hidden. There are now no more left and the patch
+set has been compile tested on 5 different machines.
 
- The function dccp_write_xmit can be called both in user context (via
- dccp_sendmsg) and via timer softirq (dccp_write_xmit_timer). It does
+Furthermore, I found a bug in the computation of CCID3 elapsed
+time when sending feedback, it is one of the older bugs and
+had not occurred to anyone before.
 
-  1. call the CCID-specific `pre-send' routine ccid_hc_tx_send_packet()
-  2. ship the skb via dccp_transmit_skb
-  3. call the CCID-specific `post-send' routine ccid_hc_tx_packet_sent().
+The problem is that the `elapsed time' reported by the receiver
+is merely the time difference between calling the functions
+rx_packet_recv() and rx_send_feedback(). This amounts on the average
+to 50 .. 100 usec. 
+With regard to RTT estimation, this is almost entirely useless.
 
- The last one does e.g. accounting by updating data records (as in CCID 3).
+Following is therefore a patch which tackles this problem with an
+alternative approach, I believe it is a bit better.
 
- The transition from 2 ... 3 should be atomic and not be interrupted
- by softirqs.  The reason is that the TX and RX halves of the CCID modules
- share data structures and both halves change state. If the sending process is
- allowed to be interrupted by the reception of a DCCP packet via softirq
- handler, then state and data structures of the sender can become corrupted.
+I have left in the clean-up operation of removing the last instance
+of skb_get_timestamp, hope that this is ok.
 
- Here is an actual example whose effects were observed and lead to this patch:
- in CCID 3 the sender records a timestamp when ccid_hc_tx_packet_sent() is called.
- If the application is sending via dccp_sendmsg, it may be interrupted and run a
- little while later. Suppose that such interruption happens between steps (2) and
- (3) above: the packet has been sent, and immediately afterwards dccp_sendmsg is
- interrupted. Meanwhile the transmitted skb reaches the other side, and an Ack
- comes back; this Ack is processed via softirq (which is allowed to interrupt
- dccp_sendmsg); only then step (3) is performed, but too late: the timestamp
- taken in ccid3_hc_tx_packet_sent is now /after/ the Ack has come in.
+Due to the patch inter-dependencies, this patch is between the others,
+uploaded as
 
- In the observed case, negative RTT samples (i.e. Acks arriving before the
- sent packet was registered) were the result.
+        10e_CCID3-TIMESTAMP-FIX.diff
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
----
- net/dccp/output.c |   13 ++++++++++---
- 1 files changed, 10 insertions(+), 3 deletions(-)
 
-diff --git a/net/dccp/output.c b/net/dccp/output.c
-index c8d843e..0978bc2 100644
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -250,11 +250,18 @@ void dccp_write_xmit(struct sock *sk, int block)
- 			else
- 				dcb->dccpd_type = DCCP_PKT_DATA;
- 
-+			/*
-+			 * Transmission and calling the post-send CCID operation
-+			 * must not be interrupted by other processing (e.g.
-+			 * packet reception), otherwise strange errors result.
-+			 */
-+			local_bh_disable();
- 			err = dccp_transmit_skb(sk, skb);
- 			ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, 0, len);
--			if (err)
--				DCCP_BUG("err=%d after ccid_hc_tx_packet_sent",
--					 err);
-+			local_bh_enable();
-+
-+			if (unlikely(err))
-+				DCCP_BUG("dccp_transmit_skb returned %d", err);
- 		} else {
- 			dccp_pr_debug("packet discarded due to err=%d\n", err);
- 			kfree_skb(skb);
--- 
-1.5.0.6
-
+Thanks.
