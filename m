@@ -1,7 +1,7 @@
 From: "vlad.gm@gmail.com" <vlad.gm@gmail.com>
-Date: Wed, 18 Apr 2007 18:32:09 +0000
+Date: Wed, 18 Apr 2007 18:34:13 +0000
 Subject: Re: [dccp] Re: [PATCH 2/25]: Avoid accumulation of large send credit
-Message-Id: <b13771cc0704181132w39fd5104v30e1a2825c2655a6@mail.gmail.com>
+Message-Id: <b13771cc0704181134k43c4ec14pd3601c2064ad65c@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200703211844.12007@strip-the-willow>
 In-Reply-To: <200703211844.12007@strip-the-willow>
@@ -33,6 +33,9 @@ rate.
 
 Regards,
 Vlad
+
+PS: Sorry four double posting, the mailing list only knows one of my
+mail addresses.
 
 On 4/18/07, Lars Eggert <lars.eggert@nokia.com> wrote:
 > On 2007-4-18, at 19:16, ext Colin Perkins wrote:
