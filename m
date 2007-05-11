@@ -1,68 +1,55 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Fri, 11 May 2007 01:16:19 +0000
-Subject: Re: [PATCH 2/3] DCCP: Shift code around
-Message-Id: <39e6f6c70705101816p3d69eb15x543449619137c744@mail.gmail.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Fri, 11 May 2007 10:36:35 +0000
+Subject: [PATCH 1/5] DCCP: Shift ccid3_li_hist
+Message-Id: <200705112236.36406.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <200705101542.15374.ian.mcdonald@jandi.co.nz>
-In-Reply-To: <200705101542.15374.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 5/10/07, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> On 5/11/07, Arnaldo Carvalho de Melo <acme@ghostprotocols.net> wrote:
-> > On 5/10/07, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> > > This is just shifting code around and involves no renames except for module
-> > > initialisation. Also add/remove static, includes, EXPORT_SYMBOL_GPL as
-> > > needed. We remove dccp_li_hist_entry_delete as it's not actually used
-> > > anywhere!
-> >
-> > Ian,
-> >
-> >       Could you please split this up into several patches:
->
-> Working on that at moment. About to post one patch which stands alone OK.
->
-> > ---------
-> > [acme@mica net-2.6]$ find net/dccp/  -type f | xargs grep ccid3_li_hist
-> > net/dccp/ccids/ccid3.c: dccp_li_hist_purge(ccid3_li_hist,
-> > &hcrx->ccid3hcrx_li_hist);
-> > net/dccp/ccids/lib/loss_interval.c:struct dccp_li_hist *ccid3_li_hist;
-> > net/dccp/ccids/lib/loss_interval.c:EXPORT_SYMBOL_GPL(ccid3_li_hist);
-> > net/dccp/ccids/lib/loss_interval.c:             if
-> > (!dccp_li_hist_interval_new(ccid3_li_hist,
-> > net/dccp/ccids/lib/loss_interval.c:             entry > > dccp_li_hist_entry_new(ccid3_li_hist, GFP_ATOMIC);
-> > net/dccp/ccids/lib/loss_interval.c:
-> > kmem_cache_free(ccid3_li_hist->dccplih_slab, tail);
-> > net/dccp/ccids/lib/loss_interval.c:     ccid3_li_hist > > dccp_li_hist_new("ccid3");
-> > net/dccp/ccids/lib/loss_interval.c:     if (ccid3_li_hist = NULL)
-> > net/dccp/ccids/lib/loss_interval.c:     if (ccid3_li_hist != NULL) {
-> > net/dccp/ccids/lib/loss_interval.c:
-> > dccp_li_hist_delete(ccid3_li_hist);
-> > net/dccp/ccids/lib/loss_interval.c:             ccid3_li_hist = NULL;
-> > net/dccp/ccids/lib/loss_interval.h:extern struct dccp_li_hist *ccid3_li_hist;
-> > [acme@mica net-2.6]$
-> > ---------
-> >
-> > dccp_li_hist_purge() with your patch becomes the only reason for
-> > ccid3_li_hist to be exported, so please just don't pass it as this
-> > function is _already_ in loss_interval.c where ccid3_li_hist is. Then
-> > make ccid3_li_hist static, unexport it and rename it to dccp_li_hist,
-> > just like all the other code and variables in loss_interval.c.
->
-> I actually had picked that up but saved it for later.... Was trying
-> not to overwhelm you with patches but backfired a little ;-)
->
-> > Patches that do many things are always bad for reviewing, sorry.
->
-> Understand. You said that last time when it was 3, and now it's about
-> 10-15 patches I think after I do this work... I should have learnt by
-> now!
+This shifts ccid3_li_hist.
 
-not a problem, the problem is with complex patches, that takes more
-time. If you make it easy by leaving the most complex ones to the tail
-and submit small, self contained patches, I can eat them ok :-)
+We temporarily export the symbol but remove this in later patch.
 
-
-- Arnaldo
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 31f50fa..a532249 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -49,7 +49,6 @@ static int ccid3_debug;
+ 
+ static struct dccp_tx_hist *ccid3_tx_hist;
+ static struct dccp_rx_hist *ccid3_rx_hist;
+-static struct dccp_li_hist *ccid3_li_hist;
+ 
+ /*
+  *	Transmitter Half-Connection Routines
+diff --git a/net/dccp/ccids/lib/loss_interval.c 
+b/net/dccp/ccids/lib/loss_interval.c
+index 3829afc..f21e1a9 100644
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -16,6 +16,9 @@
+ #include "../../dccp.h"
+ #include "loss_interval.h"
+ 
++struct dccp_li_hist *ccid3_li_hist;
++EXPORT_SYMBOL_GPL(ccid3_li_hist);
++
+ struct dccp_li_hist *dccp_li_hist_new(const char *name)
+ {
+ 	struct dccp_li_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
+diff --git a/net/dccp/ccids/lib/loss_interval.h 
+b/net/dccp/ccids/lib/loss_interval.h
+index c295947..4186a55 100644
+--- a/net/dccp/ccids/lib/loss_interval.h
++++ b/net/dccp/ccids/lib/loss_interval.h
+@@ -47,4 +47,6 @@ extern u32 dccp_li_hist_calc_i_mean(struct list_head *list);
+ 
+ extern int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+    struct list_head *list, const u64 seq_loss, const u8 win_loss);
++
++extern struct dccp_li_hist *ccid3_li_hist;
+ #endif /* _DCCP_LI_HIST_ */
