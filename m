@@ -1,51 +1,38 @@
-From: "Patrick Andrieux" <patrick.andrieux@gmail.com>
-Date: Thu, 31 May 2007 17:32:08 +0000
-Subject: Re: [dccp] Re: problem with CCID3 loss events
-Message-Id: <fca78b970705311032h7024019bw81ad282a6c68e33c@mail.gmail.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Sat, 19 May 2007 05:11:55 +0000
+Subject: [PATCH 1/7] DCCP: Fix dccp_sum_coverage
+Message-Id: <200705191711.55522.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <9442.39900.qm@web30009.mail.mud.yahoo.com>
-In-Reply-To: <9442.39900.qm@web30009.mail.mud.yahoo.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Burak,
+When compiling with EXTRA_CFLAGS=-W notice that we have signed/unsigned
+issue in dccp.h.
 
-I've got some issues doing tests on the same configuration you have.
-I'm using Dave Miller's tree instead of 2.6.20 patched with Ian's patches.
-
-When I run iperf client (DCCP patched) with :
-# iperf -c serverIP -Xdccp -l8 -t60
-my client machine freezes completely after sending a few data.
-This issue appears only when I limit the rate on the netembox. (1024kbits/sec)
-
-Did you ever have this problem ?
-
-Patrick.
-
-
-
-On 24/05/07, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> On 5/25/07, Burak Gorkemli <burakgmail-dccp@yahoo.com> wrote:
-> > Hi Ian,
->
-> Hi Burak,
->
-> Adding DCCP @ vger as I think you mistakenly added DCCP @ ietf to the mailing...
->
-> > Last but not the least, I have discovered that I am having some trouble with the sizes of the packets sent. When the packet sizes are equal to each other - which is not the actual case in my tests - everything goes fine. However, when they are not, DCCP behaves strangely, it halts for some period of time during the stream - I think due to the mismatch between the sizes of the packets sent and the average packet size used in the TCP equation. I must confess that I am not aggregating smaller packets into larger ones - which is the next thing that I will do - but I was not expecting such a big effect. I will post the test results later, as I implement packet aggregation.
->
-> CCID3 in Linux keeps a moving average of the packet size. If you look
-> at the TFRC equation  the rate = some numbers / packet size. In effect
-> CCID3 therefore becomes rate limited by packets per second as it does
-> not perform packet aggregation within the protocol (unlike TCP). This
-> would explain your results in this regard.
->
-> Ian
-> --
-> Web: http://wand.net.nz/~iam4/
-> Blog: http://iansblog.jandi.co.nz
-> WAND Network Research Group
->
->
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
+index d8ad27b..e2d74cd 100644
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -184,7 +184,7 @@ DECLARE_SNMP_STAT(struct dccp_mib, dccp_statistics);
+ /*
+  * 	Checksumming routines
+  */
+-static inline int dccp_csum_coverage(const struct sk_buff *skb)
++static inline unsigned int dccp_csum_coverage(const struct sk_buff *skb)
+ {
+ 	const struct dccp_hdr* dh = dccp_hdr(skb);
+ 
+@@ -195,7 +195,7 @@ static inline int dccp_csum_coverage(const struct sk_buff 
+*skb)
+ 
+ static inline void dccp_csum_outgoing(struct sk_buff *skb)
+ {
+-	int cov = dccp_csum_coverage(skb);
++	unsigned int cov = dccp_csum_coverage(skb);
+ 
+ 	if (cov >= skb->len)
+ 		dccp_hdr(skb)->dccph_cscov = 0;
