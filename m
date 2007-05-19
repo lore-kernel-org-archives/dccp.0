@@ -1,46 +1,54 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Mon, 28 May 2007 19:27:26 +0000
-Subject: Re: [PATCH 1/7] DCCP: Fix dccp_sum_coverage
-Message-Id: <39e6f6c70705281227j65f09204yb1aa01e6bfb3ff4@mail.gmail.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Sat, 19 May 2007 05:18:34 +0000
+Subject: [PATCH 5/7] DCCP: Simplify dccp_li_hist_interval_new
+Message-Id: <200705191718.34999.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <200705191711.55522.ian.mcdonald@jandi.co.nz>
-In-Reply-To: <200705191711.55522.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 5/19/07, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> When compiling with EXTRA_CFLAGS=-W notice that we have signed/unsigned
-> issue in dccp.h.
->
-> Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-> ---
-> diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-> index d8ad27b..e2d74cd 100644
-> --- a/net/dccp/dccp.h
-> +++ b/net/dccp/dccp.h
-> @@ -184,7 +184,7 @@ DECLARE_SNMP_STAT(struct dccp_mib, dccp_statistics);
->  /*
->   *     Checksumming routines
->   */
-> -static inline int dccp_csum_coverage(const struct sk_buff *skb)
-> +static inline unsigned int dccp_csum_coverage(const struct sk_buff *skb)
->  {
->         const struct dccp_hdr* dh = dccp_hdr(skb);
->
-> @@ -195,7 +195,7 @@ static inline int dccp_csum_coverage(const struct sk_buff
-> *skb)
->
->  static inline void dccp_csum_outgoing(struct sk_buff *skb)
->  {
-> -       int cov = dccp_csum_coverage(skb);
-> +       unsigned int cov = dccp_csum_coverage(skb);
->
->         if (cov >= skb->len)
->                 dccp_hdr(skb)->dccph_cscov = 0;
->
+This simplifies dccp_li_hist_interval_new by removing one unused parameter.
+We also rename variables to reflect use.
 
-Thanks, applied.
-
-- Arnaldo
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/ccids/lib/loss_interval.c 
+b/net/dccp/ccids/lib/loss_interval.c
+index 1879da5..fd3d15f 100644
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -125,8 +125,8 @@ u32 dccp_li_hist_calc_i_mean(struct list_head *list)
+ 
+ EXPORT_SYMBOL_GPL(dccp_li_hist_calc_i_mean);
+ 
+-static int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+-   struct list_head *list, const u64 seq_loss, const u8 win_loss)
++static int dccp_li_hist_interval_new(struct list_head *list,
++   const u64 seq_nonloss, const u8 win_nonloss)
+ {
+ 	struct dccp_li_hist_entry *entry;
+ 	int i;
+@@ -142,8 +142,8 @@ static int dccp_li_hist_interval_new(struct dccp_li_hist 
+*hist,
+ 		list_add(&entry->dccplih_node, list);
+ 	}
+ 
+-	entry->dccplih_seqno     = seq_loss;
+-	entry->dccplih_win_count = win_loss;
++	entry->dccplih_seqno     = seq_nonloss;
++	entry->dccplih_win_count = win_nonloss;
+ 	return 1;
+ }
+ 
+@@ -257,8 +257,8 @@ void dccp_li_update_li(struct sock *sk)
+ 	u8 win_nonloss = hcrx->ccid3hcrx_ccval_nonloss;
+ 
+ 	if (list_empty(&hcrx->ccid3hcrx_li_hist)) {
+-		if (!dccp_li_hist_interval_new(dccp_li_hist,
+-		   &hcrx->ccid3hcrx_li_hist, seq_nonloss, win_nonloss))
++		if (!dccp_li_hist_interval_new(&hcrx->ccid3hcrx_li_hist,
++		   seq_nonloss, win_nonloss))
+ 			return;
+ 
+ 		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
