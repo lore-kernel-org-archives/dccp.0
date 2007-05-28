@@ -1,55 +1,42 @@
-From: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Date: Fri, 11 May 2007 10:36:35 +0000
-Subject: [PATCH 1/5] DCCP: Shift ccid3_li_hist
-Message-Id: <200705112236.36406.ian.mcdonald@jandi.co.nz>
+From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
+Date: Mon, 28 May 2007 19:49:56 +0000
+Subject: Re: [PATCH 1/5] DCCP: Shift ccid3_li_hist
+Message-Id: <39e6f6c70705281249x2e98f75cj1c8725c55bcdf92d@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <200705112236.36406.ian.mcdonald@jandi.co.nz>
+In-Reply-To: <200705112236.36406.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This shifts ccid3_li_hist.
+On 5/11/07, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
+> This shifts ccid3_li_hist.
+>
+> We temporarily export the symbol but remove this in later patch.
+>
+> Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 
-We temporarily export the symbol but remove this in later patch.
+Ian,
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
----
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 31f50fa..a532249 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -49,7 +49,6 @@ static int ccid3_debug;
- 
- static struct dccp_tx_hist *ccid3_tx_hist;
- static struct dccp_rx_hist *ccid3_rx_hist;
--static struct dccp_li_hist *ccid3_li_hist;
- 
- /*
-  *	Transmitter Half-Connection Routines
-diff --git a/net/dccp/ccids/lib/loss_interval.c 
-b/net/dccp/ccids/lib/loss_interval.c
-index 3829afc..f21e1a9 100644
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -16,6 +16,9 @@
- #include "../../dccp.h"
- #include "loss_interval.h"
- 
-+struct dccp_li_hist *ccid3_li_hist;
-+EXPORT_SYMBOL_GPL(ccid3_li_hist);
-+
- struct dccp_li_hist *dccp_li_hist_new(const char *name)
- {
- 	struct dccp_li_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
-diff --git a/net/dccp/ccids/lib/loss_interval.h 
-b/net/dccp/ccids/lib/loss_interval.h
-index c295947..4186a55 100644
---- a/net/dccp/ccids/lib/loss_interval.h
-+++ b/net/dccp/ccids/lib/loss_interval.h
-@@ -47,4 +47,6 @@ extern u32 dccp_li_hist_calc_i_mean(struct list_head *list);
- 
- extern int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
-    struct list_head *list, const u64 seq_loss, const u8 win_loss);
-+
-+extern struct dccp_li_hist *ccid3_li_hist;
- #endif /* _DCCP_LI_HIST_ */
+       Finally looking at this, sorry for taking so long. But I have
+some issues with this loss intervals code reshuflling.
+
+       The idea of having dccp_tfrc_lib.ko is to have things that are
+not  specific to any CCID implementation, so that if some new CCID
+uses the TFRC algorithms it would share code with CCID3, etc.
+
+       So it is not really correct for the code in net/dccp/ccids/lib/
+to access the half connection internal state, as it really don't know
+what is the layout of such internal state.
+
+     In your patches you move ccid3_hc_rx_update_li from
+net/dccp/ccids/ccid3.c to net/dccp/ccids/lib/loss_interval.c and then
+renamed it to dccp_li_update_li, but this function still uses
+ccid3_hc_rx_sk, not good.
+
+     So I'm looking at the intent of the patches and will post here
+how I think it should have been done and the sequence of patches
+preparing for such change, etc.
+
+- Arnaldo
