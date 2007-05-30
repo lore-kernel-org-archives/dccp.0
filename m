@@ -1,39 +1,89 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 29 May 2007 03:10:55 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 30 May 2007 08:25:58 +0000
 Subject: Re: [PATCH 1/5] DCCP: Shift ccid3_li_hist
-Message-Id: <5640c7e00705282010u49ca76d3w9bffe3f906151d28@mail.gmail.com>
+Message-Id: <200705300925.58293@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200705112236.36406.ian.mcdonald@jandi.co.nz>
 In-Reply-To: <200705112236.36406.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On 5/29/07, Arnaldo Carvalho de Melo <acme@ghostprotocols.net> wrote:
->
-> Please take a look my tree at:
->
-> http://git.kernel.org/?p=linux/kernel/git/acme/net-2.6.git
->
+Quoting Arnaldo Carvalho de Melo:
+|  The idea of having dccp_tfrc_lib.ko is to have things that are
+|  not =A0specific to any CCID implementation, so that if some new CCID
+|  uses the TFRC algorithms it would share code with CCID3, etc.
+| =20
+|  =A0 =A0 =A0 =A0So it is not really correct for the code in net/dccp/ccid=
+s/lib/
+|  to access the half connection internal state, as it really don't know
+|  what is the layout of such internal state.
+| =20
+|  =A0 =A0 =A0In your patches you move ccid3_hc_rx_update_li from
+|  net/dccp/ccids/ccid3.c to net/dccp/ccids/lib/loss_interval.c and then
+|  renamed it to dccp_li_update_li, but this function still uses
+|  ccid3_hc_rx_sk, not good.
+| =20
+|  =A0 =A0 =A0So I'm looking at the intent of the patches and will post here
+|  how I think it should have been done and the sequence of patches
+|  preparing for such change, etc.
+I understand your train of thought, since the same issue had bugged me;
+I think I may have a solution for that in my patch set.
 
-Thanks Arnaldo - looks great. I think these are fine to go to Dave.
+The problem is that
+ * TFRC (dccp_tfrc_lib.ko) needs to know the length of the first loss
+   interval (which is computed by ccid3_hc_rx_update_li)
+ * fully agree that the TFRC module should not (need to) know the internals
+   of the calling module - when CCID4 comes, the same problem will come aga=
+in
 
-> I rewrote your patches to achieve the same result while keeping
-> loss_interval.c CCID agnostic Please also take a look at how the
-> patches go on paving the way for the next  ones, without having to
-> make dccp_li_hist temporarily exported, etc.
->
-> This tree has just some copyright and compiler warning fixes besides
-> these csets, so if you agree on it just provide me the signed-off or
-> acked by lines and I'll add those and republish the tree.
+The choice I have been using was to use a function pointer for calc_first_l=
+i:
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz> for all patches.
+/** tfrc_lh_interval_new  -  Insert new record into the Loss Interval datab=
+ase
+ * @lh:            Loss Interval database
+ * @rh:            Receive history containing a fresh loss event
+ * @calc_first_li: Caller-dependent routine to compute length of first inte=
+rval
+ */
+int tfrc_lh_interval_new(struct tfrc_loss_hist *lh, struct tfrc_rx_hist *rh,
+                         u32 (*calc_first_li)(struct sock *), struct sock *=
+sk)
 
-Now to go and look at more patches again as time permits.
+The price to pay is that the argument for *calc_first_li needs to be carrie=
+d, too,
+but other than that it separates the CCID3 and TFRC interfaces.
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+This function is not actually used (though visible) in CCID3, the one that =
+is called is
+
+**
+ *  tfrc_rx_handle_loss  -  Loss detection and further processing
+ *  @h:             The non-empty RX history object
+ *  @lh:            Loss Intervals database to update
+ *  @skb:           Currently received packet
+ *  @ndp:           The NDP count belonging to @skb
+ *  @calc_first_li: Caller-dependent computation of first loss interval in =
+@lh
+ *  Chooses action according to pending loss, updates LI database when a new
+ *  loss was detected, and does required post-processing. Returns 1 when ca=
+ller
+ *  should send feedback, 0 otherwise.
+ */
+int tfrc_rx_handle_loss(struct tfrc_rx_hist *h,
+                        struct tfrc_loss_hist *lh,
+                        struct sk_buff *skb, u32 ndp,
+                        u32 (*calc_first_li)(struct sock *), struct sock *s=
+k)
+
+This function is a `wrapper', which will call tfrc_lh_interval_new() when t=
+here is a
+loss event (3 duplicate packets received). This is a single-function interf=
+ace
+to the TFRC module, covering al the loss processing.
+
+So there is some minor ugliness (two functions with a function pointer and =
+argument),
+but this affords a separation of interfaces.
