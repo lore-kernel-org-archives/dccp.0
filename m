@@ -1,26 +1,39 @@
-From: Chuck Ebbert <cebbert@redhat.com>
-Date: Wed, 06 Jun 2007 22:55:50 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Wed, 06 Jun 2007 23:12:32 +0000
 Subject: Re: [BUG] Fwd: segfault : modprobe dccp_probe/tcp_probe
-Message-Id: <46673B76.2090508@redhat.com>
+Message-Id: <5640c7e00706061612h62074699wdbd2725654a164@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00706061347v42c9ecbahb5354f6687a70a78@mail.gmail.com>
 In-Reply-To: <5640c7e00706061347v42c9ecbahb5354f6687a70a78@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-On 06/06/2007 04:47 PM, Ian McDonald wrote:
-> Hi there,
-> 
-> We've seen a report of a problem with dccp_probe as shown below. The
-> user has also verified that it occurs in tcp_probe as well. This is on
-> Dave Miller's tree but that currently tracks Linus' tree quite
-> closely. I do note that it is around 2.6.22-rc2 timeframe so there is
-> a possibility fixes may have gone in since.
-> 
-
-It faulted when it tried to write the breakpoint instruction into the
-running kernel's executable code. Apparently the kernel code is now marked
-read-only?
-
+T24gNi83LzA3LCBDaHVjayBFYmJlcnQgPGNlYmJlcnRAcmVkaGF0LmNvbT4gd3JvdGU6Cj4gT24g
+MDYvMDYvMjAwNyAwNDo0NyBQTSwgSWFuIE1jRG9uYWxkIHdyb3RlOgo+ID4gSGkgdGhlcmUsCj4g
+Pgo+ID4gV2UndmUgc2VlbiBhIHJlcG9ydCBvZiBhIHByb2JsZW0gd2l0aCBkY2NwX3Byb2JlIGFz
+IHNob3duIGJlbG93LiBUaGUKPiA+IHVzZXIgaGFzIGFsc28gdmVyaWZpZWQgdGhhdCBpdCBvY2N1
+cnMgaW4gdGNwX3Byb2JlIGFzIHdlbGwuIFRoaXMgaXMgb24KPiA+IERhdmUgTWlsbGVyJ3MgdHJl
+ZSBidXQgdGhhdCBjdXJyZW50bHkgdHJhY2tzIExpbnVzJyB0cmVlIHF1aXRlCj4gPiBjbG9zZWx5
+LiBJIGRvIG5vdGUgdGhhdCBpdCBpcyBhcm91bmQgMi42LjIyLXJjMiB0aW1lZnJhbWUgc28gdGhl
+cmUgaXMKPiA+IGEgcG9zc2liaWxpdHkgZml4ZXMgbWF5IGhhdmUgZ29uZSBpbiBzaW5jZS4KPiA+
+Cj4KPiBJdCBmYXVsdGVkIHdoZW4gaXQgdHJpZWQgdG8gd3JpdGUgdGhlIGJyZWFrcG9pbnQgaW5z
+dHJ1Y3Rpb24gaW50byB0aGUKPiBydW5uaW5nIGtlcm5lbCdzIGV4ZWN1dGFibGUgY29kZS4gQXBw
+YXJlbnRseSB0aGUga2VybmVsIGNvZGUgaXMgbm93IG1hcmtlZAo+IHJlYWQtb25seT8KPgo+Clll
+cyBpdCB3b3VsZCBhcHBlYXIgdG8gYmUgdGhlIGNhc2UgYXMgdXNlciBoYXMgQ09ORklHX0RFQlVH
+X1JPREFUQQpzZXQuIFBhdHJpY2sgLSBjYW4geW91IHR1cm4gdGhpcyBvZmYgYW5kIHJldGVzdD8g
+SXQncyB1bmRlciBLZXJuZWwKSGFja2luZywgV3JpdGUgcHJvdGVjdCBrZXJuZWwgcmVhZCBvbmx5
+IGRhdGEgc3RydWN0dXJlcy4KClRoZSBsaXN0IG9mIGNvbW1pdHMgdGhhdCBJIHNlZSBhcm91bmQg
+dGhpcyBhcmUgYXQ6Cmh0dHA6Ly9naXQua2VybmVsLm9yZy8/cD1saW51eCUyRmtlcm5lbCUyRmdp
+dCUyRnRvcnZhbGRzJTJGbGludXgtMi42LmdpdCZhPXNlYXJjaCZoPUhFQUQmc3Q9Y29tbWl0JnPe
+QlVHX1JPREFUQQoKSSBzdXNwZWN0IGl0J3MgcHJvYmFibHkgb25lIG9mIHRoZSBsYXR0ZXIgb25l
+cyBnaXZpbmcgdGhlIHRpbWluZy4KCkkgZ3Vlc3MgdGhlcmUgYXJlIGEgY291cGxlIG9mIHNvbHV0
+aW9ucyBoZXJlIC0gZWl0aGVyIG1ha2Uga3Byb2Jlcwpjb25mbGljdCB3aXRoIENPTkZJR19ERUJV
+R19ST0RBVEEgc28geW91IGNhbiBkbyBvbmUgb3IgdGhlIG90aGVyLCBvcgpsb29rIGludG8gbW9y
+ZSBkZXRhaWwgd2hhdCBhY2Nlc3Mga3Byb2JlcyBuZWVkLgoKSWFuCi0tIApXZWI6IGh0dHA6Ly93
+YW5kLm5ldC5uei9+aWFtNC8KQmxvZzogaHR0cDovL2lhbnNibG9nLmphbmRpLmNvLm56CldBTkQg
+TmV0d29yayBSZXNlYXJjaCBHcm91cAotClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBz
+ZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2Ug
+dG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRw
+Oi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
