@@ -1,44 +1,130 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 18 Jun 2007 14:40:30 +0000
-Subject: [PATCH 0/3]: The last three
-Message-Id: <200706181540.30737@strip-the-willow>
+From: "S. P. Prasanna" <prasanna@in.ibm.com>
+Date: Thu, 07 Jun 2007 04:36:21 +0000
+Subject: Re: [PATCH] Kprobes x86_64 fix for mark ro data
+Message-Id: <20070607042421.GB9350@in.ibm.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-These three patches finally complete the set. Yes, it's done.
+
+This patch fixes the problem of page protection introduced by
+CONFIG_DEBUG_RODATA for x86_64 architecture. As per Andi
+Kleen's suggestion, the kernel text pages are marked writeable
+only for a short duration to insert or remove the breakpoints.
+
+Signed-off-by: Prasanna S P<prasanna@in.ibm.com>
+Ack-ed-by: Jim Keniston <jkenisto@us.ibm.com>
 
 
-Patch #1: Makes CCID3 feedback explicit (initial | periodic | parameter-change)
-          and makes the estimate of X_recv more reliable in the following combined
-          case: (a) loss has occurred already; (b) periodic feedback has been sent.
-          In this case, the previously computed value for X_recv is reused (from
-          the last periodic feedback), since it has been computed over a longer time
-          (one RTT or more); whereas in contrast the time between current feedback
-          and the instant of the last periodic feedback is smaller - and hence X_recv
-          less accurate.
+ arch/x86_64/kernel/kprobes.c |   26 ++++++++++++++++++++++++++
+ arch/x86_64/mm/init.c        |    6 +++++-
+ include/asm-x86_64/kprobes.h |   10 ++++++++++
+ 3 files changed, 41 insertions(+), 1 deletion(-)
 
-Patch #2: Removes redundant variable for `p': we use `pinv' exclusively in the CCID3 
-          code, and updating both p and pinv for each incoming packet is very expensive.
+diff -puN arch/x86_64/kernel/kprobes.c~kprobes-mark-ro-data-fix-x86_64 arch/x86_64/kernel/kprobes.c
+--- linux-2.6.22-rc2/arch/x86_64/kernel/kprobes.c~kprobes-mark-ro-data-fix-x86_64	2007-06-07 09:20:33.000000000 +0530
++++ linux-2.6.22-rc2-prasanna/arch/x86_64/kernel/kprobes.c	2007-06-07 09:20:33.000000000 +0530
+@@ -209,16 +209,42 @@ static void __kprobes arch_copy_kprobe(s
+ 
+ void __kprobes arch_arm_kprobe(struct kprobe *p)
+ {
++	unsigned long addr = (unsigned long)p->addr;
++	int page_readonly = 0;
++
++	if (kernel_readonly_text(addr)) {
++		change_page_attr_addr(addr, 1, PAGE_KERNEL_EXEC);
++		global_flush_tlb();
++		page_readonly = 1;
++	}
+ 	*p->addr = BREAKPOINT_INSTRUCTION;
+ 	flush_icache_range((unsigned long) p->addr,
+ 			   (unsigned long) p->addr + sizeof(kprobe_opcode_t));
++	if (page_readonly) {
++		change_page_attr_addr(addr, 1, PAGE_KERNEL_RO);
++		global_flush_tlb();
++	}
+ }
+ 
+ void __kprobes arch_disarm_kprobe(struct kprobe *p)
+ {
++	unsigned long addr = (unsigned long)p->addr;
++	int page_readonly = 0;
++
++	if (kernel_readonly_text(addr)) {
++		change_page_attr_addr(addr, 1, PAGE_KERNEL_EXEC);
++		global_flush_tlb();
++		page_readonly = 1;
++	}
++
+ 	*p->addr = p->opcode;
+ 	flush_icache_range((unsigned long) p->addr,
+ 			   (unsigned long) p->addr + sizeof(kprobe_opcode_t));
++
++	if (page_readonly) {
++		change_page_attr_addr(addr, 1, PAGE_KERNEL_RO);
++		global_flush_tlb();
++	}
+ }
+ 
+ void __kprobes arch_remove_kprobe(struct kprobe *p)
+diff -puN include/asm-x86_64/kprobes.h~kprobes-mark-ro-data-fix-x86_64 include/asm-x86_64/kprobes.h
+--- linux-2.6.22-rc2/include/asm-x86_64/kprobes.h~kprobes-mark-ro-data-fix-x86_64	2007-06-07 09:20:33.000000000 +0530
++++ linux-2.6.22-rc2-prasanna/include/asm-x86_64/kprobes.h	2007-06-07 09:20:33.000000000 +0530
+@@ -26,6 +26,7 @@
+ #include <linux/types.h>
+ #include <linux/ptrace.h>
+ #include <linux/percpu.h>
++#include <asm-generic/sections.h>
+ 
+ #define  __ARCH_WANT_KPROBES_INSN_SLOT
+ 
+@@ -88,4 +89,13 @@ extern int kprobe_handler(struct pt_regs
+ 
+ extern int kprobe_exceptions_notify(struct notifier_block *self,
+ 				    unsigned long val, void *data);
++extern int kernel_text_is_ro;
++static inline int kernel_readonly_text(unsigned long address)
++{
++	if (kernel_text_is_ro && ((address >= (unsigned long)_stext)
++					&& (address < (unsigned long) _etext)))
++		return 1;
++
++	return 0;
++}
+ #endif				/* _ASM_KPROBES_H */
+diff -puN arch/x86_64/mm/init.c~kprobes-mark-ro-data-fix-x86_64 arch/x86_64/mm/init.c
+--- linux-2.6.22-rc2/arch/x86_64/mm/init.c~kprobes-mark-ro-data-fix-x86_64	2007-06-07 09:20:33.000000000 +0530
++++ linux-2.6.22-rc2-prasanna/arch/x86_64/mm/init.c	2007-06-07 09:20:33.000000000 +0530
+@@ -48,6 +48,7 @@
+ #define Dprintk(x...)
+ #endif
+ 
++int kernel_text_is_ro;
+ const struct dma_mapping_ops* dma_ops;
+ EXPORT_SYMBOL(dma_ops);
+ 
+@@ -598,10 +599,13 @@ void mark_rodata_ro(void)
+ {
+ 	unsigned long start = (unsigned long)_stext, end;
+ 
++	kernel_text_is_ro = 1;
+ #ifdef CONFIG_HOTPLUG_CPU
+ 	/* It must still be possible to apply SMP alternatives. */
+-	if (num_possible_cpus() > 1)
++	if (num_possible_cpus() > 1) {
+ 		start = (unsigned long)_etext;
++		kernel_text_is_ro = 0;
++	}
+ #endif
+ 	end = (unsigned long)__end_rodata;
+ 	start = (start + PAGE_SIZE - 1) & PAGE_MASK;
 
-
-Patch #3: Update copyrights of CCID3/TFRC files. This has been diffed and `updated'
-          with regards to the recent changes in Arnaldos tree.
-          
-
-Note: As of now, the whole patch set is available within the experimental test tree, 
-      as sub-branch `dccp' on  	git://eden-feed.erg.abdn.ac.uk/dccp_exp
-
-      Detailed instructions how to pull the tree will follow in separate email.
-      Patches on this tree will be updated with regard to results of discussions
-      on this list, so please test, comment, and contribute.
-     
-      If you have a recent davem-2.6 tree, you can pull the sub-tree by
-
-        1. checking out a branch `dccp':         git checkout -b dccp master
-	2. pulling the subtree into this branch: 
-                 git pull git://eden-feed.erg.abdn.ac.uk/dccp_exp.git dccp
-           
-         
+_
+-- 
+Prasanna S.P.
+Linux Technology Center
+India Software Labs, IBM Bangalore
+Email: prasanna@in.ibm.com
+Ph: 91-80-41776329
