@@ -1,7 +1,7 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Thu, 07 Jun 2007 20:43:28 +0000
+From: Florian Westphal <fw@strlen.de>
+Date: Thu, 07 Jun 2007 22:18:16 +0000
 Subject: Re: 'BUG: scheduling while atomic' during dccp transfer
-Message-Id: <39e6f6c70706071343w477127e2gbcb5f8990f1923d7@mail.gmail.com>
+Message-Id: <20070607221816.GC32086@Chamillionaire.breakpoint.cc>
 List-Id: <dccp.vger.kernel.org>
 References: <20070607194353.GA32086@Chamillionaire.breakpoint.cc>
 In-Reply-To: <20070607194353.GA32086@Chamillionaire.breakpoint.cc>
@@ -10,17 +10,16 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/7/07, Florian Westphal <fw@strlen.de> wrote:
-> Arnaldo Carvalho de Melo <acme@ghostprotocols.net> wrote:
-> > >While transmitting data via dccp (Linux 2.6.21) I encountered this:
-> > >
-> > >BUG: scheduling while atomic: firefox-bin/0x10000100/6792
-> [..]
->
-> > Can you try with the attached patch?
->
-> I haven't been able to reproduce it so far.
+Arnaldo Carvalho de Melo <acme@ghostprotocols.net> wrote:
+> On 6/7/07, Florian Westphal <fw@strlen.de> wrote:
+> >> Can you try with the attached patch?
+> >
+> >I haven't been able to reproduce it so far.
+> 
+> You mean with this patch applied?
 
-You mean with this patch applied?
+Yes, sorry for not being precise. I applied your
+patch and so far I haven't seen this bug again.
 
-- Arnaldo
+Thanks,
+	Florian
