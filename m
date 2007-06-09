@@ -1,33 +1,34 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Mon, 04 Jun 2007 01:21:44 +0000
-Subject: Re: [PATCH 1/3] DCCP: Remove dccp_li_hist_entry_delete
-Message-Id: <5640c7e00706031821j713c8f0eoccb58c3e58bf605c@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 09 Jun 2007 18:32:15 +0000
+Subject: [PATCH 1/3]: Inline for time delta
+Message-Id: <200706091932.15559@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200706041149.45174.ian.mcdonald@jandi.co.nz>
-In-Reply-To: <200706041149.45174.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/4/07, Arnaldo Carvalho de Melo <acme@ghostprotocols.net> wrote:
-> On 6/3/07, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> > This removes dccp_li_hist_entry_delete as it's not used anywhere.
->
-> Yes, it is not being used, question is if it should be removed or if
-> we have to convert the open coded calls to
-> kmem_cache_free(dccp_li_cachep, entry) to use it, I think we should
-> use it, its the logical counterpart to dccp_li_hist_entry_new.
->
-> That or we kill also dccp_li_entry_new and use kmem_cache_alloc where
-> it is being used now. I prefer to keep both.
->
-> - Arnaldo
+[DCCP]: Inline for time delta
 
-OK. Will rework in that way.
+This provides a reusable time difference function which returns the difference in
+microseconds, as often used in the DCCP code.
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/dccp.h |    5 +++++
+ 1 file changed, 5 insertions(+)
+
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -421,6 +421,11 @@ static inline suseconds_t timeval_delta(
+ 	return secs * USEC_PER_SEC + usecs;
+ }
+ 
++static inline s64 ktime_delta(ktime_t later, ktime_t earlier)
++{
++	return ktime_to_us(ktime_sub(later, earlier));
++}
++
+ static inline void timeval_add_usecs(struct timeval *tv,
+ 				     const suseconds_t usecs)
+ {
