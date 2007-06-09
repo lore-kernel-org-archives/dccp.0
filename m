@@ -1,40 +1,30 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Mon, 18 Jun 2007 02:06:17 +0000
-Subject: [PATCH 1/4] [KTIME]: Introduce ktime_us_delta
-Message-Id: <20070618020617.GB4226@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 09 Jun 2007 18:29:26 +0000
+Subject: [PATCH 0/3]: Upgrade to ktime_t
+Message-Id: <200706091929.26290@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This provides a reusable time difference function which returns the difference in
-microseconds, as often used in the DCCP code.
+This patch updates some of the code to use the newer ktime_t interface.
+It is the begin of a longer patch set (see note at end).
 
-Commiter note: renamed ktime_delta to ktime_us_delta and put it in ktime.h.
+Patch #1: Provides an analogue of timeval_delta() with ktime_t and in usecs.
+Patch #2: Updates the CCID3 sending time interface to use ktime_t.
+Patch #3: Updates computation of X in CCID3 to use ktime_t.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
----
- include/linux/ktime.h |    5 +++++
- 1 files changed, 5 insertions(+), 0 deletions(-)
+P L E A S E   N O T E:
+----------------------
+This is the begin of a longer patch set, which is inter-dependent. Inter-dependencies
+are unavoidable, since part of the patch makes architectural changes. Patches in themselves
+are presumed correct (at least in my eyes :), I will point out the last patch of the series 
+explicitly (i.e. when it is ok to feed them to gcc).
 
-diff --git a/include/linux/ktime.h b/include/linux/ktime.h
-index c762954..a208f9f 100644
---- a/include/linux/ktime.h
-+++ b/include/linux/ktime.h
-@@ -267,6 +267,11 @@ static inline s64 ktime_to_us(const ktime_t kt)
- 	return (s64) tv.tv_sec * USEC_PER_SEC + tv.tv_usec;
- }
- 
-+static inline s64 ktime_us_delta(const ktime_t later, const ktime_t earlier)
-+{
-+       return ktime_to_us(ktime_sub(later, earlier));
-+}
-+
- /*
-  * The resolution of the clocks. The resolution value is returned in
-  * the clock_getres() system call to give application programmers an
--- 
-1.5.0.6
+It is planned to put these and other patches into an experimental DCCP tree.
 
+I am putting them out now so that people can comment and so that discussion points can
+be resolved early, not after the 49th patch.
+
+Thanks.
