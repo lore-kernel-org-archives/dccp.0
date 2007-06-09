@@ -1,22 +1,43 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Mon, 25 Jun 2007 02:16:04 +0000
-Subject: Re: [PATCH 6/9]: New RX History Step 4 - Data Packet Utility Function (part 2 RX RTT sampling)
-Message-Id: <5640c7e00706241916s3ad3ba9ch5889fb1f62f8b594@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 09 Jun 2007 18:58:07 +0000
+Subject: [PATCH 2/6]: Provide fallback RTT value when none is available
+Message-Id: <200706091958.08037@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200706151531.48562@strip-the-willow>
-In-Reply-To: <200706151531.48562@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/16/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [DCCP]: New RX History Step 4 - Data Packet Utility Function (part 2 RX RTT sampling)
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+[DCCP]: Provide fallback RTT value when none is available
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+This implements RFC 4340, section 3.4:
 
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+ "Each DCCP implementation thus defines a default round-trip time
+  for use when no estimate is  available.  This parameter should 
+  default to not less than 0.2 seconds [...]."
+
+In addition, the upper bound of 4 seconds for an RTT sample has now been reduced,
+to 3 seconds: to match the initial TCP RTO value as specified in [RFC 1122, 4.2.3.1].
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/dccp.h |    7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -73,9 +73,12 @@ extern void dccp_time_wait(struct sock *
+ 
+ #define DCCP_RTO_MAX ((unsigned)(120 * HZ)) /* FIXME: using TCP value */
+ 
+-/* bounds for sampled RTT values from packet exchanges (in usec) */
++/*
++ * RTT sampling: sanity bounds and fallback RTT value from RFC 4340, section 3.4
++ */
+ #define DCCP_SANE_RTT_MIN	100
+-#define DCCP_SANE_RTT_MAX	(4 * USEC_PER_SEC)
++#define DCCP_FALLBACK_RTT	(USEC_PER_SEC / 5)
++#define DCCP_SANE_RTT_MAX	(3 * USEC_PER_SEC)
+ 
+ /* Maximal interval between probes for local resources.  */
+ #define DCCP_RESOURCE_PROBE_INTERVAL ((unsigned)(HZ / 2U))
