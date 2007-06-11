@@ -1,23 +1,216 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 28 Jun 2007 00:25:27 +0000
-Subject: Re: [PATCH 5/9]: Insert and Update routines for the Loss Interval Database
-Message-Id: <5640c7e00706271725x380edaadu9203bb01f8a5956b@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 11 Jun 2007 14:39:29 +0000
+Subject: [PATCH 2/5]: Ignore irrelevant states on receiving feedback
+Message-Id: <200706111539.29246@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200706171352.37638@strip-the-willow>
-In-Reply-To: <200706171352.37638@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/18/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [TFRC]: Insert and Update routines for the Loss Interval Database
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+[CCID 3]: Ignore irrelevant states on receiving feedback
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+This removes two irrelevant states in TX feedback handling:
 
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+ * the NO_SENT state is only triggered in bidirectional mode (both sending
+   and receiving), costing unnecessary processing. Replaced by earlier check.		 
+ * the TERM (terminating) state is uninteresting.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk> 
+---
+ net/dccp/ccids/ccid3.c |  173 ++++++++++++++++++++++++-------------------------
+ 1 file changed, 85 insertions(+), 88 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -418,107 +418,104 @@ static void ccid3_hc_tx_packet_recv(stru
+ 	      DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_DATAACK))
+ 		return;
+ 
++	/* ... and only in the established state */
++	switch (hctx->ccid3hctx_state) {
++	case TFRC_SSTATE_NO_FBACK:	/* fall through */
++	case TFRC_SSTATE_FBACK:		break;
++	default:			return;
++	}
++
++	/* estimate RTT from history if ACK number is valid */
++	if (! tfrc_tx_hist_when(&t_send, &hctx->ccid3hctx_hist,
++			        DCCP_SKB_CB(skb)->dccpd_ack_seq)) {
++		DCCP_WARN("%s(%p): %s with bogus ACK-%llu\n", dccp_role(sk), sk,
++			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type),
++			  (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq);
++		return;
++	}
++
+ 	opt_recv = &hctx->ccid3hctx_options_received;
+ 
+-	switch (hctx->ccid3hctx_state) {
+-	case TFRC_SSTATE_NO_FBACK:
+-	case TFRC_SSTATE_FBACK:
+-		/* estimate RTT from history if ACK number is valid */
+-		if (! tfrc_tx_hist_when(&t_send, &hctx->ccid3hctx_hist,
+-				        DCCP_SKB_CB(skb)->dccpd_ack_seq)) {
+-			DCCP_WARN("%s(%p): %s with bogus ACK-%llu\n", dccp_role(sk), sk,
+-				  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type),
+-				  (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq);
+-			return;
+-		}
++	/* Update receive rate in units of 64 * bytes/second */
++	hctx->ccid3hctx_x_recv = opt_recv->ccid3or_receive_rate;
++	hctx->ccid3hctx_x_recv <<= 6;
++
++	/* Update loss event rate (scaled by 1e6), cf. RFC 4342, 8.5 */
++	pinv = opt_recv->ccid3or_loss_event_rate;
++	hctx->ccid3hctx_p = (pinv = ~0U || pinv = 0)? 0 : scaled_div(1, pinv);
+ 
+-		/* Update receive rate in units of 64 * bytes/second */
+-		hctx->ccid3hctx_x_recv = opt_recv->ccid3or_receive_rate;
+-		hctx->ccid3hctx_x_recv <<= 6;
+-
+-		/* Update loss event rate (scaled by 1e6), cf. RFC 4342, 8.5 */
+-		pinv = opt_recv->ccid3or_loss_event_rate;
+-		hctx->ccid3hctx_p = (pinv = ~0U || pinv = 0)? 0 : scaled_div(1, pinv);
++	/*
++	 * Calculate new RTT sample and update moving average
++	 */
++	now = ktime_get_real();
++	r_sample = dccp_sample_rtt(sk, ktime_delta(now, t_send));
++	hctx->ccid3hctx_rtt = tfrc_ewma(hctx->ccid3hctx_rtt, r_sample, 9);
+ 
++	if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
+ 		/*
+-		 * Calculate new RTT sample and update moving average
++		 * Larger Initial Windows [RFC 4342, sec. 5]
+ 		 */
+-		now = ktime_get_real();
+-		r_sample = dccp_sample_rtt(sk, ktime_delta(now, t_send));
+-		hctx->ccid3hctx_rtt = tfrc_ewma(hctx->ccid3hctx_rtt, r_sample, 9);
+-
+-		if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
+-			/*
+-			 * Larger Initial Windows [RFC 4342, sec. 5]
+-			 */
+-			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
+-			hctx->ccid3hctx_t_ld = now;
+-
+-			ccid3_update_send_interval(hctx);
+-
+-			ccid3_pr_debug("%s(%p), s=%u, MSS=%u, "
+-				       "R_sample=%uus, X=%u\n", dccp_role(sk),
+-				       sk, hctx->ccid3hctx_s,
+-				       dccp_sk(sk)->dccps_mss_cache, r_sample,
+-				       (unsigned)(hctx->ccid3hctx_x >> 6));
++		hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
++		hctx->ccid3hctx_t_ld = now;
+ 
+-			ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
+-		} else {
++		ccid3_update_send_interval(hctx);
+ 
+-			/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
+-			if (hctx->ccid3hctx_p > 0)
+-				hctx->ccid3hctx_x_calc -					tfrc_calc_x(hctx->ccid3hctx_s,
+-						    hctx->ccid3hctx_rtt,
+-						    hctx->ccid3hctx_p);
+-			ccid3_hc_tx_update_x(sk, &now);
+-
+-			ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, "
+-				       "p=%u, X_calc=%u, X_recv=%u, X=%u\n",
+-				       dccp_role(sk),
+-				       sk, hctx->ccid3hctx_rtt, r_sample,
+-				       hctx->ccid3hctx_s, hctx->ccid3hctx_p,
+-				       hctx->ccid3hctx_x_calc,
+-				       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
+-				       (unsigned)(hctx->ccid3hctx_x >> 6));
+-		}
++		ccid3_pr_debug("%s(%p), s=%u, MSS=%u, "
++			       "R_sample=%uus, X=%u\n", dccp_role(sk),
++			       sk, hctx->ccid3hctx_s,
++			       dccp_sk(sk)->dccps_mss_cache, r_sample,
++			       (unsigned)(hctx->ccid3hctx_x >> 6));
+ 
+-		/* unschedule no feedback timer */
+-		sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
++		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
+ 
+-		/*
+-		 * As we have calculated new ipi, delta, t_nom it is possible
+-		 * that we now can send a packet, so wake up dccp_wait_for_ccid
+-		 */
+-		sk->sk_write_space(sk);
+-
+-		/*
+-		 * Update timeout interval for the nofeedback timer.
+-		 * We use a configuration option to increase the lower bound.
+-		 * This can help avoid triggering the nofeedback timer too
+-		 * often ('spinning') on LANs with small RTTs.
+-		 */
+-		hctx->ccid3hctx_t_rto = max_t(u32, 4 * hctx->ccid3hctx_rtt,
+-						   CONFIG_IP_DCCP_CCID3_RTO *
+-						   (USEC_PER_SEC/1000));
+-		/*
+-		 * Schedule no feedback timer to expire in
+-		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
+-		 */
+-		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
++	} else {
++		/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
++		if (hctx->ccid3hctx_p > 0)
++			hctx->ccid3hctx_x_calc +				tfrc_calc_x(hctx->ccid3hctx_s,
++					    hctx->ccid3hctx_rtt,
++					    hctx->ccid3hctx_p);
++		ccid3_hc_tx_update_x(sk, &now);
+ 
+-		ccid3_pr_debug("%s(%p), Scheduled no feedback timer to "
+-			       "expire in %lu jiffies (%luus)\n",
++		ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, "
++			       "p=%u, X_calc=%u, X_recv=%u, X=%u\n",
+ 			       dccp_role(sk),
+-			       sk, usecs_to_jiffies(t_nfb), t_nfb);
+-
+-		sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
+-				   jiffies + usecs_to_jiffies(t_nfb));
+-		break;
+-	case TFRC_SSTATE_NO_SENT:	/* fall through */
+-	case TFRC_SSTATE_TERM:		/* ignore feedback when closing */
+-		break;
++			       sk, hctx->ccid3hctx_rtt, r_sample,
++			       hctx->ccid3hctx_s, hctx->ccid3hctx_p,
++			       hctx->ccid3hctx_x_calc,
++			       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
++			       (unsigned)(hctx->ccid3hctx_x >> 6));
+ 	}
++
++	/* unschedule no feedback timer */
++	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
++
++	/*
++	 * As we have calculated new ipi, delta, t_nom it is possible
++	 * that we now can send a packet, so wake up dccp_wait_for_ccid
++	 */
++	sk->sk_write_space(sk);
++
++	/*
++	 * Update timeout interval for the nofeedback timer.
++	 * We use a configuration option to increase the lower bound.
++	 * This can help avoid triggering the nofeedback timer too
++	 * often ('spinning') on LANs with small RTTs.
++	 */
++	hctx->ccid3hctx_t_rto = max_t(u32, 4 * hctx->ccid3hctx_rtt,
++					   CONFIG_IP_DCCP_CCID3_RTO *
++					   (USEC_PER_SEC/1000));
++	/*
++	 * Schedule no feedback timer to expire in
++	 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
++	 */
++	t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
++
++	sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
++			   jiffies + usecs_to_jiffies(t_nfb));
++
++	ccid3_pr_debug("Scheduled no feedback timer to expire in %lu jiffies"
++		       "(%luus)\n", usecs_to_jiffies(t_nfb), t_nfb);
+ }
+ 
+ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
