@@ -1,26 +1,37 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 20 Jun 2007 04:19:14 +0000
-Subject: Re: [PATCH 0/1]: Current BUGs
-Message-Id: <5640c7e00706192119hac0340eu2a7c360b8f50f1ba@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 11 Jun 2007 14:39:22 +0000
+Subject: [PATCH 1/5]: Shorten statement for updating p
+Message-Id: <200706111539.22960@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200706191129.55105@strip-the-willow>
-In-Reply-To: <200706191129.55105@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/20/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> |  > 1. Write queue not empty
-> |  > ------------------------
-> |  > |   "KERNEL: assertion (skb_queue_empty(&sk->sk_write_queue))
-> |  > |  failed at net/core/stream.c (276)" in system log.
-> |  > I observed this also at some time - but with TCP.
-> |
-I've also seen this but presumed it was my own research code (which is
-far from perfect). Maybe it's not and I should look at more...
+[CCID 3]: Shorten statement for updating p
 
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+This shortens the statement for updating the loss event
+rate p when a feedback packet is received.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |    7 ++-----
+ 1 file changed, 2 insertions(+), 5 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -436,12 +436,9 @@ static void ccid3_hc_tx_packet_recv(stru
+ 		hctx->ccid3hctx_x_recv = opt_recv->ccid3or_receive_rate;
+ 		hctx->ccid3hctx_x_recv <<= 6;
+ 
+-		/* Update loss event rate */
++		/* Update loss event rate (scaled by 1e6), cf. RFC 4342, 8.5 */
+ 		pinv = opt_recv->ccid3or_loss_event_rate;
+-		if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
+-			hctx->ccid3hctx_p = 0;
+-		else				       /* can not exceed 100% */
+-			hctx->ccid3hctx_p = 1000000 / pinv;
++		hctx->ccid3hctx_p = (pinv = ~0U || pinv = 0)? 0 : scaled_div(1, pinv);
+ 
+ 		/*
+ 		 * Calculate new RTT sample and update moving average
