@@ -1,58 +1,34 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sun, 17 Jun 2007 12:51:25 +0000
-Subject: [PATCH 0/9]: New TFRC Loss Interval Database & Integration with CCID code
-Message-Id: <200706171351.25957@strip-the-willow>
+Date: Mon, 11 Jun 2007 12:41:18 +0000
+Subject: [PATCH 0/6]: Locking and simplification for TFRC TX history
+Message-Id: <200706111341.18240@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch set realises a new loss intervals database,
-updating and extending existing loss handling functionality.
+This third bundle (3 more to come in this patch set) is largely self-contained
+does the following for the TFRC history
 
-It is also an optimised structure which uses on-demand allocation.
+  * implements locking
+  * removes unused fields (smaller footprint of structure)
+  * simplifies to use singly-linked list (suggestion by Arnaldo)
 
-This means that no extra memory is consumed when the link is loss-free.
-
-
-Patch #1: Introduces the new, ring-buffer based data structure plus a
-          few basic inline functions.
-
-Patch #2: Provides accessor functions and macros (OO-like encapsulation).
-
-Patch #3: Allocation/de-allocation routines and initialisation/cleanup routines.
-
-Patch #4: Recomputation of I_mean (new algorithm + revised with regard to RFC 4342).
-
-Patch #5: Insert/update routines for the database.
-
-Patch #6: Integration with RX receiver history structure. This is one of the key
-          points in the patch set - loss detection/handling are taken care of by
-          the TFRC module (dccp_tfrc_lib) now. This patch integrates the new loss
-          intervals structure into the TFRC module.
-
-Patch #7: Let calling module compute first loss interval. TFRC needs a value for
-          the first loss interval length as a seed. The problem which we have been
-          discussing with this is that this generates a close integration of CCID3
-          code with TFRC code. The approach taken here is to separate the interfaces
-          by using a function pointer. 
-          I believe that this is a useful approach: the calling module (be it CCID3,
-          CCID3-FR, CCID4 ...) knows best its own internals - last RTT estimate, last
-          time feedback was sent etc; the TFRC module doesn't need to know these details
-          and just calls the function via the function pointer to obtain the first
-          loss interval length.
-          
-Patch #8: Fixes and simplifies header includes with regard to the services exported by
-          the TFRC module. This has been updated to reflect the recent changes in 
-          Arnaldos tree.
-
-Patch #9: And finally ... the integration of the Loss Interval Database with the CCID 3
-          code. This is analogous to patch #6; but the difference is that, with regard to
-          patch #8, RX history and LI database are no longer separate units, but rather
-          a whole which is offered through the TFRC module.
+Little is added here, many lines are removed.
 
 
-This is almost everything, only one bundle left which I will send tomorrow or after we
-have discussed the other things. With the next bundle, the patch set is complete, compiles
-and works.
+Patch #1: Removes two fields, _sent, and _rtt, which are referenced nowhere in the code.
+
+Patch #2: Migration to singly-linked TX history -- introduction of data structures.
+
+Patch #3: Introduction of consistent naming scheme for functions and fields located
+          in the dccp_tfrc_lib module: all such objects now start with `tfrc_' prefix.
+
+Patch #4: Allocation (constructor) and de-allocation (destructor) routines for TFRC TX history.
+
+Patch #5: Querying function to look up the send time, lock-protected against concurrent write.
+
+Patch #6: Update CCID3 TX RTT sampling to use ktime_t
+          (Ian, this is one of the dependencies: upgrading to ktime_t could only be done
+           after introducing the TX history; ccid3_hc_tx_update_x() is resolved subsequently.
