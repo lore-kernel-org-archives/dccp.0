@@ -1,75 +1,149 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 26 Jun 2007 03:27:55 +0000
-Subject: Re: DCCP performances
-Message-Id: <5640c7e00706252027od3c379fkea903696d669ae7f@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 14 Jun 2007 09:05:19 +0000
+Subject: [PATCH 3/5]: Move NULL-protection into function
+Message-Id: <200706141005.20094@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <fca78b970706050927k53a1107fr680a17a4d48b99e@mail.gmail.com>
-In-Reply-To: <fca78b970706050927k53a1107fr680a17a4d48b99e@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi there Patrick,
+[CCID3]: Move NULL-protection into function
 
-Sorry to take so long to reply.
+This moves 10 instances of testing against NULL into the function which is
+used to de-reference the CCID-private data.
 
-As you correctly point out debugging and probing slow things down.
-Unfortunately with any debugging tool there are side effects which
-can, at times, render things useless - a bit like Schr=F6dinger's cat.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |   20 --------------------
+ net/dccp/ccids/ccid3.h |   18 ++++++++++++------
+ 2 files changed, 12 insertions(+), 26 deletions(-)
 
-So use this for debugging when you need, or get a faster machine to
-keep up with the debugging. My tendency for high speed bugs is to just
-put in printk(KERN_CRIT "blah") into the code when I'm working on a
-bug and only spit out the information I want and no other debugging.
-
-Another tool that can be quite useful is to use tcpdump and then
-analyse with WireShark (formerly Ethereal). I prefer to directly
-capture using tcpdump first as less overhead.
-
-Also in my testing I shut down all unnecessary services such as X,
-apache, exim etc as these can have quite an impact on performance. The
-biggest impact is if you're trying to use dccp_probe from a graphical
-window as opposed to a console.
-
-Anyway I'm rambling a bit and hope this is of some use.
-
-Ian
-
-On 6/6/07, Patrick Andrieux <patrick.andrieux@gmail.com> wrote:
-> Hi again,
->
-> Here is a description of another point I'd like to report. It's
-> obvious if you think on it, but it's not if you don't.
-> I ran some tests the last couple of days, and I was surprise by the
-> bitrate iperf gave   me : at about 50kbits/sec... and I didn't
-> understand why since last week. The problem was the debug messages
-> printing.
->
-> It takes lots of time to write in a file, and I enabled debug messages op=
-tions.
-> So, I can let you imagine my logs... 3Go at the end of the day...
-> I disabled these options (in /etc/modprobe.d/networks)... the bitrate
-> given by iperf is now about 2.3Mbits/sec.
->
-> And I noticed the same "problem" using dccp_probe module only. It
-> slows down the traffic at about 1.7Mbits/sec. It prints out less
-> information so it makes sense to have a better birate than with debug
-> messages enabled.
->
-> So the point is all these values are wrong since their printing affect
-> rate, RTT, loss, .... calculation.
->
-> rgds,
-> Patrick.
-> -
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
->
-
-
---=20
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -305,8 +305,6 @@ static int ccid3_hc_tx_send_packet(struc
+ 	ktime_t now = ktime_get_real();
+ 	s64 delay;
+ 
+-	BUG_ON(hctx = NULL);
+-
+ 	/*
+ 	 * This function is called only for Data and DataAck packets. Sending
+ 	 * zero-sized Data(Ack)s is theoretically possible, but for congestion
+@@ -387,8 +385,6 @@ static void ccid3_hc_tx_packet_sent(stru
+ {
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 
+-	BUG_ON(hctx = NULL);
+-
+ 	ccid3_hc_tx_update_s(hctx, len);
+ 
+ 	if (tfrc_tx_hist_add(&hctx->ccid3hctx_hist, dccp_sk(sk)->dccps_gss))
+@@ -403,8 +399,6 @@ static void ccid3_hc_tx_packet_recv(stru
+ 	unsigned long t_nfb;
+ 	u32 pinv, r_sample;
+ 
+-	BUG_ON(hctx = NULL);
+-
+ 	/* we are only interested in ACKs */
+ 	if (!(DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK ||
+ 	      DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_DATAACK))
+@@ -523,8 +517,6 @@ static int ccid3_hc_tx_parse_options(str
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	struct ccid3_options_received *opt_recv;
+ 
+-	BUG_ON(hctx = NULL);
+-
+ 	opt_recv = &hctx->ccid3hctx_options_received;
+ 
+ 	if (opt_recv->ccid3or_seqno != dp->dccps_gsr) {
+@@ -599,8 +591,6 @@ static void ccid3_hc_tx_exit(struct sock
+ {
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 
+-	BUG_ON(hctx = NULL);
+-
+ 	ccid3_hc_tx_set_state(sk, TFRC_SSTATE_TERM);
+ 	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
+ 
+@@ -616,8 +606,6 @@ static void ccid3_hc_tx_get_info(struct 
+ 	if (sk->sk_state = DCCP_LISTEN)
+ 		return;
+ 
+-	BUG_ON(hctx = NULL);
+-
+ 	info->tcpi_rto = hctx->ccid3hctx_t_rto;
+ 	info->tcpi_rtt = hctx->ccid3hctx_rtt;
+ }
+@@ -726,8 +714,6 @@ static int ccid3_hc_rx_insert_options(st
+ 	const struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 	__be32 x_recv, pinv;
+ 
+-	BUG_ON(hcrx = NULL);
+-
+ 	if (!(sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN))
+ 		return 0;
+ 
+@@ -961,8 +947,6 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	u32 p_prev, r_sample, rtt_prev;
+ 	int loss, payload_size;
+ 
+-	BUG_ON(hcrx = NULL);
+-
+ 	opt_recv = &dccp_sk(sk)->dccps_options_received;
+ 
+ 	switch (DCCP_SKB_CB(skb)->dccpd_type) {
+@@ -1079,8 +1063,6 @@ static void ccid3_hc_rx_exit(struct sock
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 
+-	BUG_ON(hcrx = NULL);
+-
+ 	ccid3_hc_rx_set_state(sk, TFRC_RSTATE_TERM);
+ 
+ 	/* Empty packet history */
+@@ -1098,8 +1080,6 @@ static void ccid3_hc_rx_get_info(struct 
+ 	if (sk->sk_state = DCCP_LISTEN)
+ 		return;
+ 
+-	BUG_ON(hcrx = NULL);
+-
+ 	info->tcpi_ca_state = hcrx->ccid3hcrx_state;
+ 	info->tcpi_options  |= TCPI_OPT_TIMESTAMPS;
+ 	info->tcpi_rcv_rtt  = hcrx->ccid3hcrx_rtt;
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -116,6 +116,14 @@ struct ccid3_hc_tx_sock {
+ 	struct ccid3_options_received	ccid3hctx_options_received;
+ };
+ 
++static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
++{
++	void *ccid3_tx_priv = ccid_priv(dccp_sk(sk)->dccps_hc_tx_ccid);
++
++	BUG_ON(ccid3_tx_priv = NULL);
++	return ccid3_tx_priv;
++}
++
+ /* TFRC receiver states */
+ enum ccid3_hc_rx_states {
+ 	TFRC_RSTATE_NO_DATA = 1,
+@@ -156,14 +164,12 @@ struct ccid3_hc_rx_sock {
+ 	u32				ccid3hcrx_pinv;
+ };
+ 
+-static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
+-{
+-    return ccid_priv(dccp_sk(sk)->dccps_hc_tx_ccid);
+-}
+-
+ static inline struct ccid3_hc_rx_sock *ccid3_hc_rx_sk(const struct sock *sk)
+ {
+-    return ccid_priv(dccp_sk(sk)->dccps_hc_rx_ccid);
++	void *ccid3_rx_priv = ccid_priv(dccp_sk(sk)->dccps_hc_rx_ccid);
++
++	BUG_ON(ccid3_rx_priv = NULL);
++	return ccid3_rx_priv;
+ }
+ 
+ #endif /* _DCCP_CCID3_H_ */
