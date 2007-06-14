@@ -1,22 +1,34 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sun, 24 Jun 2007 21:40:25 +0000
-Subject: Re: [PATCH 3/9]: New RX History Step 2 - Initialisation and cleanup
-Message-Id: <5640c7e00706241440y591410cjfa5202efe162cdf9@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 14 Jun 2007 09:05:01 +0000
+Subject: [PATCH 1/5]: Receiver does not set CCVal
+Message-Id: <200706141005.01639@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200706151531.31616@strip-the-willow>
-In-Reply-To: <200706151531.31616@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/16/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [TFRC]: New RX History Step 2 - Initialisation and cleanup
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+[CCID 3]: Receiver does not set CCVal
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+This removes an unnecessary statement, since the receiver of a half-connection
+does not set window counter values: as specified in RFCs 3448 and 4342,
+the sender provides the RTT estimates to the receiver [RFC 3448, 3.2.1], which
+in the particular case of CCID3 means that only the sender sets window counters
+[RFC 4342, sections 5 and 8.1].
 
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |    2 --
+ 1 file changed, 2 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -745,8 +745,6 @@ static int ccid3_hc_rx_insert_options(st
+ 	if (!(sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN))
+ 		return 0;
+ 
+-	DCCP_SKB_CB(skb)->dccpd_ccval = hcrx->ccid3hcrx_ccval_last_counter;
+-
+ 	if (dccp_packet_without_ack(skb))
+ 		return 0;
+ 
