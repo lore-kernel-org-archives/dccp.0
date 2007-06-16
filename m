@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 16 Jun 2007 05:10:14 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 16 Jun 2007 14:41:06 +0000
 Subject: Re: [PATCH 1/6]: Avoid accumulation of large send credit
-Message-Id: <5640c7e00706152210m403b1185mb92302b57f3a8c4@mail.gmail.com>
+Message-Id: <200706161541.06386@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200706091957.56966@strip-the-willow>
 In-Reply-To: <200706091957.56966@strip-the-willow>
@@ -10,17 +10,18 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/10/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [CCID 3]: Avoid accumulation of large send credit
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+|  Agree with Gerrit's comments in patchset description that there is
+|  still discussion around this. Still doing something is better than
+|  doing nothing.
+Also agree with what you are saying. This is really why I would like
+to get the experimental test tree for DCCP/CCID3 started soon.
 
-Agree with Gerrit's comments in patchset description that there is
-still discussion around this. Still doing something is better than
-doing nothing.
+With the mechanism already in place, it is a trivial change to use
+a different value. 
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+Kohler/Floyd currently suggest to use 1 RTT, which derives from the theory of TFRC. 
+
+The value t_ipi derives from the way the packets are currently scheduled.
+
+Neither value may be the last piece of wisdom - we need people testing
+this and report their experience + suggestions.
