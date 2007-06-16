@@ -1,45 +1,73 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Mon, 18 Jun 2007 02:07:33 +0000
-Subject: [PATCH 4/4] [CCID3]: Fix a bug in the send time processing
-Message-Id: <20070618020733.GE4226@ghostprotocols.net>
+Date: Sat, 16 Jun 2007 03:40:54 +0000
+Subject: [PATCH 05/10] [CCID3]: Pass ccid3_li_hist to ccid3_hc_rx_update_li
+Message-Id: <20070616034054.GK24488@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-ccid3_hc_tx_send_packet currently returns 0 when the time difference between
-current time and t_nom is less than 1000 microseconds.
+Now ccid3_hc_rx_update_li is ready to be moved to
+net/dccp/ccids/lib/loss_interval, it uses the same interface as the other
+functions there.
 
-In this case the packet is sent immediately; but, unlike other packets that can
-be emitted on first attempt, it will not have its window counter updated and
-its options set as required. This is a bug.
-
-Fix: Require the time difference to be at least 1000 microseconds. The
-algorithm then converges: time differences > 1000 microseconds trigger the
-timer in dccp_write_xmit; after timer expiry this function is tried again; when
-the time difference is less than 1000, the packet will have its options added
-and window counter updated as required.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/ccid3.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ net/dccp/ccids/ccid3.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
 diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 94b3a1a..e91c2b9 100644
+index fb500d3..52a71a9 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -363,7 +363,7 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
- 		 * else
- 		 *       // send the packet in (t_nom - t_now) milliseconds.
- 		 */
--		if (delay - (s64)hctx->ccid3hctx_delta >= 0)
-+		if (delay - (s64)hctx->ccid3hctx_delta >= 1000)
- 			return (u32)delay / 1000L;
+@@ -924,6 +924,7 @@ found:
+ }
  
- 		ccid3_hc_tx_update_win_count(hctx, now);
+ static void ccid3_hc_rx_update_li(struct sock *sk,
++				  struct dccp_li_hist *li_hist,
+ 				  struct list_head *li_hist_list,
+ 				  struct list_head *hist_list,
+ 				  struct timeval *last_feedback,
+@@ -935,9 +936,8 @@ static void ccid3_hc_rx_update_li(struct sock *sk,
+ 	u64 seq_temp;
+ 
+ 	if (list_empty(li_hist_list)) {
+-		if (!dccp_li_hist_interval_new(ccid3_li_hist,
+-					       li_hist_list, seq_loss,
+-					       win_loss))
++		if (!dccp_li_hist_interval_new(li_hist, li_hist_list,
++					       seq_loss, win_loss))
+ 			return;
+ 
+ 		head = list_entry(li_hist_list->next, struct dccp_li_hist_entry,
+@@ -960,7 +960,7 @@ static void ccid3_hc_rx_update_li(struct sock *sk,
+ 		/* new loss event detected */
+ 		/* calculate last interval length */
+ 		seq_temp = dccp_delta_seqno(head->dccplih_seqno, seq_loss);
+-		entry = dccp_li_hist_entry_new(ccid3_li_hist, GFP_ATOMIC);
++		entry = dccp_li_hist_entry_new(li_hist, GFP_ATOMIC);
+ 
+ 		if (entry = NULL) {
+ 			DCCP_BUG("out of memory - can not allocate entry");
+@@ -971,7 +971,7 @@ static void ccid3_hc_rx_update_li(struct sock *sk,
+ 
+ 		tail = li_hist_list->prev;
+ 		list_del(tail);
+-		kmem_cache_free(ccid3_li_hist->dccplih_slab, tail);
++		kmem_cache_free(li_hist->dccplih_slab, tail);
+ 
+ 		/* Create the newest interval */
+ 		entry->dccplih_seqno = seq_loss;
+@@ -1005,7 +1005,7 @@ static int ccid3_hc_rx_detect_loss(struct sock *sk,
+ 	while (dccp_delta_seqno(hcrx->ccid3hcrx_seqno_nonloss, seqno)
+ 	   > TFRC_RECV_NUM_LATE_LOSS) {
+ 		loss = 1;
+-		ccid3_hc_rx_update_li(sk,
++		ccid3_hc_rx_update_li(sk, ccid3_li_hist,
+ 				      &hcrx->ccid3hcrx_li_hist,
+ 				      &hcrx->ccid3hcrx_hist,
+ 				      &hcrx->ccid3hcrx_tstamp_last_feedback,
 -- 
 1.5.0.6
 
