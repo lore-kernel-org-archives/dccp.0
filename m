@@ -1,99 +1,60 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 20 Jun 2007 09:55:35 +0000
-Subject: [PATCH 1/5]: Shorten variable names in dccp_check_seqno
-Message-Id: <200706201055.35273@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Sat, 16 Jun 2007 03:41:27 +0000
+Subject: [PATCH 07/10] loss_interval: unexport dccp_li_hist_interval_new
+Message-Id: <20070616034127.GM24488@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Shorten variable names in dccp_check_seqno
+Now its only used inside the loss_interval code.
 
-This patch is in part required by the next patch; it
-
- * replaces 6 instances of `DCCP_SKB_CB(skb)->dccpd_seq' with `seqno';
- * replaces 7 instances of `DCCP_SKB_CB(skb)->dccpd_ack_seq' with `ackno';
- * replaces 1 use of dccp_inc_seqno() by unfolding `ADD48' macro in place.
-
-No changes in algorithm, all changes are text replacement/substitution.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk> 
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/input.c |   40 +++++++++++++++++-----------------------
- 1 file changed, 17 insertions(+), 23 deletions(-)
+ net/dccp/ccids/lib/loss_interval.c |    7 +++----
+ net/dccp/ccids/lib/loss_interval.h |    3 ---
+ 2 files changed, 3 insertions(+), 7 deletions(-)
 
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -68,7 +68,8 @@ static int dccp_check_seqno(struct sock 
+diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
+index ee59fde..8ac68c6 100644
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -120,8 +120,9 @@ u32 dccp_li_hist_calc_i_mean(struct list_head *list)
+ 
+ EXPORT_SYMBOL_GPL(dccp_li_hist_calc_i_mean);
+ 
+-int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+-   struct list_head *list, const u64 seq_loss, const u8 win_loss)
++static int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
++				     struct list_head *list,
++				     const u64 seq_loss, const u8 win_loss)
  {
- 	const struct dccp_hdr *dh = dccp_hdr(skb);
- 	struct dccp_sock *dp = dccp_sk(sk);
--	u64 lswl, lawl;
-+	u64 lswl, lawl, seqno = DCCP_SKB_CB(skb)->dccpd_seq,
-+			ackno = DCCP_SKB_CB(skb)->dccpd_ack_seq;
+ 	struct dccp_li_hist_entry *entry;
+ 	int i;
+@@ -142,8 +143,6 @@ int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+ 	return 1;
+ }
  
- 	/*
- 	 *   Step 5: Prepare sequence numbers for Sync
-@@ -84,11 +85,9 @@ static int dccp_check_seqno(struct sock 
- 	 */
- 	if (dh->dccph_type = DCCP_PKT_SYNC ||
- 	    dh->dccph_type = DCCP_PKT_SYNCACK) {
--		if (between48(DCCP_SKB_CB(skb)->dccpd_ack_seq,
--			      dp->dccps_awl, dp->dccps_awh) &&
--		    dccp_delta_seqno(dp->dccps_swl,
--				     DCCP_SKB_CB(skb)->dccpd_seq) >= 0)
--			dccp_update_gsr(sk, DCCP_SKB_CB(skb)->dccpd_seq);
-+		if (between48(ackno, dp->dccps_awl, dp->dccps_awh) &&
-+		    dccp_delta_seqno(dp->dccps_swl, seqno) >= 0)
-+			dccp_update_gsr(sk, seqno);
- 		else
- 			return -1;
- 	}
-@@ -113,35 +112,30 @@ static int dccp_check_seqno(struct sock 
- 	if (dh->dccph_type = DCCP_PKT_CLOSEREQ ||
- 	    dh->dccph_type = DCCP_PKT_CLOSE ||
- 	    dh->dccph_type = DCCP_PKT_RESET) {
--		lswl = dp->dccps_gsr;
--		dccp_inc_seqno(&lswl);
-+		lswl = ADD48(dp->dccps_gsr, 1);
- 		lawl = dp->dccps_gar;
- 	}
+-EXPORT_SYMBOL_GPL(dccp_li_hist_interval_new);
+-
+ /* calculate first loss interval
+  *
+  * returns estimated loss interval in usecs */
+diff --git a/net/dccp/ccids/lib/loss_interval.h b/net/dccp/ccids/lib/loss_interval.h
+index 17f173a..653328d 100644
+--- a/net/dccp/ccids/lib/loss_interval.h
++++ b/net/dccp/ccids/lib/loss_interval.h
+@@ -52,9 +52,6 @@ extern void dccp_li_hist_purge(struct dccp_li_hist *hist,
  
--	if (between48(DCCP_SKB_CB(skb)->dccpd_seq, lswl, dp->dccps_swh) &&
--	    (DCCP_SKB_CB(skb)->dccpd_ack_seq = DCCP_PKT_WITHOUT_ACK_SEQ ||
--	     between48(DCCP_SKB_CB(skb)->dccpd_ack_seq,
--		       lawl, dp->dccps_awh))) {
--		dccp_update_gsr(sk, DCCP_SKB_CB(skb)->dccpd_seq);
-+	if (between48(seqno, lswl, dp->dccps_swh) &&
-+	    (ackno = DCCP_PKT_WITHOUT_ACK_SEQ ||
-+	     between48(ackno, lawl, dp->dccps_awh))) {
-+		dccp_update_gsr(sk, seqno);
+ extern u32 dccp_li_hist_calc_i_mean(struct list_head *list);
  
- 		if (dh->dccph_type != DCCP_PKT_SYNC &&
--		    (DCCP_SKB_CB(skb)->dccpd_ack_seq !-		     DCCP_PKT_WITHOUT_ACK_SEQ))
--			dp->dccps_gar = DCCP_SKB_CB(skb)->dccpd_ack_seq;
-+		    (ackno != DCCP_PKT_WITHOUT_ACK_SEQ))
-+			dp->dccps_gar = ackno;
- 	} else {
- 		DCCP_WARN("DCCP: Step 6 failed for %s packet, "
- 			  "(LSWL(%llu) <= P.seqno(%llu) <= S.SWH(%llu)) and "
- 			  "(P.ackno %s or LAWL(%llu) <= P.ackno(%llu) <= S.AWH(%llu), "
- 			  "sending SYNC...\n",  dccp_packet_name(dh->dccph_type),
--			  (unsigned long long) lswl,
--			  (unsigned long long) DCCP_SKB_CB(skb)->dccpd_seq,
-+			  (unsigned long long) lswl, (unsigned long long) seqno,
- 			  (unsigned long long) dp->dccps_swh,
--			  (DCCP_SKB_CB(skb)->dccpd_ack_seq =
--				DCCP_PKT_WITHOUT_ACK_SEQ) ? "doesn't exist" : "exists",
--			  (unsigned long long) lawl,
--			  (unsigned long long) DCCP_SKB_CB(skb)->dccpd_ack_seq,
-+			  (ackno = DCCP_PKT_WITHOUT_ACK_SEQ) ? "doesn't exist"
-+							      : "exists",
-+			  (unsigned long long) lawl, (unsigned long long) ackno,
- 			  (unsigned long long) dp->dccps_awh);
--		dccp_send_sync(sk, DCCP_SKB_CB(skb)->dccpd_seq, DCCP_PKT_SYNC);
-+		dccp_send_sync(sk, seqno, DCCP_PKT_SYNC);
- 		return -1;
- 	}
- 
+-extern int dccp_li_hist_interval_new(struct dccp_li_hist *hist,
+-   struct list_head *list, const u64 seq_loss, const u8 win_loss);
+-
+ extern void dccp_li_update_li(struct sock *sk, struct dccp_li_hist *li_hist,
+ 			      struct list_head *li_hist_list,
+ 			      struct list_head *hist_list,
+-- 
+1.5.0.6
+
