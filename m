@@ -1,69 +1,71 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 20 Jun 2007 09:55:39 +0000
-Subject: [PATCH 2/5]: Fix Reset/Sync-Flood Bug
-Message-Id: <200706201055.39795@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Sat, 16 Jun 2007 03:41:41 +0000
+Subject: [PATCH 08/10] loss_interval: Make dccp_li_hist_entry_{new,delete}
+Message-Id: <20070616034141.GN24488@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Fix Reset/Sync-Flood Bug
+Not used outside the loss_interval code anymore.
 
-This updates sequence number checking with regard to RFC 4340, 7.5.4.
-Missing in the code was an exception for sequence-invalid Reset packets, 
-which get a Sync acknowledging GSR, instead of (as usual) P.seqno.
-
-This can lead to an oscillating ping-pong flood of Reset packets. 
-
-In fact, it has been observed on the wire as follows:
-
- 1. client establishes connection to server;
- 2. before server can write to client, client crashes without notifying
-    the server (NB: now no longer possible due to ABORT function);
- 3. server sends DCCP-Data packet (has no ackno);
- 4. client generates Reset "No Connection", seqno=0, increments seqno;
- 5. server replies with Sync, using ackno = P.seqno;
- 6. client generates Reset "No Connection" with seqno = ackno + 1;
- 7. goto (5).
-
-The difference is that now in (5) the server uses GSR.  This causes the
-Reset sent by the client in (6) to become sequence-valid, so that in (7)
-the vicious circle is broken; the Reset is then enqueued and causes the
-socket to enter TIMEWAIT state.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/input.c |   14 +++++++++++---
- 1 file changed, 11 insertions(+), 3 deletions(-)
+ net/dccp/ccids/lib/loss_interval.c |   14 ++++++++++++++
+ net/dccp/ccids/lib/loss_interval.h |   14 --------------
+ 2 files changed, 14 insertions(+), 14 deletions(-)
 
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -102,9 +102,6 @@ static int dccp_check_seqno(struct sock 
- 	 *	  Update S.GSR, S.SWL, S.SWH
- 	 *	  If P.type != Sync,
- 	 *	     Update S.GAR
--	 *      Otherwise,
--	 *	  Send Sync packet acknowledging P.seqno
--	 *	  Drop packet and return
- 	 */
- 	lswl = dp->dccps_swl;
- 	lawl = dp->dccps_awl;
-@@ -135,6 +132,17 @@ static int dccp_check_seqno(struct sock 
- 							      : "exists",
- 			  (unsigned long long) lawl, (unsigned long long) ackno,
- 			  (unsigned long long) dp->dccps_awh);
-+		/*
-+		 *   Step 6: Check sequence numbers
-+		 *      Otherwise,
-+		 *         If P.type = Reset,
-+		 *            Send Sync packet acknowledging S.GSR
-+		 *         Otherwise,
-+		 *            Send Sync packet acknowledging P.seqno
-+		 *      Drop packet and return
-+		 */
-+		if (dh->dccph_type = DCCP_PKT_RESET)
-+			seqno = dp->dccps_gsr;
- 		dccp_send_sync(sk, seqno, DCCP_PKT_SYNC);
- 		return -1;
- 	}
+diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
+index 8ac68c6..28eac9b 100644
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -62,6 +62,20 @@ void dccp_li_hist_delete(struct dccp_li_hist *hist)
+ 
+ EXPORT_SYMBOL_GPL(dccp_li_hist_delete);
+ 
++static inline struct dccp_li_hist_entry *
++		dccp_li_hist_entry_new(struct dccp_li_hist *hist,
++				       const gfp_t prio)
++{
++	return kmem_cache_alloc(hist->dccplih_slab, prio);
++}
++
++static inline void dccp_li_hist_entry_delete(struct dccp_li_hist *hist,
++					     struct dccp_li_hist_entry *entry)
++{
++	if (entry != NULL)
++		kmem_cache_free(hist->dccplih_slab, entry);
++}
++
+ void dccp_li_hist_purge(struct dccp_li_hist *hist, struct list_head *list)
+ {
+ 	struct dccp_li_hist_entry *entry, *next;
+diff --git a/net/dccp/ccids/lib/loss_interval.h b/net/dccp/ccids/lib/loss_interval.h
+index 653328d..8d3c9bf 100644
+--- a/net/dccp/ccids/lib/loss_interval.h
++++ b/net/dccp/ccids/lib/loss_interval.h
+@@ -33,20 +33,6 @@ struct dccp_li_hist_entry {
+ 	u32		 dccplih_interval;
+ };
+ 
+-static inline struct dccp_li_hist_entry *
+-		dccp_li_hist_entry_new(struct dccp_li_hist *hist,
+-				       const gfp_t prio)
+-{
+-	return kmem_cache_alloc(hist->dccplih_slab, prio);
+-}
+-
+-static inline void dccp_li_hist_entry_delete(struct dccp_li_hist *hist,
+-					     struct dccp_li_hist_entry *entry)
+-{
+-	if (entry != NULL)
+-		kmem_cache_free(hist->dccplih_slab, entry);
+-}
+-
+ extern void dccp_li_hist_purge(struct dccp_li_hist *hist,
+ 			       struct list_head *list);
+ 
+-- 
+1.5.0.6
+
