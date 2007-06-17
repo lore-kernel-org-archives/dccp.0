@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 16 Jun 2007 22:54:51 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sun, 17 Jun 2007 10:12:54 +0000
 Subject: Re: [PATCH 3/6]: Migrate to new naming scheme, using macro to declare cache
-Message-Id: <5640c7e00706161554p4f5333c4v2ec9fa25371e758c@mail.gmail.com>
+Message-Id: <200706171112.54827@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200706111341.49697@strip-the-willow>
 In-Reply-To: <200706111341.49697@strip-the-willow>
@@ -10,20 +10,19 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/12/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [TFRC]: Migrate to new naming scheme, using macro to declare cache
->
-I agree totally with the intent. I reworked li_hist as well but
-Arnaldo decided to do in a better way and I think he'll want the same
-for this also.
-
-See his patch (which is in Dave M's tree now) at:
-http://www.mail-archive.com/dccp@vger.kernel.org/msg01879.html
-
-I also suspect his patch will stop yours applying.
-
-Ian
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+Ian McDonald wrote:
+|  > [TFRC]: Migrate to new naming scheme, using macro to declare cache
+|  >
+|  I agree totally with the intent. I reworked li_hist as well but
+|  Arnaldo decided to do in a better way and I think he'll want the same
+|  for this also.
+Is this an Ack?
+  
+|  See his patch (which is in Dave M's tree now) at:
+|  http://www.mail-archive.com/dccp@vger.kernel.org/msg01879.html
+|  
+|  I also suspect his patch will stop yours applying.
+|  
+Yes that's right - I worked out the intersection of recent changes to the
+patches submitted so far, and above patch was part of it. Will send
+that later.
