@@ -1,21 +1,83 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 16 Jun 2007 22:57:41 +0000
-Subject: Re: [PATCH 2/6]: Migrate TX history to singly-linked list
-Message-Id: <5640c7e00706161557x56f0b31cxac8c8d97c4985209@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sun, 17 Jun 2007 12:53:58 +0000
+Subject: [PATCH 6/9]: Integrate RX history loss detection with loss interval update
+Message-Id: <200706171353.58304@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200706111341.43594@strip-the-willow>
-In-Reply-To: <200706111341.43594@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/12/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [TFRC]: Migrate TX history to singly-linked list
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-bu: Ian McDonald <ian.mcdonald@jandi.co.nz>
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+[TFRC]: Integrate RX history loss detection with loss interval update
+
+This adds the missing link between
+
+ * TFRC loss detection as provided by the RX history code and
+ * Loss Intervals update whenever a new loss is detected.
+
+Handling is conform to the TFRC semantics and conveniently transparent
+to the caller: only the function tfrc_rx_handle_loss() need be called.
+
+A test module is available on request which shows that the transfer from
+RX history loss event into a newly created loss interval entry works.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/lib/packet_history.c |   23 +++++++++++++++--------
+ net/dccp/ccids/lib/packet_history.h |    4 +++-
+ 2 files changed, 18 insertions(+), 9 deletions(-)
+
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -328,13 +328,20 @@ static void __three_after_loss(struct tf
+ 
+ /**
+  *  tfrc_rx_handle_loss  -  Loss detection and further processing
+- *  @h:	      The non-empty history object
+- *  @skb:     Currently received packet
+- *  @ndp:     The NDP count belonging to skb
+- *  Returns 1 when caller should send feedback, 0 otherwise.
++ *  @h:		    The non-empty RX history object
++ *  @lh:	    Loss Intervals database to update
++ *  @skb:	    Currently received packet
++ *  @ndp:	    The NDP count belonging to @skb
++ *  @calc_first_li: Caller-dependent computation of first loss interval in @lh
++ *  @sk:	    Used by @calc_first_li (see tfrc_lh_interval_add)
++ *  Chooses action according to pending loss, updates LI database when a new
++ *  loss was detected, and does required post-processing. Returns 1 when caller
++ *  should send feedback, 0 otherwise.
+  */
+ int tfrc_rx_handle_loss(struct tfrc_rx_hist *h,
+-			struct sk_buff *skb, u32 ndp)
++			struct tfrc_loss_hist *lh,
++			struct sk_buff *skb, u32 ndp,
++			u32 (*calc_first_li)(struct sock *), struct sock *sk)
+ {
+ 	int is_new_loss = 0;
+ 
+@@ -344,9 +351,9 @@ int tfrc_rx_handle_loss(struct tfrc_rx_h
+ 		DCCP_BUG("invalid loss_count %d", h->loss_count);
+ 	else if (__two_after_loss(h, skb, ndp)) {
+ 		/*
+-		 * XXX part of subsequent patch
+-		is_new_loss = update_li(li_hist, loss_prev(h));
+-		*/
++		 * Update Loss Interval database and recycle RX records
++		 */
++		is_new_loss = tfrc_lh_interval_add(lh, h, calc_first_li, sk);
+ 		__three_after_loss(h);
+ 	}
+ 	return is_new_loss;
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -223,7 +223,9 @@ static inline void tfrc_rx_hist_update(s
+ 	tfrc_rx_hist_entry_from_skb(last_rcv(h), skb, ndp);
+ }
+ 
+-extern int  tfrc_rx_handle_loss(struct tfrc_rx_hist *, struct sk_buff *, u32);
++extern int  tfrc_rx_handle_loss(struct tfrc_rx_hist *, struct tfrc_loss_hist *,
++				struct sk_buff *skb, u32 ndp,
++				u32 (*first_li)(struct sock *), struct sock *);
+ extern u32  tfrc_rx_sample_rtt(struct tfrc_rx_hist *, struct sk_buff *);
+ extern int  tfrc_rx_hist_init(struct tfrc_rx_hist *);
+ extern void tfrc_rx_hist_cleanup(struct tfrc_rx_hist *);
