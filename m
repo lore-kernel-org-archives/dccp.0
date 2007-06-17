@@ -1,53 +1,58 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 20 Jun 2007 09:56:12 +0000
-Subject: [PATCH 5/5]: Send Reset upon Sync in state REQUEST
-Message-Id: <200706201056.12089@strip-the-willow>
+Date: Sun, 17 Jun 2007 12:51:25 +0000
+Subject: [PATCH 0/9]: New TFRC Loss Interval Database & Integration with CCID code
+Message-Id: <200706171351.25957@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Send Reset upon Sync in state REQUEST
+This patch set realises a new loss intervals database,
+updating and extending existing loss handling functionality.
 
-This fixes the code to correspond to RFC 4340, 7.5.4, which states the
-exception that a Sync received in state REQUEST generates a Reset (not
-a SyncAck).
+It is also an optimised structure which uses on-demand allocation.
 
-To achieve this, only a small change is required. Since
-dccp_rcv_request_sent_state_process() already uses the correct Reset Code
-number 4 ("Packet Error"), we only need to shift the if-statement a few
-lines further down.
+This means that no extra memory is consumed when the link is loss-free.
 
-(To test this case: replace DCCP_PKT_RESPONSE with DCCP_PKT_SYNC 
-                    in dccp_make_response.)
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>     
----
- net/dccp/input.c |    8 +++-----
- 1 file changed, 3 insertions(+), 5 deletions(-)
+Patch #1: Introduces the new, ring-buffer based data structure plus a
+          few basic inline functions.
 
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -551,11 +551,6 @@ int dccp_rcv_state_process(struct sock *
- 		return 0;
- 	}
- 
--	if (unlikely(dh->dccph_type = DCCP_PKT_SYNC)) {
--		dccp_send_sync(sk, dcb->dccpd_seq, DCCP_PKT_SYNCACK);
--		goto discard;
--	}
--
- 	switch (sk->sk_state) {
- 	case DCCP_CLOSED:
- 		dcb->dccpd_reset_code = DCCP_RESET_CODE_NO_CONNECTION;
-@@ -586,6 +581,9 @@ int dccp_rcv_state_process(struct sock *
- 			sk_wake_async(sk, 0, POLL_OUT);
- 			break;
- 		}
-+	} else if (unlikely(dh->dccph_type = DCCP_PKT_SYNC)) {
-+		dccp_send_sync(sk, dcb->dccpd_seq, DCCP_PKT_SYNCACK);
-+		goto discard;
- 	}
- 
- 	if (!queued) {
+Patch #2: Provides accessor functions and macros (OO-like encapsulation).
+
+Patch #3: Allocation/de-allocation routines and initialisation/cleanup routines.
+
+Patch #4: Recomputation of I_mean (new algorithm + revised with regard to RFC 4342).
+
+Patch #5: Insert/update routines for the database.
+
+Patch #6: Integration with RX receiver history structure. This is one of the key
+          points in the patch set - loss detection/handling are taken care of by
+          the TFRC module (dccp_tfrc_lib) now. This patch integrates the new loss
+          intervals structure into the TFRC module.
+
+Patch #7: Let calling module compute first loss interval. TFRC needs a value for
+          the first loss interval length as a seed. The problem which we have been
+          discussing with this is that this generates a close integration of CCID3
+          code with TFRC code. The approach taken here is to separate the interfaces
+          by using a function pointer. 
+          I believe that this is a useful approach: the calling module (be it CCID3,
+          CCID3-FR, CCID4 ...) knows best its own internals - last RTT estimate, last
+          time feedback was sent etc; the TFRC module doesn't need to know these details
+          and just calls the function via the function pointer to obtain the first
+          loss interval length.
+          
+Patch #8: Fixes and simplifies header includes with regard to the services exported by
+          the TFRC module. This has been updated to reflect the recent changes in 
+          Arnaldos tree.
+
+Patch #9: And finally ... the integration of the Loss Interval Database with the CCID 3
+          code. This is analogous to patch #6; but the difference is that, with regard to
+          patch #8, RX history and LI database are no longer separate units, but rather
+          a whole which is offered through the TFRC module.
+
+
+This is almost everything, only one bundle left which I will send tomorrow or after we
+have discussed the other things. With the next bundle, the patch set is complete, compiles
+and works.
