@@ -1,41 +1,53 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 16 Jun 2007 14:21:04 +0000
-Subject: Re: [PATCH 2/6]: Provide fallback RTT value when none is available
-Message-Id: <200706161521.05192@strip-the-willow>
+Date: Sun, 17 Jun 2007 12:51:50 +0000
+Subject: [PATCH 2/9]: Loss-intervals access-macros and -functions
+Message-Id: <200706171351.50245@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200706091958.08037@strip-the-willow>
-In-Reply-To: <200706091958.08037@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  > [DCCP]: Provide fallback RTT value when none is available
-|  > @@ -73,9 +73,12 @@ extern void dccp_time_wait(struct sock *
-|  >
-|  >  #define DCCP_RTO_MAX ((unsigned)(120 * HZ)) /* FIXME: using TCP value */
-|  >
-|  > -/* bounds for sampled RTT values from packet exchanges (in usec) */
-|  > +/*
-|  > + * RTT sampling: sanity bounds and fallback RTT value from RFC 4340, section 3.4
-|  > + */
-|  >  #define DCCP_SANE_RTT_MIN      100
-|  > -#define DCCP_SANE_RTT_MAX      (4 * USEC_PER_SEC)
-|  > +#define DCCP_FALLBACK_RTT      (USEC_PER_SEC / 5)
-<snip>
+[TFRC]: Loss-intervals access-macros and -functions
 
-|  
-|  I personally think this patch should include the changes where this
-|  occurs in the code but I know these are in separate patches.
-|  
-I have just checked - the place it is actually used is indeed a bit later in the
-change set, in receiver RTT sampling, it is here:
-	http://www.mail-archive.com/dccp@vger.kernel.org/msg01868.html
+Access to the Loss Interval Records is not direct, but (like in object-oriented
+programming) via functions.
 
-+	if (hcrx->ccid3hcrx_rtt = 0) {
-+		DCCP_WARN("No RTT estimate available, using fallback RTT\n");
-+		hcrx->ccid3hcrx_rtt = DCCP_FALLBACK_RTT;
- 	}
+The macros are for unprotected access, the functions implement safety checks
+which ensure that the macros are called in a sane state.
 
-But this patch is also generic: RFC 4340 says that this value (which agrees with
-TCP-like values) can be used wherever there is no fallback.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/lib/loss_interval.c |   21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -16,6 +16,27 @@
+ #include "../../dccp.h"
+ #include "loss_interval.h"
+ 
++/*
++ * Access macros: These require that at least one entry is present in lh,
++ * and implement array semantics (0 is first, n-1 is the last of n entries).
++ */
++#define __lih_index(lh, n)	LIH_INDEX((lh)->counter - (n) - 1)
++#define __lih_entry(lh, n)	(lh)->ring[__lih_index(lh, n)]
++#define __curr_entry(lh)	(lh)->ring[LIH_INDEX((lh)->counter - 1)]
++#define __next_entry(lh)	(lh)->ring[LIH_INDEX((lh)->counter)]
++
++/* given i with 0 <= i <= k, return I_i as per the rfc3448bis notation */
++static inline u32 tfrc_lh_get_interval(struct tfrc_loss_hist *lh, u8 i)
++{
++	BUG_ON(i >= lh->counter);
++	return __lih_entry(lh, i)->li_length;
++}
++
++static inline struct tfrc_loss_interval *tfrc_lh_peek(struct tfrc_loss_hist *lh)
++{
++	return lh->counter ? __curr_entry(lh) : NULL;
++}
++
+ struct dccp_li_hist *dccp_li_hist_new(const char *name)
+ {
+ 	struct dccp_li_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
