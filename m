@@ -1,152 +1,156 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 16 Jun 2007 03:40:41 +0000
-Subject: [PATCH 04/10] Remove accesses to ccid3_hc_rx_sock in
-Message-Id: <20070616034041.GJ24488@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 18 Jun 2007 14:40:47 +0000
+Subject: [PATCH 1/3]: Clarify causes of feedback, compute X_recv more accurately
+Message-Id: <200706181540.47633@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is a preparatory patch for moving these loss interval functions from
-net/dccp/ccids/ccid3.c to net/dccp/ccids/lib/loss_interval.c.
+[CCID3]: Clarify causes of feedback, compute X_recv more accurately
 
-Based on a patch by Ian McDonald.
+The computation of X_recv does currently not conform to TFRC/RFC 3448,
+since this specification requires that X_recv be computed over the last
+R_m seconds (sec. 6.2).  
 
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+The code, in contrast, computes X_recv over the time the last feedback was 
+sent. This results in sending wrong estimates of X_recv, making it impossible
+for the sender to find its allowed sending rate.
+
+The patch addresses this problem and implements a clearer interface; it
+ * explicitly distinguishes the types of feedback (using an enum);
+ * uses previous value of X_recv when sending feedback due to a parameter change;
+ * makes all state changes local to ccid3_hc_tx_packet_recv;
+ * assigns feedback type according to incident (previously only used flag `do_feedback').
+
+Further and detailed information is at
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ccid3_packet_reception/#8._Computing_X_recv_ 
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid3.c |   62 +++++++++++++++++++++++++++++++----------------
- 1 files changed, 41 insertions(+), 21 deletions(-)
+ net/dccp/ccids/ccid3.c |   39 +++++++++++++++++++++++++++------------
+ net/dccp/ccids/ccid3.h |   10 +++++++++-
+ 2 files changed, 36 insertions(+), 13 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 9686a8d..fb500d3 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -823,9 +823,12 @@ static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
-  *
-  * returns estimated loss interval in usecs */
- 
--static u32 ccid3_hc_rx_calc_first_li(struct sock *sk)
-+static u32 ccid3_hc_rx_calc_first_li(struct sock *sk,
-+				     struct list_head *hist_list,
-+				     struct timeval *last_feedback,
-+				     u16 s, u32 bytes_recv,
-+				     u32 previous_x_recv)
- {
--	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
- 	struct dccp_rx_hist_entry *entry, *next, *tail = NULL;
- 	u32 x_recv, p;
- 	suseconds_t rtt, delta;
-@@ -835,8 +838,7 @@ static u32 ccid3_hc_rx_calc_first_li(struct sock *sk)
- 	int step = 0;
- 	u64 fval;
- 
--	list_for_each_entry_safe(entry, next, &hcrx->ccid3hcrx_hist,
--				 dccphrx_node) {
-+	list_for_each_entry_safe(entry, next, hist_list, dccphrx_node) {
- 		if (dccp_rx_hist_entry_data_packet(entry)) {
- 			tail = entry;
- 
-@@ -895,19 +897,20 @@ found:
- 	}
- 
- 	dccp_timestamp(sk, &tstamp);
--	delta = timeval_delta(&tstamp, &hcrx->ccid3hcrx_tstamp_last_feedback);
-+	delta = timeval_delta(&tstamp, last_feedback);
- 	DCCP_BUG_ON(delta <= 0);
- 
--	x_recv = scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
-+	x_recv = scaled_div32(bytes_recv, delta);
- 	if (x_recv = 0) {		/* would also trigger divide-by-zero */
- 		DCCP_WARN("X_recv=0\n");
--		if ((x_recv = hcrx->ccid3hcrx_x_recv) = 0) {
-+		if (previous_x_recv = 0) {
- 			DCCP_BUG("stored value of X_recv is zero");
- 			return ~0;
- 		}
-+		x_recv = previous_x_recv;
- 	}
- 
--	fval = scaled_div(hcrx->ccid3hcrx_s, rtt);
-+	fval = scaled_div(s, rtt);
- 	fval = scaled_div32(fval, x_recv);
- 	p = tfrc_calc_x_reverse_lookup(fval);
- 
-@@ -920,26 +923,36 @@ found:
- 		return 1000000 / p;
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -124,13 +124,21 @@ static inline struct ccid3_hc_tx_sock *c
+ 	return ccid3_tx_priv;
  }
  
--static void ccid3_hc_rx_update_li(struct sock *sk, u64 seq_loss, u8 win_loss)
-+static void ccid3_hc_rx_update_li(struct sock *sk,
-+				  struct list_head *li_hist_list,
-+				  struct list_head *hist_list,
-+				  struct timeval *last_feedback,
-+				  u16 s, u32 bytes_recv,
-+				  u32 previous_x_recv,
-+				  u64 seq_loss, u8 win_loss)
+-/* TFRC receiver states */
++/* CCID3 receiver states */
+ enum ccid3_hc_rx_states {
+ 	TFRC_RSTATE_NO_DATA = 1,
+ 	TFRC_RSTATE_DATA,
+ 	TFRC_RSTATE_TERM    = 127,
+ };
+ 
++/* CCID3 feedback types */
++enum ccid3_fback_type {
++	FBACK_NONE = 0,
++	FBACK_INITIAL,
++	FBACK_PERIODIC,
++	FBACK_PARAM_CHANGE
++};
++
+ /** struct ccid3_hc_rx_sock - CCID3 receiver half-connection socket
+  *
+  *  @ccid3hcrx_x_recv  -  Receiver estimate of send rate (RFC 3448 4.3)
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -665,7 +665,8 @@ static inline void ccid3_hc_rx_update_s(
+ 		hcrx->ccid3hcrx_s = tfrc_ewma(hcrx->ccid3hcrx_s, len, 9);
+ }
+ 
+-static void ccid3_hc_rx_send_feedback(struct sock *sk, struct sk_buff *skb)
++static void ccid3_hc_rx_send_feedback(struct sock *sk, struct sk_buff *skb,
++				      enum ccid3_fback_type fbtype)
  {
--	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
- 	struct dccp_li_hist_entry *head;
- 	u64 seq_temp;
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 	struct dccp_sock *dp = dccp_sk(sk);
+@@ -675,13 +676,26 @@ static void ccid3_hc_rx_send_feedback(st
+ 	if (unlikely(hcrx->ccid3hcrx_state = TFRC_RSTATE_TERM))
+ 		return;
  
--	if (list_empty(&hcrx->ccid3hcrx_li_hist)) {
-+	if (list_empty(li_hist_list)) {
- 		if (!dccp_li_hist_interval_new(ccid3_li_hist,
--		   &hcrx->ccid3hcrx_li_hist, seq_loss, win_loss))
-+					       li_hist_list, seq_loss,
-+					       win_loss))
- 			return;
+-	switch (hcrx->ccid3hcrx_state) {
+-	case TFRC_RSTATE_NO_DATA:
++	switch (fbtype) {
++	case FBACK_INITIAL:
+ 		hcrx->ccid3hcrx_x_recv = 0;
+ 		hcrx->ccid3hcrx_pinv   = ~0U;	/* see RFC 4342, 8.5 */
+-		ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
+ 		break;
+-	case TFRC_RSTATE_DATA:
++	case FBACK_PARAM_CHANGE:
++		/*
++		 * When parameters change (new loss or p > p_prev), we do not
++		 * have a reliable estimate for R_m of [RFC 3448, 6.2] and so
++		 * need to  reuse the previous value of X_recv. However, when
++		 * X_recv was 0 (due to early loss), this would kill X down to
++		 * s/t_mbi (i.e. one packet in 64 seconds).
++		 * To avoid such drastic reduction, we approximate X_recv as
++		 * the number of bytes since last feedback.
++		 * This is a safe fallback, since X is bounded above by X_calc.
++		 */
++		if (hcrx->ccid3hcrx_x_recv > 0)
++			break;
++		/* fall through */
++	case FBACK_PERIODIC:
+ 		delta = ktime_us_delta(now, hcrx->ccid3hcrx_last_feedback);
+ 		if (delta <= 0)
+ 			DCCP_BUG("delta (%ld) <= 0", (long)delta);
+@@ -769,16 +783,17 @@ static u32 ccid3_first_li(struct sock *s
+ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
++	enum   ccid3_fback_type  do_feedback = FBACK_NONE;
+ 	u32 sample, ndp = dccp_sk(sk)->dccps_options_received.dccpor_ndp,
+ 	    payload_size = skb->len - dccp_hdr(skb)->dccph_doff * 4;
+-	u8  is_data_packet = dccp_data_packet(skb), do_feedback = 0;
++	u8  is_data_packet = dccp_data_packet(skb);
  
--		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
--		   struct dccp_li_hist_entry, dccplih_node);
--		head->dccplih_interval = ccid3_hc_rx_calc_first_li(sk);
-+		head = list_entry(li_hist_list->next, struct dccp_li_hist_entry,
-+				  dccplih_node);
-+		head->dccplih_interval +				ccid3_hc_rx_calc_first_li(sk, hist_list,
-+							  last_feedback, s,
-+							  bytes_recv,
-+							  previous_x_recv);
- 	} else {
- 		struct dccp_li_hist_entry *entry;
- 		struct list_head *tail;
+ 	spin_lock(&hcrx->ccid3hcrx_hist.lock);
  
--		head = list_entry(hcrx->ccid3hcrx_li_hist.next,
--		   struct dccp_li_hist_entry, dccplih_node);
-+		head = list_entry(li_hist_list->next, struct dccp_li_hist_entry,
-+				  dccplih_node);
- 		/* FIXME win count check removed as was wrong */
- 		/* should make this check with receive history */
- 		/* and compare there as per section 10.2 of RFC4342 */
-@@ -954,9 +967,9 @@ static void ccid3_hc_rx_update_li(struct sock *sk, u64 seq_loss, u8 win_loss)
- 			return;
+ 	if (unlikely(hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA)) {
+-		/* Handle initial feedback */
+ 		if (is_data_packet) {
+-			do_feedback = 1;
++			do_feedback = FBACK_INITIAL;
++			ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
+ 			ccid3_hc_rx_update_s(hcrx, payload_size);
  		}
+ 		goto update_records;
+@@ -799,7 +814,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	    tfrc_rx_handle_loss(&hcrx->ccid3hcrx_hist,
+ 				&hcrx->ccid3hcrx_li_hist,
+ 				skb, ndp, ccid3_first_li, sk) ) {
+-		do_feedback = 1;
++		do_feedback = FBACK_PARAM_CHANGE;
+ 		goto done_receiving;
+ 	}
  
--		list_add(&entry->dccplih_node, &hcrx->ccid3hcrx_li_hist);
-+		list_add(&entry->dccplih_node, li_hist_list);
+@@ -828,11 +843,11 @@ static void ccid3_hc_rx_packet_recv(stru
+ 		 * Step (3) of [RFC 3448, 6.1]: Recompute I_mean and, if I_mean
+ 		 * has decreased (resp. p has increased), send feedback now.
+ 		 */
+-		do_feedback = 1;
++		do_feedback = FBACK_PARAM_CHANGE;
  
--		tail = hcrx->ccid3hcrx_li_hist.prev;
-+		tail = li_hist_list->prev;
- 		list_del(tail);
- 		kmem_cache_free(ccid3_li_hist->dccplih_slab, tail);
+ 	/* check if the periodic once-per-RTT feedback is due; RFC 4342, 10.3 */
+ 	if (SUB16(dccp_hdr(skb)->dccph_ccval, hcrx->ccid3hcrx_last_counter) > 3)
+-		do_feedback = 1;
++		do_feedback = FBACK_PERIODIC;
  
-@@ -992,8 +1005,15 @@ static int ccid3_hc_rx_detect_loss(struct sock *sk,
- 	while (dccp_delta_seqno(hcrx->ccid3hcrx_seqno_nonloss, seqno)
- 	   > TFRC_RECV_NUM_LATE_LOSS) {
- 		loss = 1;
--		ccid3_hc_rx_update_li(sk, hcrx->ccid3hcrx_seqno_nonloss,
--		   hcrx->ccid3hcrx_ccval_nonloss);
-+		ccid3_hc_rx_update_li(sk,
-+				      &hcrx->ccid3hcrx_li_hist,
-+				      &hcrx->ccid3hcrx_hist,
-+				      &hcrx->ccid3hcrx_tstamp_last_feedback,
-+				      hcrx->ccid3hcrx_s,
-+				      hcrx->ccid3hcrx_bytes_recv,
-+				      hcrx->ccid3hcrx_x_recv,
-+				      hcrx->ccid3hcrx_seqno_nonloss,
-+				      hcrx->ccid3hcrx_ccval_nonloss);
- 		tmp_seqno = hcrx->ccid3hcrx_seqno_nonloss;
- 		dccp_inc_seqno(&tmp_seqno);
- 		hcrx->ccid3hcrx_seqno_nonloss = tmp_seqno;
--- 
-1.5.0.6
-
+ update_records:
+ 	tfrc_rx_hist_update(&hcrx->ccid3hcrx_hist, skb, ndp);
+@@ -841,7 +856,7 @@ done_receiving:
+ 	spin_unlock(&hcrx->ccid3hcrx_hist.lock);
+ 
+ 	if (do_feedback)
+-		ccid3_hc_rx_send_feedback(sk, skb);
++		ccid3_hc_rx_send_feedback(sk, skb, do_feedback);
+ }
+ 
+ static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
