@@ -1,41 +1,40 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Jun 2007 14:10:51 +0000
-Subject: [PATCH 4/4]: Update API documentation
-Message-Id: <200706281510.51151@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Mon, 18 Jun 2007 02:06:17 +0000
+Subject: [PATCH 1/4] [KTIME]: Introduce ktime_us_delta
+Message-Id: <20070618020617.GB4226@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Update API documentation 
+This provides a reusable time difference function which returns the difference in
+microseconds, as often used in the DCCP code.
 
-This adds documentation on the use of service codes on 
-client and server.
+Commiter note: renamed ktime_delta to ktime_us_delta and put it in ktime.h.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- Documentation/networking/dccp.txt |    8 +++++---
- 1 file changed, 5 insertions(+), 3 deletions(-)
+ include/linux/ktime.h |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -38,8 +38,10 @@ Socket options
- DCCP_SOCKOPT_SERVICE sets the service. The specification mandates use of
- service codes (RFC 4340, sec. 8.1.2); if this socket option is not set,
- the socket will fall back to 0 (which means that no meaningful service code
--is present). Connecting sockets set at most one service option; for
--listening sockets, multiple service codes can be specified.
-+is present). On active sockets this is set before connect(); specifying more
-+than one code has no effect (all subsequent service codes are ignored). The
-+case is different for passive sockets, where multiple service codes (up to 32)
-+can be set before calling bind().
+diff --git a/include/linux/ktime.h b/include/linux/ktime.h
+index c762954..a208f9f 100644
+--- a/include/linux/ktime.h
++++ b/include/linux/ktime.h
+@@ -267,6 +267,11 @@ static inline s64 ktime_to_us(const ktime_t kt)
+ 	return (s64) tv.tv_sec * USEC_PER_SEC + tv.tv_usec;
+ }
  
- DCCP_SOCKOPT_GET_CUR_MPS is read-only and retrieves the current maximum packet
- size (application payload size) in bytes, see RFC 4340, section 14.
-@@ -124,5 +126,5 @@ Notes
- == 
- DCCP does not travel through NAT successfully at present on many boxes. This is
--because the checksum covers the psuedo-header as per TCP and UDP. Linux NAT
-+because the checksum covers the pseudo-header as per TCP and UDP. Linux NAT
- support for DCCP has been added.
++static inline s64 ktime_us_delta(const ktime_t later, const ktime_t earlier)
++{
++       return ktime_to_us(ktime_sub(later, earlier));
++}
++
+ /*
+  * The resolution of the clocks. The resolution value is returned in
+  * the clock_getres() system call to give application programmers an
+-- 
+1.5.0.6
+
