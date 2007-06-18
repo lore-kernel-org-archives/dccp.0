@@ -1,71 +1,45 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 16 Jun 2007 03:41:41 +0000
-Subject: [PATCH 08/10] loss_interval: Make dccp_li_hist_entry_{new,delete}
-Message-Id: <20070616034141.GN24488@ghostprotocols.net>
+Date: Mon, 18 Jun 2007 02:07:33 +0000
+Subject: [PATCH 4/4] [CCID3]: Fix a bug in the send time processing
+Message-Id: <20070618020733.GE4226@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Not used outside the loss_interval code anymore.
+ccid3_hc_tx_send_packet currently returns 0 when the time difference between
+current time and t_nom is less than 1000 microseconds.
 
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+In this case the packet is sent immediately; but, unlike other packets that can
+be emitted on first attempt, it will not have its window counter updated and
+its options set as required. This is a bug.
+
+Fix: Require the time difference to be at least 1000 microseconds. The
+algorithm then converges: time differences > 1000 microseconds trigger the
+timer in dccp_write_xmit; after timer expiry this function is tried again; when
+the time difference is less than 1000, the packet will have its options added
+and window counter updated as required.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/lib/loss_interval.c |   14 ++++++++++++++
- net/dccp/ccids/lib/loss_interval.h |   14 --------------
- 2 files changed, 14 insertions(+), 14 deletions(-)
+ net/dccp/ccids/ccid3.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
-index 8ac68c6..28eac9b 100644
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -62,6 +62,20 @@ void dccp_li_hist_delete(struct dccp_li_hist *hist)
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 94b3a1a..e91c2b9 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -363,7 +363,7 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 		 * else
+ 		 *       // send the packet in (t_nom - t_now) milliseconds.
+ 		 */
+-		if (delay - (s64)hctx->ccid3hctx_delta >= 0)
++		if (delay - (s64)hctx->ccid3hctx_delta >= 1000)
+ 			return (u32)delay / 1000L;
  
- EXPORT_SYMBOL_GPL(dccp_li_hist_delete);
- 
-+static inline struct dccp_li_hist_entry *
-+		dccp_li_hist_entry_new(struct dccp_li_hist *hist,
-+				       const gfp_t prio)
-+{
-+	return kmem_cache_alloc(hist->dccplih_slab, prio);
-+}
-+
-+static inline void dccp_li_hist_entry_delete(struct dccp_li_hist *hist,
-+					     struct dccp_li_hist_entry *entry)
-+{
-+	if (entry != NULL)
-+		kmem_cache_free(hist->dccplih_slab, entry);
-+}
-+
- void dccp_li_hist_purge(struct dccp_li_hist *hist, struct list_head *list)
- {
- 	struct dccp_li_hist_entry *entry, *next;
-diff --git a/net/dccp/ccids/lib/loss_interval.h b/net/dccp/ccids/lib/loss_interval.h
-index 653328d..8d3c9bf 100644
---- a/net/dccp/ccids/lib/loss_interval.h
-+++ b/net/dccp/ccids/lib/loss_interval.h
-@@ -33,20 +33,6 @@ struct dccp_li_hist_entry {
- 	u32		 dccplih_interval;
- };
- 
--static inline struct dccp_li_hist_entry *
--		dccp_li_hist_entry_new(struct dccp_li_hist *hist,
--				       const gfp_t prio)
--{
--	return kmem_cache_alloc(hist->dccplih_slab, prio);
--}
--
--static inline void dccp_li_hist_entry_delete(struct dccp_li_hist *hist,
--					     struct dccp_li_hist_entry *entry)
--{
--	if (entry != NULL)
--		kmem_cache_free(hist->dccplih_slab, entry);
--}
--
- extern void dccp_li_hist_purge(struct dccp_li_hist *hist,
- 			       struct list_head *list);
- 
+ 		ccid3_hc_tx_update_win_count(hctx, now);
 -- 
 1.5.0.6
 
