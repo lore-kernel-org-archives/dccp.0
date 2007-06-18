@@ -1,70 +1,133 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Jun 2007 14:10:37 +0000
-Subject: [PATCH 1/4]: Add socket option to query the current MPS
-Message-Id: <200706281510.37445@strip-the-willow>
+Date: Mon, 18 Jun 2007 14:41:04 +0000
+Subject: [PATCH 3/3]: Update copyrights of CCID3/TFRC files
+Message-Id: <200706181541.04407@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Add socket option to query the current MPS
+[DCCP]: Update copyrights of CCID3/TFRC files
 
-This enables applications to query the current value of the Maximum Packet 
-Size via a socket option, suggested as a SHOULD in (RFC 4340, p. 102). 
+ 1. A substantial amount of time has gone into improving CCID3/TFRC.  
+    Funding for this work was provided by The Unversity of Aberdeen, UK, which 
+    is hereby acknowledged as sponsor.
 
-This socket option is useful to avoid the annoying bail-out via `-EMSGSIZE'.
-In particular, as fragmentation is not currently supported (and its use is
-partly discouraged in RFC 4340).
+ 2. All copyrights of work contributed WAND research group have been updated, 
+    using a recen patch by Ian McDonald. 
 
-With this option, it is possible to size buffers accordingly, e.g.
 
-	int buflen = dccp_get_cur_mps(sockfd);
-
-	/* or */
-	if (msgsize > dccp_get_cur_mps(sockfd))
-		die("message is too large for this path");
-
+Please verify that copyright changes have indeed been updated correctly.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- Documentation/networking/dccp.txt |    3 +++
- include/linux/dccp.h              |    1 +
- net/dccp/proto.c                  |    4 ++++
- 3 files changed, 8 insertions(+)
+ net/dccp/ccids/ccid3.c              |    1 +
+ net/dccp/ccids/ccid3.h              |    3 ++-
+ net/dccp/ccids/lib/loss_interval.c  |    1 +
+ net/dccp/ccids/lib/loss_interval.h  |    1 +
+ net/dccp/ccids/lib/packet_history.c |    3 ++-
+ net/dccp/ccids/lib/packet_history.h |    5 ++---
+ net/dccp/ccids/lib/tfrc.h           |    9 +++++----
+ net/dccp/ccids/lib/tfrc_module.c    |    2 ++
+ 8 files changed, 16 insertions(+), 9 deletions(-)
 
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -41,6 +41,9 @@ the socket will fall back to 0 (which me
- is present). Connecting sockets set at most one service option; for
- listening sockets, multiple service codes can be specified.
- 
-+DCCP_SOCKOPT_GET_CUR_MPS is read-only and retrieves the current maximum packet
-+size (application payload size) in bytes, see RFC 4340, section 14.
-+
- DCCP_SOCKOPT_SEND_CSCOV and DCCP_SOCKOPT_RECV_CSCOV are used for setting the
- partial checksum coverage (RFC 4340, sec. 9.2). The default is that checksums
- always cover the entire packet and that only fully covered application data is
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -204,6 +204,7 @@ struct dccp_so_feat {
- #define DCCP_SOCKOPT_SERVICE		2
- #define DCCP_SOCKOPT_CHANGE_L		3
- #define DCCP_SOCKOPT_CHANGE_R		4
-+#define DCCP_SOCKOPT_GET_CUR_MPS	5
- #define DCCP_SOCKOPT_SEND_CSCOV		10
- #define DCCP_SOCKOPT_RECV_CSCOV		11
- #define DCCP_SOCKOPT_CCID_RX_INFO	128
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -588,6 +588,10 @@ static int do_dccp_getsockopt(struct soc
- 	case DCCP_SOCKOPT_SERVICE:
- 		return dccp_getsockopt_service(sk, len,
- 					       (__be32 __user *)optval, optlen);
-+	case DCCP_SOCKOPT_GET_CUR_MPS:
-+		val = dp->dccps_mss_cache;
-+		len = sizeof(val);
-+		break;
- 	case DCCP_SOCKOPT_SEND_CSCOV:
- 		val = dp->dccps_pcslen;
- 		len = sizeof(val);
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -3,7 +3,8 @@
+ /*
+  *  net/dccp/ccids/ccid3.h
+  *
+- *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
++ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
++ *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
+  *
+  *  An implementation of the DCCP protocol
+  *
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -1,7 +1,8 @@
+ /*
+  *  net/dccp/packet_history.c
+  *
+- *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
++ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
++ *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
+  *
+  *  An implementation of the DCCP protocol
+  *
+--- a/net/dccp/ccids/lib/tfrc.h
++++ b/net/dccp/ccids/lib/tfrc.h
+@@ -3,10 +3,11 @@
+ /*
+  *  net/dccp/ccids/lib/tfrc.h
+  *
+- *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
+- *  Copyright (c) 2005 Ian McDonald <ian.mcdonald@jandi.co.nz>
+- *  Copyright (c) 2005 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+- *  Copyright (c) 2003 Nils-Erik Mattsson, Joacim Haggmark, Magnus Erixzon
++ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
++ *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
++ *  Copyright (c) 2005-6 Ian McDonald <ian.mcdonald@jandi.co.nz>
++ *  Copyright (c) 2005   Arnaldo Carvalho de Melo <acme@conectiva.com.br>
++ *  Copyright (c) 2003   Nils-Erik Mattsson, Joacim Haggmark, Magnus Erixzon
+  *
+  *  This program is free software; you can redistribute it and/or modify
+  *  it under the terms of the GNU General Public License as published by
+--- a/net/dccp/ccids/lib/tfrc_module.c
++++ b/net/dccp/ccids/lib/tfrc_module.c
+@@ -1,5 +1,7 @@
+ /*
+  * TFRC: main module holding the pieces of the TFRC library together
++ *
++ * Copyright (c) 2007   The University of Aberdeen, Scotland, UK
+  */
+ #include <linux/module.h>
+ #include <linux/moduleparam.h>
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -1,12 +1,11 @@
+ #ifndef _DCCP_PKT_HIST_
+ #define _DCCP_PKT_HIST_
+ /*
+- *  net/dccp/packet_history.h
++ *  Packet RX/TX history data structures and routines for TFRC-based protocols.
+  *
++ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
+  *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
+  *
+- *  An implementation of the DCCP protocol
+- *
+  *  This code has been developed by the University of Waikato WAND
+  *  research group. For further information please see http://www.wand.net.nz/
+  *  or e-mail Ian McDonald - ian.mcdonald@jandi.co.nz
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -1,6 +1,7 @@
+ /*
+  *  net/dccp/ccids/ccid3.c
+  *
++ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
+  *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
+  *  Copyright (c) 2005-7 Ian McDonald <ian.mcdonald@jandi.co.nz>
+  *
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -1,6 +1,7 @@
+ /*
+  *  net/dccp/ccids/lib/loss_interval.c
+  *
++ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
+  *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
+  *  Copyright (c) 2005-7 Ian McDonald <ian.mcdonald@jandi.co.nz>
+  *  Copyright (c) 2005 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+--- a/net/dccp/ccids/lib/loss_interval.h
++++ b/net/dccp/ccids/lib/loss_interval.h
+@@ -3,6 +3,7 @@
+ /*
+  *  net/dccp/ccids/lib/loss_interval.h
+  *
++ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
+  *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
+  *  Copyright (c) 2005-7 Ian McDonald <ian.mcdonald@jandi.co.nz>
+  *  Copyright (c) 2005 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
