@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sun, 24 Jun 2007 04:37:13 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 25 Jun 2007 08:40:22 +0000
 Subject: Re: [Announce]: How to access Experimental Test Tree
-Message-Id: <5640c7e00706232137s2416611cmc817c5b9cc298d65@mail.gmail.com>
+Message-Id: <200706250940.22801@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200706221523.29662@strip-the-willow>
 In-Reply-To: <200706221523.29662@strip-the-willow>
@@ -10,17 +10,27 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/24/07, Ian McDonald <ian.mcdonald@jandi.co.nz> wrote:
-> Your tree looks very good when compiled as a whole. It passes all my
-> tests on CCID3 - the first time I've had this occur in ANY tree. Well
-> done! I'm going to post the results on the OSDL wiki soon - in
-> particular it passed tests at full speed over a routed link.
->
-Results here now:
-http://linux-net.osdl.org/index.php/DCCP_Testing#Regression_testing
+|  Thanks for these instructions. Very helpful. Unfortunately the
+|  alternative way didn't work for me but the others did just fine.
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+Thanks very much for the testing (see other email), this is much appreciated.
+
+I am not entirely sure about the alternative way either, but it worked once with
+git version 1.5.2.2.238. For simplicity, the two-step approach (fork and then pull)
+seems best and works reasonably fast.
+
+
+|  > Even better: only pull the relevant `dccp' subtree:
+|  > ---------------------------------------------------
+|  > 1. The experimental tree is updated every work day from David Miller's tree
+|  >    it is a good idea to take an up-to-date copy first:
+|  >
+|  >       git://git.kernel.org/pub/scm/linux/kernel/git/davem/net-2.6
+|  >
+|  > 2. chdir into your up-to-date git repository
+|  >
+|  > 3. create a subtree `dccp' using the commands
+|  >       git checkout -b dccp master
+|  >
+|  > 4. pull the experimental DCCP tree into this branch using
+|  >       git pull git://eden-feed.erg.abdn.ac.uk/dccp_exp.git dccp
