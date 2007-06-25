@@ -1,27 +1,82 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 16 Jun 2007 14:41:06 +0000
-Subject: Re: [PATCH 1/6]: Avoid accumulation of large send credit
-Message-Id: <200706161541.06386@strip-the-willow>
+Date: Mon, 25 Jun 2007 09:36:54 +0000
+Subject: Re: Regression Tests
+Message-Id: <200706251036.54465@strip-the-willow>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="Boundary-00=_2y4fGN3knUpiKd/"
 List-Id: <dccp.vger.kernel.org>
-References: <200706091957.56966@strip-the-willow>
-In-Reply-To: <200706091957.56966@strip-the-willow>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  Agree with Gerrit's comments in patchset description that there is
-|  still discussion around this. Still doing something is better than
-|  doing nothing.
-Also agree with what you are saying. This is really why I would like
-to get the experimental test tree for DCCP/CCID3 started soon.
+--Boundary-00=_2y4fGN3knUpiKd/
+Content-Type: text/plain;
+  charset="iso-8859-1"
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline
 
-With the mechanism already in place, it is a trivial change to use
-a different value. 
+Ian -
 
-Kohler/Floyd currently suggest to use 1 RTT, which derives from the theory of TFRC. 
+|  Results here now:
+|  http://linux-net.osdl.org/index.php/DCCP_Testing#Regression_testing
 
-The value t_ipi derives from the way the packets are currently scheduled.
+many thanks indeed for working out these test cases and reference points.
+Testing is really very much needed at this stage and the input is helpful.
 
-Neither value may be the last piece of wisdom - we need people testing
-this and report their experience + suggestions.
+The test setup is very useful and I am strongly in favour of using
+ 
+     http://linux-net.osdl.org/index.php/DCCP_Testing#Regression_testing
+
+as a kind of benchmark for all further development on the test tree - to see
+whether results deteriorate.
+
+If you have links to scripts you use that would be great. 
+
+
+
+I am getting confused by Perry's throughput calculator. Attached is a
+simple bc(1) script which can be made executable and takes s, R, p.
+
+I get different results from the ones on the web page (using 1424 bytes):
+
+  * for the 150ms / 10% case, I get Xcalc = 132.44  Kbits/sec and 
+  * for the  40ms / 1%  case, I get Xcalc =   3.27  Mbits/sec
+
+But this may likely be due to using slightly different `s' and rounding errors;
+for live testing it is reasonably close.
+
+--Boundary-00=_2y4fGN3knUpiKd/
+Content-Type: text/plain;
+  charset="iso-8859-1";
+  name="throughput_calculator.bc"
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment;
+	filename="throughput_calculator.bc"
+
+#!/usr/bin/bc -l
+#
+# Compute the allowed sending rate X_calc using the formula of [RFC 3448, 3.1].
+#
+# This script can be run standalone, or using a pipe.
+# For example, to compute  for 
+#   *   s=1424  bytes, 
+#   * RTT= 150  milliseconds, and 
+#   *  p =  10  %,
+# use
+#	 echo 1424 150 10 | ./throughput_calculator.bc
+#
+# The result is about 132 Kbits/sec
+
+scale = 3
+
+define f(p) { return sqrt(2*p/3) + 12 * sqrt(3*p/8) * (32 * p^3 + p) }
+define xcalc(s,r,p) { return s*8 * 10^3/(r * f(p/100.0)) }
+
+print "TFRC throughput calculator\n\n"
+
+print "s   in bytes: "; s = read()
+print "RTT in msecs: "; r = read()
+print "p   in %    : "; p = read()
+
+print "\nXcalc = ", xcalc(s,r,p) / 1024.0, " Kbits/sec\n"
+quit
+
+--Boundary-00=_2y4fGN3knUpiKd/--
