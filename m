@@ -1,189 +1,77 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 27 Jun 2007 04:49:21 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 27 Jun 2007 09:06:45 +0000
 Subject: Re: Regression Tests
-Message-Id: <5640c7e00706262149r2a35daaekce21741a155f6c32@mail.gmail.com>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="----=_Part_32252_31705636.1182919761460"
+Message-Id: <200706271006.45899@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200706251036.54465@strip-the-willow>
 In-Reply-To: <200706251036.54465@strip-the-willow>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-------=_Part_32252_31705636.1182919761460
-Content-Type: text/plain; charset=ISO-8859-1; format=flowed
-Content-Transfer-Encoding: 7bit
-Content-Disposition: inline
+Sorry this was all due to my not reading the page carefully enough. 
 
-Gerrit,
+You have done an excellent job of setting all this information up (and selecting meaningful 
+test cases in the first place), so that it should now be much easier to assess CCID3 performance. 
 
-It was my fault for using the TFRC throughput page and not changing
-delayed acks from 2 to 1 which is used in RFC3448 (and our code) as
-the default. I've gone and corrected my figures. I'm now within 1% of
-your figures - I think this is rounding error from bc but not 100%
-sure. I've attached the spreadsheet I used for verification which
-matched Perry's page.
+With the spreadsheet I get the same results also; for quick tests I find Perry's calculator
+too powerful (too many knobs), using spreadsheet or calculator is better.
 
-The scripts are all on that page at
-http://linux-net.osdl.org/index.php/DCCP_Testing#netem and loading
-CCID3 at http://linux-net.osdl.org/index.php/DCCP#Choosing_and_initialising_your_CCID
+Thanks,
+Gerrit
 
-Maybe I have not worded it well? If not please feel free to improve.
-
-Regards,
-
-Ian
-
-On 6/25/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Ian -
->
-> |  Results here now:
-> |  http://linux-net.osdl.org/index.php/DCCP_Testing#Regression_testing
->
-> many thanks indeed for working out these test cases and reference points.
-> Testing is really very much needed at this stage and the input is helpful.
->
-> The test setup is very useful and I am strongly in favour of using
->
->      http://linux-net.osdl.org/index.php/DCCP_Testing#Regression_testing
->
-> as a kind of benchmark for all further development on the test tree - to see
-> whether results deteriorate.
->
-> If you have links to scripts you use that would be great.
->
->
->
-> I am getting confused by Perry's throughput calculator. Attached is a
-> simple bc(1) script which can be made executable and takes s, R, p.
->
-> I get different results from the ones on the web page (using 1424 bytes):
->
->   * for the 150ms / 10% case, I get Xcalc = 132.44  Kbits/sec and
->   * for the  40ms / 1%  case, I get Xcalc =   3.27  Mbits/sec
->
-> But this may likely be due to using slightly different `s' and rounding errors;
-> for live testing it is reasonably close.
->
->
-
-
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
-
-------=_Part_32252_31705636.1182919761460
-Content-Type: application/vnd.sun.xml.calc; name=xcalc.sxc
-Content-Transfer-Encoding: base64
-X-Attachment-Id: f_f3fbszfr
-Content-Disposition: attachment; filename="xcalc.sxc"
-
-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
-+oWN/neALR3w9IsibpNVH30jw8a4/hWjUI2a/zjZijTgOIZyCGAp5i06lcbJWcHllRGRp5rEnPwJ
-oslMDlkDp/Z1fJugJ18UdclYf9Qh4TjQPSARVcScCSSFDpJptbLn3j5YtzOimEdUCLioBQmc9uyS
-yes6heEcqroZW5ZOhgeWHYf+RGMnhUEOAHJHrOvk2EBg3cpuByebw8Yw7h1P52fn6p5XKsRj0CY4
-krqumJs1XfmaCYhOOvPmF6edoaEPT8SY+I8xwmwzALANxt07l8NHNf2uj0pq14yH8h0SxCenMym2
-cpaQ0HrhqS9llKFQf4IAVt75pF6Mgk/yWqVh2VNfBJ78rmhpWMCFFeOa/Drcbz1hvjWaDqetO9h7
-jEIbdjqSEUpPY7NAYydnv2XpM/SX8o5YZOZvvsFYv8D4l5eXS7crNJKskwmdapHHWF6TJIfRBzp+
-hJK89bbKRGP3OxmKeZCo9ezjT8r9GrI9CKWrFuejENw9Gg8x+xFnjI8SO90j1lxIOJbXkcTzmVxb
-r7SdICJpmujn13s8tHZqiVT9dHaH+QUPjjIwIFVGjpqwoVQcT/7Yvjdzp+fyA5pzA0Fa+UdWiRag
-T2aLk9ni9KxC3Jc6bXD/Wz5ZbtNQvYH783nTUMv+pbxz+wvd7f9M1v8LUEsHCA0IeM45BQAAOBYA
-AFBLAwQUAAAAAACWJNs2IgseQ7cDAAC3AwAACAAAAG1ldGEueG1sPD94bWwgdmVyc2lvbj0iMS4w
-IiBlbmNvZGluZz0iVVRGLTgiPz4KPCFET0NUWVBFIG9mZmljZTpkb2N1bWVudC1tZXRhIFBVQkxJ
-QyAiLS8vT3Blbk9mZmljZS5vcmcvL0RURCBPZmZpY2VEb2N1bWVudCAxLjAvL0VOIiAib2ZmaWNl
-LmR0ZCI+PG9mZmljZTpkb2N1bWVudC1tZXRhIHhtbG5zOm9mZmljZT0iaHR0cDovL29wZW5vZmZp
-Y2Uub3JnLzIwMDAvb2ZmaWNlIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94
-bGluayIgeG1sbnM6ZGM9Imh0dHA6Ly9wdXJsLm9yZy9kYy9lbGVtZW50cy8xLjEvIiB4bWxuczpt
-ZXRhPSJodHRwOi8vb3Blbm9mZmljZS5vcmcvMjAwMC9tZXRhIiBvZmZpY2U6dmVyc2lvbj0iMS4w
-Ij48b2ZmaWNlOm1ldGE+PG1ldGE6Z2VuZXJhdG9yPk9wZW5PZmZpY2Uub3JnIDEuMS4zIChMaW51
-eCk8L21ldGE6Z2VuZXJhdG9yPjwhLS02NDUoQnVpbGQ6ODgwOCktLT48bWV0YTpjcmVhdGlvbi1k
-YXRlPjIwMDUtMDQtMjFUMTU6MjY6MjM8L21ldGE6Y3JlYXRpb24tZGF0ZT48ZGM6ZGF0ZT4yMDA3
-LTA2LTI3VDE2OjM2OjQ1PC9kYzpkYXRlPjxkYzpsYW5ndWFnZT5lbi1VUzwvZGM6bGFuZ3VhZ2U+
-PG1ldGE6ZWRpdGluZy1jeWNsZXM+MjI8L21ldGE6ZWRpdGluZy1jeWNsZXM+PG1ldGE6ZWRpdGlu
-Zy1kdXJhdGlvbj5QVDdIMTdNMTlTPC9tZXRhOmVkaXRpbmctZHVyYXRpb24+PG1ldGE6dXNlci1k
-ZWZpbmVkIG1ldGE6bmFtZT0iSW5mbyAxIi8+PG1ldGE6dXNlci1kZWZpbmVkIG1ldGE6bmFtZT0i
-SW5mbyAyIi8+PG1ldGE6dXNlci1kZWZpbmVkIG1ldGE6bmFtZT0iSW5mbyAzIi8+PG1ldGE6dXNl
-ci1kZWZpbmVkIG1ldGE6bmFtZT0iSW5mbyA0Ii8+PG1ldGE6ZG9jdW1lbnQtc3RhdGlzdGljIG1l
-dGE6dGFibGUtY291bnQ9IjMiIG1ldGE6Y2VsbC1jb3VudD0iNTYiLz48L29mZmljZTptZXRhPjwv
-b2ZmaWNlOmRvY3VtZW50LW1ldGE+UEsDBBQACAAIAJYk2zYAAAAAAAAAAAAAAAAMAAAAc2V0dGlu
-Z3MueG1s7Zlfd6o4EMDf91O4vO6xIO7tXnta70Gs1d5WLf7FtwCpZg0JmwTRfvoNot2WamsRz9nd
-U5+ETH4zSSYzk3D5Y+njwgIyjii5UkpnmlKAxKUeItMrZdBvFL8rP6q/XP5a75h9u3tdoI+PyIUX
-HnVDHxJR5FAIKcsL3UHtrmUWlKKqdgJIOmu5M8qmqlrv1wvJc33TrSAVqep1WykoCfDME55SvdxL
-l1YSfpE0XykzIYILVaVSD/1Hj65pmpo8K5sOS4zI/Fk+iqKzqLyWLVUqFXXduhV1KXlE03fYJTUR
-UbZz8GrWnm3fmly9TMQ34CIS0I/HU9i8JsCXI1kgGD2PUtnV57X8EHHkYGgwCPo0ULaNYhXIRkSE
-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
-------=_Part_32252_31705636.1182919761460--
+Quoting Ian McDonald:
+|  Gerrit,
+|  
+|  It was my fault for using the TFRC throughput page and not changing
+|  delayed acks from 2 to 1 which is used in RFC3448 (and our code) as
+|  the default. I've gone and corrected my figures. I'm now within 1% of
+|  your figures - I think this is rounding error from bc but not 100%
+|  sure. I've attached the spreadsheet I used for verification which
+|  matched Perry's page.
+|  
+|  The scripts are all on that page at
+|  http://linux-net.osdl.org/index.php/DCCP_Testing#netem and loading
+|  CCID3 at http://linux-net.osdl.org/index.php/DCCP#Choosing_and_initialising_your_CCID
+|  
+|  Maybe I have not worded it well? If not please feel free to improve.
+|  
+|  Regards,
+|  
+|  Ian
+|  
+|  On 6/25/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+|  > Ian -
+|  >
+|  > |  Results here now:
+|  > |  http://linux-net.osdl.org/index.php/DCCP_Testing#Regression_testing
+|  >
+|  > many thanks indeed for working out these test cases and reference points.
+|  > Testing is really very much needed at this stage and the input is helpful.
+|  >
+|  > The test setup is very useful and I am strongly in favour of using
+|  >
+|  >      http://linux-net.osdl.org/index.php/DCCP_Testing#Regression_testing
+|  >
+|  > as a kind of benchmark for all further development on the test tree - to see
+|  > whether results deteriorate.
+|  >
+|  > If you have links to scripts you use that would be great.
+|  >
+|  >
+|  >
+|  > I am getting confused by Perry's throughput calculator. Attached is a
+|  > simple bc(1) script which can be made executable and takes s, R, p.
+|  >
+|  > I get different results from the ones on the web page (using 1424 bytes):
+|  >
+|  >   * for the 150ms / 10% case, I get Xcalc = 132.44  Kbits/sec and
+|  >   * for the  40ms / 1%  case, I get Xcalc =   3.27  Mbits/sec
+|  >
+|  > But this may likely be due to using slightly different `s' and rounding errors;
+|  > for live testing it is reasonably close.
+|  >
+|  >
+|  
+|  
