@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 28 Jun 2007 00:30:24 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 28 Jun 2007 13:51:42 +0000
 Subject: Re: [PATCH 8/9]: Fix and simplify header includes
-Message-Id: <5640c7e00706271730g1f20ddf8u93d3c7fe334407ba@mail.gmail.com>
+Message-Id: <200706281451.42925@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200706171354.38717@strip-the-willow>
 In-Reply-To: <200706171354.38717@strip-the-willow>
@@ -10,29 +10,26 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/18/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [TFRC]: Fix and simplify header includes
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> --- a/net/dccp/ccids/lib/tfrc.h
-> +++ b/net/dccp/ccids/lib/tfrc.h
-> @@ -16,6 +16,11 @@
->  #include <linux/types.h>
->  #include <asm/div64.h>
->  #include "../../dccp.h"
-> +/* internal includes that this module exports: */
-> +struct tfrc_rx_hist;
-> +struct tfrc_loss_hist;
-> +#include "loss_interval.h"
-> +#include "packet_history.h"
->
+Ian McDonald wrote:
+|  > +/* internal includes that this module exports: */
+|  > +struct tfrc_rx_hist;
+|  > +struct tfrc_loss_hist;
+|  > +#include "loss_interval.h"
+|  > +#include "packet_history.h"
+|  >
+|  
+|  Variable definitions in the middle of an include block? Is that
+|  necessary? I just haven't seen that done before and it looks a little
+|  odd...
+|  
+You are right, that is ugly, which is why I have changed it - see subsequent patch.
+The forward declarations of the two structures are needed since both sub-units --
+receiver history and (receiver) loss detection work tightly together
 
-Variable definitions in the middle of an include block? Is that
-necessary? I just haven't seen that done before and it looks a little
-odd...
+ * the RX history does loss detection and needs to know where to pass on a newly 
+   identified loss. This is done by tfrc_rx_handle_loss() which talks to struct tfrc_loss_hist.
 
-Ian
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+ * the loss interval database needs to access information stored in the receiver history
+   record when creating a new loss interval, to identify whether a loss event starts a new
+   loss interval, and for several internal uses. This is done in tfrc_lh_interval_add(),
+   which talks to struct tfrc_loss_hist.
