@@ -1,50 +1,45 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 12 Jul 2007 14:27:02 +0000
-Subject: [PATCH 10/10]: Collapse repeated `len' statements into one
-Message-Id: <200707121527.02204@strip-the-willow>
+Date: Sun, 08 Jul 2007 11:40:54 +0000
+Subject: [PATCH 4/8]: Remove redundant case block
+Message-Id: <200707081240.54570@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Collapse repeated `len' statements into one
+[CCID2]: Remove redundant case block
 
-This replaces 4 individual assignments for `len' with a single
-one, placed where the control flow of those 4 leads to.
+skb's passed to ccid2_hc_tx_send_packet() are headerless, the 
+packet type is decided later, in dccp_write_xmit(). Therefore
+the first test of the switch/case block is always true, the
+others are never reached.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/proto.c |    5 +----
- 1 file changed, 1 insertion(+), 4 deletions(-)
+ net/dccp/ccids/ccid2.c |   14 +-------------
+ 1 file changed, 1 insertion(+), 13 deletions(-)
 
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -603,19 +603,15 @@ static int do_dccp_getsockopt(struct soc
- 					       (__be32 __user *)optval, optlen);
- 	case DCCP_SOCKOPT_GET_CUR_MPS:
- 		val = dp->dccps_mss_cache;
--		len = sizeof(val);
- 		break;
- 	case DCCP_SOCKOPT_SERVER_TIMEWAIT:
- 		val = dp->dccps_server_timewait;
--		len = sizeof(val);
- 		break;
- 	case DCCP_SOCKOPT_SEND_CSCOV:
- 		val = dp->dccps_pcslen;
--		len = sizeof(val);
- 		break;
- 	case DCCP_SOCKOPT_RECV_CSCOV:
- 		val = dp->dccps_pcrlen;
--		len = sizeof(val);
- 		break;
- 	case 128 ... 191:
- 		return ccid_hc_rx_getsockopt(dp->dccps_hc_rx_ccid, sk, optname,
-@@ -627,6 +623,7 @@ static int do_dccp_getsockopt(struct soc
- 		return -ENOPROTOOPT;
- 	}
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -126,19 +126,7 @@ static int ccid2_hc_tx_alloc_seq(struct 
  
-+	len = sizeof(val);
- 	if (put_user(len, optlen) || copy_to_user(optval, &val, len))
- 		return -EFAULT;
+ static int ccid2_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ {
+-	struct ccid2_hc_tx_sock *hctx;
+-
+-	switch (DCCP_SKB_CB(skb)->dccpd_type) {
+-	case 0: /* XXX data packets from userland come through like this */
+-	case DCCP_PKT_DATA:
+-	case DCCP_PKT_DATAACK:
+-		break;
+-	/* No congestion control on other packets */
+-	default:
+-		return 0;
+-	}
+-
+-	hctx = ccid2_hc_tx_sk(sk);
++	struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
  
+ 	ccid2_pr_debug("pipe=%d cwnd=%d\n", hctx->ccid2hctx_pipe,
+ 		       hctx->ccid2hctx_cwnd);
