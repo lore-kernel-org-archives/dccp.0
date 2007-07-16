@@ -1,7 +1,7 @@
-From: "Arjuna Sathiaseelan" <arjuna@erg.abdn.ac.uk>
-Date: Mon, 16 Jul 2007 07:51:27 +0000
-Subject: RE: [dccp] TFRC Faster Restart implementation for Linux DCCP
-Message-Id: <200707160751.l6G7pZeA017913@erg.abdn.ac.uk>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 16 Jul 2007 12:04:08 +0000
+Subject: Re: TFRC Faster Restart implementation for Linux DCCP
+Message-Id: <200707161304.09079@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00707152131k689ff53dn105ed1c0f3b90717@mail.gmail.com>
 In-Reply-To: <5640c7e00707152131k689ff53dn105ed1c0f3b90717@mail.gmail.com>
@@ -10,38 +10,32 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+You didn't write whether you intend this as Linux mainline work.
 
-From the simulation point of view, we have been constantly revising the code
-to accommodate the latest revisions of the draft. We at UoA havent
-implemented the FR algorithm yet.
+I am not aware of anyone else working on this so far. However, it reopens a big can
+of worms for the CCID3 code in the kernel: much in Faster Restart depends on the 
+rfc3448bis changes to computing the sending rate and determining idle/application-limited
+times. 
+The algorithm keeps changing in each new revision of the rfc3448bis draft, which probably
+means that when you've just finished your work, you can start from scratch again.
 
-Arjuna
+Thus my suggestion is - if you want to do this community-wise - to do this as part/sub-branch
+of the testing tree. There is still a lot of space for further branches, and it is not clear
+when all this will stabilise.
 
+Thoughts?
 
------Original Message-----
-From: Ian McDonald [mailto:ian.mcdonald@jandi.co.nz] 
-Sent: 16 July 2007 05:32
-To: Arjuna Sathiaseelan; Eddie Kohler
-Cc: Gorry Fairhurst; Gerrit Renker; DCCP mailing list; Richard Nelson; DCCP
-Mailing List
-Subject: [dccp] TFRC Faster Restart implementation for Linux DCCP
-
-Folks,
-
-At the suggestion of my PhD supervisor, I am considering implementing
-TFRC faster restart for the Linux version of DCCP.
-
-From my reading of the correspondence it would seem to me that the
-testing was done in ns2 and not in the Linux kernel. If this is not
-correct, or you know of any implementations, can you tell me so I
-don't reinvent the wheel!
-
-Thanks,
-
-Ian
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
-
-
+Quoting Ian McDonald:
+|  Folks,
+|  
+|  At the suggestion of my PhD supervisor, I am considering implementing
+|  TFRC faster restart for the Linux version of DCCP.
+|  
+|  From my reading of the correspondence it would seem to me that the
+|  testing was done in ns2 and not in the Linux kernel. If this is not
+|  correct, or you know of any implementations, can you tell me so I
+|  don't reinvent the wheel!
+|  
+|  Thanks,
+|  
+|  Ian
