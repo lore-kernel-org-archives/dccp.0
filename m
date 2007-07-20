@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 20 Jul 2007 12:35:02 +0000
+Date: Fri, 20 Jul 2007 12:42:47 +0000
 Subject: Re: iperf
-Message-Id: <200707201335.02745@strip-the-willow>
+Message-Id: <200707201342.47663@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570707171213v6eb89545y5970e471345cc3f8@mail.gmail.com>
 In-Reply-To: <5bc4c4570707171213v6eb89545y5970e471345cc3f8@mail.gmail.com>
@@ -10,25 +10,23 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  OK. I've hacked my iperf version around a bit to get closer to Gerrit's.
-|  
-|  What I've done:
-|  - ported more of his code over
-|  -- renaming/shifting code
-|  -- fix service code handling to allow network byte order and correct name
-|  -- merged using -b option for DCCP (NB gives an error at end but seems
-|  to be working OK)
-This is an error - you need to support the -b option on the server as well. The
-reason is that iperf, like ttcp, uses a kind of handshake to terminate datagram 
-test runs. You didn't describe the error - was it something like `did not receive the
-last ack after 10 tries'? If yes then the code needs to support -b on the server
-as well. The bandwidth measurements are otherwise not accurate.
+Thank you for testing this - the patch had been all in one and apparently 
+I have made a bad job of splitting it up into separate patches. 
 
+The error is due to a missing header include (I ported UDP-Lite in 2.6.20
+but system headers are not that recent), will fix that and upload a clean
+patch set.
+|  Applying only patch #1 doesn't work... patch #2 correct the error.
+|  PerfSocket.cpp: In function 'void MakeSocket(thread_Settings*)':
+|  PerfSocket.cpp:89: error: 'IPPROTO_UDPLITE' was not declared in this scope
+|  make[2]: *** [PerfSocket.o] Error 1
+|  make[2]: Leaving directory `/root/iperf-2.0.2/src'
+|  make[1]: *** [all-recursive] Error 1
+|  make[1]: Leaving directory `/root/iperf-2.0.2'
+|  make: *** [all] Error 2
 |  
-|  Our code still differs a bit e.g. I don't support UDP Lite yet.
-Are these the only differences? If yes then I am all for combining one patch 
-and uploading it to the description of regression testing.
+|  It could be good to not have 2 iperf dccp patched version, one Ian
+|  patched, one Gerrit patched ?
+Agree, will look at Ian's patches when I have some time and confer with Ian.
 
-Over the time I have using -b (even if it does not solve the present problem
-with bandwidth) a very useful diagnosis tool, iperf at full speed generates
-a lot of noise.
+Thanks again.
