@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 20 Jul 2007 12:55:41 +0000
+Date: Fri, 20 Jul 2007 17:53:28 +0000
 Subject: Re: iperf
-Message-Id: <200707201355.41549@strip-the-willow>
+Message-Id: <200707201853.28744@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570707171213v6eb89545y5970e471345cc3f8@mail.gmail.com>
 In-Reply-To: <5bc4c4570707171213v6eb89545y5970e471345cc3f8@mail.gmail.com>
@@ -10,25 +10,43 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Thanks everyone for sending test reports.
+Ian,
 
-|  Question - what do you get on an unpatched 2.6.20 kernel? I think this
-|  is my patches making it work well but want to verify that it's not
-|  just something breaking between 2.6.20 and 2.6.22.
-Fully agree here: I am not sure that these problems are necessarily due to a DCCP 
-problem and actually would like to put the following question to the list - 
-   - to what extent should the DCCP test tree track 
-     the latest developments on the netdev tree?
+I also cleaned up my patch set to
+ * completely remove UDP-Lite from all other patches
+ * shift UDP-Lite to the end (as fourth patch)
+ * I have shamelessly stolen your `continuous' patch and integrated as patch #3
+ * result (patches 1..3) compiles without error or problems on a brandnew 
+   installation of linux (with unmodified kernel headers)
+ * I haven't had time to look through your code, but I think we should put
+   out one combined client for testing purposes.
 
-My understanding that it is a good thing to track netdev, but it will make debugging
-a bit more laborious. It is an acknowledged issue that there are still many bugs 
-outstanding in 2.6.21/22, and I have been experiencing many crashes during the last
-month which vanished mysteriously a couple of days/revisions later.
+I am not fussy who's it is we are using - the code is after all yours. I just
+polished it a bit up and made sure that the -b switch also works for DCCP.
 
-You can help us and hopefully other developers by supplying as much information as
-you can get:
- * use constant bitrate and full byte-blast of iperf
- * use dccp_probe (as suggested by Ian, CBR produces much less noise in the output)
- * use different hardware (Wifi, 10mpbs, 100mbps, bluetooth, other arches)
+And I have found it quite a useful switch for testing, indeed.
 
-I will also try and replicate this. Please provide as detailed information as you can.
+Results are on http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/iperf/patches/
+       (src:   http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/iperf/zip/ )
+Gerrit
+
+Quoting Ian McDonald:
+|  OK. I've hacked my iperf version around a bit to get closer to Gerrit's.
+|  
+|  What I've done:
+|  - ported more of his code over
+|  -- renaming/shifting code
+|  -- fix service code handling to allow network byte order and correct name
+|  -- merged using -b option for DCCP (NB gives an error at end but seems
+|  to be working OK)
+|  
+|  Our code still differs a bit e.g. I don't support UDP Lite yet.
+|  
+|  So if you want unlimited run time and -b together then you want my
+|  tree, otherwise Gerrit's is probably better. I'm sure Gerrit can port
+|  my unlimited run time easily to his tree if he wants.
+|  
+|  My patches are at:
+|  http://wand.net.nz/~iam4/iperf/
+|  
+|  Ian
