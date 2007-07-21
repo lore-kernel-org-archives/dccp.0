@@ -1,74 +1,35 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 12 Jul 2007 14:26:42 +0000
-Subject: [PATCH 5/10]: Perform SHUT_RD and SHUT_WR on receiving close
-Message-Id: <200707121526.42144@strip-the-willow>
+Date: Sat, 21 Jul 2007 14:58:48 +0000
+Subject: [PATCH 0/1][RFC]: Drop `accumulation of large send credits' patch
+Message-Id: <200707211558.48679@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Perform SHUT_RD and SHUT_WR on receiving close
+While bisecting I found that the DCCP packet scheduler now reacts much
+differently from the one 2.6.20 (which was up to three times too fast).
 
-The first change is to close the write-end in addition to the read-end when
-a fin-like segment (Close or CloseReq) is received by DCCP. This accounts
-for the fact that DCCP, in contrast to TCP, does not have a half-close. I
-checked the specification - when a fin-like segment has been sent there is
-no guarantee at all that any further data will be processed.
+The new experimental data, taken on a 2.6.22 tree with the DCCP test tree patches,
+shows that 
 
-Thus this patch performs SHUT_WR in addition to the SHUT_RD when a fin-like
-segment is encountered.
+ (1) the packet scheduler now reacts accurately with regard to the value of t_ipi;
+ (2) the send-credits patch is no longer necessary and in fact degrades performance.
 
-The second change is minor; I noted that code appears twice in different
-places and think it makes sense to put this into a self-contained function.
+I would therefore like to drop this patch from the test tree.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/input.c |   22 +++++++++++++++-------
- 1 file changed, 15 insertions(+), 7 deletions(-)
+The results are here:
+ http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/packet_scheduling/2.6.22-scheduler/	
 
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -19,16 +19,27 @@
- #include "ccid.h"
- #include "dccp.h"
- 
--static void dccp_fin(struct sock *sk, struct sk_buff *skb)
-+static void dccp_enqueue_skb(struct sock *sk, struct sk_buff *skb)
- {
--	sk->sk_shutdown |= RCV_SHUTDOWN;
--	sock_set_flag(sk, SOCK_DONE);
- 	__skb_pull(skb, dccp_hdr(skb)->dccph_doff * 4);
- 	__skb_queue_tail(&sk->sk_receive_queue, skb);
- 	skb_set_owner_r(skb, sk);
- 	sk->sk_data_ready(sk, 0);
- }
- 
-+static void dccp_fin(struct sock *sk, struct sk_buff *skb)
-+{
-+	/*
-+	 * On receiving Close/CloseReq, both RD/WR shutdown are performed.
-+	 * RFC 4340, 8.3 says that we MAY send further Data/DataAcks after
-+	 * receiving the closing segment, but there is no guarantee that such
-+	 * data will be processed at all.
-+	 */
-+	sk->sk_shutdown = SHUTDOWN_MASK;
-+	sock_set_flag(sk, SOCK_DONE);
-+	dccp_enqueue_skb(sk, skb);
-+}
-+
- static void dccp_rcv_close(struct sock *sk, struct sk_buff *skb)
- {
- 	if (sk->sk_state = DCCP_CLOSEREQ) {
-@@ -187,10 +198,7 @@ static int __dccp_rcv_established(struct
- 		 * FIXME: check if sk_receive_queue is full, schedule DATA_DROPPED
- 		 * option if it is.
- 		 */
--		__skb_pull(skb, dh->dccph_doff * 4);
--		__skb_queue_tail(&sk->sk_receive_queue, skb);
--		skb_set_owner_r(skb, sk);
--		sk->sk_data_ready(sk, 0);
-+		dccp_enqueue_skb(sk, skb);
- 		return 0;
- 	case DCCP_PKT_ACK:
- 		goto discard;
+
+The most drastic example was a laptop with HZ%0
+ * 2.6.22 netdev as of 20/7:   84.6  Mbits/sec
+ * DCCP test tree as of 20/7:   4.33 Mbits/sec !!!
+ * DCCP test tree patched:     92.8  Mbits/sec
+
+
+I would be grateful for any test results and continue to look for further causes
+of the bad performance with the TBF bandwidth restriction.
+
+Any input, suggestions, test reports are welcome.
