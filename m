@@ -1,32 +1,36 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sun, 08 Jul 2007 11:40:14 +0000
-Subject: [PATCH 0/8]: CCID2 fixes + misc
-Message-Id: <200707081240.14276@strip-the-willow>
+Date: Thu, 26 Jul 2007 12:56:12 +0000
+Subject: [PATCH 0/5]: CCID3 update and minor DCCP tidy-ups
+Message-Id: <200707261356.12419@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-A few things that I found while looking at the CCID2 code.
+These are the last 4 patches from my patch set, plus an update
+with regard to the CCID3 code. I compile-tested these and 
+(#1..#4 have been in my private tree for about 3 months), and 
+performed a test run.
 
-Patch #1: Is a revised version of `allocation in atomic context' fix
-          first submitted on http://www.mail-archive.com/dccp@vger.kernel.org/msg01941.html
-          I found that there is an implicit assumption on the length of the pre-allocated
-          list, which means that the allocation is always the same, which leads to further
-          simplification.
+Patch #1: Gathers all scattered sysctl variables into the single
+          file sysctl.c - they are quite spread out over the code
+          and if they are declared `extern' in the header file 
+          anyway, using a single file eases to find `where is what'.
 
-Patch #2: Removes an ugly BUG_ON, spotted by Arnaldo, which directly hangs on patch #1.
+Patch #2: For same reasons, minisock initialisation code is moved from
+          options.c to minisock.c - where it is more naturally expected.
+ 
+Patch #3: One-liner -- wrong printk format.
 
-Patch #3: Removes another BUG_ON, which was found to be redundant.
+Patch #4: Makes Ackvecs non-optional (as in fact they are not really optional).
 
-Patch #4: An entire switch/case block can go - dead code.
+Patch #5: Reverts the use of `MSS' instead of `s' in the CCID3 code. MSS had 
+          been used for a short while in rfc3448bis, but both rfc3448bis and
+          the faster restart draft now consistently use `s' - fixed by this patch.
+          
 
-Patch #5: Sequence number wraparound issues - updated to use the newer seqno functions.
+It may be possible to further update the code with regard to rfc3448bis, 
+but it seems better to wait until the discussion and the specification somewhat 
+stabilises.
 
-Patch #6: Spotted an instance of the DIV_ROUND_UP() macro and used it.
-
-Patch #7: follows48() is nowhere used in the DCCP code and thus removed.
-
-Patch #8: Removes redundant initialisation of "memset + assignment of zero". This was also
-          spotted by Arnaldo - thanks again.
