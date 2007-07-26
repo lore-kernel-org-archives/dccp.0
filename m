@@ -1,21 +1,66 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sun, 01 Jul 2007 04:01:34 +0000
-Subject: Re: [PATCH 4/5]: Rate-limit DCCP-Syncs
-Message-Id: <5640c7e00706302101h7e400d76x7eddf569cad733b7@mail.gmail.com>
+From: Jesper Juhl <jesper.juhl@gmail.com>
+Date: Thu, 26 Jul 2007 22:39:37 +0000
+Subject: [PATCH][dccp] Fix memory leak and clean up style - dccp_feat_empty_confirm()
+Message-Id: <200707270039.37860.jesper.juhl@gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200704091058.57313@strip-the-willow>
-In-Reply-To: <200704091058.57313@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/20/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [DCCP]: Rate-limit DCCP-Syncs
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
-WAND Network Research Group
+
+Greetings,
+
+There's a memory leak in net/dccp/feat.c::dccp_feat_empty_confirm().
+If we hit the 'default:' case of the 'switch' statement, then we 
+return without freeing 'opt', thus leaking 'struct dccp_opt_pend' 
+bytes.
+The leak is fixed easily enough by adding a kfree(opt); before the 
+return statement.
+The patch also changes the layout of the 'switch' to be more in line 
+with CodingStyle.
+
+Patch has been compile tested.
+
+Please consider merging.
+
+
+Signed-off-by: Jesper Juhl <jesper.juhl@gmail.com>
+---
+
+ net/dccp/feat.c |   14 ++++++++++----
+ 1 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/net/dccp/feat.c b/net/dccp/feat.c
+index cd845df..5ebdd86 100644
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -327,10 +327,16 @@ static void dccp_feat_empty_confirm(struct dccp_minisock *dmsk,
+ 	}
+ 
+ 	switch (type) {
+-	case DCCPO_CHANGE_L: opt->dccpop_type = DCCPO_CONFIRM_R; break;
+-	case DCCPO_CHANGE_R: opt->dccpop_type = DCCPO_CONFIRM_L; break;
+-	default:	     DCCP_WARN("invalid type %d\n", type); return;
+-
++	case DCCPO_CHANGE_L:
++		opt->dccpop_type = DCCPO_CONFIRM_R;
++		break;
++	case DCCPO_CHANGE_R:
++		opt->dccpop_type = DCCPO_CONFIRM_L;
++		break;
++	default:
++		DCCP_WARN("invalid type %d\n", type);
++		kfree(opt);
++		return;
+ 	}
+ 	opt->dccpop_feat = feature;
+ 	opt->dccpop_val	 = NULL;
+
+
+
+
+
+PS. Please keep me on Cc when replying.
+
+
