@@ -1,32 +1,30 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 20 Jul 2007 17:49:50 +0000
-Subject: Re: test reports
-Message-Id: <200707201849.50846@strip-the-willow>
+Date: Thu, 26 Jul 2007 12:56:44 +0000
+Subject: [PATCH 3/5]: Wrong format in printk
+Message-Id: <200707261356.44426@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <fca78b970707200925n35062760o4845978b31bfde7c@mail.gmail.com>
-In-Reply-To: <fca78b970707200925n35062760o4845978b31bfde7c@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Thanks, looks great. Will have a detailed look tomorrow.
+[DCCP]: Wrong format in printk
 
-Quoting Patrick Andrieux:
-|  Hi,
-|  
-|  Here is some test reports I've done :
-|  http://threesim.ucd.ie/~pandrieux/dccp/
-|  
-|  Not amazing results I guess, but just simple tests on dccp.
-|  I've done that a few weeks ago, so with new iperf patches, I guess the
-|  cmd line is a bit different now...
-|  
-|  regards,
-|  Patrick.
-|  -
-|  To unsubscribe from this list: send the line "unsubscribe dccp" in
-|  the body of a message to majordomo@vger.kernel.org
-|  More majordomo info at  http://vger.kernel.org/majordomo-info.html
-|  
-|  
+The elapsed time uses u32, but printk was using %d, not %u.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/options.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -179,7 +179,7 @@ int dccp_parse_options(struct sock *sk, 
+ 				elapsed_time = ntohl(opt_val);
+ 			}
+ 
+-			dccp_pr_debug_cat(", ELAPSED_TIME=%d\n", elapsed_time);
++			dccp_pr_debug_cat(", ELAPSED_TIME=%u\n", elapsed_time);
+ 
+ 			/* Give precedence to the biggest ELAPSED_TIME */
+ 			if (elapsed_time > opt_recv->dccpor_elapsed_time)
