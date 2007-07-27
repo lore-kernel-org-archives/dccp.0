@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Fri, 27 Jul 2007 05:02:25 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 27 Jul 2007 15:21:05 +0000
 Subject: Re: [PATCH 5/5]: Revert use of MSS instead of s
-Message-Id: <5640c7e00707262202o6d9b71cds33ad6e52c6ec62f8@mail.gmail.com>
+Message-Id: <200707271621.05523@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200707261356.53153@strip-the-willow>
 In-Reply-To: <200707261356.53153@strip-the-willow>
@@ -10,42 +10,49 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 7/27/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [CCID3]: Revert use of MSS instead of s
->
-> This updates the CCID3 code with regard to two instances of using `MSS' in place of `s':
->
->  1. The RFC3390-based initial rate. Both rfc3448bis as well as the Faster Restart
->     draft now consistently use `s' instead of MSS. Swapping MSS for s had been done
->     shortly after revision 01 of rfc3448bis, but that change subsequently disappeared.
->
->  2. According to section 4.2 of rfc3448bis: "If the sender is ready to send data when
->     it does not yet have a round trip sample, the value of X is set to s bytes per
->     second, for segment size s [...]"
->
-> Apart from tracking documents, this change makes sense: in particular, it avoids gross
-> over-estimation if the packet size `s' is small (imagine a VoIP application with sd
-> bytes and MSS according to Ethernet jumbo frames).
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+|  I want to think about this. In particular the reference to VoIP - go
+|  look at CCID4 and that's EXACTLY what they do in effect (but standard
+|  frames - not jumbo).
+ The reference to VoIP/jumbo frames is not relevant in this context, what is
+relevant is thatthe code did not correspond to the current state of what 
+several documents specify to use as default for `s'. That's enough justification
+for me.
 
-Hmm,
+I don't understand the above comment about VoIP.
 
-I want to think about this. In particular the reference to VoIP - go
-look at CCID4 and that's EXACTLY what they do in effect (but standard
-frames - not jumbo).
+|  I'm heading down the patch that we should set 3448bis via a socket
+|  option as well as faster restart but maybe that's a question we should
+|  ask on the IETF list. 
+If you want to do this and come back with some usable results to this list, feel free
+to do this. I'd like to hear the results, but don't want to participate in IETF discussions.
+I have lots of other work to do and am doing the DCCP/CCID3 work on top of it / aside
+of it. That means for me `technical support yes' but `research discussions on the IETF
+list (which is a specification list): no'. 
 
-I'm heading down the patch that we should set 3448bis via a socket
-option as well as faster restart but maybe that's a question we should
-ask on the IETF list. It really depends on whether existing TFRC is
-meant to be phased out and replaced or whether the application can
-choose - like a lot of TCP enhancements e.g. SACK. I think 3448bis
-should be the default but whether the only option is another
-question...
+|  It really depends on whether existing TFRC is meant to be phased out and 
+|  replaced or whether the application can choose - like a lot of TCP 
+|  enhancements e.g. SACK. I think 3448bis should be the default but whether 
+|  the only option is another question...
+I disagree with the idea. It is already the case that the many documents (3448, 4340,
+4342, rfc3448bis, Faster Restart draft) all make related, but in a subtle way different
+interpretations of the same thing. I recall that when I did the patches, I would spend
+reading up to two or three hours the different drafts, because they are all not really
+consistent. What you are proposing is a parallel implementation of both the orthodox
+RFC 4342/3448 if I understand you correctly. With that you only increase the number of
+nightmares, since now you need not only align drafts, but also track sub-changes of 
+different drafts in the code.
 
-Ian
+My suggestion is to keep the most common-sense collection of features as default and
+to do everything else on a case-by-case or experimental basis. Already the code is not
+really orthodox RFC 4342, we have for instance the Request/Response RTT sample which
+is not part of the document, and there are several other features (can list them if
+needed) that make the code not a true RFC 3448/4342 implementation.
 
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+We could fork subtrees for such features, how about this? That would keep defaults
+and new features separate, at least for a while, and they can be integrated when the
+specification gains maturity.
+
+
+So what is your stance regarding the `s' vs `MSS' issue? This patch is according
+to the book, I sent it to make your Faster Restart work a bit easier, and you
+are saying you don't want it?
