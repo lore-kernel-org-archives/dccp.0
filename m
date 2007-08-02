@@ -1,51 +1,27 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 09 Aug 2007 13:59:53 +0000
-Subject: [PATCH 3/3]:  Update documentation
-Message-Id: <200708091459.53303@strip-the-willow>
+Date: Thu, 02 Aug 2007 14:46:19 +0000
+Subject: [PATCH 0/2]: Typo and RFC for CCID2
+Message-Id: <200708021546.19513@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Update documentation
+This is one minor patch and an RFC:
 
-This updates the DCCP documentation, following input from Ian McDonald,
-clarifiying the status of DCCP, and adding a note about the test tree.
+Patch #1: Typo in documentation, also clarified whether receiver
+          coverage is inherited (question read in VLC sources).
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- Documentation/networking/dccp.txt |   14 +++++++++-----
- 1 file changed, 9 insertions(+), 5 deletions(-)
-
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -26,19 +26,23 @@ given applications, see section 10 of RF
+Patch #2: This is not in the test tree yet, I am sending that
+          for discussion / approval. I have dropped the `always support
+          Ack Vectors' patch upon Arnaldo's suggestion that keeping it
+          can be a useful aid in debugging.
  
- It has a base protocol and pluggable congestion control IDs (CCIDs).
- 
--It is at proposed standard RFC status and the homepage for DCCP as a protocol
--is at:
--	http://www.read.cs.ucla.edu/dccp/
-+DCCP is a Proposed Standard (RFC 2026), and the homepage for DCCP as a protocol
-+is at http://www.ietf.org/html.charters/dccp-charter.html
- 
- Missing features
- ========
- 
--The DCCP implementation does not currently have all the features that are in
--the RFC.
-+The Linux DCCP implementation does not currently support all the features that are
-+specified in RFCs 4340...42.
- 
- The known bugs are at:
- 	http://linux-net.osdl.org/index.php/TODO#DCCP
- 
-+For more up-to-date versions of the DCCP implementation, please consider using
-+the experimental DCCP test tree; instructions for checking this out are on:
-+http://linux-net.osdl.org/index.php/DCCP_Testing#Experimental_DCCP_source_tree
-+
-+
- Socket options
- =======
- 
+          This patch fixes a different problem: when both CCIDs are disabled
+          (stupid, but possible combination) then DCCP will not work, the
+          call to socket() will return with -ENOMEM, due to allocation in
+          dccp_init_sock(). The suggestion is to always build CCID2, since
+          it is also set as DCCPF_INITIAL_CCID in linux/dccp.h
+          I am asking whether people are ok with this and how the Kconfig
+          `debug output' options should be kept.
