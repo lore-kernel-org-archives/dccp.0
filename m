@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 07 Aug 2007 07:04:15 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 07 Aug 2007 11:03:29 +0000
 Subject: Re: Comments/question on no_feedback_timer
-Message-Id: <5640c7e00708070004m44166306kba524fb8ae902260@mail.gmail.com>
+Message-Id: <200708071203.29459@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <5640c7e00708021614j780c829ao3ce950b25c8ac67@mail.gmail.com>
 In-Reply-To: <5640c7e00708021614j780c829ao3ce950b25c8ac67@mail.gmail.com>
@@ -10,26 +10,26 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-> On 8/3/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> > Given the recent discussions of this, I would like to postpone such discussion until
-> > December, after they have reviewed the next revision of rfc3448bis.
-> >
+|  And the more I look at it the bigger my headache. I'm going to have to
+|  start doing some of the TFRCbis rev02 stuff given the intertwining
+|  with Faster Restart.
+I take it that you are aware that the authors of the Faster Restart draft
+are in the process of replacing the current version with an entirely different one
+based on cwnd window validation. I'd check with the authors for their time plan.
 
-Ian said:
-> OK. I don't intend to get into long discussions around individual
-> versions or discuss to death. I just didn't realise which version the
-> code was against. It creates a headache for me but that's my
-> problem...
->
+Having rev02 in full length (and provided feedback), I found other issues in rev02.
+There are a couple of things (such as receive-sets) which make implementation even more 
+complex. Plus, the situation is like Faster-Restart: the draft is in a volatile state, 
+some feedback (after recent IETF) seems to not have been addressed, the next rev is due 
+in December, and only after the IETF meeting can some convergence/clarity be expected.
 
-And the more I look at it the bigger my headache. I'm going to have to
-start doing some of the TFRCbis rev02 stuff given the intertwining
-with Faster Restart. I won't discuss as such given your concerns but
-I'll probably post back patches from time to time that you can do what
-you want with. (Ignore, integrate or somewhere in between)
+|  I'll probably post back patches from time to time that you can do what
+|  you want with. (Ignore, integrate or somewhere in between)
+I'd say, we put this up as a fork of the DCCP test tree? 
 
-Ian
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+If you encounter issues or problems with the test tree and there are things 
+            - outside the rev00 and rev02 discussion -
+which can make the test tree better, then of course this goes into the test tree.
+
+But due to the entanglements, I'd much prefer to keep rev00 and rev02 code separate
+from each other.
