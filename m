@@ -1,7 +1,7 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Fri, 10 Aug 2007 13:28:29 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Fri, 10 Aug 2007 22:35:03 +0000
 Subject: Re: VLC - DCCP patch uploaded
-Message-Id: <20070810132829.GH3375@ghostprotocols.net>
+Message-Id: <5640c7e00708101535s3ae123e5t6174820785ba0636@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200708101422.24558@strip-the-willow>
 In-Reply-To: <200708101422.24558@strip-the-willow>
@@ -10,17 +10,24 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Fri, Aug 10, 2007 at 02:22:24PM +0100, Gerrit Renker escreveu:
+Awesome Gerrit.
+
+On 8/11/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
 > I have uploaded a patch to support DCCP in the Video Lan Client (www.videolan.org).
-> 
+>
 > With that, one can stream video/audio/capture cards (those guys from VLC have done
 > a great job, it is well worth checking out), now also via VLC. And works allright -
 > watched an entire DVD over CCID3:
-> 
+>
 > http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/#VLC_Patch
+> -
+> To unsubscribe from this list: send the line "unsubscribe dccp" in
+> the body of a message to majordomo@vger.kernel.org
+> More majordomo info at  http://vger.kernel.org/majordomo-info.html
+>
 
-That is great news indeed! Keep up the good work, perhaps tomorrow I'll
-be able to merge stuff and send to Dave for 2.6.24. At least I'll try to
-watch some DVDs here 8)
 
-- Arnaldo
+-- 
+Web1: http://wand.net.nz/~iam4/
+Web2: http://www.jandi.co.nz
+Blog: http://iansblog.jandi.co.nz
