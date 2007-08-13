@@ -1,21 +1,27 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 22 Aug 2007 09:00:59 +0000
-Subject: Re: Kernel version of Arnaldos Net Git tree
-Message-Id: <200708221000.59615@strip-the-willow>
+From: joe@perches.com
+Date: Mon, 13 Aug 2007 06:26:04 +0000
+Subject: [PATCH] [148/2many] MAINTAINERS - DCCP PROTOCOL
+Message-Id: <46bff97c.9avHEM3TinhF1DrA%joe@perches.com>
 List-Id: <dccp.vger.kernel.org>
-References: <5bc4c4570708191944j789a4e31u9ef23d55512e420b@mail.gmail.com>
-In-Reply-To: <5bc4c4570708191944j789a4e31u9ef23d55512e420b@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  > I think I know ... I had the same problems - three computers with e100 cards
-|  > just froze. It really seems that this is due to a half-finished merge window.
-|  >
-|  Gerrit - this is well worth reporting to netdev mailing list as the
-|  2.6.24 later becomes the stable tree. I'm not saying you should fix
-|  but it's worth reporting.
-|  
-I have cribbed the oops message from the screen and sent this to netdev. Today it is
-still not better (same oops as yesterday).
+Add file pattern to MAINTAINER entry
+
+Signed-off-by: Joe Perches <joe@perches.com>
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 7f54480..c786066 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -1434,6 +1434,8 @@ M:	acme@ghostprotocols.net
+ L:	dccp@vger.kernel.org
+ W:	http://linux-net.osdl.org/index.php/DCCP
+ S:	Maintained
++F:	include/linux/dccp.h
++F:	net/dccp/
+ 
+ DECnet NETWORK LAYER
+ P:	Patrick Caulfield
