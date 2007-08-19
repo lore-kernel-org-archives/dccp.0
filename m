@@ -1,107 +1,95 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 07 Aug 2007 11:40:59 +0000
-Subject: [PATCH 1/1][BUG-Fix]: Divide-by-zero bug when running CCID3 data in both directions
-Message-Id: <200708071240.59167@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Sun, 19 Aug 2007 23:49:59 +0000
+Subject: [PATCH 05/15] Convert ccid3hcrx_tstamp_last_feedback to ktime_t
+Message-Id: <20070819234959.GI24792@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-I have found a bug which is related to challenging CCID3 with heavy data
-traffic in both directions. I built some test clients for simple services
-and found that
-
- cat /boot/vmlinuz* | ./Discard/discard_client serverHost      # that's several MBytes
-
-works without problems, but
-
- ./Echo/echo_client  serverHost  < /etc/bash_completion > out_file
-
-fails miserably and produces the bug fixed by this patch.
-
-The patch is provided for those who have checked the tree out; the latest test tree 
-has this bug fix already merged in.
-
-The bug occurs when loading CCID3 with data traffic in both directions. It
-was observed using a simple echo client/server application (a la RFC 862).
-
-After spending one afternoon of bug-hunting, the cause does not seem to be in the
-TFRC unit, but rather due to the fact that heavy data transfer: 
-
-  I have been printing out the sender's idea of its RTT and got horribly large values
-  for the `quarter_RTTs' variable (from the algorithm in RFC 4342, section 8.1) - 
-  larger than 11 was frequent when the RTT was about 3 milliseconds, i.e. 
-         4 * 11 * 3 = 132 milliseconds. 
-  There were values as large as 1467 for `quarter_RTTs'. 
-
-Furthermore, this condition only occurs when using a large datafile as input (example 
-above). Otherwise the bug will not be triggered. The reason seems to be that both sides 
-send largely only Data packets, which starves sending of Acks (no DataAcks were observed);
-which would explain the grossly over-estimated RTTs. 
-
-There are two reasons why I don't want to fix this:
-
- 1. CCID3 is not really designed for heavy bidirectional traffic. I think it is 
-    important to really understand how CCID3 works in /one/ direction, before 
-    adding the second dimension of reverse-path data traffic. 
-    I think that CCID3 is ready for deployment in typical streaming applications, 
-    which only have a small degree of return traffic (RTCP receiver reports, e.g.). 
-    Engineering a heavy-duty bidirectional variant of CCID3 seems to me beside the 
-    point. And it is expensive/complicated - CCID3 would have to check if it is 
-    loaded on both half-connections, then try to optimise traffic and feedback by 
-    piggy-backing. That is really stuff for later. Let's have a few running CCID3
-    (one-directional) applications first.
-
- 2. The whole idea of receiver-RTT-sampling seems broken to me. Imagine a QoS 
-    traffic shaper between the two CCID end hosts (e.g. a large Token Bucket or 
-    Leaky Bucket Filter) with a large queue; the device throttles, temporarily 
-    stores the packets; when conditions change, it releases a large number of 
-    stored packets at virtually the same time: for all these, the receiver RTT 
-    samples will be close to zero.
-
-I have added this as a known bug on http://linux-net.osdl.org/index.php/TODO#DCCP
-and will post a link to the library and clients shortly, so that people can test.
-
-The provided patch turns the machine-freeze condition into a safe one: 
- * the return value of tfrc_rx_sample_rtt() is now zero when this condition
-   occurs, ie. the caller will skip over the sample;
- * a detailed warning is printed (you will notice);
- * applications will continue to work as before, without interruption.
-
-Even with the hiccups, "diff outfile /etc/bash_completion" now returns 0 as desired :)
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>    
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/lib/packet_history.c |   20 ++++++++++++++++----
- 1 file changed, 16 insertions(+), 4 deletions(-)
+ net/dccp/ccids/ccid3.c |   19 +++++++++++--------
+ net/dccp/ccids/ccid3.h |    2 +-
+ 2 files changed, 12 insertions(+), 9 deletions(-)
 
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -373,10 +373,22 @@ u32 tfrc_rx_sample_rtt(struct tfrc_rx_hi
- 	if (delta_v < 1 || delta_v > 4) {	/* unsuitable CCVal delta */
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 63051eb..1a0c5ed 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -729,20 +729,21 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk)
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct dccp_rx_hist_entry *packet;
+-	struct timeval now;
++	struct timeval tnow;
++	ktime_t now;
+ 	suseconds_t delta;
  
- 		if (h->rtt_sample_prev = 2) {	/* previous candidate stored */
--			sample = ktime_us_delta(rtt_prev_s(h)->stamp,
--					     rtt_last_s(h)->stamp);
--			sample *= 4 / SUB16(rtt_prev_s(h)->ccval,
--					    rtt_last_s(h)->ccval);
-+			sample = SUB16(rtt_prev_s(h)->ccval,
-+				       rtt_last_s(h)->ccval);
-+			if (sample)
-+				sample = 4 / sample
-+				       * ktime_us_delta(rtt_prev_s(h)->stamp,
-+							rtt_last_s(h)->stamp);
-+			else    /*
-+				 * FIXME: This condition is in principle not
-+				 * possible but occurs when CCID is used for
-+				 * two-way data traffic. I have tried to trace
-+				 * it, but the cause does not seem to be here.
-+				 */
-+				DCCP_BUG("please report to dccp@vger.kernel.org"
-+					 " - prev = %u, last =  %u",
-+					 rtt_prev_s(h)->ccval,
-+					 rtt_last_s(h)->ccval);
- 		} else if (delta_v < 1) {
- 			h->rtt_sample_prev = 1;
- 			goto keep_ref_for_next_time;
+ 	ccid3_pr_debug("%s(%p) - entry \n", dccp_role(sk), sk);
+ 
+-	dccp_timestamp(sk, &now);
++	now = ktime_get_real();
+ 
+ 	switch (hcrx->ccid3hcrx_state) {
+ 	case TFRC_RSTATE_NO_DATA:
+ 		hcrx->ccid3hcrx_x_recv = 0;
+ 		break;
+ 	case TFRC_RSTATE_DATA:
+-		delta = timeval_delta(&now,
+-				      &hcrx->ccid3hcrx_tstamp_last_feedback);
++		delta = ktime_us_delta(now,
++				       hcrx->ccid3hcrx_tstamp_last_feedback);
+ 		DCCP_BUG_ON(delta < 0);
+ 		hcrx->ccid3hcrx_x_recv  			scaled_div32(hcrx->ccid3hcrx_bytes_recv, delta);
+@@ -764,7 +765,8 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk)
+ 	hcrx->ccid3hcrx_bytes_recv	     = 0;
+ 
+ 	/* Elapsed time information [RFC 4340, 13.2] in units of 10 * usecs */
+-	delta = timeval_delta(&now, &packet->dccphrx_tstamp);
++	tnow = ktime_to_timeval(now);
++	delta = timeval_delta(&tnow, &packet->dccphrx_tstamp);
+ 	DCCP_BUG_ON(delta < 0);
+ 	hcrx->ccid3hcrx_elapsed_time = delta / 10;
+ 
+@@ -835,11 +837,13 @@ static int ccid3_hc_rx_detect_loss(struct sock *sk,
+ 
+ 	while (dccp_delta_seqno(hcrx->ccid3hcrx_seqno_nonloss, seqno)
+ 	   > TFRC_RECV_NUM_LATE_LOSS) {
++		struct timeval tstamp +			ktime_to_timeval(hcrx->ccid3hcrx_tstamp_last_feedback);
+ 		loss = 1;
+ 		dccp_li_update_li(sk,
+ 				  &hcrx->ccid3hcrx_li_hist,
+ 				  &hcrx->ccid3hcrx_hist,
+-				  &hcrx->ccid3hcrx_tstamp_last_feedback,
++				  &tstamp,
+ 				  hcrx->ccid3hcrx_s,
+ 				  hcrx->ccid3hcrx_bytes_recv,
+ 				  hcrx->ccid3hcrx_x_recv,
+@@ -989,9 +993,8 @@ static int ccid3_hc_rx_init(struct ccid *ccid, struct sock *sk)
+ 	hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA;
+ 	INIT_LIST_HEAD(&hcrx->ccid3hcrx_hist);
+ 	INIT_LIST_HEAD(&hcrx->ccid3hcrx_li_hist);
+-	hcrx->ccid3hcrx_tstamp_last_ack = ktime_get_real();
+ 	hcrx->ccid3hcrx_tstamp_last_feedback -		ktime_to_timeval(hcrx->ccid3hcrx_tstamp_last_ack);
++		hcrx->ccid3hcrx_tstamp_last_ack = ktime_get_real();
+ 	hcrx->ccid3hcrx_s   = 0;
+ 	hcrx->ccid3hcrx_rtt = 0;
+ 	return 0;
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index a69cf88..7cbf2b1 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -152,7 +152,7 @@ struct ccid3_hc_rx_sock {
+ 					ccid3hcrx_ccval_last_counter:4;
+ 	enum ccid3_hc_rx_states		ccid3hcrx_state:8;
+ 	u32				ccid3hcrx_bytes_recv;
+-	struct timeval			ccid3hcrx_tstamp_last_feedback;
++	ktime_t				ccid3hcrx_tstamp_last_feedback;
+ 	ktime_t				ccid3hcrx_tstamp_last_ack;
+ 	struct list_head		ccid3hcrx_hist;
+ 	struct list_head		ccid3hcrx_li_hist;
+-- 
+1.5.2.2
+
