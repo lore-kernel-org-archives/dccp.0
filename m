@@ -1,22 +1,34 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sun, 19 Aug 2007 20:58:47 +0000
-Subject: Re: Backporting gerrit tree (from git) to 2.6.18. IT WAS: "Backport" latest (git) DCCP code to 2.6.1
-Message-Id: <5640c7e00708191358u39632bdbod2b6ac37621a93e2@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Sun, 19 Aug 2007 22:06:50 +0000
+Subject: Re: Backporting gerrit tree (from git) to 2.6.18. IT WAS:
+Message-Id: <20070819220650.GA24792@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570708180844g3618c9a0v1f6cb69222c9c7f8@mail.gmail.com>
 In-Reply-To: <5bc4c4570708180844g3618c9a0v1f6cb69222c9c7f8@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-2022-jp"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="windows-1252"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On 8/20/07, ツ Leandro Sales <leandroal@gmail.com> wrote:
-> Are these operations equivalent? Please, tell me where can I find docs about skb
->
-Dave Miller wrote some docs a while ago at:
-http://vger.kernel.org/~davem/skb.html
+Em Sun, Aug 19, 2007 at 09:38:13AM -0300, =E3=83=84 Leandro Sales escreveu:
+> Are these operations equivalent? Please, tell me where can I find docs ab=
+out skb
+>=20
+> -   skb->h.raw =3D skb->data;
+>=20
+> +   skb_reset_transport_header(skb);
 
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+That is easy as I left all the old code in include/linux/skbuff.h. Just
+look at what the operation does if NET_SKBUFF_DATA_USES_OFFSET is not
+defined, that, for the above api is:
+
+static inline void skb_reset_transport_header(struct sk_buff *skb)
+{
+        skb->transport_header =3D skb->data;
+}
+
+skb->h.raw is the old name of skb->transport_header
+skb->nh.raw is the old name of skb->network_header
+skb->nac.raw is the old name of skb->mac_header
+=20
+- Arnaldo
