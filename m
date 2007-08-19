@@ -1,7 +1,7 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sun, 19 Aug 2007 23:51:23 +0000
-Subject: [PATCH 09/15] [DCCP] ackvec: Convert to ktime_t
-Message-Id: <20070819235123.GM24792@ghostprotocols.net>
+Date: Sun, 19 Aug 2007 23:53:00 +0000
+Subject: [PATCH 14/15] [DCCP]: Nuke dccp_timestamp and dccps_epoch, not
+Message-Id: <20070819235300.GR24792@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -10,77 +10,89 @@ To: dccp@vger.kernel.org
 
 Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ackvec.c |   11 +++++------
- net/dccp/ackvec.h |    4 ++--
- 2 files changed, 7 insertions(+), 8 deletions(-)
+ include/linux/dccp.h |    1 -
+ net/dccp/dccp.h      |    2 --
+ net/dccp/minisocks.c |    1 -
+ net/dccp/options.c   |   16 ----------------
+ net/dccp/proto.c     |    1 -
+ 5 files changed, 0 insertions(+), 21 deletions(-)
 
-diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
-index 7ac775f..3f8984b 100644
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -73,17 +73,17 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
- 			     DCCP_MAX_ACKVEC_OPT_LEN - 1) /
- 			    DCCP_MAX_ACKVEC_OPT_LEN;
- 	u16 len = av->dccpav_vec_len + 2 * nr_opts, i;
--	struct timeval now;
- 	u32 elapsed_time;
- 	const unsigned char *tail, *from;
- 	unsigned char *to;
- 	struct dccp_ackvec_record *avr;
-+	suseconds_t delta;
+diff --git a/include/linux/dccp.h b/include/linux/dccp.h
+index 3a4b96b..a044119 100644
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -512,7 +512,6 @@ struct dccp_sock {
+ 	struct ccid			*dccps_hc_rx_ccid;
+ 	struct ccid			*dccps_hc_tx_ccid;
+ 	struct dccp_options_received	dccps_options_received;
+-	struct timeval			dccps_epoch;
+ 	enum dccp_role			dccps_role:2;
+ 	__u8				dccps_hc_rx_insert_options:1;
+ 	__u8				dccps_hc_tx_insert_options:1;
+diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
+index 20a7bed..6fbe293 100644
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -402,8 +402,6 @@ extern int dccp_insert_option(struct sock *sk, struct sk_buff *skb,
+ 			       unsigned char option,
+ 			       const void *value, unsigned char len);
  
- 	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
- 		return -1;
+-extern void dccp_timestamp(const struct sock *sk, struct timeval *tv);
+-
+ static inline suseconds_t timeval_usecs(const struct timeval *tv)
+ {
+ 	return tv->tv_sec * USEC_PER_SEC + tv->tv_usec;
+diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
+index e18e249..9168599 100644
+--- a/net/dccp/minisocks.c
++++ b/net/dccp/minisocks.c
+@@ -112,7 +112,6 @@ struct sock *dccp_create_openreq_child(struct sock *sk,
+ 		newdp->dccps_service_list  = NULL;
+ 		newdp->dccps_service	   = dreq->dreq_service;
+ 		newicsk->icsk_rto	   = DCCP_TIMEOUT_INIT;
+-		do_gettimeofday(&newdp->dccps_epoch);
  
--	dccp_timestamp(sk, &now);
--	elapsed_time = timeval_delta(&now, &av->dccpav_time) / 10;
-+	delta = ktime_us_delta(ktime_get_real(), av->dccpav_time);
-+	elapsed_time = delta / 10;
+ 		if (dccp_feat_clone(sk, newsk))
+ 			goto out_free;
+diff --git a/net/dccp/options.c b/net/dccp/options.c
+index 439e25d..1674156 100644
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -370,22 +370,6 @@ int dccp_insert_option_elapsed_time(struct sock *sk, struct sk_buff *skb,
  
- 	if (elapsed_time != 0 &&
- 	    dccp_insert_option_elapsed_time(sk, skb, elapsed_time))
-@@ -159,8 +159,7 @@ struct dccp_ackvec *dccp_ackvec_alloc(const gfp_t priority)
- 		av->dccpav_buf_head	= DCCP_MAX_ACKVEC_LEN - 1;
- 		av->dccpav_buf_ackno	= UINT48_MAX + 1;
- 		av->dccpav_buf_nonce = av->dccpav_buf_nonce = 0;
--		av->dccpav_time.tv_sec	= 0;
--		av->dccpav_time.tv_usec	= 0;
-+		av->dccpav_time	     = ktime_set(0, 0);
- 		av->dccpav_vec_len	= 0;
- 		INIT_LIST_HEAD(&av->dccpav_records);
- 	}
-@@ -321,7 +320,7 @@ int dccp_ackvec_add(struct dccp_ackvec *av, const struct sock *sk,
- 	}
+ EXPORT_SYMBOL_GPL(dccp_insert_option_elapsed_time);
  
- 	av->dccpav_buf_ackno = ackno;
--	dccp_timestamp(sk, &av->dccpav_time);
-+	av->dccpav_time = ktime_get_real();
- out:
- 	return 0;
+-void dccp_timestamp(const struct sock *sk, struct timeval *tv)
+-{
+-	const struct dccp_sock *dp = dccp_sk(sk);
+-
+-	do_gettimeofday(tv);
+-	tv->tv_sec  -= dp->dccps_epoch.tv_sec;
+-	tv->tv_usec -= dp->dccps_epoch.tv_usec;
+-
+-	while (tv->tv_usec < 0) {
+-		tv->tv_sec--;
+-		tv->tv_usec += USEC_PER_SEC;
+-	}
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_timestamp);
+-
+ int dccp_insert_option_timestamp(struct sock *sk, struct sk_buff *skb)
+ {
+ 	__be32 now = htonl(((suseconds_t)ktime_to_us(ktime_get_real())) / 10);
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 04b59ec..8d545da 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -172,7 +172,6 @@ int dccp_init_sock(struct sock *sk, const __u8 ctl_sock_initialized)
+ 	struct inet_connection_sock *icsk = inet_csk(sk);
  
-diff --git a/net/dccp/ackvec.h b/net/dccp/ackvec.h
-index 96504a3..9ef0737 100644
---- a/net/dccp/ackvec.h
-+++ b/net/dccp/ackvec.h
-@@ -12,8 +12,8 @@
-  */
+ 	dccp_minisock_init(&dp->dccps_minisock);
+-	do_gettimeofday(&dp->dccps_epoch);
  
- #include <linux/compiler.h>
-+#include <linux/ktime.h>
- #include <linux/list.h>
--#include <linux/time.h>
- #include <linux/types.h>
- 
- /* Read about the ECN nonce to see why it is 253 */
-@@ -52,7 +52,7 @@
- struct dccp_ackvec {
- 	u64		dccpav_buf_ackno;
- 	struct list_head dccpav_records;
--	struct timeval	dccpav_time;
-+	ktime_t		dccpav_time;
- 	u16		dccpav_buf_head;
- 	u16		dccpav_vec_len;
- 	u8		dccpav_buf_nonce;
+ 	/*
+ 	 * FIXME: We're hardcoding the CCID, and doing this at this point makes
 -- 
 1.5.2.2
 
