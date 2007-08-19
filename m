@@ -1,102 +1,64 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sun, 19 Aug 2007 23:50:22 +0000
-Subject: [PATCH 06/15] Introduce ktime_sub_ns and ktime_sub_us
-Message-Id: <20070819235022.GJ24792@ghostprotocols.net>
+Date: Sun, 19 Aug 2007 23:51:05 +0000
+Subject: [PATCH 08/15] [CCID3]: Stop using dccp_timestamp
+Message-Id: <20070819235105.GL24792@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-First user will be the DCCP transport networking protocol.
+Now to convert the ackvec code to ktime_t so that we can get rid of
+dccp_timestamp and the epoch thing in dccp_sock.
 
 Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- include/linux/ktime.h |   21 +++++++++++++++++++++
- kernel/hrtimer.c      |   24 ++++++++++++++++++++++++
- 2 files changed, 45 insertions(+), 0 deletions(-)
+ net/dccp/ccids/ccid3.c |   11 ++++-------
+ 1 files changed, 4 insertions(+), 7 deletions(-)
 
-diff --git a/include/linux/ktime.h b/include/linux/ktime.h
-index dae7143..a6ddec1 100644
---- a/include/linux/ktime.h
-+++ b/include/linux/ktime.h
-@@ -102,6 +102,13 @@ static inline ktime_t ktime_set(const long secs, const unsigned long nsecs)
- #define ktime_add_ns(kt, nsval) \
- 		({ (ktime_t){ .tv64 = (kt).tv64 + (nsval) }; })
- 
-+/*
-+ * Subtract a scalar nanosecod from a ktime_t variable
-+ * res = kt - nsval:
-+ */
-+#define ktime_sub_ns(kt, nsval) \
-+		({ (ktime_t){ .tv64 = (kt).tv64 - (nsval) }; })
-+
- /* convert a timespec to ktime_t format: */
- static inline ktime_t timespec_to_ktime(struct timespec ts)
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 3524328..6b12e9f 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -388,7 +388,6 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more,
+ 				    unsigned int len)
  {
-@@ -200,6 +207,15 @@ static inline ktime_t ktime_add(const ktime_t add1, const ktime_t add2)
- extern ktime_t ktime_add_ns(const ktime_t kt, u64 nsec);
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+-	struct timeval now;
+ 	struct dccp_tx_hist_entry *packet;
  
- /**
-+ * ktime_sub_ns - Subtract a scalar nanoseconds value from a ktime_t variable
-+ * @kt:		minuend
-+ * @nsec:	the scalar nsec value to subtract
-+ *
-+ * Returns the subtraction of @nsec from @kt in ktime_t format
-+ */
-+extern ktime_t ktime_sub_ns(const ktime_t kt, u64 nsec);
-+
-+/**
-  * timespec_to_ktime - convert a timespec to ktime_t format
-  * @ts:		the timespec variable to convert
-  *
-@@ -289,6 +305,11 @@ static inline ktime_t ktime_add_us(const ktime_t kt, const u64 usec)
- 	return ktime_add_ns(kt, usec * 1000);
- }
+ 	BUG_ON(hctx = NULL);
+@@ -402,8 +401,7 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more,
+ 	}
+ 	dccp_tx_hist_add_entry(&hctx->ccid3hctx_hist, packet);
  
-+static inline ktime_t ktime_sub_us(const ktime_t kt, const u64 usec)
-+{
-+	return ktime_sub_ns(kt, usec * 1000);
-+}
-+
- /*
-  * The resolution of the clocks. The resolution value is returned in
-  * the clock_getres() system call to give application programmers an
-diff --git a/kernel/hrtimer.c b/kernel/hrtimer.c
-index c21ca6b..5d885fc 100644
---- a/kernel/hrtimer.c
-+++ b/kernel/hrtimer.c
-@@ -277,6 +277,30 @@ ktime_t ktime_add_ns(const ktime_t kt, u64 nsec)
- }
+-	dccp_timestamp(sk, &now);
+-	packet->dccphtx_tstamp = now;
++	packet->dccphtx_tstamp = ktime_to_timeval(ktime_get_real());
+ 	packet->dccphtx_seqno  = dccp_sk(sk)->dccps_gss;
+ 	packet->dccphtx_rtt    = hctx->ccid3hctx_rtt;
+ 	packet->dccphtx_sent   = 1;
+@@ -729,8 +727,7 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk)
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct dccp_rx_hist_entry *packet;
+-	struct timeval tnow;
+-	ktime_t now;
++	ktime_t now, t_hist;
+ 	suseconds_t delta;
  
- EXPORT_SYMBOL_GPL(ktime_add_ns);
-+
-+/**
-+ * ktime_sub_ns - Subtract a scalar nanoseconds value from a ktime_t variable
-+ * @kt:		minuend
-+ * @nsec:	the scalar nsec value to subtract
-+ *
-+ * Returns the subtraction of @nsec from @kt in ktime_t format
-+ */
-+ktime_t ktime_sub_ns(const ktime_t kt, u64 nsec)
-+{
-+	ktime_t tmp;
-+
-+	if (likely(nsec < NSEC_PER_SEC)) {
-+		tmp.tv64 = nsec;
-+	} else {
-+		unsigned long rem = do_div(nsec, NSEC_PER_SEC);
-+
-+		tmp = ktime_set((long)nsec, rem);
-+	}
-+
-+	return ktime_sub(kt, tmp);
-+}
-+
-+EXPORT_SYMBOL_GPL(ktime_add_ns);
- # endif /* !CONFIG_KTIME_SCALAR */
+ 	ccid3_pr_debug("%s(%p) - entry \n", dccp_role(sk), sk);
+@@ -765,8 +762,8 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk)
+ 	hcrx->ccid3hcrx_bytes_recv	     = 0;
  
- /*
+ 	/* Elapsed time information [RFC 4340, 13.2] in units of 10 * usecs */
+-	tnow = ktime_to_timeval(now);
+-	delta = timeval_delta(&tnow, &packet->dccphrx_tstamp);
++	t_hist = timeval_to_ktime(packet->dccphrx_tstamp);
++	delta = ktime_us_delta(now, t_hist);
+ 	DCCP_BUG_ON(delta < 0);
+ 	hcrx->ccid3hcrx_elapsed_time = delta / 10;
+ 
 -- 
 1.5.2.2
 
