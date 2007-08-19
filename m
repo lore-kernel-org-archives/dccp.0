@@ -1,22 +1,22 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 09 Aug 2007 21:30:07 +0000
-Subject: Re: [PATCH 2/3]: Promote CCID2 as default CCID
-Message-Id: <5640c7e00708091430v12ea670bk68c6bbf8ec3df815@mail.gmail.com>
+From: Shahiduzzaman <shahid21st@gmail.com>
+Date: Sun, 19 Aug 2007 13:27:29 +0000
+Subject: About pluggable congestion control infrastructure in DCCP
+Message-Id: <e3c7f9e80708190627y3e883241gb1def650e37965c0@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200708091459.33988@strip-the-willow>
-In-Reply-To: <200708091459.33988@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 8/10/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [DCCP]: Promote CCID2 as default CCID
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Hi all,
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+This may be a redundant or very naive question - sorry in advance for
+that. Can anybody tell me, whether the current Linux kernel DCCP
+implementation is done in a fashion like TCP pluggable congestion
+avoidance modules infrastructure (http://lwn.net/Articles/128681/) ?
+
+
+Thanks.
+
+
+Shahid
