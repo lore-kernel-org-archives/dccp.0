@@ -1,77 +1,55 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sun, 19 Aug 2007 23:49:21 +0000
-Subject: [PATCH 03/15] Convert ccid3hctx_t_ld to ktime_t
-Message-Id: <20070819234921.GG24792@ghostprotocols.net>
+Date: Sun, 19 Aug 2007 23:48:38 +0000
+Subject: [PATCH 01/15] Allocation in atomic context
+Message-Id: <20070819234838.GE24792@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+This fixes the following bug reported in syslog:
+
+[ 4039.051658] BUG: sleeping function called from invalid context at /usr/src/davem-2.6/mm/slab.c:3032
+[ 4039.051668] in_atomic():1, irqs_disabled():0
+[ 4039.051670] INFO: lockdep is turned off.
+[ 4039.051674]  [<c0104c0f>] show_trace_log_lvl+0x1a/0x30
+[ 4039.051687]  [<c0104d4d>] show_trace+0x12/0x14
+[ 4039.051691]  [<c0104d65>] dump_stack+0x16/0x18
+[ 4039.051695]  [<c011371e>] __might_sleep+0xaf/0xbe
+[ 4039.051700]  [<c0157b66>] __kmalloc+0xb1/0xd0
+[ 4039.051706]  [<f090416f>] ccid2_hc_tx_alloc_seq+0x35/0xc3 [dccp_ccid2]
+[ 4039.051717]  [<f09048d6>] ccid2_hc_tx_packet_sent+0x27f/0x2d9 [dccp_ccid2]
+[ 4039.051723]  [<f085486b>] dccp_write_xmit+0x1eb/0x338 [dccp]
+[ 4039.051741]  [<f085603d>] dccp_sendmsg+0x113/0x18f [dccp]
+[ 4039.051750]  [<c03907fc>] inet_sendmsg+0x2e/0x4c
+[ 4039.051758]  [<c033a47d>] sock_aio_write+0xd5/0x107
+[ 4039.051766]  [<c015abc1>] do_sync_write+0xcd/0x11c
+[ 4039.051772]  [<c015b296>] vfs_write+0x118/0x11f
+[ 4039.051840]  [<c015b932>] sys_write+0x3d/0x64
+[ 4039.051845]  [<c0103e7c>] syscall_call+0x7/0xb
+[ 4039.051848]  ===========
+The problem was that GFP_KERNEL was used; fixed by using gfp_any().
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/ccid3.c |   12 +++++-------
- net/dccp/ccids/ccid3.h |    3 +--
- 2 files changed, 6 insertions(+), 9 deletions(-)
+ net/dccp/ccids/ccid2.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index d0763ad..42d3dbc 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -154,12 +154,10 @@ static void ccid3_hc_tx_update_x(struct sock *sk)
- 								TFRC_T_MBI);
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 248d20f..d29b88f 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -298,7 +298,7 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ 		int rc;
  
- 	} else {
--		struct timeval now;
-+		const ktime_t now = ktime_get_real();
+ 		ccid2_pr_debug("allocating more space in history\n");
+-		rc = ccid2_hc_tx_alloc_seq(hctx, CCID2_SEQBUF_LEN, GFP_KERNEL);
++		rc = ccid2_hc_tx_alloc_seq(hctx, CCID2_SEQBUF_LEN, gfp_any());
+ 		BUG_ON(rc); /* XXX what do we do? */
  
--		dccp_timestamp(sk, &now);
--
--		if ((timeval_delta(&now, &hctx->ccid3hctx_t_ld) -
--		     (suseconds_t)hctx->ccid3hctx_rtt) >= 0) {
-+		if ((ktime_us_delta(now, hctx->ccid3hctx_t_ld) -
-+		     (s64)hctx->ccid3hctx_rtt) >= 0) {
- 
- 			hctx->ccid3hctx_x  				max(min(2 * hctx->ccid3hctx_x, min_rate),
-@@ -343,7 +341,7 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
- 			ccid3_pr_debug("SYN RTT = %uus\n", dp->dccps_syn_rtt);
- 			hctx->ccid3hctx_rtt  = dp->dccps_syn_rtt;
- 			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
--			hctx->ccid3hctx_t_ld = ktime_to_timeval(now);
-+			hctx->ccid3hctx_t_ld = now;
- 		} else {
- 			/* Sender does not have RTT sample: X = MSS/second */
- 			hctx->ccid3hctx_x = dp->dccps_mss_cache;
-@@ -477,7 +475,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 			 */
- 			hctx->ccid3hctx_rtt  = r_sample;
- 			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
--			hctx->ccid3hctx_t_ld = now;
-+			hctx->ccid3hctx_t_ld = timeval_to_ktime(now);
- 
- 			ccid3_update_send_interval(hctx);
- 
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index 51d4b80..dcb6b67 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -38,7 +38,6 @@
- 
- #include <linux/ktime.h>
- #include <linux/list.h>
--#include <linux/time.h>
- #include <linux/types.h>
- #include <linux/tfrc.h>
- #include "../ccid.h"
-@@ -111,7 +110,7 @@ struct ccid3_hc_tx_sock {
- 	u8				ccid3hctx_idle;
- 	ktime_t				ccid3hctx_t_last_win_count;
- 	struct timer_list		ccid3hctx_no_feedback_timer;
--	struct timeval			ccid3hctx_t_ld;
-+	ktime_t				ccid3hctx_t_ld;
- 	ktime_t				ccid3hctx_t_nom;
- 	u32				ccid3hctx_delta;
- 	struct list_head		ccid3hctx_hist;
+ 		next = hctx->ccid2hctx_seqh->ccid2s_next;
 -- 
 1.5.2.2
 
