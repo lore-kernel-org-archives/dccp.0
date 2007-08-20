@@ -1,7 +1,7 @@
 From: "=?ISO-2022-JP?B?GyRCJUQbKEIgTGVhbmRybyBTYWxlcw==?="
-Date: Mon, 20 Aug 2007 03:13:40 +0000
+Date: Mon, 20 Aug 2007 03:14:47 +0000
 Subject: Re: Kernel version of Arnaldos Net Git tree
-Message-Id: <5bc4c4570708192013n71d9458chd1ae4cb4c9edba15@mail.gmail.com>
+Message-Id: <5bc4c4570708192014i399acd2eqee715408a8c82a29@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570708191944j789a4e31u9ef23d55512e420b@mail.gmail.com>
 In-Reply-To: <5bc4c4570708191944j789a4e31u9ef23d55512e420b@mail.gmail.com>
@@ -9,10 +9,6 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset="iso-2022-jp"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
-
-OK. I'll try it! I'm cloning linus tree... Thank you.
-
-Leandro.
 
 2007/8/19, Ian McDonald <ian.mcdonald@jandi.co.nz>:
 > On 8/20/07, ツ Leandro Sales <leandroal@gmail.com> wrote:
@@ -46,13 +42,6 @@ Leandro.
 > Blog: http://iansblog.jandi.co.nz
 >
 
+BTW, sorry for my top reply in the earlier posts.
 
--- 
-Leandro Melo de Sales.
-Pervasive and Embedded Computing Laboratory
-BRisa and E-Phone Projects Manager & Network Administrator
-http://embedded.ufcg.edu.br/
-+55 083 3310-1404 (extension 208)
-
-"There are 10 types of people in this world: those who understand
-binary, those who don't"
+Leandro.
