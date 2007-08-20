@@ -1,19 +1,26 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 21 Aug 2007 14:22:08 +0000
-Subject: Re: [RFC][PATCH 1/1]: Let dccp_epoch return
-Message-Id: <200708211522.08339@strip-the-willow>
+From: "=?ISO-2022-JP?B?GyRCJUQbKEIgTGVhbmRybyBTYWxlcw==?="
+Date: Mon, 20 Aug 2007 02:44:15 +0000
+Subject: Kernel version of Arnaldos Net Git tree
+Message-Id: <5bc4c4570708191944j789a4e31u9ef23d55512e420b@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200708211510.31147@strip-the-willow>
-In-Reply-To: <200708211510.31147@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  The idea is to start the timer when DCCP is loaded. This gives
-|  2^32-1 usecs = circa 49 days before the clock wraps around.
-Oops, it is not milliseconds but microseconds ... that means the counter
-wraps around every 71 seconds. If the maximum RTT is 3 seconds, then this
-means wrap-around every 20 RTTs.
+Hi Arnaldo,
+     today I clone your git kernel and although it is shown 2.6.24,
+when I run make menuconfig it is shown 2.6.23-rc2. Is there something
+missing in what I did when I clone the tree?
 
-Maybe this is too much?
+Leandro.
+
+-- 
+Leandro Melo de Sales.
+Pervasive and Embedded Computing Laboratory
+BRisa and E-Phone Projects Manager & Network Administrator
+http://embedded.ufcg.edu.br/
++55 083 3310-1404 (extension 208)
+
+"There are 10 types of people in this world: those who understand
+binary, those who don't"
