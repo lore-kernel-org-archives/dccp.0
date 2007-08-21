@@ -1,133 +1,110 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 03 Aug 2007 14:14:16 +0000
-Subject: Re: relating code to RFC 4342, RFC 3448, rfc3448bis-00
-Message-Id: <200708031514.16519@strip-the-willow>
+Date: Tue, 21 Aug 2007 06:55:17 +0000
+Subject: [PATCH 1/1]: Reuse ktime_get_real() calls again
+Message-Id: <200708210755.17774@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Ian,
+[DCCP] Reuse ktime_get_real() calls again
 
-below is as promised the list of differences of the CCID3 code, this has th=
-e most relevant differences.
+This patch reduces the number of timestamps taken in the receive path
+for each packet, following a suggestion by Arnaldo in his recent patch set.
 
-The list may not be exhaustive, but this is all I can get hold of for the m=
-oment.
+The ccid3_hc_tx_update_x() routine is called in
+ * the receive path for each CCID3-controlled packet
+ * for the nofeedback timer (if no feedback arrives during 4 RTT)
 
-Most is also documented online at
-      http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ccid3_packet_recept=
-ion/
+Currently, when there is no loss, each packet gets timestamped twice.
+The patch resolves this by recycling the first timestamp taken on packet
+reception for RTT sampling.
 
+When the no_feedback_timer() is called, then the timestamp argument is
+simply set to NULL - so that ccid3_hc_tx_update_x() takes care of the logic.
 
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |   39 ++++++++++++++++-----------------------
+ 1 file changed, 16 insertions(+), 23 deletions(-)
 
-1. General
-----------
-The code conforms to RFC 4342 as far as possible. Where deviating, the chan=
-ges introduced
-in draft rfc3448bis, revision 00, are used as reference.
-
-2. TFRC code
--------------
-* loss detection is fully compliant with RFC 4342, including the handling o=
-f DUPACKS
-
-* details on=20
-  http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ccid3_packet_reception/=
-loss_detection/loss_detection_algorithm_notes.txt=20
-
-* receiver RTT sampling uses a modified algorithm from RFC 4342, 8.1. This =
-is an extension
-  (uses all data it can get), but the principle is the algorithm from RFC 4=
-342.
-
-* the loss interval handling uses rfc3448bis rather than RFC 3448, due to t=
-he following
-  limitation of RFC 3448:=20
-	RFC 3448 considers only a fixed set of n=3D8 loss intervals. It takes quit=
-e a while
-        until that many loss intervals have accumulated. rfc3448bis is bett=
-er in this regard,
-        since it specifies handling up to k < n =3D 8 loss intervals. This =
-is more realistic=20
-        and hence has been adapted for the code.    =20
-
-* the weights used for the individual loss intervals use the precise, not t=
-he mod-2 rounded
-  values, from RFC 3448, section 5.4 rather than section 8. This is because=
- it gives a better
-  performance and since there is no real gain in using shift operations her=
-e.
-
-* lost packets are always assumed to be data packets (cf. section 7 of the =
-above URL for clarification)
-
-* updating I_mean, in contrast, is based on section 10.2 of RFC 4342 rather=
- than RFC 3448/rfc3448bis.
-  RFC 4342 introduced a method to find out where a new loss interval starts=
-, with respect to sequence
-  number wrap-around (field li_is_closed).
-
-* similarly, determining whether a newly identified loss event does indeed =
-designate a new loss=20
-  interval depends is based on RFC 4342, 10.2 rather than RFC 3448/rfc3448b=
-is
-
-
-3. CCID3 code
---------------
-* RFC3390 initial rate uses `s' instead of MSS described in RFC 4342, as pe=
-r previous discussion
-
-* all non-RFC 4342 based code uses revision 00 of draft rfc3448bis as basis=
-, in particular:
-	- computation procedures in ccid3_hc_tx_update_x(),
-	- updating X when feedback is received in ccid3_hc_tx_packet_recv(),
-	- updating X in ccid3_hc_tx_no_feedback_timer(),
-
-* TX CCID3 uses RTT from Request/Response handshake - as per RFC 4342 errat=
-um.
-
-* packet scheduling closely follows section 4.6 of RFC 3448. Still not sure=
- that this is the best
-  way to do this, but recent tests (cf. bug reports and dropping of `send c=
-redit' patch) showed that
-  apparently this works quite satisfactorily.
-
-* the value of `s' is not fixed but uses EWMA - something which rfc3448bis =
-clarified and introduced.
-
-* computing X_recv uses a disambiguation which tries to reconcile between t=
-he different definitions
-  of RFC 3448 and 4342, cf.=20
-  http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ccid3_packet_reception/=
-#8._Computing_X_recv_
-
-* introduced the possibility of changing the t_nfb to avoid frequently call=
-ing the no_feedback_timer
-  when the RTT is small (Kconfig option)
-
-* CCID3 packet reception (RX CCID) is largely conformant with RFC 3448/rfc3=
-448bis rev 00 and was a
-  pain to get right. See http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/=
-ccid3_packet_reception why.
-
-* sending feedback is also largely conformant with RFC 4342/3448, with the =
-addition of the clarification
-  for computing X_recv when the time interval between sending the last feed=
-back and now is less than one
-  RTT - in this case the previously computed X_recv value is reused (would =
-otherwise lead to false=20
-  estimates of X_recv).
-
-HTH
-Gerrit
-
-|  > | =A0If you do have a list of them it would be great. I see quite a few
-|  > | =A0comments about bis in the code.
-|  > I don't have a list at present, need to go through the works. Will pos=
-t at a later point.
-|  >
-|  Don't worry too much about this, as this is my research so don't want
-|  to waste your time :-)
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -113,27 +113,24 @@ static inline void ccid3_update_send_int
+ 		       hctx->ccid3hctx_s, (unsigned)(hctx->ccid3hctx_x >> 6));
+ 
+ }
+-/*
+- * Update X by
+- *    If (p > 0)
+- *       X_calc = calcX(s, R, p);
+- *       X = max(min(X_calc, 2 * X_recv), s / t_mbi);
+- *    Else
+- *       If (now - tld >= R)
+- *          X = max(min(2 * X, 2 * X_recv), s / R);
+- *          tld = now;
++
++/**
++ * ccid3_hc_tx_update_x  -  Update allowed sending rate X
++ * @stamp: most recent time if available - can be left NULL.
++ * This function tracks draft rfc3448bis, check there for latest details.
+  *
+  * Note: X and X_recv are both stored in units of 64 * bytes/second, to support
+  *       fine-grained resolution of sending rates. This requires scaling by 2^6
+  *       throughout the code. Only X_calc is unscaled (in bytes/second).
+  *
+  */
+-static void ccid3_hc_tx_update_x(struct sock *sk)
++static void ccid3_hc_tx_update_x(struct sock *sk, ktime_t *stamp)
+ 
+ {
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	__u64 min_rate = 2 * hctx->ccid3hctx_x_recv;
+ 	const  __u64 old_x = hctx->ccid3hctx_x;
++	ktime_t now = stamp? *stamp : ktime_get_real();
+ 
+ 	/*
+ 	 * Handle IDLE periods: do not reduce below RFC3390 initial sending rate
+@@ -153,18 +150,14 @@ static void ccid3_hc_tx_update_x(struct 
+ 					(((__u64)hctx->ccid3hctx_s) << 6) /
+ 								TFRC_T_MBI);
+ 
+-	} else {
+-		const ktime_t now = ktime_get_real();
+-
+-		if ((ktime_us_delta(now, hctx->ccid3hctx_t_ld) -
+-		     (s64)hctx->ccid3hctx_rtt) >= 0) {
++	} else if (ktime_us_delta(now, hctx->ccid3hctx_t_ld)
++				- (s64)hctx->ccid3hctx_rtt >= 0) {
+ 
+-			hctx->ccid3hctx_x -				max(min(2 * hctx->ccid3hctx_x, min_rate),
+-				    scaled_div(((__u64)hctx->ccid3hctx_s) << 6,
+-					       hctx->ccid3hctx_rtt));
+-			hctx->ccid3hctx_t_ld = now;
+-		}
++		hctx->ccid3hctx_x +			max(min(2 * hctx->ccid3hctx_x, min_rate),
++			    scaled_div(((__u64)hctx->ccid3hctx_s) << 6,
++				       hctx->ccid3hctx_rtt));
++		hctx->ccid3hctx_t_ld = now;
+ 	}
+ 
+ 	if (hctx->ccid3hctx_x != old_x) {
+@@ -273,7 +266,7 @@ static void ccid3_hc_tx_no_feedback_time
+ 			hctx->ccid3hctx_x_recv <<= 4;
+ 		}
+ 		/* Now recalculate X [RFC 3448, 4.3, step (4)] */
+-		ccid3_hc_tx_update_x(sk);
++		ccid3_hc_tx_update_x(sk, NULL);
+ 		/*
+ 		 * Schedule no feedback timer to expire in
+ 		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
+@@ -493,7 +486,7 @@ static void ccid3_hc_tx_packet_recv(stru
+ 					tfrc_calc_x(hctx->ccid3hctx_s,
+ 						    hctx->ccid3hctx_rtt,
+ 						    hctx->ccid3hctx_p);
+-			ccid3_hc_tx_update_x(sk);
++			ccid3_hc_tx_update_x(sk, &now);
+ 
+ 			ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, "
+ 				       "p=%u, X_calc=%u, X_recv=%u, X=%u\n",
