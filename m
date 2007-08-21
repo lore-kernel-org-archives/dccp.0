@@ -1,7 +1,7 @@
-From: David Miller <davem@davemloft.net>
-Date: Mon, 20 Aug 2007 00:20:19 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 21 Aug 2007 07:11:12 +0000
 Subject: Re: [PATCH 0/15] dccp ktime_t conversion and a fix
-Message-Id: <20070819.172019.84150977.davem@davemloft.net>
+Message-Id: <200708210811.12937@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <20070819234821.GD24792@ghostprotocols.net>
 In-Reply-To: <20070819234821.GD24792@ghostprotocols.net>
@@ -10,14 +10,13 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sun, 19 Aug 2007 20:48:21 -0300
+Thanks a lot for all the good work - I have updated the test tree with regard to
+this changeset, summary of changes follows separately.
 
-> 	Please consider pulling from:
-> 
-> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.24.git
+There are a few bug fix patches, the most prominent is the Sync Flood one (I have
+put this at the top of the tree, so that it does not depend on the other patches in 
+the tree). Would you like me to resend this or what are future plans? 
 
-All applied as patches to net-2.6.24, thanks!
-
-Since patch 1 (the gfp_any() change) is a bug fix I'll
-queue that up for net-2.6 too.
+Another question I wanted to raise is whether people would be ok to have some of the 
+patches compacted in the test tree - there are so many patches that tracking even small 
+changes can be quite time consuming.
