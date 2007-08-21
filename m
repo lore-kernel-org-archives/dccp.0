@@ -1,55 +1,94 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 02 Aug 2007 14:40:02 +0000
-Subject: Re: [PATCH 5/5]: Revert use of MSS instead of s
-Message-Id: <200708021540.02720@strip-the-willow>
+Date: Tue, 21 Aug 2007 14:10:31 +0000
+Subject: [RFC][PATCH 1/1]: Let dccp_epoch return
+Message-Id: <200708211510.31147@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200707261356.53153@strip-the-willow>
-In-Reply-To: <200707261356.53153@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting Ian McDonald:
-|  > Can understand that - that is partly why I suggested to wait a little,=
- and see if and the
-|  > two drafts stabilise. If there were updates to 4342 then I would also =
-be all for tracking
-|  > them. However, 4342 is written in such a clever way that updates of 34=
-48 do not apply.
-|  > I am in support of the 3448 draft changes that are in the kernel so fa=
-r, since to my
-|  > understanding they improve the performance over an `orthodox' 4342; th=
-e point being that
-|  > no one cares how orthodox the implementation is when the performance i=
-s awful.
-|  >
-|  Unfortunately I can't really wait too long as it is for my thesis.
-|  That's OK as I can reference which draft I use. It has been suggested
-|  for CCID3.bis (and agreed) that CCID3 should track TFRC.
+This is an idea-test, not a full patch. But I have found it to work.
 
-I have enquired about the status of rfc3448bis - the situation at the momen=
-t seems that there
-are a lot of changes in rfc3448bis which have not gone through community re=
-view yet; there are
-further edits/changes which need to be addressed (probably in the next revi=
-sion for the December
-IETF meeting); and only after this has been done can some stabilisation be =
-expected. Until
-then there are probably going to be many changes. It seems that Faster Rest=
-art is being rewritten
-into a new algorithm, using something like TCP cwnd validation.
+The idea is to start the timer when DCCP is loaded. This gives
+2^32-1 usecs = circa 49 days before the clock wraps around.
 
-For me this all looks very experimental, but it can be useful to experiment=
-. Therefore, if you
-wanted to, the offer is there to put all this stuff as a fork of the test t=
-ree.
-=20
-|  > | =A0If you do have a list of them it would be great. I see quite a few
-|  > | =A0comments about bis in the code.
-|  > I don't have a list at present, need to go through the works. Will pos=
-t at a later point.
-|  >
-|  Don't worry too much about this, as this is my research so don't want
-|  to waste your time :-)
-Thanks - much appreciated, this can take a little time.
+What I have tested is the RTT sampling for the initial SYN RTT and
+that worked well with the hack below.
+
+Here is a transcript (after the patch)
+$ iperf -c 10.0.0.1 -d
+------------------------------------------------------------
+Client connecting to 10.0.0.1, DCCP port 5001
+NOTE: running in bytestream-mode (maximum speed)
+DCCP datagram buffer size:   104 KByte (default)
+------------------------------------------------------------
+[  3] local 10.0.0.176 port 53425 connected with 10.0.0.1 port 5001
+Aug 21 15:04:04 gerrit kernel: delta = 171               <Aug 21 15:04:04 gerrit kernel: SYN RTT = 171us           <= 
+[  3]  0.0-10.0 sec    112 MBytes  93.9 Mbits/se
+
+Will try to clean this up for the other cases - but is the idea ok?
+---
+ net/dccp/dccp.h    |    1 +
+ net/dccp/input.c   |    4 ++--
+ net/dccp/options.c |    2 +-
+ net/dccp/proto.c   |    7 +++++++
+ 4 files changed, 11 insertions(+), 3 deletions(-)
+
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -413,6 +413,7 @@ extern int dccp_insert_options(struct so
+ extern int dccp_insert_option_elapsed_time(struct sock *sk,
+ 					    struct sk_buff *skb,
+ 					    u32 elapsed_time);
++extern u32 dccp_timestamp(void);
+ extern int dccp_insert_option_timestamp(struct sock *sk,
+ 					 struct sk_buff *skb);
+ extern int dccp_insert_option(struct sock *sk, struct sk_buff *skb,
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -365,7 +365,7 @@ EXPORT_SYMBOL_GPL(dccp_insert_option_ela
+ 
+ int dccp_insert_option_timestamp(struct sock *sk, struct sk_buff *skb)
+ {
+-	__be32 now = htonl(((suseconds_t)ktime_to_us(ktime_get_real())) / 10);
++	__be32 now = htonl(dccp_timestamp() / 10);
+ 	/* yes this will overflow but that is the point as we want a
+ 	 * 10 usec 32 bit timer which mean it wraps every 11.9 hours */
+ 
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -52,6 +52,12 @@ struct inet_hashinfo __cacheline_aligned
+ 
+ EXPORT_SYMBOL_GPL(dccp_hashinfo);
+ 
++static ktime_t dccp_timestamp_seed;
++u32 dccp_timestamp(void)
++{
++	return ktime_us_delta(ktime_get_real(), dccp_timestamp_seed);
++}
++
+ /* Forward Declarations. */
+ static void dccp_handle_passive_close(struct sock *sk);
+ 
+@@ -1134,6 +1140,7 @@ static int __init dccp_init(void)
+ 	rc = dccp_sysctl_init();
+ 	if (rc)
+ 		goto out_ackvec_exit;
++	dccp_timestamp_seed = ktime_get_real();
+ out:
+ 	return rc;
+ out_ackvec_exit:
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -648,8 +648,8 @@ u32 dccp_sample_rtt(struct sock *sk, kti
+ 			DCCP_WARN("packet without timestamp echo\n");
+ 			return DCCP_SANE_RTT_MAX;
+ 		}
+-		ktime_sub_us(t_recv, or->dccpor_timestamp_echo * 10);
+-		delta = ktime_to_us(t_recv);
++		delta = dccp_timestamp() - or->dccpor_timestamp_echo * 10;
++		printk("delta = %lld\n", (long long)delta);
+ 	} else
+ 		delta = ktime_us_delta(t_recv, *t_hist);
+ 
