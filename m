@@ -1,64 +1,91 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 21 Aug 2007 13:25:27 +0000
-Subject: Re: [PATCH 13/15] [DCCP] options: convert dccp_insert_option_timestamp to ktime_t
-Message-Id: <200708211425.27664@strip-the-willow>
+Date: Thu, 23 Aug 2007 15:10:08 +0000
+Subject: [PATCHv2  2/3]: Provide 10s of microsecond timesource
+Message-Id: <200708231610.08471@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <20070819235240.GQ24792@ghostprotocols.net>
-In-Reply-To: <20070819235240.GQ24792@ghostprotocols.net>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Sorry this one has a bug also - it compresses a signed 64 bit quantity into a 32-bit unsigned
-value. When re-interpreted as microsecond value (in dccp_sample_rtt), this gives values which
-are way too small.
+I have thought this over - the solutions I came up with were all complicated
+and I think it is not worth making it more complicated if the issue only occurs
+every 11.9 hours. But added a warning note in the timer comments, so that other
+timestamp users may take preventive action, if necessary.
 
-Maybe we should keep the dccp_epoch thing, but now with ktime_t, so as to avoid large microsecond values?
+--------------------> Patch v2 <-----------------------------------------
+[DCCP]: Provide 10s of microsecond timesource
 
-In any case, the RTT sampling is not usable - it constantly produces overflow, since the timestamp
-option value is too small.
+This provides a timesource, conveniently used for DCCP timestamps, which 
+returns the elapsed time in 10s of microseconds since initialisation. 
+This makes for a wrap-around time of about 11.9 hours, which should be
+sufficient for most applications.
 
-Please see below.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/dccp.h    |    2 ++
+ net/dccp/options.c |    2 +-
+ net/dccp/proto.c   |    2 ++
+ net/dccp/timer.c   |   21 +++++++++++++++++++++
+ 4 files changed, 26 insertions(+), 1 deletion(-)
 
-|  @@ -388,11 +388,7 @@ EXPORT_SYMBOL_GPL(dccp_timestamp);
-|   
-|   int dccp_insert_option_timestamp(struct sock *sk, struct sk_buff *skb)
-|   {
-|  -	struct timeval tv;
-|  -	__be32 now;
-|  -
-|  -	dccp_timestamp(sk, &tv);
-|  -	now = htonl(timeval_usecs(&tv) / 10);
-|  +	__be32 now = htonl(((suseconds_t)ktime_to_us(ktime_get_real())) / 10);
-|   	/* yes this will overflow but that is the point as we want a
-|   	 * 10 usec 32 bit timer which mean it wraps every 11.9 hours */
-|   
-
-I debugged this by adding 
-
-int dccp_insert_option_timestamp(struct sock *sk, struct sk_buff *skb)
-{
-       ktime_t time = ktime_get_real();
-       s64 n = ktime_to_us(time);
-       u32 now;
-
-       do_div(n, 10);
-       now = n;
-
-       printk("TIME: %lld => us = %lld => %u (%x) ", (long long) time.tv64, (long long)n, now, now);
-       now = htonl(now);
-       printk(" = %x\n", now);
-}
-
-... and I get values such as
-   TIME: 1187701891935389887 => us = 118770189193538 => 1458557250 (56efd142)  = 42d1ef56
-
-This is the cut-off, the `us' value is 
-  6C0556efd142 and the u32 (__be32) converted value is
-      56efd142
-
-So this doesn't work - in CCID3, due to the large RTT values, the sending rate currently goes down
-to 7..8 kbits/sec - when I change the RTT back to normal, the rate goes back to line speed (91.6 Mbits/sec).
-
-
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -396,6 +396,8 @@ extern int dccp_insert_options(struct so
+ extern int dccp_insert_option_elapsed_time(struct sock *sk,
+ 					    struct sk_buff *skb,
+ 					    u32 elapsed_time);
++extern u32 dccp_timestamp(void);
++extern void dccp_timestamping_init(void);
+ extern int dccp_insert_option_timestamp(struct sock *sk,
+ 					 struct sk_buff *skb);
+ extern int dccp_insert_option(struct sock *sk, struct sk_buff *skb,
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -372,7 +372,7 @@ EXPORT_SYMBOL_GPL(dccp_insert_option_ela
+ 
+ int dccp_insert_option_timestamp(struct sock *sk, struct sk_buff *skb)
+ {
+-	__be32 now = htonl(((suseconds_t)ktime_to_us(ktime_get_real())) / 10);
++	__be32 now = htonl(dccp_timestamp());
+ 	/* yes this will overflow but that is the point as we want a
+ 	 * 10 usec 32 bit timer which mean it wraps every 11.9 hours */
+ 
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -1076,6 +1076,8 @@ static int __init dccp_init(void)
+ 	rc = dccp_sysctl_init();
+ 	if (rc)
+ 		goto out_ackvec_exit;
++
++	dccp_timestamping_init();
+ out:
+ 	return rc;
+ out_ackvec_exit:
+--- a/net/dccp/timer.c
++++ b/net/dccp/timer.c
+@@ -291,3 +291,24 @@ void dccp_init_xmit_timers(struct sock *
+ 	inet_csk_init_xmit_timers(sk, &dccp_write_timer, &dccp_delack_timer,
+ 				  &dccp_keepalive_timer);
+ }
++
++static ktime_t dccp_timestamp_seed;
++/**
++ * dccp_timestamp  -  10s of microseconds time source
++ * Returns the number of 10s of microseconds since loading DCCP. This is native
++ * DCCP time difference format (RFC 4340, sec. 13).
++ * Please note: This will wrap around about circa every 11.9 hours.
++ */
++u32 dccp_timestamp(void)
++{
++	s64 delta = ktime_us_delta(ktime_get_real(), dccp_timestamp_seed);
++
++	do_div(delta, 10);
++	return delta;
++}
++EXPORT_SYMBOL_GPL(dccp_timestamp);
++
++void __init dccp_timestamping_init(void)
++{
++	dccp_timestamp_seed = ktime_get_real();
++}
