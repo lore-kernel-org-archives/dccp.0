@@ -1,81 +1,31 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sun, 19 Aug 2007 23:52:20 +0000
-Subject: [PATCH 12/15] [DCCP]: Convert dccps_timestamp_time to ktime_t
-Message-Id: <20070819235220.GP24792@ghostprotocols.net>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Tue, 28 Aug 2007 23:37:25 +0000
+Subject: [PATCH 5/6] DCCP: Check if faster restart is on
+Message-Id: <200708291137.26404.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
----
- include/linux/dccp.h |    3 ++-
- net/dccp/options.c   |   13 +++++--------
- 2 files changed, 7 insertions(+), 9 deletions(-)
+This adds new helper functions to check if faster restart is turned on.
 
-diff --git a/include/linux/dccp.h b/include/linux/dccp.h
-index fda2148..3a4b96b 100644
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -215,6 +215,7 @@ struct dccp_so_feat {
- #ifdef __KERNEL__
- 
- #include <linux/in.h>
-+#include <linux/ktime.h>
- #include <linux/list.h>
- #include <linux/uio.h>
- #include <linux/workqueue.h>
-@@ -498,7 +499,7 @@ struct dccp_sock {
- 	__u64				dccps_gar;
- 	__be32				dccps_service;
- 	struct dccp_service_list	*dccps_service_list;
--	struct timeval			dccps_timestamp_time;
-+	ktime_t				dccps_timestamp_time;
- 	__u32				dccps_timestamp_echo;
- 	__u16				dccps_l_ack_ratio;
- 	__u16				dccps_r_ack_ratio;
-diff --git a/net/dccp/options.c b/net/dccp/options.c
-index 34d536d..95b75d8 100644
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -158,7 +158,7 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
- 			opt_recv->dccpor_timestamp = ntohl(*(__be32 *)value);
- 
- 			dp->dccps_timestamp_echo = opt_recv->dccpor_timestamp;
--			dccp_timestamp(sk, &dp->dccps_timestamp_time);
-+			dp->dccps_timestamp_time = ktime_get_real();
- 
- 			dccp_pr_debug("%s rx opt: TIMESTAMP=%u, ackno=%llu\n",
- 				      dccp_role(sk), opt_recv->dccpor_timestamp,
-@@ -405,14 +405,12 @@ static int dccp_insert_option_timestamp_echo(struct sock *sk,
- 					     struct sk_buff *skb)
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
--	struct timeval now;
- 	__be32 tstamp_echo;
--	u32 elapsed_time;
- 	int len, elapsed_time_len;
- 	unsigned char *to;
--
--	dccp_timestamp(sk, &now);
--	elapsed_time = timeval_delta(&now, &dp->dccps_timestamp_time) / 10;
-+	const suseconds_t delta = ktime_us_delta(ktime_get_real(),
-+						 dp->dccps_timestamp_time);
-+	u32 elapsed_time = delta / 10;
- 	elapsed_time_len = dccp_elapsed_time_len(elapsed_time);
- 	len = 6 + elapsed_time_len;
- 
-@@ -438,8 +436,7 @@ static int dccp_insert_option_timestamp_echo(struct sock *sk,
- 	}
- 
- 	dp->dccps_timestamp_echo = 0;
--	dp->dccps_timestamp_time.tv_sec = 0;
--	dp->dccps_timestamp_time.tv_usec = 0;
-+	dp->dccps_timestamp_time = ktime_set(0, 0);
- 	return 0;
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index c77c8fb..7edbf70 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -182,4 +182,11 @@ static inline struct ccid3_hc_rx_sock 
+*ccid3_hc_rx_sk(const struct sock *sk)
+ 	return ccid3_rx_priv;
  }
  
--- 
-1.5.2.2
-
++static inline bool ccid3_hc_tx_faster_restart_on(
++	const struct ccid3_hc_tx_sock *hctx)
++{
++	return ((hctx->ccid3hctx_extensions & TFRC_EXT_FASTER_RESTART)
++		= TFRC_EXT_FASTER_RESTART);
++}
++
+ #endif /* _DCCP_CCID3_H_ */
