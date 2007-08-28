@@ -1,52 +1,42 @@
-From: "=?ISO-2022-JP?B?GyRCJUQbKEIgTGVhbmRybyBTYWxlcw==?="
-Date: Mon, 20 Aug 2007 02:47:39 +0000
-Subject: Re: What happened to http://linux-net.osdl.org/index.php/DCCP_Testing?
-Message-Id: <5bc4c4570708191947w1b1dbff2jc1ec207c4063e78f@mail.gmail.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Tue, 28 Aug 2007 23:13:04 +0000
+Subject: [PATCH 0/6] DCCP: Implement TFRC Faster Restart
+Message-Id: <200708291113.07431.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
-References: <5bc4c4570708191849s1dc54f23i20b37ada8fb08194@mail.gmail.com>
-In-Reply-To: <5bc4c4570708191849s1dc54f23i20b37ada8fb08194@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-2022-jp"
+Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Sure, I agree on this, just one more option if it is necessary...
+This patch set implements TFRC Faster Restart as per current draft.
 
-Leandro.
+Patche can also be found at:
+http://wand.net.nz/~iam4/dccp/patches24/
+(although do not apply patch 7)
 
-2007/8/19, Ian McDonald <ian.mcdonald@jandi.co.nz>:
-> On 8/20/07, ツ Leandro Sales <leandroal@gmail.com> wrote:
-> > Here in the university I have control of some servers of our
-> > laboratory. If you want, we can host the wiki there.
-> >
-> > Leandro.
-> >
-> Leandro,
->
-> I think this is better on an official Linux Foundation server as it
-> gives it a good reputation.
->
-> I'm happy removing spam in the meantime.
->
-> Ian
->
-> --
-> Web1: http://wand.net.nz/~iam4/
-> Web2: http://www.jandi.co.nz
-> Blog: http://iansblog.jandi.co.nz
-> -
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
->
+The faster restart implementation was based on 
+draft-ietf-dccp-tfrc-faster-restart-03.txt.
 
+The version of DCCP CCID3 in Gerrit's tree used as the base is (mostly) 
+draft-floyd-rfc3448bis-00.txt where the faster restart Internet Draft 
+specifies the use of draft-ietf-dccp-rfc3448bis-02.txt.
 
--- 
-Leandro Melo de Sales.
-Pervasive and Embedded Computing Laboratory
-BRisa and E-Phone Projects Manager & Network Administrator
-http://embedded.ufcg.edu.br/
-+55 083 3310-1404 (extension 208)
+We did not implement all of the Internet Draft for faster restart as it was 
+either not required, or the base DCCP did not support the features required.
 
-"There are 10 types of people in this world: those who understand
-binary, those who don't"
+In particular the following features are missing:
+
+    * keep alive pings as per section 3.1. It has been proposed at IETF 69 to 
+remove these.
+    * the use of X_recv_set as per section 3.2. We use X_recv instead as 
+X_recv_set is not part of rfc3448bis-00.txt
+    * Interpolation of X_fast_max as per section 3.2. This is used for idle 
+periods to scale back the faster restart and is used for idle periods in 
+minutes. As our tests are shorter than this in duration we have not 
+implemented. We have however provided the framework for this so it would be 
+trivial to complete this if desired.
+    * the measurement of the receive rate in the last RTT as per section 4.2. 
+We have left our implementation at the receive rate since last feedback sent 
+for simplicity of implementation. We do not believe that this would have a 
+material affect, and it would equally affect both the standard implementation 
+and faster restart so it would be cancelled out.
