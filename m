@@ -1,29 +1,37 @@
-From: David Miller <davem@davemloft.net>
-Date: Wed, 26 Sep 2007 05:42:35 +0000
-Subject: Re: [PATCH 6/6] [DCCP]: Parameter renaming
-Message-Id: <20070925.224235.27796755.davem@davemloft.net>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Mon, 03 Sep 2007 23:02:50 +0000
+Subject: Re: [PATCH 3/6] DCCP: Introduce CCID3 extensions
+Message-Id: <5640c7e00709031602v42ebef8bq87fd31a2ed5443b9@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20070922211033.GK4887@ghostprotocols.net>
-In-Reply-To: <20070922211033.GK4887@ghostprotocols.net>
+References: <200708291134.45030.ian.mcdonald@jandi.co.nz>
+In-Reply-To: <200708291134.45030.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 22 Sep 2007 18:10:33 -0300
+On 8/30/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> A style comment - I like the idea of the extensions and can see your point.
+> To be true, if the code were analysed for extensions then the rfc344bis-00
+> extensions would probably also count, as well as the erratum for the SYN
+> RTT sample.
 
-> The parameter `seq' of dccp_send_sync() is in fact an acknowledgement number
-> and not a sequence number - thus renamed by this patch into `ackno'.
-> 
-> Secondly, a `critical' warning is added when a Sync/SyncAck could not be sent.
-> 
-> Sanity: I have checked all other functions that are called in dccp_transmit_skb,
->         there are no clashes with the use of dccpd_ack_seq; no other function is
->         using this slot at the same time.
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-> Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Yes, that was the intention - to pick up other uses over time as appropriate.
+>
+> When using a one-bit flag (which automatically behaves like a Boolean type),
+> such as
+>         /* @ccid3hctx_faster_restart_on: whether Faster Restart is enabled */
+>         /* ... */
+>         u8                              ccid3hctx_faster_restart_on:1;
+>
+> the testing and setting code would be smaller - if a little less elegant.
 
-Applied, thanks.
+Understand what you're saying. When/if it gets merged I'll see what
+code style Arnaldo wants and go with whichever style he prefers. I
+don't mind which one is used.
+
+Ian
+-- 
+Web1: http://wand.net.nz/~iam4/
+Web2: http://www.jandi.co.nz
+Blog: http://iansblog.jandi.co.nz
