@@ -1,34 +1,38 @@
 From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sun, 23 Sep 2007 07:48:48 +0000
-Subject: Re: Ack Vectors, feature negotiation and preview of new patches
-Message-Id: <5640c7e00709230048j767ca705x1ed764a80bf00aca@mail.gmail.com>
+Date: Tue, 04 Sep 2007 01:24:50 +0000
+Subject: Re: [PATCH 4/6] DCCP: Add framework for faster restart
+Message-Id: <5640c7e00709031824w1ab3db27tfaaa386daa96fd32@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200709201605.31605@strip-the-willow>
-In-Reply-To: <200709201605.31605@strip-the-willow>
+References: <200708291136.19130.ian.mcdonald@jandi.co.nz>
+In-Reply-To: <200708291136.19130.ian.mcdonald@jandi.co.nz>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 9/21/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> I am happy to announce that feature negotiation now works, which resolves the above problem. Below is
-> a log dump which shows the successful negotiation of CCID and dependent features during the handshake.
-> Exchanging NN features during an established connection is also possible (as used e.g. by Ack Ratio for
-> CCID2). I'll be sending the patches next week after some more testing.
+On 8/30/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> I think a small optimisation is possible below:
 >
-Sounds awesome.
-
-> The other news is a patch for wireshark to
->  * decode all feature-negotiation options
->  * decode CCID3's X_recv and Loss Event Rate
-> This is on http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/wireshark-options-decoding.diff
+> |  +static int ccid3_hc_rx_setsockopt(struct sock *sk, const int optname,
+> |  +                              int val, int optlen)
+> |  +{
+> |  +    struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+> |  +
+> |  +    /* Listen socks don't have a private CCID block */
+> |  +    if (sk->sk_state = DCCP_LISTEN)
+> |  +            return -EINVAL;
+> This check appears now 6 times in the CCID3 code. I think it could be moved to
+> the wrapper functions ccid_hc_{t,r}x_getsockopt and - with regard to your previous patch -
+> to ccid_hc_{t,r}x_setsockopt.
 >
+I've tidied this up a bit and will resubmit once I finish fixing faster restart.
 
-That sounds useful too. Have you sent it upstream?
+> What I am working on is resolving this "Listen socks don't have a private CCID block" business,
+> i.e. trying to get away from passing all the CCID control blocks to the control socket and let
+> the connection do the negotiation.
 
-Lots of good work. Look forward to reviewing the patches in due course.
+Cool
 
-Ian
 -- 
 Web1: http://wand.net.nz/~iam4/
 Web2: http://www.jandi.co.nz
