@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 04 Sep 2007 21:45:02 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 05 Sep 2007 09:02:48 +0000
 Subject: Re: [PATCH 0/6] DCCP: Implement TFRC Faster Restart
-Message-Id: <5640c7e00709041445w30934f12qde5b7693d7f2875e@mail.gmail.com>
+Message-Id: <200709051002.48674@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200708291113.07431.ian.mcdonald@jandi.co.nz>
 In-Reply-To: <200708291113.07431.ian.mcdonald@jandi.co.nz>
@@ -10,53 +10,49 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 9/5/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> |  Agree. But don't think this is an obstacle to merging as we are
-> |  running obsolete code in other branch/mainline ;-)
-> |
-> That is not what I meant. Of course it is not an obstacle of getting code `in', but the
-> problem is in getting the code `out' or updated when there is time for a new revision.
->
-> When there is little or no documentation in the code saying which variable or piece of
-> code belongs where, then each time someone wants to change a bit of code has to reverse-
-> engineer what actually is going on. This can be very time-consuming. So I was not thinking
-> in terms of merging (although I am sure that Arnaldo will pick out bad code), but of keeping
-> the code changeable for a longer period and easier to update.
->
-> Don't get me wrong, I don't mean your code here, it is a general problem which I think we
-> should pay more attention to. And, as said, my ideas of keeping things separate may not be
-> the best possible solution, only one that I could think of at the moment.
->
-Aha. I see what you mean now. I think the best thing to do here is to
-label each block of code introduced, that is specific to a version,
-with the version of the document used.
+|  > When there is little or no documentation in the code saying which variable or piece of
+|  > code belongs where, then each time someone wants to change a bit of code has to reverse-
+|  > engineer what actually is going on. This can be very time-consuming. So I was not thinking
+|  > in terms of merging (although I am sure that Arnaldo will pick out bad code), but of keeping
+|  > the code changeable for a longer period and easier to update.
+|  >
+|  > Don't get me wrong, I don't mean your code here, it is a general problem which I think we
+|  > should pay more attention to. And, as said, my ideas of keeping things separate may not be
+|  > the best possible solution, only one that I could think of at the moment.
+|  >
+|  Aha. I see what you mean now. I think the best thing to do here is to
+|  label each block of code introduced, that is specific to a version,
+|  with the version of the document used.
+That's why I thought a separate branch would be nice - it keeps all documentation and patches together
+so that even after some pauses in between one knows where the code came from and what it was good for. 
 
-I actually think my code could be merged into your main branch (when I
-resubmit it fixed) as it does not conflict with anything and doesn't
-run by default.
+Will you be updating the code when the `real' Faster Restart comes out? We talked about this before,
+the situation is that rev-03 is obsolete and in the progress of being replaced by a different approach, so 
+the current incarnation is in a kind of disconnected limbo state. It is useful for testing, and that is
+why I am certainly happy to track it in (a branch of) the tree; but it is clear that this Faster Restart
+will be obsoleted in some future.
 
->
-> |  > * the CCID3 code is currently facing the following revisions
-> |  > - the current code implements rev00
-> |  > - Tommi's CCID4 relies on rev01 (not sure about Leandro's)
-> |  > - your FR code actually would need rev02
-> |  > - rev02 is in the process of being revised and obsoleted into rev03
-> |  >
-> |  Agree all the versions are a mess. I think it's worthwhile starting on
-> |  upgrading the code base but not a project I'm undertaking at the
-> |  moment (or you).
-> Hopefully there will be some IETF consolidation about rfc3448bis in December, then all this
-> could be reduced to one revision.
->
-> Imagine -- 4 different developers and 3 different draft versions :(
->
-I'm in two minds about this one. On my one hand as Linux developer I
-think we should always be working towards the latest version. On the
-other hand as a researcher I want a known and consistent quantity.
-Difficult one to resolve!
+That is why I think a separate branch is better - it allows you, even after months of pause, to continue
+with your Faster Restart work exactly where it was left previously.
 
-Ian
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+Let me be clear - I don't want to get in the way of style discussions between you and Arnaldo, but I'd
+like to keep the test tree as clearly structured as possible. What I don't know at the moment, and shall
+investigate, is whether there are other ways of arranging the subtrees while still keeping different 
+approaches separable (my understanding of a `branch').
+
+Again, this is not a Faster Restart issue, but a general problem of moving targets. What I am taking
+home from this is to make a mental note of annotating the current code with regard to which rfc3448bis
+draft version is used (at least it is documented online in these archives).
+
+There is a similar problem with CCID4, which is apparently an also much-discussed draft, and the TFRC-SP
+specification is only an Experimental RFC (not Proposed Standard, like DCCP). I know from my own experience
+with getting the code for RFC 3828 (a stable Proposed Standard RFC) merged into the mainline that
+even then it took a long time and David Miller was not very sympathetic towards unfinished code: initially
+I submitted only the IPv4 variant, but was asked to produce v6 also. I.e. when Faster Restart goes mainline,
+I'd expect similar questions.
+
+So, my hope is that if we can resolve this satisfactorily for you and all others involved, we will arrive
+at a generic solution of distributed development, as I am quite sure that the problem of moving targets will 
+persist in the DCCP world for some time to come.
+
+Gerrit
