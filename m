@@ -1,64 +1,38 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 27 Sep 2007 14:21:21 +0000
-Subject: [PATCH 8/11]: Cleanup routines for feature negotiation
-Message-Id: <200709271521.21444@strip-the-willow>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Thu, 06 Sep 2007 04:34:49 +0000
+Subject: Re: [PATCH 4/10]: Basic support for passive-close
+Message-Id: <5640c7e00709052134o653c12a7w2886ba98e21194e2@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Cleanup routines for feature negotiation
-
-This inserts the required de-allocation routines for memory allocated
-by feature negotiation in the socket destructors.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/dccp.h  |    2 ++
- net/dccp/ipv4.c  |    1 +
- net/dccp/ipv6.c  |    1 +
- net/dccp/proto.c |    1 +
- 4 files changed, 5 insertions(+)
-
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -422,6 +422,8 @@ static inline int dccp_ack_pending(const
- 	       inet_csk_ack_scheduled(sk);
- }
- 
-+extern void dccp_feat_list_purge(struct list_head *fn_list);
-+
- extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
- extern int dccp_insert_options_rsk(struct dccp_request_sock*, struct sk_buff*);
- extern int dccp_insert_option_elapsed_time(struct sock *sk,
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -553,6 +553,7 @@ static void dccp_v4_reqsk_destructor(str
- {
- 	struct dccp_request_sock *dreq = dccp_rsk(req);
- 
-+	dccp_feat_list_purge(&dreq->dreq_featneg);
- 	if (dreq->dreq_tstamp != NULL)
- 		kfree(dreq->dreq_tstamp);
- 	kfree(inet_rsk(req)->opt);
---- a/net/dccp/ipv6.c
-+++ b/net/dccp/ipv6.c
-@@ -297,6 +297,7 @@ static void dccp_v6_reqsk_destructor(str
- {
- 	struct dccp_request_sock *dreq = dccp_rsk(req);
- 
-+	dccp_feat_list_purge(&dreq->dreq_featneg);
- 	if (dreq->dreq_tstamp != NULL)
- 		kfree(dreq->dreq_tstamp);
- 	if (inet6_rsk(req)->pktopts != NULL)
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -270,6 +270,7 @@ int dccp_destroy_sock(struct sock *sk)
- 
- 	/* clean up feature negotiation state */
- 	dccp_feat_clean(dmsk);
-+	dccp_feat_list_purge(&dp->dccps_featneg);
- 
- 	return 0;
- }
+On 7/13/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [DCCP]: Basic support for passive-close
+>
+> This implements necessary state transitions for the two forms of passive-close
+>
+>  * PASSIVE_1, which is entered when a host receives Close;
+>  * PASSIVE_2, which is entered when a client receives CloseReq.
+>
+> The handling is such that these passive connection-termination requests are
+> enqueued as `fin' packets so that dccp_recvmsg() can later detect them. The
+> only thing I am not entirely sure about is the wake_async in dccp_rcv_closereq();
+> this has been copied from dccp_rcv_close() (but looks ok from the principle).
+>
+> The completed state transition diagram is on
+> http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/closing_states/
+>
+> NB: Regrettably, it is no longer easily possible to use a table-based transition as
+>     before. The reason is that the role of the host (server or client) also plays a
+>     `role' in the state transition. Therefore DCCP_ACTION_FIN has also been removed.
+>     Another difference is that the transition into DCCP_CLOSED is now after sending
+>     the Close/CloseReq.
+>
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+-- 
+Web1: http://wand.net.nz/~iam4/
+Web2: http://www.jandi.co.nz
+Blog: http://iansblog.jandi.co.nz
