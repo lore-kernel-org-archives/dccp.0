@@ -1,23 +1,36 @@
 From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 22 Sep 2007 20:33:54 +0000
-Subject: Re: [PATCH 3/5] CCID 4: Enforce a minimum sending rate of 10 ms
-Message-Id: <5640c7e00709221333m73ad575elcaf8c82481e2e3a@mail.gmail.com>
+Date: Thu, 06 Sep 2007 04:02:47 +0000
+Subject: Re: [PATCH 0/10]: Support for passive close
+Message-Id: <5640c7e00709052102v733a46acocaaacecc7c51dee5@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20070920112443.GB26233@kikai.katei.fi>
-In-Reply-To: <20070920112443.GB26233@kikai.katei.fi>
+References: <200707121520.48349@strip-the-willow>
+In-Reply-To: <200707121520.48349@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 9/20/07, Tommi Saviranta <wnd@iki.fi> wrote:
-> +       /* TFRC-SP enforces a minimum interval of 10 milliseconds */
-> +       hctx->ccid4hctx_t_ipi > +               max_t(u32, scaled_div32(((u64)hctx->ccid4hctx_s) << 6,
-> +                                       hctx->ccid4hctx_x),
-> +                     10000);
+On 7/18/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
 >
-I think this should be a constant. Otherwise fine.
+> |  Please note your method works perfectly fine and is an acceptable fix,
+> |  and can go in. My method may not even work as I'm thinking out loud
+> |  here really.
+> This really is appreciated since by looking at the same thing one often gets better ideas,
+> please see below.
+>
+> I am defending my solution on the grounds that I have verified the possible state transitions,
+> most signalling is in the kernel, and changes are documented.
+>
+> The main point behind this patch set is the API: with regard to closing states one now gets
+> the same behaviour as with TCP, i.e. the close() calls work as expected - either when called
+> directly, or implicitly via exit().
+>
+OK. I'm (finally) getting back to this and after thinking some more
+your solution seems the best.
 
+Will go through patches individually now.
+
+Ian
 -- 
 Web1: http://wand.net.nz/~iam4/
 Web2: http://www.jandi.co.nz
