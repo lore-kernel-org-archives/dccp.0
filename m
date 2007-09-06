@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Mon, 03 Sep 2007 23:02:50 +0000
-Subject: Re: [PATCH 3/6] DCCP: Introduce CCID3 extensions
-Message-Id: <5640c7e00709031602v42ebef8bq87fd31a2ed5443b9@mail.gmail.com>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Thu, 06 Sep 2007 03:05:28 +0000
+Subject: [PATCH 3/6] DCCP: Introduce CCID3 extensions
+Message-Id: <200709061505.28964.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 References: <200708291134.45030.ian.mcdonald@jandi.co.nz>
 In-Reply-To: <200708291134.45030.ian.mcdonald@jandi.co.nz>
@@ -10,28 +10,46 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 8/30/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> A style comment - I like the idea of the extensions and can see your point.
-> To be true, if the code were analysed for extensions then the rfc344bis-00
-> extensions would probably also count, as well as the erratum for the SYN
-> RTT sample.
+In this patch we introduce the extension TFRC faster restart.
 
-Yes, that was the intention - to pick up other uses over time as appropriate.
->
-> When using a one-bit flag (which automatically behaves like a Boolean type),
-> such as
->         /* @ccid3hctx_faster_restart_on: whether Faster Restart is enabled */
->         /* ... */
->         u8                              ccid3hctx_faster_restart_on:1;
->
-> the testing and setting code would be smaller - if a little less elegant.
-
-Understand what you're saying. When/if it gets merged I'll see what
-code style Arnaldo wants and go with whichever style he prefers. I
-don't mind which one is used.
-
-Ian
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index 5a23b62..6de73f7 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -116,6 +116,7 @@ struct ccid3_hc_tx_sock {
+ 	u32				ccid3hctx_delta;
+ 	struct tfrc_tx_hist_head	ccid3hctx_hist;
+ 	struct ccid3_options_received	ccid3hctx_options_received;
++	u8				ccid3hctx_extensions;
+ };
+ 
+ static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
+@@ -153,6 +154,7 @@ enum ccid3_fback_type {
+  *  @ccid3hcrx_li_hist  -  Loss Interval database, exported by TFRC module
+  *  @ccid3hcrx_s  -  Received packet size in bytes
+  *  @ccid3hcrx_pinv  -  Inverse of Loss Event Rate (RFC 4342, sec. 8.5)
++ *  @ccid3hcrx_extensions - what extensions to CCID3 are used
+  */
+ struct ccid3_hc_rx_sock {
+ 	u8				ccid3hcrx_last_counter:4;
+@@ -165,6 +167,7 @@ struct ccid3_hc_rx_sock {
+ 	struct tfrc_loss_hist		ccid3hcrx_li_hist;
+ 	u16				ccid3hcrx_s;
+ #define ccid3hcrx_pinv			ccid3hcrx_li_hist.i_mean
++	u8				ccid3hcrx_extensions;
+ };
+ 
+ static inline struct ccid3_hc_rx_sock *ccid3_hc_rx_sk(const struct sock *sk)
+diff --git a/net/dccp/ccids/lib/tfrc.h b/net/dccp/ccids/lib/tfrc.h
+index 6241e4a..0c25487 100644
+--- a/net/dccp/ccids/lib/tfrc.h
++++ b/net/dccp/ccids/lib/tfrc.h
+@@ -61,4 +61,6 @@ static inline u32 tfrc_ewma(const u32 avg, const u32 newval, const u8 weight)
+ extern u32 tfrc_calc_x(u16 s, u32 R, u32 p);
+ extern u32 tfrc_calc_x_reverse_lookup(u32 fvalue);
+ 
++#define TFRC_EXT_FASTER_RESTART		1
++
+ #endif /* _TFRC_H_ */
