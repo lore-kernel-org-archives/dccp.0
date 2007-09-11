@@ -1,137 +1,171 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 27 Sep 2007 14:21:07 +0000
-Subject: [PATCH 5/11]: Implement lookup table for feature-negotiation information
-Message-Id: <200709271521.07675@strip-the-willow>
+From: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Date: Tue, 11 Sep 2007 22:05:12 +0000
+Subject: [RESEND] [PATCH  6/6] DCCP: Implement faster restart
+Message-Id: <200709121005.13497.ian.mcdonald@jandi.co.nz>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Implement lookup table for feature-negotiation information
+Just sending this patch again as adding comments and tidying up whitespace.
+Absolutely zero code changes from last time.
 
-A lookup table for feature-negotiation information, extracted from RFC 4340/42,
-is provided by this patch. All currently known features can be found in this 
-table, along with their feature location, their default value, and type.
+Thanks to Gerrit for pointing these out.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Ian
 ---
- include/linux/dccp.h |    9 +++---
- net/dccp/feat.c      |   72 +++++++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 77 insertions(+), 4 deletions(-)
+This implements TFRC faster restart as per:
+draft-ietf-dccp-tfrc-faster-restart-03.txt
 
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -23,6 +23,76 @@
+and with changes from:
+http://www3.ietf.org/proceedings/07jul/slides/dccp-6.pdf
+
+Most notably we don't do pings.
+
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index ea9e1f9..1abe365 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -121,8 +121,32 @@ static u32 ccid3_hc_tx_idle_rtt(struct ccid3_hc_tx_sock *hctx, ktime_t now)
+ }
  
- #define DCCP_FEAT_SP_NOAGREE (-123)
- 
-+static const struct {
-+	u8			feat_num;		/* DCCPF_xxx */
-+	enum dccp_feat_type	rxtx;			/* RX or TX  */
-+	enum dccp_feat_type	reconciliation;		/* SP or NN  */
-+	u8			default_value;		/* as in 6.4 */
-+/*
-+ *    Lookup table for location and type of features (from RFC 4340/4342)
-+ *  +--------------------------+----+-----+----+----+---------+-----------+
-+ *  | Feature                  | Location | Reconc. | Initial |  Section  |
-+ *  |                          | RX | TX  | SP | NN |  Value  | Reference |
-+ *  +--------------------------+----+-----+----+----+---------+-----------+
-+ *  | DCCPF_CCID               |    |  X  | X  |    |   2     | 10        |
-+ *  | DCCPF_SHORT_SEQNOS       |    |  X  | X  |    |   0     |  7.6.1    |
-+ *  | DCCPF_SEQUENCE_WINDOW    |    |  X  |    | X  | 100     |  7.5.2    |
-+ *  | DCCPF_ECN_INCAPABLE      | X  |     | X  |    |   0     | 12.1      |
-+ *  | DCCPF_ACK_RATIO          |    |  X  |    | X  |   2     | 11.3      |
-+ *  | DCCPF_SEND_ACK_VECTOR    | X  |     | X  |    |   0     | 11.5      |
-+ *  | DCCPF_SEND_NDP_COUNT     |    |  X  | X  |    |   0     |  7.7.2    |
-+ *  | DCCPF_MIN_CSUM_COVER     | X  |     | X  |    |   0     |  9.2.1    |
-+ *  | DCCPF_DATA_CHECKSUM      | X  |     | X  |    |   0     |  9.3.1    |
-+ *  | DCCPF_SEND_LEV_RATE      | X  |     | X  |    |   0     | 4342/8.4  |
-+ *  +--------------------------+----+-----+----+----+---------+-----------+
+ /**
++ * ccid3_hc_tx_fr_loss - indicate if loss for faster restart
++ *
++ * According to draft-ietf-dccp-tfrc-faster-restart-03.txt section 3.2
++ * we can say there is a loss if loss rate has increased in last two
++ * feedback packets
++ *
 + */
-+} dccp_feat_table[] = {
-+	{ DCCPF_CCID,		 FEAT_AT_TX, FEAT_SP, 2 },
-+	{ DCCPF_SHORT_SEQNOS,	 FEAT_AT_TX, FEAT_SP, 0 },
-+	{ DCCPF_SEQUENCE_WINDOW, FEAT_AT_TX, FEAT_NN, 100 },
-+	{ DCCPF_ECN_INCAPABLE,	 FEAT_AT_RX, FEAT_SP, 0 },
-+	{ DCCPF_ACK_RATIO,	 FEAT_AT_TX, FEAT_NN, 2 },
-+	{ DCCPF_SEND_ACK_VECTOR, FEAT_AT_RX, FEAT_SP, 0 },
-+	{ DCCPF_SEND_NDP_COUNT,  FEAT_AT_TX, FEAT_SP, 0 },
-+	{ DCCPF_MIN_CSUM_COVER,  FEAT_AT_RX, FEAT_SP, 0 },
-+	{ DCCPF_DATA_CHECKSUM,	 FEAT_AT_RX, FEAT_SP, 0 },
-+	{ DCCPF_SEND_LEV_RATE,	 FEAT_AT_RX, FEAT_SP, 0 },
-+};
-+#define DCCP_FEAT_SUPPORTED_MAX		ARRAY_SIZE(dccp_feat_table)
++static bool ccid3_hc_tx_fr_loss(const struct ccid3_hc_tx_sock *hctx)
++{
++	if (hctx->ccid3hctx_p_prev1 > hctx->ccid3hctx_p_prev2)
++		return true;
++
++	if (hctx->ccid3hctx_p > hctx->ccid3hctx_p_prev2)
++		return true;
++
++	if (hctx->ccid3hctx_p > hctx->ccid3hctx_p_prev1)
++		return true;
++
++	return false;
++}
 +
 +/**
-+ * dccp_feat_index  -  Hash function to map feature number into array position
-+ * Returns consecutive array index or -1 if the feature is not understood.
-+ */
-+static int dccp_feat_index(u8 feat_num)
-+{
-+	/* The first 9 entries are occupied by the types from RFC 4340, 6.4 */
-+	if (feat_num > DCCPF_RESERVED && feat_num <= DCCPF_DATA_CHECKSUM)
-+		return feat_num - 1;
-+
-+	/* Specific features: add new types here after adding to the table */
-+	switch (feat_num) {
-+	case DCCPF_SEND_LEV_RATE:	return (DCCP_FEAT_SUPPORTED_MAX-1);
-+	}
-+	return -1;
-+}
-+
-+static u8 dccp_feat_type(u8 feat_num)
-+{
-+	int idx = dccp_feat_index(feat_num);
-+
-+	if (idx < 0)
-+		return FEAT_UNKNOWN;
-+	return dccp_feat_table[idx].reconciliation;
-+}
-+
-+static int dccp_feat_default_value(u8 feat_num)
-+{
-+	int idx = dccp_feat_index(feat_num);
-+
-+	return idx < 0? idx : dccp_feat_table[idx].default_value;
-+}
-+
- /* copy constructor, fval must not already contain allocated memory */
- static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
+  * ccid3_hc_tx_update_x  -  Update allowed sending rate X
+  * @stamp: most recent time if available - can be left NULL.
++ * @nofeedback: true if no feedback timer has fired, as faster restart
++ * shouldn't be used in this case.
+  * This function tracks draft rfc3448bis, check there for latest details.
+  *
+  * Note: X and X_recv are both stored in units of 64 * bytes/second, to support
+@@ -130,13 +154,13 @@ static u32 ccid3_hc_tx_idle_rtt(struct ccid3_hc_tx_sock *hctx, ktime_t now)
+  *       throughout the code. Only X_calc is unscaled (in bytes/second).
+  *
+  */
+-static void ccid3_hc_tx_update_x(struct sock *sk, ktime_t *stamp)
+-
++static void ccid3_hc_tx_update_x(struct sock *sk, ktime_t *stamp, bool nofeedback)
  {
-@@ -689,6 +759,8 @@ const char *dccp_feat_name(const u8 feat
- 	if (feat > DCCPF_DATA_CHECKSUM && feat < DCCPF_MIN_CCID_SPECIFIC)
- 		return feature_names[DCCPF_RESERVED];
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	__u64 min_rate = 2 * hctx->ccid3hctx_x_recv;
+ 	const  __u64 old_x = hctx->ccid3hctx_x;
+ 	ktime_t now = stamp? *stamp : ktime_get_real();
++	u64 x_fast_max;
  
-+	if (feat =  DCCPF_SEND_LEV_RATE)
-+		return "Send Loss Event Rate";
- 	if (feat >= DCCPF_MIN_CCID_SPECIFIC)
- 		return "CCID-specific";
+ 	/*
+ 	 * Handle IDLE periods: do not reduce below RFC3390 initial sending rate
+@@ -149,14 +173,37 @@ static void ccid3_hc_tx_update_x(struct sock *sk, ktime_t *stamp)
+ 		min_rate = max(min_rate, 2 * hctx->ccid3hctx_x_recv);
+ 	}
  
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -174,19 +174,20 @@ enum {
- };
+-	if (hctx->ccid3hctx_p > 0) {
++	if (ccid3_hc_tx_faster_restart_on(hctx) && !nofeedback)
++		if (hctx->ccid3hctx_p > 0) {
++			x_fast_max = hctx->ccid3hctx_x_active_recv;
++			/* FIXME We should interpolate here but this is under
++			 * discussion as looking to reduce thresholds from
++			 * 10/30 minutes to 1/3 minutes IAM */
++			if (!ccid3_hc_tx_fr_loss(hctx) &&
++			  (hctx->ccid3hctx_x_recv > x_fast_max)) {
++				x_fast_max = hctx->ccid3hctx_x_recv;
++				hctx->ccid3hctx_x_active_recv = x_fast_max;
++				hctx->ccid3hctx_t_active_recv = now;
++			} else if (ccid3_hc_tx_fr_loss(hctx) &&
++			  (hctx->ccid3hctx_x_recv < x_fast_max)) {
++				x_fast_max = hctx->ccid3hctx_x_recv / 2;
++				hctx->ccid3hctx_x_active_recv = x_fast_max;
++				hctx->ccid3hctx_t_active_recv = now;
++			}
++			if (min_rate < x_fast_max)
++				min_rate = min(2*min_rate, x_fast_max);
++			/* We double again for faster rate */
++			/* FIXME - draft refers to X_recv_set but base
++			 * implementation doesn't use this so we stay
++			 * consistent with this IAM */
++		}
  
- /* DCCP features (RFC 4340 section 6.4) */
--enum {
-+enum dccp_feature_numbers {
- 	DCCPF_RESERVED = 0,
- 	DCCPF_CCID = 1,
--	DCCPF_SHORT_SEQNOS = 2,		/* XXX: not yet implemented */
-+	DCCPF_SHORT_SEQNOS = 2,
- 	DCCPF_SEQUENCE_WINDOW = 3,
--	DCCPF_ECN_INCAPABLE = 4,	/* XXX: not yet implemented */
-+	DCCPF_ECN_INCAPABLE = 4,
- 	DCCPF_ACK_RATIO = 5,
- 	DCCPF_SEND_ACK_VECTOR = 6,
- 	DCCPF_SEND_NDP_COUNT = 7,
- 	DCCPF_MIN_CSUM_COVER = 8,
--	DCCPF_DATA_CHECKSUM = 9,	/* XXX: not yet implemented */
-+	DCCPF_DATA_CHECKSUM = 9,
- 	/* 10-127 reserved */
- 	DCCPF_MIN_CCID_SPECIFIC = 128,
-+	DCCPF_SEND_LEV_RATE = 192,	/* RFC 4342, sec. 8.4 */
- 	DCCPF_MAX_CCID_SPECIFIC = 255,
- };
++	if (hctx->ccid3hctx_p > 0) {
+ 		hctx->ccid3hctx_x = min(((__u64)hctx->ccid3hctx_x_calc) << 6,
+ 					min_rate);
+ 		hctx->ccid3hctx_x = max(hctx->ccid3hctx_x,
+ 					(((__u64)hctx->ccid3hctx_s) << 6) /
+ 								TFRC_T_MBI);
+-
+ 	} else if (ktime_us_delta(now, hctx->ccid3hctx_t_ld)
+ 				- (s64)hctx->ccid3hctx_rtt >= 0) {
  
+@@ -220,6 +267,9 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	unsigned long t_nfb = USEC_PER_SEC / 5;
+ 
++	/* FIXME Section 4.2 of Faster restart should really
++	 * be implemented in here IAM */
++
+ 	bh_lock_sock(sk);
+ 	if (sock_owned_by_user(sk)) {
+ 		/* Try again later. */
+@@ -268,7 +318,7 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+ 			hctx->ccid3hctx_x_recv = hctx->ccid3hctx_x_calc;
+ 			hctx->ccid3hctx_x_recv <<= 4;
+ 		}
+-		ccid3_hc_tx_update_x(sk, NULL);
++		ccid3_hc_tx_update_x(sk, NULL, true);
+ 	}
+ 	ccid3_pr_debug("Reduced X to %llu/64 bytes/sec\n",
+ 			(unsigned long long)hctx->ccid3hctx_x);
+@@ -324,6 +374,13 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 
+ 		hctx->ccid3hctx_s = skb->len;
+ 
++		hctx->ccid3hctx_p_prev2 = 0;
++		hctx->ccid3hctx_p_prev1 = 0;
++		hctx->ccid3hctx_p = 0;
++		hctx->ccid3hctx_t_active_recv = now;
++		hctx->ccid3hctx_x_active_recv = 0;
++		/* we initialise above for faster restart */
++
+ 		/*
+ 		 * Use initial RTT sample when available: recommended by erratum
+ 		 * to RFC 4342. This implements the initialisation procedure of
+@@ -423,6 +480,8 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 
+ 	/* Update loss event rate (scaled by 1e6), cf. RFC 4342, 8.5 */
+ 	pinv = opt_recv->ccid3or_loss_event_rate;
++	hctx->ccid3hctx_p_prev2 = hctx->ccid3hctx_p_prev1;
++	hctx->ccid3hctx_p_prev1 = hctx->ccid3hctx_p;
+ 	hctx->ccid3hctx_p = (pinv = ~0U || pinv = 0)? 0 : scaled_div(1, pinv);
+ 
+ 	/*
+@@ -462,7 +521,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 		hctx->ccid3hctx_x_calc = tfrc_calc_x(hctx->ccid3hctx_s,
+ 						     hctx->ccid3hctx_rtt,
+ 						     hctx->ccid3hctx_p);
+-	ccid3_hc_tx_update_x(sk, &now);
++	ccid3_hc_tx_update_x(sk, &now, false);
+ 
+ done_computing_x:
+ 	ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, p=%u, X_calc=%u, "
