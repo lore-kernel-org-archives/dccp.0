@@ -1,64 +1,61 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 22 Sep 2007 20:16:07 +0000
-Subject: Re: [PATCH 4/5]: Rate-limit DCCP-Syncs
-Message-Id: <20070922201607.GD4887@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 12 Sep 2007 14:35:20 +0000
+Subject: [PATCH 4/5]: DCCP's passive close needs to match TCP's half-close
+Message-Id: <200709121535.20408@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200704091058.57313@strip-the-willow>
-In-Reply-To: <200704091058.57313@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Wed, Jun 20, 2007 at 10:56:03AM +0100, Gerrit Renker escreveu:
-> [DCCP]: Rate-limit DCCP-Syncs
-> 
-> This implements a SHOULD from RFC 4340, 7.5.4: 
->  "To protect against denial-of-service attacks, DCCP implementations SHOULD 
->   impose a rate limit on DCCP-Syncs sent in response to sequence-invalid packets, 
->   such as not more than eight DCCP-Syncs per second."
-> 
-> The rate-limit is maintained on a per-socket basis. This is a more stringent
-> policy than enforcing the rate-limit on a per-source-address basis and
-> protects against attacks with forged source addresses.
-> 
-> Moreover, the mechanism is deliberately kept simple. In contrast to
-> xrlim_allow(), bursts of Sync packets in reply to sequence-invalid packets
-> are not supported.  This foils such attacks where the receipt of a Sync
-> triggers further sequence-invalid packets. (I have tested this mechanism against
-> xrlim_allow algorithm for Syncs, permitting bursts just increases the problems.)
-> 
-> In order to keep flexibility, the timeout parameter can be set via sysctl; and
-> the whole mechanism can even be disabled (which is however not recommended).
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+[DCCP]: DCCP's passive close needs to match TCP's half-close
 
-Algorigthm is fine, just use time_after when comparing jiffies based
-timestamps, here:
+This fixes a problem of integrating the new auxiliary states PASSIVE_1/2 with the
+inet_xxx infrastructure. 
 
+The problem appears on the listening side and is that
+ * a Close may have been received on the socket while it is still in the accept queue
+   of the master/listening socket;
+ * hence when it is taken out of the queue by inet_accept(), the state of the socket
+   is PASSIVE_1 (whose value is greater than all registered TCP states);
+ * this triggers the following warning in inet_accept():
+  
+   Sep 10 16:52:27 kernel: KERNEL: \
+	assertion ((1 << sk2->sk_state) & (TCPF_ESTABLISHED | TCPF_CLOSE_WAIT | TCPF_CLOSE))\
+	failed at /usr/src/main_davem-2.6/net/ipv4/af_inet.c (646)
 
->  		 */
-> -		if (dh->dccph_type = DCCP_PKT_RESET)
-> -			seqno = dp->dccps_gsr;
-> -		dccp_send_sync(sk, seqno, DCCP_PKT_SYNC);
-> +		if (now - dp->dccps_rate_last >= sysctl_dccp_sync_ratelimit) {
-> +			dp->dccps_rate_last = now;
-> +
+The fix consists mapping PASSIVE_1 into TCPF_CLOSE_WAIT, which is possible since
+there is no other mapping from a DCCP state into it. Incidentally, the `semantics'
+of that state are also similar: in TCP's CLOSE_WAIT, a user confirmation to close
+up the socket is needed - and the same (calling close/exit) situation arises here.
 
-Take a look at net/ipv4/syncookies.c:
+For a server deciding to hold TIMEWAIT state there is no such problem, since
+DCCP_SOCKOPT_SERVER_TIMEWAIT can not be set on a listening socket, it is by default off
+and not inherited to child sockets.
 
-struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb,
-                             struct ip_options *opt)
-<SNIP>
-        if (time_after(jiffies, tp->last_synq_overflow + TCP_TIMEOUT_INIT) ||
-            (mss = cookie_check(skb, cookie)) = 0) {
-                NET_INC_STATS_BH(LINUX_MIB_SYNCOOKIESFAILED);
-                goto out;
-        }
-<SNIP>
+Lastly, for PASSIVE_2 the situation is simpler, since this is a client-only state. 
 
-Please resubmit with this fix and I'm ok merging it,
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ include/linux/dccp.h |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
-Thanks,
-
-- Arnaldo
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -249,14 +249,14 @@ enum dccp_state {
+ 	 * CLOSING, corresponds to (b) above) are used.
+ 	 */
+ 	DCCP_CLOSEREQ	= TCP_FIN_WAIT1,
++	DCCP_PASSIVE_1	= TCP_CLOSE_WAIT,	/* any node receiving a Close */
+ 	DCCP_CLOSING	= TCP_CLOSING,
+ 	DCCP_TIME_WAIT	= TCP_TIME_WAIT,
+ 	DCCP_CLOSED	= TCP_CLOSE,
+ 	/* Everything below here is specific to DCCP only */
+ 	DCCP_INTRINSICS = TCP_MAX_STATES,
+ 	DCCP_PARTOPEN,
+-	DCCP_PASSIVE_1,		/* any node receiving a Close  */
+-	DCCP_PASSIVE_2,		/* client receiving a CloseReq */
++	DCCP_PASSIVE_2,				/* client receiving CloseReq  */
+ 	DCCP_MAX_STATES
+ };
+ 
