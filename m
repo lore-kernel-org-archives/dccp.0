@@ -1,39 +1,59 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 19 Sep 2007 10:00:11 +0000
+From: "=?ISO-2022-JP?B?GyRCJUQbKEIgTGVhbmRybyBTYWxlcw==?="
+Date: Wed, 19 Sep 2007 14:53:50 +0000
 Subject: Re: CONFLICT using git-pull
-Message-Id: <200709191100.11486@strip-the-willow>
+Message-Id: <5bc4c4570709190753x3a2775dbsad3963b7d6664755@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570709181607n49026fa2pdda176bce4ea4d45@mail.gmail.com>
 In-Reply-To: <5bc4c4570709181607n49026fa2pdda176bce4ea4d45@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
+Content-Type: text/plain; charset="iso-2022-jp"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Leandro, -
+2007/9/19, Ian McDonald <ian.mcdonald@jandi.co.nz>:
+> On 9/19/07, ツ Leandro Sales <leandroal@gmail.com> wrote:
+> > Hi,
+> >    as for the implementation of CCID-4, I modified some files of the
+> > gerrit git during last week and weekend and now I but to make a fetch
+> > of te gerrit latest code. But when I type git-pull I'm getting the
+> > following:
+> >
+>
+> From past experience the tree has been rebased so you'll have to
+> reclone the tree and then reapply your patches. It's too hard to fix
+> (or I'm too dumb!!)
+>
+> I keep at least two trees - one is Linus' pure one and one (or more)
+> are my development trees.
+>
+> Then when git-pull fails you reclone based from Linus tree and it
+> saves time and bandwidth.
+>
+> This is documented at:
+> http://linux-net.osdl.org/index.php/DCCP_Testing#How_to_obtain
+>
+> Feel free to ask more questions.
+>
+> Ian
+> --
+> Web1: http://wand.net.nz/~iam4/
+> Web2: http://www.jandi.co.nz
+> Blog: http://iansblog.jandi.co.nz
+>
 
-|  But when I type git-pull
-Warning: I don't know your configuration, but if you are checking out everything
-(which is fine), you will get the most recent netdev-tree. This is currently
-tracking davem-2.6.git (not davem-2.6.24.git, due to the troubles reported earlier).
+Thank you! I followed your recommendation. I already had the gerrit
+tree for some experimental usage and for study the code and develop
+some patches, such as ccid-4. I don't know what happened that cause
+this conflicts. In all the case, I already rebase and clone the tree.
 
-The first thing I'd ask you to try is to check out _only_ the DCCP tree:
+Leandro.
 
- 1. use your normal tree
- 2. create a subtree dccp:
+-- 
+Leandro Melo de Sales.
+Pervasive and Embedded Computing Laboratory
+BRisa and E-Phone Projects Manager & Network Administrator
+http://embedded.ufcg.edu.br/
++55 083 3310-1404 (extension 208)
 
-	git branch -b dccp master
-
- 3. now pull the `dccp' subtree into your tree (as Ian also recommended)
-
-	 git-pull git://eden-feed.erg.abdn.ac.uk/dccp_exp dccp
-
-If this still fails then there is a difference between your tree and the netdev-2.6 one
-which needs to be resolved.
-
-For such cases, I put up extracts from the DCCP patches online at 
-
-	http://www.erg.abdn.ac.uk/users/gerrit/dccp/testing_dccp/test-tree/
-
-HTH
-Gerrit
+"There are 10 types of people in this world: those who understand
+binary, those who don't"
