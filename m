@@ -1,7 +1,7 @@
 From: "=?ISO-2022-JP?B?GyRCJUQbKEIgTGVhbmRybyBTYWxlcw==?="
-Date: Thu, 20 Sep 2007 21:27:00 +0000
+Date: Thu, 20 Sep 2007 22:19:11 +0000
 Subject: Re: [PATCH 3/4] CCID4: Signs off patch #2 submitted by Tommi and it organize the copyright and comme
-Message-Id: <5bc4c4570709201427h2b2ff2b4t52278020eecc588@mail.gmail.com>
+Message-Id: <5bc4c4570709201519p57b3eb97t5812cf1dcf435117@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570709201054t564cf7aak2cf4cfcd41623c55@mail.gmail.com>
 In-Reply-To: <5bc4c4570709201054t564cf7aak2cf4cfcd41623c55@mail.gmail.com>
@@ -90,5 +90,4 @@ To: dccp@vger.kernel.org
 >   *  or e-mail Ian McDonald - ian.mcdonald@jandi.co.nz
 >
 
-Don't worry about that, it is just the initial commits. As we go into
-the ccid-4 implementation, you can update the code.
+Signed-off-by: Leandro Sales <leandro@embedded.ufcg.edu.br>
