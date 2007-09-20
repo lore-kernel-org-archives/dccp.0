@@ -1,34 +1,33 @@
 From: "=?ISO-2022-JP?B?GyRCJUQbKEIgTGVhbmRybyBTYWxlcw==?="
-Date: Wed, 26 Sep 2007 13:38:58 +0000
-Subject: Re: Header size of the data packet
-Message-Id: <5bc4c4570709260638m65ba5a3cr5d6c11842d7c5032@mail.gmail.com>
+Date: Thu, 20 Sep 2007 17:53:05 +0000
+Subject: [PATCH 0/4] CCID 4: adjusts the initial implementation of CCID-4
+Message-Id: <5bc4c4570709201053q35b3c504s43d2e0e57322cfd4@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <5bc4c4570709260619w27b29866l59bbff6747105a97@mail.gmail.com>
-In-Reply-To: <5bc4c4570709260619w27b29866l59bbff6747105a97@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-2022-jp"
+Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-2007/9/26, Arnaldo Carvalho de Melo <acme@ghostprotocols.net>:
-> Em Wed, Sep 26, 2007 at 10:19:48AM -0300, ツ Leandro Sales escreveu:
-> > Hi,
-> >
-> >    according to ccid-4 internet draft, "the estimated header size on
-> > data packets is 36 bytes (20 bytes for the IP header and 16 bytes for
-> > the DCCP-data header with 48-bit sequence numbers). The header size
-> > would be 32 bytes instead of 36 bytes when 24-bit sequence number were
-> > used in the DCCP-data header."
-> >    In this case, how can I get this information if dccp will use
-> > 48-bit or 24-bit sequence number?
->
-> So far we're using only 48-bit sequence numbers. To keep your
-> implementation simple, I suggest you do the same, i.e. don't worry about
-> 24-bit sequence numbers for the time being.
->
-> - Arnaldo
->
+Signed-off-by: Leandro Sales <leandro@embedded.ufcg.edu.br>
 
-Ok.
+Re-submitting my initial patchset for CCID-4, merging them against
+Tommi patcheset and providing some updates/improvements/organization.
 
-Leandro.
+Since me and Tommi provided similar initial patches for Kconfing, ccid4.{h/c},
+Makefile and include/linux/dccp.h, this patchset provides just diffs not
+presented in the Tommi patchset it provide code refactory and fix to the help
+for Kconfig CCID-4. The both patchset (from mine and Tommi) was based on the
+CCID-3 implementation, and in addition to patches provided by Tommi, which is
+very similar to the mine, I suggest the following changes:
+
+Patch #1: signs off patch #1 submitted by Tommi and it provides improvements/
+organization to the initial entries for CCID 4 to net/dccp/ccids/Kconfig
+
+Patch #2: it provides organization to the initial entries for CCID 4 to
+net/dccp/ccids/Makefile.
+
+Patch #3: signs off patch #2 submitted by Tommi and it organize the copyright
+and comments.
+
+Patch #4: replace the hard-coded 1460 nominal packet size by a #define in the
+ccid4.h and adjust the ccid4.c for the applied changes
