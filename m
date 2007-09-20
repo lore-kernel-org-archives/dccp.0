@@ -1,40 +1,38 @@
-From: Tommi Saviranta <wnd@iki.fi>
-Date: Thu, 20 Sep 2007 11:15:57 +0000
-Subject: [PATCH 0/5] CCID 4: initial implementation of CCID 4
-Message-Id: <20070920111557.GA1288@kikai.katei.fi>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 20 Sep 2007 13:01:52 +0000
+Subject: Re: [PATCH 0/5] CCID 4: initial implementation of CCID 4
+Message-Id: <200709201401.52593@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
+References: <20070920111557.GA1288@kikai.katei.fi>
+In-Reply-To: <20070920111557.GA1288@kikai.katei.fi>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Re-submitting, with hopefully proper tags etc.
+|  Re-submitting, with hopefully proper tags etc.
+|  
+|  
+|  After discussing the topic on IRC, we figured we need a place to have
+|  the sources for CCID 4 available for everyone. This way we can finally
+|  start cooperating on it.
+|  
+The patches applied fine, a new subtree `ccid4' has been created to host these.
+The subtree can be checked out by
+
+	1) create a subtree
+
+		git-checkout -b ccid4 master
+
+	2) pull the CCID4 subtree 
+
+		pull  eden-feed:/usr/src/GIT/dccp_exp.git ccid4
 
 
-After discussing the topic on IRC, we figured we need a place to have
-the sources for CCID 4 available for everyone. This way we can finally
-start cooperating on it.
+This tree now sits on top of the test tree, i.e. inherits it. As said, I am ok
+tracking changes required to ensure that patches remain applicable. 
 
-I have created a few patches against dccp-exp. Even if they're not much,
-or pretty, they may be something to start with.
+What I can't do is to track updates to CCID3 into your code, since that would mean
+altering your patches; so it is something you need to keep track of yourselves.
 
-The sources are based on ~a week old copy of CCID 3 from dccp-exp,
-created with
-	http://wnd.katei.fi/dccp/files/copy-ccid3-to-ccid4.sh
-
-
-Patch #1: Adds DCCPC_CCID4 to include/linux/dccp.h, and initial entries
-	about CCID 4 to net/dccp/ccids/{Kconfig,Makefile}.
-
-Patch #2: Clones ~a week old implementation of CCID 3 into ccid4.[ch].
-
-Patch #3: Implements TFRC-SP's 10 ms minimum sending rate (without
-	possibility to decrese inter-packet interval below 10 ms, but
-	still sending at most three packets every 30 ms).
-
-Patch #4: Reduces allowed sending rate by a factor that accounts for
-	packet header size.
-
-Patch #5: Uses nominal segment size of 1460 bytes in TCP throughput
-	equation.
-
+Gerrit
