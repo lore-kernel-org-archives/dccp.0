@@ -1,48 +1,44 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 27 Sep 2007 08:08:00 +0000
-Subject: Re: tcpdump broken wrt CsCov & CsVal parsing?
-Message-Id: <200709270908.00165@strip-the-willow>
+From: Tommi Saviranta <wnd@iki.fi>
+Date: Thu, 20 Sep 2007 11:29:43 +0000
+Subject: [PATCH 5/5] CCID 4: Use 1460 bytes as segment size in TCP
+Message-Id: <20070920112943.GD26233@kikai.katei.fi>
 List-Id: <dccp.vger.kernel.org>
-References: <20070922144111.GE10051@ghostprotocols.net>
-In-Reply-To: <20070922144111.GE10051@ghostprotocols.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  I checked locally:
-|  > =A0* tcpdump 3.9.5 as Debian package with libpcap 0.9.5 has this swap-=
-problem=20
-|  > =A0* tcpdump 3.9.5 built from tcpdump source, with libpcap 0.9.4 works=
- correct
-|  >=20
-|  > Can you try tcpdump from source please and check if the problem persis=
-ts?
-| =20
-|  Excellent data point, I should know better and try with upstream before
-|  complaining. Ah, and also provide the tcpdump version:
-| =20
-|  [root@tonchinha ~]# rpm -q tcpdump
-|  tcpdump-3.9.7-3.fc8
-Have you looked at the source rpm's? I found the old patch, if the followin=
-g hunk
-applies then quite likely they have forgotten to patch the header file, and=
- the
-problem could be solved then (CCval and Cscov were swapped):
+Uses hard-coded value of 1460 bytes in TCP throughput calculation.
 
---- a/dccp.h
-+++ b/dccp.h
-@@ -36,8 +36,8 @@ struct dccp_hdr {
- 	}		dccph_xtrs;
- };
-=20
--#define DCCPH_CCVAL(dh)	(((dh)->dccph_ccval_cscov) & 0x0F)
--#define DCCPH_CSCOV(dh)	(((dh)->dccph_ccval_cscov >> 4) & 0x0F)
-+#define DCCPH_CCVAL(dh)	(((dh)->dccph_ccval_cscov >> 4) & 0xF)
-+#define DCCPH_CSCOV(dh)	(((dh)->dccph_ccval_cscov) & 0xF)
-=20
- #define DCCPH_X(dh)	((dh)->dccph_xtrs.dccph_xtr & 1)
- #define DCCPH_TYPE(dh)	(((dh)->dccph_xtrs.dccph_xtr >> 1) & 0xF)
+Signed-off-by: Tommi Saviranta <wnd@iki.fi>
 
-
-
+---
+diff -Nrup a/net/dccp/ccids/ccid4.c b/net/dccp/ccids/ccid4.c
+--- a/net/dccp/ccids/ccid4.c	2007-09-20 13:32:42.000000000 +0300
++++ b/net/dccp/ccids/ccid4.c	2007-09-20 14:02:43.000000000 +0300
+@@ -459,7 +459,7 @@ static void ccid4_hc_tx_packet_recv(stru
+ 	}
+ 	/* perform step (4) of draft rfc3448bis, section 4.3 */
+ 	if (hctx->ccid4hctx_p > 0)
+-		hctx->ccid4hctx_x_calc = tfrc_calc_x(hctx->ccid4hctx_s,
++		hctx->ccid4hctx_x_calc = tfrc_calc_x(1460,
+ 						     hctx->ccid4hctx_rtt,
+ 						     hctx->ccid4hctx_p);
+ 	ccid4_hc_tx_update_x(sk, &now);
+@@ -740,7 +740,7 @@ static int ccid4_hc_rx_insert_options(st
+ 	return 0;
+ }
+ 
+-/** ccid4_first_li  -  Implements [RFC 3448, 6.3.1]
++/** ccid4_first_li  -  Implements [RFC 3448, 6.3.1], with s = 1460 [TFRC-SP]
+  *
+  * Determine the length of the first loss interval via inverse lookup.
+  * Assume that X_recv can be computed by the throughput equation
+@@ -770,7 +770,7 @@ static u32 ccid4_first_li(struct sock *s
+ 		}
+ 	}
+ 
+-	fval = scaled_div(hcrx->ccid4hcrx_s, hcrx->ccid4hcrx_rtt);
++	fval = scaled_div(1460, hcrx->ccid4hcrx_rtt);
+ 	fval = scaled_div32(fval, x_recv);
+ 	p = tfrc_calc_x_reverse_lookup(fval);
