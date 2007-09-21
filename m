@@ -1,7 +1,7 @@
 From: "=?ISO-2022-JP?B?GyRCJUQbKEIgTGVhbmRybyBTYWxlcw==?="
-Date: Thu, 20 Sep 2007 21:23:55 +0000
+Date: Fri, 21 Sep 2007 03:52:56 +0000
 Subject: Re: [PATCH 4/4] CCID4: Replaces the hard-coded 1460 nominal packet size by a #define
-Message-Id: <5bc4c4570709201423v415e73c9h79da7bf5e482bfd@mail.gmail.com>
+Message-Id: <5bc4c4570709202052g4a7e0c0dsac6b8e03a443ffd7@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570709201055m200ca6enbcc7d33070f7e792@mail.gmail.com>
 In-Reply-To: <5bc4c4570709201055m200ca6enbcc7d33070f7e792@mail.gmail.com>
@@ -23,8 +23,44 @@ To: dccp@vger.kernel.org
 >
 >
 
-Put NOM_PACKET_SIZE into ccid4.h follows the other definition, similar to
-#define TFRC_T_MBI 64
-that goes into ccid4.h too.
+Signed-off-by: Leandro Sales <leandro@embedded.ufcg.edu.br>
 
-Leandro.
+Adjust patch #4 to be cleanly applied without generate "hunk" due to
+patch #3 update.
+
+diff -uprN dccp-ccid4.base/net/dccp/ccids/ccid4.c
+dccp-ccid4/net/dccp/ccids/ccid4.c
+--- dccp-ccid4.base/net/dccp/ccids/ccid4.c	2007-09-21 00:30:35.000000000 -0300
++++ dccp-ccid4/net/dccp/ccids/ccid4.c	2007-09-21 00:33:40.000000000 -0300
+@@ -494,7 +494,7 @@ static void ccid4_hc_tx_packet_recv(stru
+ 	}
+ 	/* perform step (4) of draft rfc3448bis, section 4.3 */
+ 	if (hctx->ccid4hctx_p > 0)
+-		hctx->ccid4hctx_x_calc = tfrc_calc_x(1460,
++		hctx->ccid4hctx_x_calc = tfrc_calc_x(NOM_PACKET_SIZE,
+ 						     hctx->ccid4hctx_rtt,
+ 						     hctx->ccid4hctx_p);
+ 	ccid4_hc_tx_update_x(sk, &now);
+@@ -805,7 +805,7 @@ static u32 ccid4_first_li(struct sock *s
+ 		}
+ 	}
+
+-	fval = scaled_div(1460, hcrx->ccid4hcrx_rtt);
++	fval = scaled_div(NOM_PACKET_SIZE, hcrx->ccid4hcrx_rtt);
+ 	fval = scaled_div32(fval, x_recv);
+ 	p = tfrc_calc_x_reverse_lookup(fval);
+
+diff -uprN dccp-ccid4.base/net/dccp/ccids/ccid4.h
+dccp-ccid4/net/dccp/ccids/ccid4.h
+--- dccp-ccid4.base/net/dccp/ccids/ccid4.h	2007-09-21 00:30:35.000000000 -0300
++++ dccp-ccid4/net/dccp/ccids/ccid4.h	2007-09-21 00:32:57.000000000 -0300
+@@ -65,6 +65,9 @@
+ /* Parameter t_mbi from [RFC 3448, 4.3]: backoff interval in seconds */
+ #define TFRC_T_MBI		   64
+
++/* The nominal packet size to be used into TFRC equation as per CCID-4 draft*/
++#define NOM_PACKET_SIZE                   1460
++
+ enum ccid4_options {
+ 	TFRC_OPT_LOSS_EVENT_RATE = 192,
+ 	TFRC_OPT_LOSS_INTERVALS	 = 193,
