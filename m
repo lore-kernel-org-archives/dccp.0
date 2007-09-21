@@ -1,115 +1,61 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 29 Sep 2007 16:44:53 +0000
-Subject: [PATCH 3/3]: Convert Reset code into socket error number
-Message-Id: <200709291744.53552@strip-the-willow>
+From: "=?ISO-2022-JP?B?GyRCJUQbKEIgTGVhbmRybyBTYWxlcw==?="
+Date: Fri, 21 Sep 2007 02:28:52 +0000
+Subject: Re: unchanged functions between ccid-3 and ccid-4
+Message-Id: <5bc4c4570709201928l270b24cdod359349ca3d3508@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="iso-2022-jp"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Convert Reset code into socket error number
+2007/9/20, Ian McDonald <ian.mcdonald@jandi.co.nz>:
+> On 9/21/07, ツ Leandro Sales <leandroal@gmail.com> wrote:
+> > Hello Gerrit,
+> >
+> >    From now and as I was talking to Ian two days ago, after our
+> > patchset for initial code of ccid-4, I'm identifying functions between
+> > ccid-4 and ccid-3 that will remains unchangeable. What do you think if
+> > we try to define something like a common_ccid34.{c/h} and make common
+> > functions between ccid-4 and ccid-3 available into this source file?
+> > Or this will make the code a little bit confused?
+> >
+> > Leandro.
+> >
+> Leandro,
+>
+> Firstly - I think these discussions are better on list. Can we open to list.
+>
+> Thinking some more about this I've thought about this some more. I
+> think what we're bettter to do is to get CCID4 code to use CCID3 code
+> rather than create a new file. This is because CCID4 references CCID3
+> but not the other way around.
+>
+> It will also be messy if we then get CCID5 etc.
+>
+> So what I suggest you might need to do is shift more ccid3
+> declarations into ccid3.h and included this. It might also need
+> removal of some static from function declarations and adding of
+> EXPORT_SYMBOL_GPL to existing CCID3 code.
+>
+> This way you are still sharing code but it is clear CCID4 is based on CCID3.
+>
+> Regards,
+>
+> Ian
+> --
+> Web1: http://wand.net.nz/~iam4/
+> Web2: http://www.jandi.co.nz
+> Blog: http://iansblog.jandi.co.nz
+>
 
-This adds support for converting the 11 currently defined Reset codes into =
-system
-error numbers, which are stored in sk_err for further interpretation.
+Exactly! I was thinking about this since my first patchset sent via an
+URL, where I commented about this. The problem of doing like you
+suggested (move some code from ccid3.c to ccid3.h) is it will require
+an approval about you and the others, such as gerrit and arnaldo, at
+least if this is the right process to follow. Anyway, I'm already
+identifying the candidate codes to be shared between ccid3 and ccid4
+if you didn't this yet. Another option is wait for gerrit suggestion
+on this issue and discuss more about that and define a strategy to
+avoid code repetition.
 
-This makes the externally visible API behaviour similar to TCP, since a cli=
-ent
-connecting to a non-existing port will experience ECONNREFUSED.
-=20
- * Code 0, Unspecified, is interpreted as non-error (0);
- * Code 1, Closed (normal termination), also maps into 0;
- * Code 2, Aborted, maps into "Connection reset by peer" (ECONNRESET);
- * Code 3, No Connection and
-   Code 7, Connection Refused, map into "Connection refused" (ECONNREFUSED);
- * Code 4, Packet Error, maps into "No message of desired type" (ENOMSG);
- * Code 5, Option Error, maps into "Illegal byte sequence" (EILSEQ);
- * Code 6, Mandatory Error, maps into "Operation not supported on transport=
- endpoint" (EOPNOTSUPP);
- * Code 8, Bad Service Code, maps into "Invalid request code" (EBADRQC);
- * Code 9, Too Busy, maps into "Too many users" (EUSERS);
- * Code 10, Bad Init Cookie, maps into "Invalid request descriptor" (EBADR);
- * Code 11, Aggression Penalty, maps into "Quota exceeded" (EDQUOT)
-   which makes sense in terms of using more than the `fair share' of bandwi=
-dth.
-
-The patch was found to solve the problem reported by R=C3=A9mi Denis-Courmo=
-nt - many thanks.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>  =20
----
- net/dccp/input.c |   48 +++++++++++++++++++++++++++++++++++++++---------
- 1 file changed, 39 insertions(+), 9 deletions(-)
-
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -55,6 +55,42 @@ static void dccp_rcv_closereq(struct soc
- 	dccp_send_close(sk, 0);
- }
-=20
-+static u8 dccp_reset_code_convert(const u8 code)
-+{
-+	const u8 error_code[] =3D {
-+	[DCCP_RESET_CODE_CLOSED]	     =3D 0,	/* normal termination */
-+	[DCCP_RESET_CODE_UNSPECIFIED]	     =3D 0,	/* nothing known */
-+	[DCCP_RESET_CODE_ABORTED]	     =3D ECONNRESET,
-+
-+	[DCCP_RESET_CODE_NO_CONNECTION]	     =3D ECONNREFUSED,
-+	[DCCP_RESET_CODE_CONNECTION_REFUSED] =3D ECONNREFUSED,
-+	[DCCP_RESET_CODE_TOO_BUSY]	     =3D EUSERS,
-+	[DCCP_RESET_CODE_AGGRESSION_PENALTY] =3D EDQUOT,
-+
-+	[DCCP_RESET_CODE_PACKET_ERROR]	     =3D ENOMSG,
-+	[DCCP_RESET_CODE_BAD_INIT_COOKIE]    =3D EBADR,
-+	[DCCP_RESET_CODE_BAD_SERVICE_CODE]   =3D EBADRQC,
-+	[DCCP_RESET_CODE_OPTION_ERROR]	     =3D EILSEQ,
-+	[DCCP_RESET_CODE_MANDATORY_ERROR]    =3D EOPNOTSUPP,
-+	};
-+
-+	return code <=3D DCCP_RESET_CODE_AGGRESSION_PENALTY? error_code[code] : 0;
-+}
-+
-+static void dccp_rcv_reset(struct sock *sk, struct sk_buff *skb)
-+{
-+	u8 err =3D dccp_reset_code_convert(dccp_hdr_reset(skb)->dccph_reset_code);
-+
-+	sk->sk_err =3D err;
-+
-+	/* Queue the equivalent of TCP fin so that dccp_recvmsg exits the loop */
-+	dccp_fin(sk, skb);
-+
-+	if (err && !sock_flag(sk, SOCK_DEAD))
-+		sk_wake_async(sk, 0, POLL_ERR);
-+	dccp_time_wait(sk, DCCP_TIME_WAIT, 0);
-+}
-+
- static void dccp_event_ack_recv(struct sock *sk, struct sk_buff *skb)
- {
- 	struct dccp_sock *dp =3D dccp_sk(sk);
-@@ -175,9 +211,8 @@ static int __dccp_rcv_established(struct
- 		 *		S.state :=3D TIMEWAIT
- 		 *		Set TIMEWAIT timer
- 		 *		Drop packet and return
--		*/
--		dccp_fin(sk, skb);
--		dccp_time_wait(sk, DCCP_TIME_WAIT, 0);
-+		 */
-+		dccp_rcv_reset(sk, skb);
- 		return 0;
- 	case DCCP_PKT_CLOSEREQ:
- 		dccp_rcv_closereq(sk, skb);
-@@ -505,12 +540,7 @@ int dccp_rcv_state_process(struct sock *
- 	 *		Drop packet and return
- 	*/
- 	if (dh->dccph_type =3D DCCP_PKT_RESET) {
--		/*
--		 * Queue the equivalent of TCP fin so that dccp_recvmsg
--		 * exits the loop
--		 */
--		dccp_fin(sk, skb);
--		dccp_time_wait(sk, DCCP_TIME_WAIT, 0);
-+		dccp_rcv_reset(sk, skb);
- 		return 0;
- 		/*
- 		 *   Step 7: Check for unexpected packet types
+Leandro.
