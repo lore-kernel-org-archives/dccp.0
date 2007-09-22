@@ -1,7 +1,7 @@
-From: "=?ISO-2022-JP?B?GyRCJUQbKEIgTGVhbmRybyBTYWxlcw==?="
-Date: Thu, 20 Sep 2007 17:49:15 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sat, 22 Sep 2007 20:16:42 +0000
 Subject: Re: [PATCH 1/5] CCID 4: Adds Kconfig, Makefile, and new CCID to include/linux/dccp.h
-Message-Id: <5bc4c4570709201049t3cda88fat3fd98f48b5be29e3@mail.gmail.com>
+Message-Id: <5640c7e00709221316j91d5d3co71822f796471345e@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20070920112021.GB1288@kikai.katei.fi>
 In-Reply-To: <20070920112021.GB1288@kikai.katei.fi>
@@ -10,7 +10,7 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-2007/9/20, Tommi Saviranta <wnd@iki.fi>:
+On 9/20/07, Tommi Saviranta <wnd@iki.fi> wrote:
 > Adds Kconfig-entries, modified Makefile, and adds DCCP_CCID enum for for
 > CCID 4. Kconfig-entries are derived from CCID 3, and are probably
 > invalid.
@@ -18,29 +18,11 @@ To: dccp@vger.kernel.org
 >
 > Signed-off-by: Tommi Saviranta <wnd@iki.fi>
 >
-> ---
-> diff --git a/include/linux/dccp.h b/include/linux/dccp.h
-> index b569947..dc19d6b 100644
-> --- a/include/linux/dccp.h
-> +++ b/include/linux/dccp.h
-> @@ -173,6 +173,7 @@ enum {
->  enum {
->         DCCPC_CCID2 = 2,
->         DCCPC_CCID3 = 3,
-> +       DCCPC_CCID4 = 4,
->  };
->
->  /* DCCP features (RFC 4340 section 6.4) */
-> diff --git a/net/dccp/ccids/Kconfig b/net/dccp/ccids/Kconfig
-> index a0c42d7..e402869 100644
-> --- a/net/dccp/ccids/Kconfig
-> +++ b/net/dccp/ccids/Kconfig
-> @@ -115,4 +115,87 @@ config IP_DCCP_TFRC_DEBUG
->         bool
->         default y if IP_DCCP_CCID3_DEBUG
->
 > +config IP_DCCP_CCID4
 > +       tristate "CCID4 (TCP-Friendly, Small Packet Variant) (EXPERIMENTAL)"
+
+But it doesn't depend on EXPERIMENTAL... This should be fixed.
+
 > +       depends on IP_DCCP
 > +       def_tristate IP_DCCP
 > +       ---help---
@@ -58,33 +40,16 @@ To: dccp@vger.kernel.org
 > +         CCID 4 is further described in RFC xxxx,
 > +         http://www.ietf.org/rfc/rfcXXXX.txt
 > +
-> +         The TFRC-SP congestion control algorithms were initially described in
-> +         RFC 4828.
-> +
-> +         This text was extracted from RFC 4340 (sec. 10.2),
-> +         http://www.ietf.org/rfc/rfc4340.txt, and modified to match CCID4.
-> +
-> +         To compile this CCID as a module, choose M here: the module will be
-> +         called dccp_ccid4.
-> +
-> +         If in doubt, say M.
-> +
-> +config IP_DCCP_CCID4_DEBUG
-> +         bool "CCID4 debugging messages"
-> +         depends on IP_DCCP_CCID4
-> +         ---help---
-> +           Enable CCID4-specific debugging messages.
-> +
-> +           When compiling CCID4 as a module, this debugging output can
-> +           additionally be toggled by setting the ccid4_debug module
-> +           parameter to 0 or 1.
-> +
-> +           If in doubt, say N.
-> +
+This part should say that is an Internet Draft and give the URL for
+that. When it becomes a RFC a patch can then give the RFC number.
+
 > +config IP_DCCP_CCID4_RTO
 > +         int "Use higher bound for nofeedback timer"
 > +         default 100
 > +         depends on IP_DCCP_CCID4 && EXPERIMENTAL
+
+This EXPERIMENTAL can be removed with the changes to add to
+IP_DCCP_CCID4 as above
 > +         ---help---
 > +           FIXME
 > +           Use higher lower bound for nofeedback timer expiration.
@@ -105,51 +70,12 @@ To: dccp@vger.kernel.org
 > +               * 100ms as a reasonable compromise [default]
 > +               * 1000ms corresponds to the lower TCP RTO bound (RFC 2988, 2.4)
 > +
-> +           The default of 100ms is a compromise between a large value for
-> +           efficient DCCP implementations, and a small value to avoid disrupting
-> +           the network in times of congestion.
-> +
-> +           The purpose of the nofeedback timer is to slow DCCP down when there
-> +           is serious network congestion: experimenting with larger values should
-> +           therefore not be performed on WANs.
-> +
-> +# The TFRC-SP Library: currently only has CCID 4 as customer
-> +config IP_DCCP_TFRC_SP_LIB
-> +       depends on IP_DCCP_CCID4
-> +       def_tristate IP_DCCP_CCID4
-> +
-> +config IP_DCCP_TFRC_SP_DEBUG
-> +       bool
-> +       default y if IP_DCCP_CCID4_DEBUG
-> +
->  endmenu
-> diff --git a/net/dccp/ccids/Makefile b/net/dccp/ccids/Makefile
-> index 438f20b..fa21407 100644
-> --- a/net/dccp/ccids/Makefile
-> +++ b/net/dccp/ccids/Makefile
-> @@ -5,5 +5,9 @@ dccp_ccid3-y := ccid3.o
->  obj-$(CONFIG_IP_DCCP_CCID2) += dccp_ccid2.o
->
->  dccp_ccid2-y := ccid2.o
-> +
-> +obj-$(CONFIG_IP_DCCP_CCID4) += dccp_ccid4.o
-> +
-> +dccp_ccid4-y := ccid4.o
->
->  obj-y += lib/
-> -
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
->
 
-NAK.
+But Linux actually uses 250 ms for TCP here, not 1000 ms. You might
+want to add that.
 
-How about do as gerrit suggested "select IP_DCCP_CCID3" or like this:
 
-# The TFRC Library: currently has CCID 3 and CCID 4 as customer
-config IP_DCCP_TFRC_LIB
-       depends on IP_DCCP_CCID3 || IP_DCCP_CCID4
-
-My patchset about this fixes this issue and also remove unnecessary
-repetition of the TFRC menu declaration.
+-- 
+Web1: http://wand.net.nz/~iam4/
+Web2: http://www.jandi.co.nz
+Blog: http://iansblog.jandi.co.nz
