@@ -1,38 +1,26 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 25 Sep 2007 09:27:05 +0000
-Subject: Re: [PATCH 1/5] CCID 4: Adds Kconfig, Makefile, and new CCID to include/linux/dccp.h
-Message-Id: <5640c7e00709250227l4e74a704x30de416121fac08d@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Sat, 22 Sep 2007 14:41:12 +0000
+Subject: tcpdump broken wrt CsCov & CsVal parsing?
+Message-Id: <20070922144111.GE10051@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
-References: <20070920112021.GB1288@kikai.katei.fi>
-In-Reply-To: <20070920112021.GB1288@kikai.katei.fi>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 9/25/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Ian McDonald wrote:
-> |   + * 16-20ms to match the typical multimedia inter-frame interval
-> |  > + * 100ms as a reasonable compromise [default]
-> |  > + * 1000ms corresponds to the lower TCP RTO bound (RFC 2988, 2.4)
-> |  > +
-> |
-> |  But Linux actually uses 250 ms for TCP here, not 1000 ms. You might
-> |  want to add that.
-> |
-> The others are not guilty of this change - the text was copied verbatim from the CCID3 menu.
-> And the CCID3 menu was copied from emails on dccp@ietf. I think Colin Perkins suggested the
-> lower, frame-based value, whereas 100ms were suggested by Mark Handley. Good to know about
-> the Linux value -- this is all meant for experimentation, maybe the 1000ms can then go?
-> I have been using the default of 100ms for a long while, but not done feedback loss tests.
+Trying to rebuild a proper test setup, so far using just loopback for
+simple tests I noticed this problem:
 
-I've just cced you all in on something I dug up through the iccrg list
-not so long ago. Makes interesting reading.
+11:57:47.463084 IP localhost.40343 > localhost.5001: CCVal 0, CsCov 5, cksum 0xf52a (correct), dataack (ack5231163474841)
+11:57:47.463095 IP localhost.5001 > localhost.40343: CCVal 0, CsCov 5, cksum 0x92f7 (correct), ack (ack5230668497611)
+11:57:47.463219 IP localhost.40343 > localhost.5001: CCVal 0, CsCov 10, cksum 0xe8d8 (correct), dataack (ack5231163474842)
+11:57:47.463231 IP localhost.5001 > localhost.40343: CCVal 0, CsCov 10, cksum 0xa7e9 (correct), ack (ack5230668497612)
+11:57:47.463344 IP localhost.40343 > localhost.5001: CCVal 0, CsCov 15, cksum 0xda86 (correct), dataack (ack5231163474843)
+11:57:47.463355 IP localhost.5001 > localhost.40343: CCVal 0, CsCov 15, cksum 0x166c (correct), ack (ack5230668497613)
+11:57:47.463466 IP localhost.40343 > localhost.5001: CCVal 0, CsCov 4, cksum 0xcf34 (correct), dataack (ack5231163474844)
+11:57:47.463477 IP localhost.5001 > localhost.40343: CCVal 0, CsCov 4, cksum 0x4f19 (correct), ack (ack5230668497614)
 
-Regards,
+Who was the last person to touch the DCCP support code in tcpdump? Care
+to take a look?
 
-Ian
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+- Arnaldo
