@@ -1,33 +1,92 @@
-From: David Miller <davem@davemloft.net>
-Date: Wed, 26 Sep 2007 05:39:24 +0000
-Subject: Re: [PATCH 1/6] [DCCP]: Reuse ktime_get_real() calls again
-Message-Id: <20070925.223924.22185946.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 25 Sep 2007 14:29:56 +0000
+Subject: [PATCH 2/8]: Add Support for Data 1 .. 3 fields of Reset packets
+Message-Id: <200709251529.56581@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <20070922210917.GF4887@ghostprotocols.net>
-In-Reply-To: <20070922210917.GF4887@ghostprotocols.net>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 22 Sep 2007 18:09:17 -0300
+[DCCP]: Add Support for Data 1 .. 3 fields of Reset packets
 
-> This patch reduces the number of timestamps taken in the receive path
-> for each packet.
-> 
-> The ccid3_hc_tx_update_x() routine is called in
->  * the receive path for each CCID3-controlled packet
->  * for the nofeedback timer (if no feedback arrives during 4 RTT)
-> 
-> Currently, when there is no loss, each packet gets timestamped twice.
-> The patch resolves this by recycling the first timestamp taken on packet
-> reception for RTT sampling.
-> 
-> When the no_feedback_timer() is called, then the timestamp argument is
-> simply set to NULL - so that ccid3_hc_tx_update_x() takes care of the logic.
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+This adds fields to support the informational Data 1..3 fields of the
+DCCP-Reset packets (RFC 4340, 5.6), and makes minor cosmetic changes
+to documentation.
+Code which fills in these fields follows in subsequent patches, it is
+primarily used for reporting option-processing and feature-negotiation
+errors.
 
-Applied.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ include/linux/dccp.h |   14 ++++++--------
+ net/dccp/dccp.h      |   14 +++++++++++++-
+ 2 files changed, 19 insertions(+), 9 deletions(-)
+
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -313,10 +313,22 @@ static inline int dccp_bad_service_code(
+ 	return !dccp_list_has_service(dp->dccps_service_list, service);
+ }
+ 
++/**
++ * dccp_skb_cb  -  DCCP per-packet control information
++ * @dccpd_type: one of %dccp_pkt_type (or unknown)
++ * @dccpd_ccval: CCVal field (5.1), see e.g. RFC 4342, 8.1
++ * @dccpd_reset_code: one of %dccp_reset_codes
++ * @dccpd_reset_data: Data1..3 fields (depend on @dccpd_reset_code)
++ * @dccpd_opt_len: total length of all options (5.8) in the packet
++ * @dccpd_seq: sequence number
++ * @dccpd_ack_seq: acknowledgment number subheader field value
++ * This is used for transmission as well as for reception.
++ */
+ struct dccp_skb_cb {
+ 	__u8  dccpd_type:4;
+ 	__u8  dccpd_ccval:4;
+-	__u8  dccpd_reset_code;
++	__u8  dccpd_reset_code,
++	      dccpd_reset_data[3];
+ 	__u16 dccpd_opt_len;
+ 	__u64 dccpd_seq;
+ 	__u64 dccpd_ack_seq;
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -56,10 +56,9 @@ struct dccp_hdr_ext {
+ };
+ 
+ /**
+- * struct dccp_hdr_request - Conection initiation request header
++ * struct dccp_hdr_request - Connection initiation request header
+  *
+  * @dccph_req_service - Service to which the client app wants to connect
+- * @dccph_req_options - list of options (must be a multiple of 32 bits
+  */
+ struct dccp_hdr_request {
+ 	__be32	dccph_req_service;
+@@ -76,12 +75,10 @@ struct dccp_hdr_ack_bits {
+ 	__be32	dccph_ack_nr_low;
+ };
+ /**
+- * struct dccp_hdr_response - Conection initiation response header
++ * struct dccp_hdr_response - Connection initiation response header
+  *
+- * @dccph_resp_ack_nr_high - 48 bit ack number high order bits, contains GSR
+- * @dccph_resp_ack_nr_low - 48 bit ack number low order bits, contains GSR
++ * @dccph_resp_ack - 48 bit Acknowledgment Number Subheader (5.3)
+  * @dccph_resp_service - Echoes the Service Code on a received DCCP-Request
+- * @dccph_resp_options - list of options (must be a multiple of 32 bits
+  */
+ struct dccp_hdr_response {
+ 	struct dccp_hdr_ack_bits	dccph_resp_ack;
+@@ -91,8 +88,9 @@ struct dccp_hdr_response {
+ /**
+  * struct dccp_hdr_reset - Unconditionally shut down a connection
+  *
+- * @dccph_reset_service - Echoes the Service Code on a received DCCP-Request
+- * @dccph_reset_options - list of options (must be a multiple of 32 bits
++ * @dccph_reset_ack - 48 bit Acknowledgment Number Subheader (5.6)
++ * @dccph_reset_code - one of %dccp_reset_codes
++ * @dccph_reset_data - the Data 1 ... Data 3 fields from 5.6
+  */
+ struct dccp_hdr_reset {
+ 	struct dccp_hdr_ack_bits	dccph_reset_ack;
