@@ -1,37 +1,78 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 27 Sep 2007 19:38:07 +0000
-Subject: Re: [PATCH 1/11]: Remove unused and redundant validation functions
-Message-Id: <5640c7e00709271238i54769e44m7ddeab2e19e8a5ae@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 25 Sep 2007 14:30:45 +0000
+Subject: [PATCH 6/8]: Add (missing) option parsing to request_sock processing
+Message-Id: <200709251530.45192@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200709271520.41173@strip-the-willow>
-In-Reply-To: <200709271520.41173@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 9/28/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [DCCP]: Remove unused and redundant validation functions
->
-> This removes two inlines which were both called in a single function only:
->
->  1) dccp_feat_change() is always called with either DCCPO_CHANGE_L or DCCPO_CHANGE_R as argument
->     * from dccp_set_socktopt_change() via do_dccp_setsockopt() with DCCP_SOCKOPT_CHANGE_R/L
->     * from __dccp_feat_init() via dccp_feat_init() also with DCCP_SOCKOPT_CHANGE_R/L.
->
->     Hence the dccp_feat_is_valid_type() is completely unnecessary and always returns true.
->
->  2) Due to (1), the length test reduces to 'len >= 4', which in turn makes
->     dccp_feat_is_valid_length() unnecessary.
->
-> Furthermore, the inline function dccp_feat_is_reserved() was unfolded,
-> since only called in a single place.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+[DCCP]: Add (missing) option parsing to request_sock processing
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+This adds option-parsing code to processing of Acks in the listening state
+on request_socks on the server, serving two purposes
+ (i)  resolves a FIXME (removed);
+ (ii) paves the way for feature-negotiation during connection-setup. 
 
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+There is an intended subtlety here with regard to dccp_check_req:
+
+ Parsing options happens only after testing whether the received packet is
+ a retransmitted Request.  Otherwise, if the Request contained (a possibly
+ large number of) feature-negotiation options, recomputing state would have to
+ happen each time a retransmitted Request arrives, which opens the door to an
+ easy DoS attack.  Since in a genuine retransmission the options should not be
+ different from the original, reusing the already computed state seems better.
+
+ The other point is - if there are timestamp options on the Request, they will 
+ not be answered; which means that in the presence of retransmission (likely 
+ due to loss and/or other problems), the use of Request/Response RTT sampling 
+ is suspended, so that startup problems here do not propagate.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/minisocks.c |   12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+--- a/net/dccp/minisocks.c
++++ b/net/dccp/minisocks.c
+@@ -200,10 +200,10 @@ struct sock *dccp_check_req(struct sock 
+ 			    struct request_sock **prev)
+ {
+ 	struct sock *child = NULL;
++	struct dccp_request_sock *dreq = dccp_rsk(req);
+ 
+ 	/* Check for retransmitted REQUEST */
+ 	if (dccp_hdr(skb)->dccph_type = DCCP_PKT_REQUEST) {
+-		struct dccp_request_sock *dreq = dccp_rsk(req);
+ 
+ 		if (after48(DCCP_SKB_CB(skb)->dccpd_seq, dreq->dreq_isr)) {
+ 			dccp_pr_debug("Retransmitted REQUEST\n");
+@@ -227,22 +227,22 @@ struct sock *dccp_check_req(struct sock 
+ 		goto drop;
+ 
+ 	/* Invalid ACK */
+-	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != dccp_rsk(req)->dreq_iss) {
++	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != dreq->dreq_iss) {
+ 		dccp_pr_debug("Invalid ACK number: ack_seq=%llu, "
+ 			      "dreq_iss=%llu\n",
+ 			      (unsigned long long)
+ 			      DCCP_SKB_CB(skb)->dccpd_ack_seq,
+-			      (unsigned long long)
+-			      dccp_rsk(req)->dreq_iss);
++			      (unsigned long long) dreq->dreq_iss);
+ 		goto drop;
+ 	}
+ 
++	if (dccp_parse_options(sk, dreq, skb))
++		 goto drop;
++
+ 	child = inet_csk(sk)->icsk_af_ops->syn_recv_sock(sk, skb, req, NULL);
+ 	if (child = NULL)
+ 		goto listen_overflow;
+ 
+-	/* FIXME: deal with options */
+-
+ 	inet_csk_reqsk_queue_unlink(sk, req, prev);
+ 	inet_csk_reqsk_queue_removed(sk, req);
+ 	inet_csk_reqsk_queue_add(sk, req, child);
