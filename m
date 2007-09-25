@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 22 Sep 2007 20:03:04 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 25 Sep 2007 08:08:29 +0000
 Subject: Re: tcpdump broken wrt CsCov & CsVal parsing?
-Message-Id: <5640c7e00709221303td947fcbs7c110ca988cc623d@mail.gmail.com>
+Message-Id: <200709250908.29357@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <20070922144111.GE10051@ghostprotocols.net>
 In-Reply-To: <20070922144111.GE10051@ghostprotocols.net>
@@ -10,20 +10,25 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 9/23/07, Arnaldo Carvalho de Melo <acme@ghostprotocols.net> wrote:
-> Trying to rebuild a proper test setup, so far using just loopback for
-> simple tests I noticed this problem:
->
-> Who was the last person to touch the DCCP support code in tcpdump? Care
-> to take a look?
->
-> - Arnaldo
+|  On 9/23/07, Arnaldo Carvalho de Melo <acme@ghostprotocols.net> wrote:
+|  > Trying to rebuild a proper test setup, so far using just loopback for
+|  > simple tests I noticed this problem:
+|  >
+|  > Who was the last person to touch the DCCP support code in tcpdump? Care
+|  > to take a look?
+|  >
+|  > - Arnaldo
+|  
+|  I'm pretty sure that would be me :-(
+|  
+|  I'll take a look but it won't be very soon.
+|  
+... and me too :) I know this problem - CsCov and CCVal were swapped in the
+header file. As far as I recall the maintainer had checked an update in last
+year.
 
-I'm pretty sure that would be me :-(
+You didn't say which version of tcpdump you were using, I checked locally:
+ * tcpdump 3.9.5 as Debian package with libpcap 0.9.5 has this swap-problem 
+ * tcpdump 3.9.5 built from tcpdump source, with libpcap 0.9.4 works correct
 
-I'll take a look but it won't be very soon.
-
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+Can you try tcpdump from source please and check if the problem persists?
