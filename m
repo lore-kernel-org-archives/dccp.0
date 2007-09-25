@@ -1,7 +1,7 @@
-From: "=?ISO-2022-JP?B?GyRCJUQbKEIgTGVhbmRybyBTYWxlcw==?="
-Date: Mon, 24 Sep 2007 21:35:11 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Tue, 25 Sep 2007 02:45:26 +0000
 Subject: Re: Towards the ccid-3 and ccid-4 integration
-Message-Id: <5bc4c4570709241435n5bba43bcje1997bff14605ad9@mail.gmail.com>
+Message-Id: <5640c7e00709241945r1ac995e7t90f690cc855a38bf@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570709241115u1254baa9j7033d1bdc9dc079@mail.gmail.com>
 In-Reply-To: <5bc4c4570709241115u1254baa9j7033d1bdc9dc079@mail.gmail.com>
@@ -10,7 +10,7 @@ Content-Type: text/plain; charset="iso-2022-jp"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-2007/9/24, ツ Leandro Sales <leandroal@gmail.com>:
+On 9/25/07, ツ Leandro Sales <leandroal@gmail.com> wrote:
 > Hi list,
 >   I'm currently trying to define the steps in order to get a good
 > patchset for the initial ccid-4 implementation. Thus, I'd like to
@@ -28,9 +28,11 @@ To: dccp@vger.kernel.org
 > Please, let me know if I've forgot something.
 >
 > Leandro.
->
 
-Is there someone that would like to comment the proceeds that me and
-Tommi will adopt for the initial ccid-4. Tommi, anything more?
+Sounds great to me.
 
-Leandro.
+Ian
+-- 
+Web1: http://wand.net.nz/~iam4/
+Web2: http://www.jandi.co.nz
+Blog: http://iansblog.jandi.co.nz
