@@ -1,7 +1,7 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 25 Sep 2007 12:16:53 +0000
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Tue, 25 Sep 2007 12:27:11 +0000
 Subject: Re: [PATCH v2  4/5]: Rate-limit DCCP-Syncs
-Message-Id: <200709251316.53262@strip-the-willow>
+Message-Id: <20070925122711.GB18348@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 References: <200709251058.41805@strip-the-willow>
 In-Reply-To: <200709251058.41805@strip-the-willow>
@@ -10,50 +10,57 @@ Content-Type: text/plain; charset="iso-8859-1"
 Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
+Em Tue, Sep 25, 2007 at 01:16:53PM +0100, Gerrit Renker escreveu:
+>=20
+> |  > +/* rate-limit for syncs in reply to sequence-invalid packets; RFC 4=
+340, 7.5.4 */
+> |  > +int sysctl_dccp_sync_ratelimit=A0=A0=A0=A0=A0=A0=A0__read_mostly =
+=3D HZ / 8;
+> | =20
+> |  Why the extra spaces/tabs before __read_mostly?=20
+> This is for consistency with the sysctls below, the whole paragraph looks=
+ like this:
+>=20
+> /* the maximum queue length for tx in packets. 0 is no limit */
+> int sysctl_dccp_tx_qlen         __read_mostly =3D 5;
+>=20
+> /* sysctl variables governing numbers of retransmission attempts */
+> int sysctl_dccp_request_retries __read_mostly =3D TCP_SYN_RETRIES;
+> int sysctl_dccp_retries1        __read_mostly =3D TCP_RETR1;
+> int sysctl_dccp_retries2        __read_mostly =3D TCP_RETR2;
+>=20
+> /* rate-limit for syncs in reply to sequence-invalid packets; RFC 4340, 7=
+.5.4 */
+> int sysctl_dccp_sync_ratelimit  __read_mostly =3D HZ / 8;
+>=20
+> Sigh - I just wanted to be `neat', but each maintainer has a different co=
+nception of that :)
 
-|  > +/* rate-limit for syncs in reply to sequence-invalid packets; RFC 434=
-0, 7.5.4 */
-|  > +int sysctl_dccp_sync_ratelimit=A0=A0=A0=A0=A0=A0=A0__read_mostly =3D =
-HZ / 8;
-| =20
-|  Why the extra spaces/tabs before __read_mostly?=20
-This is for consistency with the sysctls below, the whole paragraph looks l=
-ike this:
+Ok, sorry for the noise on this one, should be ok, at least for me ;-)
+=20
+> |  One more:=20
+> |  In linux networking code what has been the most accepted form for
+> |  multiline expressions is:
+> | =20
+> |  =A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0if (time_after(now, (d=
+p->dccps_rate_last +
+> |  =A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=
+=A0=A0=A0=A0=A0=A0=A0=A0=A0 =A0 =A0 sysctl_dccp_sync_ratelimit))) {
+> | =20
+> |  Either form produces the same code, but as the later is what I, David
+> |  and others are most confortable with and have been using for quite a
+> |  while,=20
+> Please excuse my ignorance: that was simply something I didn't know, and =
+thus it is good that
+> it is on the list, so that others can also adapt this. Thanks for explain=
+ing.
+>=20
+> It is _very_ important since in CCID3/CCID4 variable names are all very l=
+ong (the drafts are
+> also long), and lots of calculations.
+>=20
+> Will fix that and put the result in the tree.
 
-/* the maximum queue length for tx in packets. 0 is no limit */
-int sysctl_dccp_tx_qlen         __read_mostly =3D 5;
+Great, thank you.
 
-/* sysctl variables governing numbers of retransmission attempts */
-int sysctl_dccp_request_retries __read_mostly =3D TCP_SYN_RETRIES;
-int sysctl_dccp_retries1        __read_mostly =3D TCP_RETR1;
-int sysctl_dccp_retries2        __read_mostly =3D TCP_RETR2;
-
-/* rate-limit for syncs in reply to sequence-invalid packets; RFC 4340, 7.5=
-.4 */
-int sysctl_dccp_sync_ratelimit  __read_mostly =3D HZ / 8;
-
-Sigh - I just wanted to be `neat', but each maintainer has a different conc=
-eption of that :)
-
-|  One more:=20
-|  In linux networking code what has been the most accepted form for
-|  multiline expressions is:
-| =20
-|  =A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0if (time_after(now, (dp-=
->dccps_rate_last +
-|  =A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=A0=
-=A0=A0=A0=A0=A0=A0=A0=A0 =A0 =A0 sysctl_dccp_sync_ratelimit))) {
-| =20
-|  Either form produces the same code, but as the later is what I, David
-|  and others are most confortable with and have been using for quite a
-|  while,=20
-Please excuse my ignorance: that was simply something I didn't know, and th=
-us it is good that
-it is on the list, so that others can also adapt this. Thanks for explainin=
-g.
-
-It is _very_ important since in CCID3/CCID4 variable names are all very lon=
-g (the drafts are
-also long), and lots of calculations.
-
-Will fix that and put the result in the tree.
+- Arnaldo
