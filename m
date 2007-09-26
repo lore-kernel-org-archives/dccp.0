@@ -1,19 +1,25 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 22 Sep 2007 20:37:30 +0000
-Subject: Re: [PATCH 4/5] CCID 4: Reduce allowed sending rate by a factor that accounts for packet header size
-Message-Id: <5640c7e00709221337r6fefe9cy6e5b0ae2258c866c@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Wed, 26 Sep 2007 22:52:23 +0000
+Subject: My plans
+Message-Id: <20070926225223.GN10932@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
-References: <20070920112717.GC26233@kikai.katei.fi>
-In-Reply-To: <20070920112717.GC26233@kikai.katei.fi>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-> + * The header size on data packets is estimated as 36 bytes [RFC XXXX,
-> + * Section 5] (floyd-01)
-> + */
+Hi,
 
-Reference the Internet Draft here rather than RFC which does not exist.
+      Dave merged more 8 patches today, so I'm making progress on
+merging all the pending work, yay! I plan to continue working on
+the non-ccid patches that are easier to merge at this stage.
 
-Otherwise looks fine.
+      Gerrit, so I think that right now for you the best is to continue
+working on your codebase, as I get closer to fill the gap we can talk
+again, no need for you to try to cope with my cherry picking right now.
+
+Comments?
+
+Thanks a lot and keep up the good work!
+
+- Arnaldo
