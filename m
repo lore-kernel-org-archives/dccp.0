@@ -1,29 +1,58 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 22 Sep 2007 20:06:05 +0000
-Subject: Re: [PATCH 2/4] CCID4: Provides organization to the initial entries for CCID 4 to net/dccp/ccids/Mak
-Message-Id: <5640c7e00709221306ha85d1c7u5f994df79372f268@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Wed, 26 Sep 2007 18:39:16 +0000
+Subject: [PATCH 1/8] [DCCP]: Send Reset upon Sync in state REQUEST
+Message-Id: <20070926183916.GC10932@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
-References: <5bc4c4570709201054n1beda2d8x6bfdcda0cbcbaa35@mail.gmail.com>
-In-Reply-To: <5bc4c4570709201054n1beda2d8x6bfdcda0cbcbaa35@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-2022-jp"
+Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 9/21/07, ツ Leandro Sales <leandroal@gmail.com> wrote:
-> Signed-off-by: Leandro Sales <leandro@embedded.ufcg.edu.br>
->
-> Just to maintain the order or declarion 4, 3, 2 instead of 3 4 2, which can
-> facilitate either future identification and addition of new ccids on top of the
-> Makefile.
->
+This fixes the code to correspond to RFC 4340, 7.5.4, which states the
+exception that a Sync received in state REQUEST generates a Reset (not
+a SyncAck).
 
-I don't think it actually matters the order as it is just a makefile
-and not user facing.
+To achieve this, only a small change is required. Since
+dccp_rcv_request_sent_state_process() already uses the correct Reset Code
+number 4 ("Packet Error"), we only need to shift the if-statement a few
+lines further down.
 
-Still the patch is OK
+(To test this case: replace DCCP_PKT_RESPONSE with DCCP_PKT_SYNC
+                    in dccp_make_response.)
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+---
+ net/dccp/input.c |    8 +++-----
+ 1 files changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/net/dccp/input.c b/net/dccp/input.c
+index cde0e70..86ad3ba 100644
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -540,11 +540,6 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+ 		return 0;
+ 	}
+ 
+-	if (unlikely(dh->dccph_type = DCCP_PKT_SYNC)) {
+-		dccp_send_sync(sk, dcb->dccpd_seq, DCCP_PKT_SYNCACK);
+-		goto discard;
+-	}
+-
+ 	switch (sk->sk_state) {
+ 	case DCCP_CLOSED:
+ 		dcb->dccpd_reset_code = DCCP_RESET_CODE_NO_CONNECTION;
+@@ -575,6 +570,9 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+ 			sk_wake_async(sk, 0, POLL_OUT);
+ 			break;
+ 		}
++	} else if (unlikely(dh->dccph_type = DCCP_PKT_SYNC)) {
++		dccp_send_sync(sk, dcb->dccpd_seq, DCCP_PKT_SYNCACK);
++		goto discard;
+ 	}
+ 
+ 	if (!queued) {
 -- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+1.5.2.2
+
