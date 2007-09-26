@@ -1,21 +1,19 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 20 Sep 2007 06:27:48 +0000
-Subject: Re: Source repository for CCID 4
-Message-Id: <200709200727.48753@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Wed, 26 Sep 2007 23:07:31 +0000
+Subject: [PATCHES 0/2][DCCP]: Today's last batch
+Message-Id: <20070926230731.GO10932@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
-References: <20070919081635.GA26986@kikai.katei.fi>
-In-Reply-To: <20070919081635.GA26986@kikai.katei.fi>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-|  =A0 =A0About the signed-off-by and acked-by, I also don't know its usage,
-|  but if I understood right, it is a kind of signal of agreement or not
-|  for something. For me, it is still a little bit confused. Please,
-|  someone to explain us this issue?
-The use is documented in Documentation/SubmittingPatches (sections 12/13).
+Hi David,
 
-If you want your patches in a shared repository, please send them to the li=
-st
-including such lines, as Ian and I are already doing.
+	Please consider pulling from:
+
+master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.24
+
+Thanks,
+
+- Arnaldo
