@@ -1,101 +1,141 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 28 Sep 2007 15:30:20 +0000
-Subject: [PATCH 3/9]: Resolve feature dependencies resulting from choice of CCID
-Message-Id: <200709281630.20184@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Wed, 26 Sep 2007 18:40:10 +0000
+Subject: [PATCH 5/8] [DCCP]: Remove duplicate code for Reset from connected
+Message-Id: <20070926184010.GG10932@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Resolve feature dependencies resulting from choice of CCID
+In this patch, duplicated code is removed for the case when a Reset packet is
+sent from a connected socket. This code duplication is between dccp_make_reset
+and dccp_transmit_skb, which already contained an (up to now entirely unused)
+switch statement to fill in the reset code from the DCCP_SKB_CB.
 
-This adds a hook to resolve features whose value depends on the choice of
-CCID. It is done at the server since it can only be done after the CCID
-values have been negotiated; i.e. the client will add its CCID preference
-list on the Change options sent in the Request, which will be reconciled
-with the local preference list of the server.
+The only thing that has been removed is the call to dst_clone(dst), since
+the queue_xmit functions use sk_dst_cache anyway.
 
-The concept is documented on 
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/feature_negotiation/implementation_notes.html#ccid_dependencies
+I wasn't sure which purpose inet_sk_rebuild_header served, so I left it in.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/dccp.h   |    1 +
- net/dccp/feat.c   |   25 +++++++++++++++++++++++++
- net/dccp/output.c |   13 +++++++++----
- 3 files changed, 35 insertions(+), 4 deletions(-)
+ net/dccp/output.c |   78 +++++++++++++----------------------------------------
+ 1 files changed, 19 insertions(+), 59 deletions(-)
 
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -423,6 +423,7 @@ static inline int dccp_ack_pending(const
- }
- 
- extern int  dccp_feat_finalise_settings(struct dccp_sock *dp);
-+extern int  dccp_feat_server_ccid_dependencies(struct dccp_request_sock *dreq);
- extern void dccp_feat_list_purge(struct list_head *fn_list);
- 
- extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -547,6 +547,31 @@ int dccp_feat_finalise_settings(struct d
- 	return 0;
- }
- 
-+/**
-+ * dccp_feat_server_ccid_dependencies  -  Resolve CCID-dependent features
-+ * It is the server which resolves the dependencies once the CCID has been
-+ * fully negotiated. If no CCID has been negotiated, it uses the default CCID.
-+ */
-+int dccp_feat_server_ccid_dependencies(struct dccp_request_sock *dreq)
-+{
-+	struct list_head *fn = &dreq->dreq_featneg;
-+	struct dccp_feat_entry *entry;
-+	u8 is_local, ccid;
-+
-+	for (is_local = 0; is_local <= 1; is_local++) {
-+		entry = dccp_feat_list_lookup(fn, DCCPF_CCID, is_local);
-+
-+		if (entry != NULL && !entry->empty_confirm)
-+			ccid = entry->val.sp.vec[0];
-+		else
-+			ccid = dccp_feat_default_value(DCCPF_CCID);
-+
-+		if (dccp_feat_propagate_ccid(fn, ccid, is_local))
-+			return -1;
-+	}
-+	return 0;
-+}
-+
- static int dccp_feat_update_ccid(struct sock *sk, u8 type, u8 new_ccid_nr)
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
+diff --git a/net/dccp/output.c b/net/dccp/output.c
+index d0c9ec6..f4bde20 100644
 --- a/net/dccp/output.c
 +++ b/net/dccp/output.c
-@@ -303,10 +303,12 @@ struct sk_buff *dccp_make_response(struc
- 	DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_RESPONSE;
- 	DCCP_SKB_CB(skb)->dccpd_seq  = dreq->dreq_iss;
+@@ -61,6 +61,7 @@ static int dccp_transmit_skb(struct sock *sk, struct sk_buff *skb)
+ 			set_ack = 0;
+ 			/* fall through */
+ 		case DCCP_PKT_DATAACK:
++		case DCCP_PKT_RESET:
+ 			break;
  
--	if (dccp_insert_options_rsk(dreq, skb)) {
+ 		case DCCP_PKT_REQUEST:
+@@ -73,8 +74,10 @@ static int dccp_transmit_skb(struct sock *sk, struct sk_buff *skb)
+ 			/* fall through */
+ 		default:
+ 			/*
+-			 * Only data packets should come through with skb->sk
+-			 * set.
++			 * Set owner/destructor: some skbs are allocated via
++			 * alloc_skb (e.g. when retransmission may happen).
++			 * Only Data, DataAck, and Reset packets should come
++			 * through here with skb->sk set.
+ 			 */
+ 			WARN_ON(skb->sk);
+ 			skb_set_owner_w(skb, sk);
+@@ -324,72 +327,29 @@ struct sk_buff *dccp_make_response(struct sock *sk, struct dst_entry *dst,
+ 
+ EXPORT_SYMBOL_GPL(dccp_make_response);
+ 
+-static struct sk_buff *dccp_make_reset(struct sock *sk, struct dst_entry *dst,
+-				       const enum dccp_reset_codes code)
+-{
+-	struct dccp_hdr *dh;
+-	struct dccp_sock *dp = dccp_sk(sk);
+-	const u32 dccp_header_size = sizeof(struct dccp_hdr) +
+-				     sizeof(struct dccp_hdr_ext) +
+-				     sizeof(struct dccp_hdr_reset);
+-	struct sk_buff *skb = sock_wmalloc(sk, sk->sk_prot->max_header, 1,
+-					   GFP_ATOMIC);
+-	if (skb = NULL)
+-		return NULL;
+-
+-	/* Reserve space for headers. */
+-	skb_reserve(skb, sk->sk_prot->max_header);
+-
+-	skb->dst = dst_clone(dst);
+-
+-	dccp_inc_seqno(&dp->dccps_gss);
+-
+-	DCCP_SKB_CB(skb)->dccpd_reset_code = code;
+-	DCCP_SKB_CB(skb)->dccpd_type	   = DCCP_PKT_RESET;
+-	DCCP_SKB_CB(skb)->dccpd_seq	   = dp->dccps_gss;
+-
+-	if (dccp_insert_options(sk, skb)) {
 -		kfree_skb(skb);
 -		return NULL;
 -	}
-+	/* Resolve feature dependencies resulting from choice of CCID */
-+	if (dccp_feat_server_ccid_dependencies(dreq))
-+		goto response_failed;
-+
-+	if (dccp_insert_options_rsk(dreq, skb))
-+		goto response_failed;
+-
+-	dh = dccp_zeroed_hdr(skb, dccp_header_size);
+-
+-	dh->dccph_sport	= inet_sk(sk)->sport;
+-	dh->dccph_dport	= inet_sk(sk)->dport;
+-	dh->dccph_doff	= (dccp_header_size +
+-			   DCCP_SKB_CB(skb)->dccpd_opt_len) / 4;
+-	dh->dccph_type	= DCCP_PKT_RESET;
+-	dh->dccph_x	= 1;
+-	dccp_hdr_set_seq(dh, dp->dccps_gss);
+-	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb), dp->dccps_gsr);
+-
+-	dccp_hdr_reset(skb)->dccph_reset_code = code;
+-	inet_csk(sk)->icsk_af_ops->send_check(sk, 0, skb);
+-
+-	DCCP_INC_STATS(DCCP_MIB_OUTSEGS);
+-	return skb;
+-}
+-
++/* send Reset on established socket, to close or abort the connection */
+ int dccp_send_reset(struct sock *sk, enum dccp_reset_codes code)
+ {
++	struct sk_buff *skb;
+ 	/*
+ 	 * FIXME: what if rebuild_header fails?
+ 	 * Should we be doing a rebuild_header here?
+ 	 */
+ 	int err = inet_sk_rebuild_header(sk);
  
- 	/* Build and checksum header */
- 	dh = dccp_zeroed_hdr(skb, dccp_header_size);
-@@ -327,6 +329,9 @@ struct sk_buff *dccp_make_response(struc
- 	inet_rsk(req)->acked = 1;
- 	DCCP_INC_STATS(DCCP_MIB_OUTSEGS);
- 	return skb;
-+response_failed:
-+	kfree_skb(skb);
-+	return NULL;
+-	if (err = 0) {
+-		struct sk_buff *skb = dccp_make_reset(sk, sk->sk_dst_cache,
+-						      code);
+-		if (skb != NULL) {
+-			memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
+-			err = inet_csk(sk)->icsk_af_ops->queue_xmit(skb, 0);
+-			return net_xmit_eval(err);
+-		}
+-	}
++	if (err != 0)
++		return err;
++
++	skb = sock_wmalloc(sk, sk->sk_prot->max_header, 1, GFP_ATOMIC);
++	if (skb = NULL)
++		return -ENOBUFS;
++
++	/* Reserve space for headers and prepare control bits. */
++	skb_reserve(skb, sk->sk_prot->max_header);
++	DCCP_SKB_CB(skb)->dccpd_type	   = DCCP_PKT_RESET;
++	DCCP_SKB_CB(skb)->dccpd_reset_code = code;
+ 
+-	return err;
++	return dccp_transmit_skb(sk, skb);
  }
  
- EXPORT_SYMBOL_GPL(dccp_make_response);
+ /*
+-- 
+1.5.2.2
+
