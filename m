@@ -1,251 +1,219 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Wed, 26 Sep 2007 18:40:53 +0000
-Subject: [PATCH 8/8] [DCCP]: Factor out common code for generating Resets
-Message-Id: <20070926184053.GJ10932@ghostprotocols.net>
+Date: Wed, 26 Sep 2007 18:39:30 +0000
+Subject: [PATCH 2/8] [CCID3]: Move NULL-protection into function
+Message-Id: <20070926183930.GD10932@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This factors code common to dccp_v{4,6}_ctl_send_reset into a separate function,
-and adds support for filling in the Data 1 ... Data 3 fields from RFC 4340, 5.6.
+This moves several instances of testing against NULL into the function which is
+used to de-reference the CCID-private data.
 
-It is useful to have this separate, since the following Reset codes will always
-be generated from the control socket rather than via dccp_send_reset:
- * Code 3, "No Connection", cf. 8.3.1;
- * Code 4, "Packet Error" (identification for Data 1 added);
- * Code 5, "Option Error" (identification for Data 1..3 added, will be used later);
- * Code 6, "Mandatory Error" (same as Option Error);
- * Code 7, "Connection Refused" (what on Earth is the difference to "No Connection"?);
- * Code 8, "Bad Service Code";
- * Code 9, "Too Busy";
- * Code 10, "Bad Init Cookie" (not used).
-
-Code 0 is not recommended by the RFC, the following codes would be used in
-dccp_send_reset() instead, since they all relate to an established DCCP connection:
- * Code 1, "Closed";
- * Code 2, "Aborted";
- * Code 11, "Aggression Penalty" (12.3).
+Committer note: Made the BUG_ON depend on having CONFIG_IP_DCCP_CCID3_DEBUG, as it
+                is too much to have this on production code. Also made sure that
+                the macro is used only after checking if sk_state is not LISTEN,
+                to make it equivalent to what we had before.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/dccp.h   |    2 ++
- net/dccp/ipv4.c   |   38 +++++---------------------------------
- net/dccp/ipv6.c   |   39 ++++++---------------------------------
- net/dccp/output.c |   52 ++++++++++++++++++++++++++++++++++++++++++++++++++++
- 4 files changed, 65 insertions(+), 66 deletions(-)
+ net/dccp/ccids/ccid3.c |   35 ++++++++++-------------------------
+ net/dccp/ccids/ccid3.h |   20 ++++++++++++++------
+ 2 files changed, 24 insertions(+), 31 deletions(-)
 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index a602d92..ee97950 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -294,6 +294,8 @@ extern unsigned int dccp_poll(struct file *file, struct socket *sock,
- extern int	   dccp_v4_connect(struct sock *sk, struct sockaddr *uaddr,
- 				   int addr_len);
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 0bb338b..a409939 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -302,8 +302,6 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 	ktime_t now = ktime_get_real();
+ 	s64 delay;
  
-+extern struct sk_buff *dccp_ctl_make_reset(struct socket *ctl,
-+					   struct sk_buff *skb);
- extern int	   dccp_send_reset(struct sock *sk, enum dccp_reset_codes code);
- extern void	   dccp_send_close(struct sock *sk, const int active);
- extern int	   dccp_invalid_packet(struct sk_buff *skb);
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index 58a79c2..2312b9f 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -510,17 +510,12 @@ out:
- static void dccp_v4_ctl_send_reset(struct sock *sk, struct sk_buff *rxskb)
+-	BUG_ON(hctx = NULL);
+-
+ 	/*
+ 	 * This function is called only for Data and DataAck packets. Sending
+ 	 * zero-sized Data(Ack)s is theoretically possible, but for congestion
+@@ -383,8 +381,6 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more,
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	struct dccp_tx_hist_entry *packet;
+ 
+-	BUG_ON(hctx = NULL);
+-
+ 	ccid3_hc_tx_update_s(hctx, len);
+ 
+ 	packet = dccp_tx_hist_entry_new(ccid3_tx_hist, GFP_ATOMIC);
+@@ -409,8 +405,6 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	unsigned long t_nfb;
+ 	u32 pinv, r_sample;
+ 
+-	BUG_ON(hctx = NULL);
+-
+ 	/* we are only interested in ACKs */
+ 	if (!(DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK ||
+ 	      DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_DATAACK))
+@@ -551,8 +545,6 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	struct ccid3_options_received *opt_recv;
+ 
+-	BUG_ON(hctx = NULL);
+-
+ 	opt_recv = &hctx->ccid3hctx_options_received;
+ 
+ 	if (opt_recv->ccid3or_seqno != dp->dccps_gsr) {
+@@ -626,8 +618,6 @@ static void ccid3_hc_tx_exit(struct sock *sk)
  {
- 	int err;
--	struct dccp_hdr *rxdh = dccp_hdr(rxskb), *dh;
- 	const struct iphdr *rxiph;
--	const int dccp_hdr_reset_len = sizeof(struct dccp_hdr) +
--				       sizeof(struct dccp_hdr_ext) +
--				       sizeof(struct dccp_hdr_reset);
- 	struct sk_buff *skb;
- 	struct dst_entry *dst;
--	u64 seqno = 0;
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
  
- 	/* Never send a reset in response to a reset. */
--	if (rxdh->dccph_type = DCCP_PKT_RESET)
-+	if (dccp_hdr(rxskb)->dccph_type = DCCP_PKT_RESET)
- 		return;
- 
- 	if (((struct rtable *)rxskb->dst)->rt_type != RTN_LOCAL)
-@@ -530,37 +525,14 @@ static void dccp_v4_ctl_send_reset(struct sock *sk, struct sk_buff *rxskb)
- 	if (dst = NULL)
- 		return;
- 
--	skb = alloc_skb(dccp_v4_ctl_socket->sk->sk_prot->max_header,
--			GFP_ATOMIC);
-+	skb = dccp_ctl_make_reset(dccp_v4_ctl_socket, rxskb);
- 	if (skb = NULL)
- 		goto out;
- 
--	/* Reserve space for headers. */
--	skb_reserve(skb, dccp_v4_ctl_socket->sk->sk_prot->max_header);
--	skb->dst = dst_clone(dst);
+-	BUG_ON(hctx = NULL);
 -
--	dh = dccp_zeroed_hdr(skb, dccp_hdr_reset_len);
--
--	/* Build DCCP header and checksum it. */
--	dh->dccph_type	   = DCCP_PKT_RESET;
--	dh->dccph_sport	   = rxdh->dccph_dport;
--	dh->dccph_dport	   = rxdh->dccph_sport;
--	dh->dccph_doff	   = dccp_hdr_reset_len / 4;
--	dh->dccph_x	   = 1;
--	dccp_hdr_reset(skb)->dccph_reset_code -				DCCP_SKB_CB(rxskb)->dccpd_reset_code;
--
--	/* See "8.3.1. Abnormal Termination" in RFC 4340 */
--	if (DCCP_SKB_CB(rxskb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
--		seqno = ADD48(DCCP_SKB_CB(rxskb)->dccpd_ack_seq, 1);
--
--	dccp_hdr_set_seq(dh, seqno);
--	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb), DCCP_SKB_CB(rxskb)->dccpd_seq);
--
--	dccp_csum_outgoing(skb);
- 	rxiph = ip_hdr(rxskb);
--	dh->dccph_checksum = dccp_v4_csum_finish(skb, rxiph->saddr,
--						 rxiph->daddr);
-+	dccp_hdr(skb)->dccph_checksum = dccp_v4_csum_finish(skb, rxiph->saddr,
-+								 rxiph->daddr);
-+	skb->dst = dst_clone(dst);
+ 	ccid3_hc_tx_set_state(sk, TFRC_SSTATE_TERM);
+ 	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
  
- 	bh_lock_sock(dccp_v4_ctl_socket->sk);
- 	err = ip_build_and_send_pkt(skb, dccp_v4_ctl_socket->sk,
-diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
-index d954e83..b7c0f66 100644
---- a/net/dccp/ipv6.c
-+++ b/net/dccp/ipv6.c
-@@ -301,50 +301,23 @@ static void dccp_v6_reqsk_destructor(struct request_sock *req)
+@@ -637,14 +627,13 @@ static void ccid3_hc_tx_exit(struct sock *sk)
  
- static void dccp_v6_ctl_send_reset(struct sock *sk, struct sk_buff *rxskb)
+ static void ccid3_hc_tx_get_info(struct sock *sk, struct tcp_info *info)
  {
--	struct dccp_hdr *rxdh = dccp_hdr(rxskb), *dh;
- 	struct ipv6hdr *rxip6h;
--	const u32 dccp_hdr_reset_len = sizeof(struct dccp_hdr) +
--				       sizeof(struct dccp_hdr_ext) +
--				       sizeof(struct dccp_hdr_reset);
- 	struct sk_buff *skb;
- 	struct flowi fl;
--	u64 seqno = 0;
+-	const struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
++	struct ccid3_hc_tx_sock *hctx;
  
--	if (rxdh->dccph_type = DCCP_PKT_RESET)
-+	if (dccp_hdr(rxskb)->dccph_type = DCCP_PKT_RESET)
+ 	/* Listen socks doesn't have a private CCID block */
+ 	if (sk->sk_state = DCCP_LISTEN)
  		return;
  
- 	if (!ipv6_unicast_destination(rxskb))
+-	BUG_ON(hctx = NULL);
+-
++	hctx = ccid3_hc_tx_sk(sk);
+ 	info->tcpi_rto = hctx->ccid3hctx_t_rto;
+ 	info->tcpi_rtt = hctx->ccid3hctx_rtt;
+ }
+@@ -652,13 +641,14 @@ static void ccid3_hc_tx_get_info(struct sock *sk, struct tcp_info *info)
+ static int ccid3_hc_tx_getsockopt(struct sock *sk, const int optname, int len,
+ 				  u32 __user *optval, int __user *optlen)
+ {
+-	const struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
++	const struct ccid3_hc_tx_sock *hctx;
+ 	const void *val;
+ 
+ 	/* Listen socks doesn't have a private CCID block */
+ 	if (sk->sk_state = DCCP_LISTEN)
+ 		return -EINVAL;
+ 
++	hctx = ccid3_hc_tx_sk(sk);
+ 	switch (optname) {
+ 	case DCCP_SOCKOPT_CCID_TX_INFO:
+ 		if (len < sizeof(hctx->ccid3hctx_tfrc))
+@@ -772,14 +762,13 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk)
+ 
+ static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
+ {
+-	const struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
++	const struct ccid3_hc_rx_sock *hcrx;
+ 	__be32 x_recv, pinv;
+ 
+-	BUG_ON(hcrx = NULL);
+-
+ 	if (!(sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN))
+ 		return 0;
+ 
++	hcrx = ccid3_hc_rx_sk(sk);
+ 	DCCP_SKB_CB(skb)->dccpd_ccval = hcrx->ccid3hcrx_ccval_last_counter;
+ 
+ 	if (dccp_packet_without_ack(skb))
+@@ -870,8 +859,6 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	int loss, payload_size;
+ 	ktime_t now;
+ 
+-	BUG_ON(hcrx = NULL);
+-
+ 	opt_recv = &dccp_sk(sk)->dccps_options_received;
+ 
+ 	switch (DCCP_SKB_CB(skb)->dccpd_type) {
+@@ -985,8 +972,6 @@ static void ccid3_hc_rx_exit(struct sock *sk)
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 
+-	BUG_ON(hcrx = NULL);
+-
+ 	ccid3_hc_rx_set_state(sk, TFRC_RSTATE_TERM);
+ 
+ 	/* Empty packet history */
+@@ -998,14 +983,13 @@ static void ccid3_hc_rx_exit(struct sock *sk)
+ 
+ static void ccid3_hc_rx_get_info(struct sock *sk, struct tcp_info *info)
+ {
+-	const struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
++	const struct ccid3_hc_rx_sock *hcrx;
+ 
+ 	/* Listen socks doesn't have a private CCID block */
+ 	if (sk->sk_state = DCCP_LISTEN)
  		return;
  
--	skb = alloc_skb(dccp_v6_ctl_socket->sk->sk_prot->max_header,
--			GFP_ATOMIC);
-+	skb = dccp_ctl_make_reset(dccp_v6_ctl_socket, rxskb);
- 	if (skb = NULL)
- 		return;
- 
--	skb_reserve(skb, dccp_v6_ctl_socket->sk->sk_prot->max_header);
+-	BUG_ON(hcrx = NULL);
 -
--	dh = dccp_zeroed_hdr(skb, dccp_hdr_reset_len);
--
--	/* Swap the send and the receive. */
--	dh->dccph_type	= DCCP_PKT_RESET;
--	dh->dccph_sport	= rxdh->dccph_dport;
--	dh->dccph_dport	= rxdh->dccph_sport;
--	dh->dccph_doff	= dccp_hdr_reset_len / 4;
--	dh->dccph_x	= 1;
--	dccp_hdr_reset(skb)->dccph_reset_code -				DCCP_SKB_CB(rxskb)->dccpd_reset_code;
--
--	/* See "8.3.1. Abnormal Termination" in RFC 4340 */
--	if (DCCP_SKB_CB(rxskb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
--		seqno = ADD48(DCCP_SKB_CB(rxskb)->dccpd_ack_seq, 1);
--
--	dccp_hdr_set_seq(dh, seqno);
--	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb), DCCP_SKB_CB(rxskb)->dccpd_seq);
--
--	dccp_csum_outgoing(skb);
- 	rxip6h = ipv6_hdr(rxskb);
--	dh->dccph_checksum = dccp_v6_csum_finish(skb, &rxip6h->saddr,
--						      &rxip6h->daddr);
-+	dccp_hdr(skb)->dccph_checksum = dccp_v6_csum_finish(skb, &rxip6h->saddr,
-+							    &rxip6h->daddr);
++	hcrx = ccid3_hc_rx_sk(sk);
+ 	info->tcpi_ca_state = hcrx->ccid3hcrx_state;
+ 	info->tcpi_options  |= TCPI_OPT_TIMESTAMPS;
+ 	info->tcpi_rcv_rtt  = hcrx->ccid3hcrx_rtt;
+@@ -1014,13 +998,14 @@ static void ccid3_hc_rx_get_info(struct sock *sk, struct tcp_info *info)
+ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
+ 				  u32 __user *optval, int __user *optlen)
+ {
+-	const struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
++	const struct ccid3_hc_rx_sock *hcrx;
+ 	const void *val;
  
- 	memset(&fl, 0, sizeof(fl));
- 	ipv6_addr_copy(&fl.fl6_dst, &rxip6h->saddr);
-@@ -352,8 +325,8 @@ static void dccp_v6_ctl_send_reset(struct sock *sk, struct sk_buff *rxskb)
+ 	/* Listen socks doesn't have a private CCID block */
+ 	if (sk->sk_state = DCCP_LISTEN)
+ 		return -EINVAL;
  
- 	fl.proto = IPPROTO_DCCP;
- 	fl.oif = inet6_iif(rxskb);
--	fl.fl_ip_dport = dh->dccph_dport;
--	fl.fl_ip_sport = dh->dccph_sport;
-+	fl.fl_ip_dport = dccp_hdr(skb)->dccph_dport;
-+	fl.fl_ip_sport = dccp_hdr(skb)->dccph_sport;
- 	security_skb_classify_flow(rxskb, &fl);
++	hcrx = ccid3_hc_rx_sk(sk);
+ 	switch (optname) {
+ 	case DCCP_SOCKOPT_CCID_RX_INFO:
+ 		if (len < sizeof(hcrx->ccid3hcrx_tfrc))
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index 7cbf2b1..ae99ec4 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -117,6 +117,15 @@ struct ccid3_hc_tx_sock {
+ 	struct ccid3_options_received	ccid3hctx_options_received;
+ };
  
- 	/* sk = NULL, but it is safe for now. RST socket required. */
-diff --git a/net/dccp/output.c b/net/dccp/output.c
-index f4bde20..6a334ed 100644
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -327,6 +327,58 @@ struct sk_buff *dccp_make_response(struct sock *sk, struct dst_entry *dst,
- 
- EXPORT_SYMBOL_GPL(dccp_make_response);
- 
-+/* answer offending packet in @rcv_skb with Reset from control socket @ctl */
-+struct sk_buff *dccp_ctl_make_reset(struct socket *ctl, struct sk_buff *rcv_skb)
++static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
 +{
-+	struct dccp_hdr *rxdh = dccp_hdr(rcv_skb), *dh;
-+	struct dccp_skb_cb *dcb = DCCP_SKB_CB(rcv_skb);
-+	const u32 dccp_hdr_reset_len = sizeof(struct dccp_hdr) +
-+				       sizeof(struct dccp_hdr_ext) +
-+				       sizeof(struct dccp_hdr_reset);
-+	struct dccp_hdr_reset *dhr;
-+	struct sk_buff *skb;
-+
-+	skb = alloc_skb(ctl->sk->sk_prot->max_header, GFP_ATOMIC);
-+	if (skb = NULL)
-+		return NULL;
-+
-+	skb_reserve(skb, ctl->sk->sk_prot->max_header);
-+
-+	/* Swap the send and the receive. */
-+	dh = dccp_zeroed_hdr(skb, dccp_hdr_reset_len);
-+	dh->dccph_type	= DCCP_PKT_RESET;
-+	dh->dccph_sport	= rxdh->dccph_dport;
-+	dh->dccph_dport	= rxdh->dccph_sport;
-+	dh->dccph_doff	= dccp_hdr_reset_len / 4;
-+	dh->dccph_x	= 1;
-+
-+	dhr = dccp_hdr_reset(skb);
-+	dhr->dccph_reset_code = dcb->dccpd_reset_code;
-+
-+	switch (dcb->dccpd_reset_code) {
-+	case DCCP_RESET_CODE_PACKET_ERROR:
-+		dhr->dccph_reset_data[0] = rxdh->dccph_type;
-+		break;
-+	case DCCP_RESET_CODE_OPTION_ERROR:	/* fall through */
-+	case DCCP_RESET_CODE_MANDATORY_ERROR:
-+		memcpy(dhr->dccph_reset_data, dcb->dccpd_reset_data, 3);
-+		break;
-+	}
-+	/*
-+	 * From RFC 4340, 8.3.1:
-+	 *   If P.ackno exists, set R.seqno := P.ackno + 1.
-+	 *   Else set R.seqno := 0.
-+	 */
-+	if (dcb->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
-+		dccp_hdr_set_seq(dh, ADD48(dcb->dccpd_ack_seq, 1));
-+	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb), dcb->dccpd_seq);
-+
-+	dccp_csum_outgoing(skb);
-+	return skb;
++    struct ccid3_hc_tx_sock *hctx = ccid_priv(dccp_sk(sk)->dccps_hc_tx_ccid);
++#ifdef CONFIG_IP_DCCP_CCID3_DEBUG
++    BUG_ON(hctx = NULL);
++#endif
++    return hctx;
 +}
 +
-+EXPORT_SYMBOL_GPL(dccp_ctl_make_reset);
-+
- /* send Reset on established socket, to close or abort the connection */
- int dccp_send_reset(struct sock *sk, enum dccp_reset_codes code)
+ /* TFRC receiver states */
+ enum ccid3_hc_rx_states {
+ 	TFRC_RSTATE_NO_DATA = 1,
+@@ -161,14 +170,13 @@ struct ccid3_hc_rx_sock {
+ 	u32				ccid3hcrx_elapsed_time;
+ };
+ 
+-static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
+-{
+-    return ccid_priv(dccp_sk(sk)->dccps_hc_tx_ccid);
+-}
+-
+ static inline struct ccid3_hc_rx_sock *ccid3_hc_rx_sk(const struct sock *sk)
  {
+-    return ccid_priv(dccp_sk(sk)->dccps_hc_rx_ccid);
++    struct ccid3_hc_rx_sock *hcrx = ccid_priv(dccp_sk(sk)->dccps_hc_rx_ccid);
++#ifdef CONFIG_IP_DCCP_CCID3_DEBUG
++    BUG_ON(hcrx = NULL);
++#endif
++    return hcrx;
+ }
+ 
+ #endif /* _DCCP_CCID3_H_ */
 -- 
 1.5.2.2
 
