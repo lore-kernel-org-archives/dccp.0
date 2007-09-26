@@ -1,95 +1,25 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 22 Sep 2007 21:09:37 +0000
-Subject: [PATCH 2/6] [DCCP]: Provide 10s of microsecond timesource
-Message-Id: <20070922210937.GG4887@ghostprotocols.net>
+From: David Miller <davem@davemloft.net>
+Date: Wed, 26 Sep 2007 05:40:21 +0000
+Subject: Re: [PATCH 2/6] [DCCP]: Provide 10s of microsecond timesource
+Message-Id: <20070925.224021.56796161.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
+References: <20070922210937.GG4887@ghostprotocols.net>
+In-Reply-To: <20070922210937.GG4887@ghostprotocols.net>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This provides a timesource, conveniently used for DCCP timestamps, which
-returns the elapsed time in 10s of microseconds since initialisation.
-This makes for a wrap-around time of about 11.9 hours, which should be
-sufficient for most applications.
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Sat, 22 Sep 2007 18:09:37 -0300
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
----
- net/dccp/dccp.h    |    2 ++
- net/dccp/options.c |    2 +-
- net/dccp/proto.c   |    2 ++
- net/dccp/timer.c   |   21 +++++++++++++++++++++
- 4 files changed, 26 insertions(+), 1 deletions(-)
+> This provides a timesource, conveniently used for DCCP timestamps, which
+> returns the elapsed time in 10s of microseconds since initialisation.
+> This makes for a wrap-around time of about 11.9 hours, which should be
+> sufficient for most applications.
+> 
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+> Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index ddacc23..a75c740 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -396,6 +396,8 @@ extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
- extern int dccp_insert_option_elapsed_time(struct sock *sk,
- 					    struct sk_buff *skb,
- 					    u32 elapsed_time);
-+extern u32 dccp_timestamp(void);
-+extern void dccp_timestamping_init(void);
- extern int dccp_insert_option_timestamp(struct sock *sk,
- 					 struct sk_buff *skb);
- extern int dccp_insert_option(struct sock *sk, struct sk_buff *skb,
-diff --git a/net/dccp/options.c b/net/dccp/options.c
-index 1674156..a57fcbd 100644
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -372,7 +372,7 @@ EXPORT_SYMBOL_GPL(dccp_insert_option_elapsed_time);
- 
- int dccp_insert_option_timestamp(struct sock *sk, struct sk_buff *skb)
- {
--	__be32 now = htonl(((suseconds_t)ktime_to_us(ktime_get_real())) / 10);
-+	__be32 now = htonl(dccp_timestamp());
- 	/* yes this will overflow but that is the point as we want a
- 	 * 10 usec 32 bit timer which mean it wraps every 11.9 hours */
- 
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 8d545da..14ec1d2 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -1076,6 +1076,8 @@ static int __init dccp_init(void)
- 	rc = dccp_sysctl_init();
- 	if (rc)
- 		goto out_ackvec_exit;
-+
-+	dccp_timestamping_init();
- out:
- 	return rc;
- out_ackvec_exit:
-diff --git a/net/dccp/timer.c b/net/dccp/timer.c
-index 0197a41..3af0673 100644
---- a/net/dccp/timer.c
-+++ b/net/dccp/timer.c
-@@ -291,3 +291,24 @@ void dccp_init_xmit_timers(struct sock *sk)
- 	inet_csk_init_xmit_timers(sk, &dccp_write_timer, &dccp_delack_timer,
- 				  &dccp_keepalive_timer);
- }
-+
-+static ktime_t dccp_timestamp_seed;
-+/**
-+ * dccp_timestamp  -  10s of microseconds time source
-+ * Returns the number of 10s of microseconds since loading DCCP. This is native
-+ * DCCP time difference format (RFC 4340, sec. 13).
-+ * Please note: This will wrap around about circa every 11.9 hours.
-+ */
-+u32 dccp_timestamp(void)
-+{
-+	s64 delta = ktime_us_delta(ktime_get_real(), dccp_timestamp_seed);
-+
-+	do_div(delta, 10);
-+	return delta;
-+}
-+EXPORT_SYMBOL_GPL(dccp_timestamp);
-+
-+void __init dccp_timestamping_init(void)
-+{
-+	dccp_timestamp_seed = ktime_get_real();
-+}
--- 
-1.5.3.1
+Applied.
 
