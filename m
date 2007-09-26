@@ -1,7 +1,7 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 25 Sep 2007 08:52:57 +0000
+From: Tommi Saviranta <wnd@iki.fi>
+Date: Wed, 26 Sep 2007 13:22:02 +0000
 Subject: Re: unchanged functions between ccid-3 and ccid-4
-Message-Id: <200709250952.57753@strip-the-willow>
+Message-Id: <20070926132202.GA4344@kikai.katei.fi>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570709201928l270b24cdod359349ca3d3508@mail.gmail.com>
 In-Reply-To: <5bc4c4570709201928l270b24cdod359349ca3d3508@mail.gmail.com>
@@ -10,26 +10,33 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
- 
-|  > Anyway, I'm already identifying the candidate codes to be shared
-|  > between ccid3 and ccid4 if you didn't this yet. Another option is wait
-|  > for gerrit suggestion on this issue and discuss more about that and
-|  > define a strategy to avoid code repetition.
-|  
-|  See? Wait for Gerrit, wait for Arnaldo, reach a consensus on code layout
-|  first... nah, get something that works, when and if people send
-|  suggestions you react, but don't get lack of feedback on these matters
-|  to make you stop coding.
-|  
-I'll say the same - the repository is yours, just keep working on it until
-you have soomething that works for you - when there are actual problems with
-the CCID3 code, please however mail them to the list.
+On Fri, Sep 21, 2007 at 07:00:21 -0300, Arnaldo Carvalho de Melo wrote:
+> Reorganizing the resulting source code to match Linux kernel
+> guidelines is something we should try to do from the start, but also
+> should not get in the way of having code that works first.
 
-I just remembered a very crude, but technically correct hack: if you want
-to avoid the work of linking, header dependencies, one can include entire
-source files using the preprocessor macro, e.g. in ccid4.c:
+Agreed. However it seems I'm still not fully aware of the process.
+Quoting another thread:
 
-#include "ccid3.c"	/* works as expected, all code is imported */
+On Tue, Sep 25, 2007 at 10:01:32 +0100, Gerrit Renker wrote:
+> |  - Rewrite all the patches (from me and Tommi) and resubmit to
+> |  Gerrit as a unique patchset, as suggested by Ian. Besides, ask
+> |  Gerrit to overwrite the current ccid4 branch;
 
-This allows small and clear code (only the `diff' needs to be added, but I think 
-the mainline guys don't like it so much :)
+> The ideas sound good, and I think it is a good idea to factor out what
+> is not needed - just unclear which patch set to use, the latest so far
+> is from Thursday?
+
+Is overwriting an existing branch common practice, or simply used here
+to cover our tracks of the initial confusion?-) Obviously we needed some
+sort of starting point, and thus my mutilated copy of CCID 3 got in
+early and unreviewed. Anyway, I think we should fix the existing trivial
+issues (such as my mistakes to refer to non-existent RFCs instead of
+Internet Drafts), overwrite the branch once more, and then start working
+on splitting CCID 3.
+
+Now that my patches have already been merged, how exactly should the
+patches be dealt with? Naturally the patches need to be against the
+current branch, but should or should I not start a new thread for the
+patches?
+
