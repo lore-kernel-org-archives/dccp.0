@@ -1,171 +1,98 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sun, 30 Sep 2007 14:06:07 +0000
-Subject: Re: [PATCH 3/10]: Dedicated auxiliary states to support
-Message-Id: <20070930140607.GT23546@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 27 Sep 2007 14:20:41 +0000
+Subject: [PATCH 1/11]: Remove unused and redundant validation functions
+Message-Id: <200709271520.41173@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200707121523.40095@strip-the-willow>
-In-Reply-To: <200707121523.40095@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Thu, Jul 12, 2007 at 03:23:39PM +0100, Gerrit Renker escreveu:
-> [DCCP]: Dedicated auxiliary states to support passive-close
-> 
-> This adds two auxiliary states to deal with passive closes:
->   * PASSIVE_1 (reached from OPEN via reception of Close) and
->   * PASSIVE_2 (reached from OPEN via reception of CloseReq)
+[DCCP]: Remove unused and redundant validation functions
 
+This removes two inlines which were both called in a single function only:
 
-Perhaps we should rename PASSIVE_1 (magic number) to PASSIVE_CLOSEREQ
-and PASSIVE_2 to PASSIVE_CLOSE, and also CLOSEREQ to ACTIVE_CLOSEREQ?
+ 1) dccp_feat_change() is always called with either DCCPO_CHANGE_L or DCCPO_CHANGE_R as argument
+    * from dccp_set_socktopt_change() via do_dccp_setsockopt() with DCCP_SOCKOPT_CHANGE_R/L
+    * from __dccp_feat_init() via dccp_feat_init() also with DCCP_SOCKOPT_CHANGE_R/L.
 
-I'll defer these patches till we get some more discussion. There are
-many more unrelated patches to work on after all :)
+    Hence the dccp_feat_is_valid_type() is completely unnecessary and always returns true.
 
-- Arnaldo
+ 2) Due to (1), the length test reduces to 'len >= 4', which in turn makes 
+    dccp_feat_is_valid_length() unnecessary.
+    
+Furthermore, the inline function dccp_feat_is_reserved() was unfolded, 
+since only called in a single place.
 
-> to the internal state machine.
-> 
-> The PASSIVE_1 and PASSIVE_2 states represent the two ways a passive-close
-> can happen in DCCP.  The addition of these states is not merely to
-> increase clarity. These states are required by the implementation to
-> allow a receiver to process unread data before acknowledging the received
-> connection-termination-request (i.e. the Close/CloseReq).
-> 
-> Fix:
-> ----
->  This patch uses the PASSIVE_1 and PASSIVE_2 states to explicitly refer to
->  passive-closing states and to protect against external wipeout of internal
->  receive queues. The macroscopic behaviour is compatible with RFC 4340, but
->  without the auxiliary states, buggy, absurd and abnormal behaviour of the
->  socket API will continue. Which is to say, without auxiliary states it does
->  not work.
-> 
->  As a consequence, the count of DCCP_STATE_MASK has been increased, to account
->  for the number of new states. 
-> 
-> 
-> Implementation Note:
-> --------------------
->  To keep compatibility with sk_stream_wait_connect():
->  * DCCP_CLOSING continues to map into TCP_CLOSING (since this state can be
->    either passive- or active-close)
->  * DCCP_CLOSEREQ maps into TCP_FIN_WAIT1 (since it is always active-close)
-> 
->  It is tempting to keep the clever merge of the CLOSEREQ and CLOSING states.
->  However, with the number of possible state transitions, this would require:
-> 
->  * quite a number of `if' statements to distinguish all predecessors of
->    the CLOSING state (server/client, active/passive, server timewait yes/no);
-> 
->  * two different branches from the CLOSING state:
->    - to TIMEWAIT if it is not an active server-close without keeping timewait state
->    - to CLOSED otherwise (and requiring to receive a Close instead of a Reset).
->  
->  In light of this, I think it is cleaner to implement separate CLOSEREQ and CLOSING
->  states (this is done by the subsequent patches).
-> 
-> Further documentation is on http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/closing_states/
-> 
-> 
->                     Why this is necessary [can be removed]
->                     --------------------------------------
-> 
->  The two states are not mentioned in the DCCP specification [RFC 4340, 8.4].
->  In fact, RFC 4340 is silent about passive-close. In a nutshell, suppose that
->  the CLOSE_WAIT and LAST_ACK states were removed from TCP, i.e. a FIN triggers
->  direct transition from ESTABLISHED to CLOSED - similar problem. 
->  The detailed account is as follows.
-> 
->  The first problem lies in using inet_stream_connect():
-> 
->  An absurd case arises if we let the protocol machinery, not the application,
->  go through the states. If the protocol machinery allows to proceed to DCCP_CLOSED
->  (which corresponds to TCP_CLOSE), connect() returns with -ECONNABORTED, even if
->  there was data in the receive queue. 
-> 
->  Therefore, if we want to keep the useful abstraction of inet_stream_connect(), we
->  need to make sure that a passive close can not lead to DCCP_CLOSE via the protocol
->  machinery alone. 
-> 
->  The second problem is also related to entering DCCP_CLOSED too early: 
-> 
->  Even if connect() were fixed, if a passive-close can directly trigger a state 
->  transition from OPEN to DCCP_CLOSED, the receiver may not be able to read data
->  from its input queue. The reason is that the input queue has already been wiped, 
->  DCCP_CLOSED state has been entered, while the SOCK_DONE flag has not yet been set.
->  Consequently, any subsequent call to dccp_recvmsg terminates in -ENOTCONN, 
->  and this despite of a potentially full receive queue.
-> 
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> ---
->  include/linux/dccp.h |   22 +++++++++++++++++++++-
->  net/dccp/proto.c     |    3 +++
->  2 files changed, 24 insertions(+), 1 deletion(-)
-> 
-> --- a/include/linux/dccp.h
-> +++ b/include/linux/dccp.h
-> @@ -230,16 +230,35 @@ enum dccp_state {
->  	DCCP_REQUESTING	= TCP_SYN_SENT,
->  	DCCP_LISTEN	= TCP_LISTEN,
->  	DCCP_RESPOND	= TCP_SYN_RECV,
-> +	/*
-> +	 *			Close states:
-> +	 *
-> +	 * CLOSEREQ is active-server close only.
-> +	 * CLOSING can have three different meanings [RFC 4340, 8.3]:
-> +	 *  a. Client has performed active-close, sent a Close to peer from
-> +	 *     state OPEN or PARTOPEN, waiting for the final Reset
-> +	 *     (in this case, SOCK_DONE = 1).
-> +	 *  b. Client performs passive-Close, by receiving an CloseReq in OPEN
-> +	 *     or PARTOPEN state. It sends a Close and waits for final Reset
-> +	 *     (in this case, SOCK_DONE = 0).
-> +	 *  c. Server decides to hold TIMEWAIT state & performs an active-close.
-> +	 * To avoid erasing receive queues too early, the transitional states
-> +	 * PASSIVE_1 (from OPEN => CLOSED) and PASSIVE_2 (from (PART)OPEN to
-> +	 * CLOSING, corresponds to (b) above) are used.
-> +	 */
-> +	DCCP_CLOSEREQ	= TCP_FIN_WAIT1,
->  	DCCP_CLOSING	= TCP_CLOSING,
->  	DCCP_TIME_WAIT	= TCP_TIME_WAIT,
->  	DCCP_CLOSED	= TCP_CLOSE,
->  	/* Everything below here is specific to DCCP only */
->  	DCCP_INTRINSICS = TCP_MAX_STATES,
->  	DCCP_PARTOPEN,
-> +	DCCP_PASSIVE_1,		/* any node receiving a Close  */
-> +	DCCP_PASSIVE_2,		/* client receiving a CloseReq */
->  	DCCP_MAX_STATES
->  };
->  
-> -#define DCCP_STATE_MASK 0xf
-> +#define DCCP_STATE_MASK 0x1f
->  #define DCCP_ACTION_FIN (1<<7)
->  
->  enum {
-> @@ -247,6 +266,7 @@ enum {
->  	DCCPF_REQUESTING = TCPF_SYN_SENT,
->  	DCCPF_LISTEN	 = TCPF_LISTEN,
->  	DCCPF_RESPOND	 = TCPF_SYN_RECV,
-> +	DCCPF_CLOSEREQ	 = TCPF_FIN_WAIT1,
->  	DCCPF_CLOSING	 = TCPF_CLOSING,
->  	DCCPF_TIME_WAIT	 = TCPF_TIME_WAIT,
->  	DCCPF_CLOSED	 = TCPF_CLOSE,
-> --- a/net/dccp/proto.c
-> +++ b/net/dccp/proto.c
-> @@ -139,6 +139,9 @@ const char *dccp_state_name(const int st
->  	[DCCP_LISTEN]	  = "LISTEN",
->  	[DCCP_RESPOND]	  = "RESPOND",
->  	[DCCP_CLOSING]	  = "CLOSING",
-> +	[DCCP_CLOSEREQ]	  = "CLOSEREQ",
-> +	[DCCP_PASSIVE_1]  = "PASSIVE_1",
-> +	[DCCP_PASSIVE_2]  = "PASSIVE_2",
->  	[DCCP_TIME_WAIT]  = "TIME_WAIT",
->  	[DCCP_CLOSED]	  = "CLOSED",
->  	};
-> -
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>    
+---
+ net/dccp/feat.c |   12 ++++--------
+ net/dccp/feat.h |   26 --------------------------
+ 2 files changed, 4 insertions(+), 34 deletions(-)
+
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -24,11 +24,7 @@ int dccp_feat_change(struct dccp_minisoc
+ 
+ 	dccp_feat_debug(type, feature, *val);
+ 
+-	if (!dccp_feat_is_valid_type(type)) {
+-		DCCP_WARN("option type %d invalid in negotiation\n", type);
+-		return 1;
+-	}
+-	if (!dccp_feat_is_valid_length(type, feature, len)) {
++	if (len > 3) {
+ 		DCCP_WARN("invalid length %d\n", len);
+ 		return 1;
+ 	}
+@@ -637,12 +633,12 @@ const char *dccp_feat_name(const u8 feat
+ 		[DCCPF_MIN_CSUM_COVER]	= "Min. Csum Coverage",
+ 		[DCCPF_DATA_CHECKSUM]	= "Send Data Checksum",
+ 	};
++	if (feat > DCCPF_DATA_CHECKSUM && feat < DCCPF_MIN_CCID_SPECIFIC)
++		return feature_names[DCCPF_RESERVED];
++
+ 	if (feat >= DCCPF_MIN_CCID_SPECIFIC)
+ 		return "CCID-specific";
+ 
+-	if (dccp_feat_is_reserved(feat))
+-		return feature_names[DCCPF_RESERVED];
+-
+ 	return feature_names[feat];
+ }
+ 
+--- a/net/dccp/feat.h
++++ b/net/dccp/feat.h
+@@ -14,32 +14,6 @@
+ #include <linux/types.h>
+ #include "dccp.h"
+ 
+-static inline int dccp_feat_is_valid_length(u8 type, u8 feature, u8 len)
+-{
+-	/* sec. 6.1: Confirm has at least length 3,
+-	 * sec. 6.2: Change  has at least length 4 */
+-	if (len < 3)
+-		return 1;
+-	if (len < 4  && (type = DCCPO_CHANGE_L || type = DCCPO_CHANGE_R))
+-		return 1;
+-	/* XXX: add per-feature length validation (sec. 6.6.8) */
+-	return 0;
+-}
+-
+-static inline int dccp_feat_is_reserved(const u8 feat)
+-{
+-	return (feat > DCCPF_DATA_CHECKSUM &&
+-		feat < DCCPF_MIN_CCID_SPECIFIC) ||
+-		feat = DCCPF_RESERVED;
+-}
+-
+-/* feature negotiation knows only these four option types (RFC 4340, sec. 6) */
+-static inline int dccp_feat_is_valid_type(const u8 optnum)
+-{
+-	return optnum >= DCCPO_CHANGE_L && optnum <= DCCPO_CONFIRM_R;
+-
+-}
+-
+ #ifdef CONFIG_IP_DCCP_DEBUG
+ extern const char *dccp_feat_typename(const u8 type);
+ extern const char *dccp_feat_name(const u8 feat);
