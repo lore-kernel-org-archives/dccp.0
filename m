@@ -1,45 +1,48 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Wed, 26 Sep 2007 18:27:24 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 27 Sep 2007 08:08:00 +0000
 Subject: Re: tcpdump broken wrt CsCov & CsVal parsing?
-Message-Id: <20070926182724.GA10932@ghostprotocols.net>
+Message-Id: <200709270908.00165@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <20070922144111.GE10051@ghostprotocols.net>
 In-Reply-To: <20070922144111.GE10051@ghostprotocols.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-Em Tue, Sep 25, 2007 at 09:08:29AM +0100, Gerrit Renker escreveu:
-> |  On 9/23/07, Arnaldo Carvalho de Melo <acme@ghostprotocols.net> wrote:
-> |  > Trying to rebuild a proper test setup, so far using just loopback for
-> |  > simple tests I noticed this problem:
-> |  >
-> |  > Who was the last person to touch the DCCP support code in tcpdump? Care
-> |  > to take a look?
-> |  >
-> |  > - Arnaldo
-> |  
-> |  I'm pretty sure that would be me :-(
-> |  
-> |  I'll take a look but it won't be very soon.
-> |  
-> ... and me too :) I know this problem - CsCov and CCVal were swapped in the
-> header file. As far as I recall the maintainer had checked an update in last
-> year.
-> 
-> You didn't say which version of tcpdump you were using, I checked locally:
->  * tcpdump 3.9.5 as Debian package with libpcap 0.9.5 has this swap-problem 
->  * tcpdump 3.9.5 built from tcpdump source, with libpcap 0.9.4 works correct
-> 
-> Can you try tcpdump from source please and check if the problem persists?
+|  I checked locally:
+|  > =A0* tcpdump 3.9.5 as Debian package with libpcap 0.9.5 has this swap-=
+problem=20
+|  > =A0* tcpdump 3.9.5 built from tcpdump source, with libpcap 0.9.4 works=
+ correct
+|  >=20
+|  > Can you try tcpdump from source please and check if the problem persis=
+ts?
+| =20
+|  Excellent data point, I should know better and try with upstream before
+|  complaining. Ah, and also provide the tcpdump version:
+| =20
+|  [root@tonchinha ~]# rpm -q tcpdump
+|  tcpdump-3.9.7-3.fc8
+Have you looked at the source rpm's? I found the old patch, if the followin=
+g hunk
+applies then quite likely they have forgotten to patch the header file, and=
+ the
+problem could be solved then (CCval and Cscov were swapped):
 
-Excellent data point, I should know better and try with upstream before
-complaining. Ah, and also provide the tcpdump version:
+--- a/dccp.h
++++ b/dccp.h
+@@ -36,8 +36,8 @@ struct dccp_hdr {
+ 	}		dccph_xtrs;
+ };
+=20
+-#define DCCPH_CCVAL(dh)	(((dh)->dccph_ccval_cscov) & 0x0F)
+-#define DCCPH_CSCOV(dh)	(((dh)->dccph_ccval_cscov >> 4) & 0x0F)
++#define DCCPH_CCVAL(dh)	(((dh)->dccph_ccval_cscov >> 4) & 0xF)
++#define DCCPH_CSCOV(dh)	(((dh)->dccph_ccval_cscov) & 0xF)
+=20
+ #define DCCPH_X(dh)	((dh)->dccph_xtrs.dccph_xtr & 1)
+ #define DCCPH_TYPE(dh)	(((dh)->dccph_xtrs.dccph_xtr >> 1) & 0xF)
 
-[root@tonchinha ~]# rpm -q tcpdump
-tcpdump-3.9.7-3.fc8
 
-I'll check upstream now.
 
-- Arnaldo
