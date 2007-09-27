@@ -1,219 +1,160 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Wed, 26 Sep 2007 18:39:30 +0000
-Subject: [PATCH 2/8] [CCID3]: Move NULL-protection into function
-Message-Id: <20070926183930.GD10932@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 27 Sep 2007 14:21:10 +0000
+Subject: [PATCH 6/11]: List management for new feature negotiation
+Message-Id: <200709271521.10924@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This moves several instances of testing against NULL into the function which is
-used to de-reference the CCID-private data.
+[DCCP]: List management for new feature negotiation
 
-Committer note: Made the BUG_ON depend on having CONFIG_IP_DCCP_CCID3_DEBUG, as it
-                is too much to have this on production code. Also made sure that
-                the macro is used only after checking if sk_state is not LISTEN,
-                to make it equivalent to what we had before.
+This adds list fields and list management functions for the new feature
+negotiation implementation. The new code is kept in parallel to the old
+code, until removed at the end of the patch set.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ccids/ccid3.c |   35 ++++++++++-------------------------
- net/dccp/ccids/ccid3.h |   20 ++++++++++++++------
- 2 files changed, 24 insertions(+), 31 deletions(-)
+ net/dccp/feat.c |  130 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 130 insertions(+)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 0bb338b..a409939 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -302,8 +302,6 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
- 	ktime_t now = ktime_get_real();
- 	s64 delay;
- 
--	BUG_ON(hctx = NULL);
--
- 	/*
- 	 * This function is called only for Data and DataAck packets. Sending
- 	 * zero-sized Data(Ack)s is theoretically possible, but for congestion
-@@ -383,8 +381,6 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more,
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 	struct dccp_tx_hist_entry *packet;
- 
--	BUG_ON(hctx = NULL);
--
- 	ccid3_hc_tx_update_s(hctx, len);
- 
- 	packet = dccp_tx_hist_entry_new(ccid3_tx_hist, GFP_ATOMIC);
-@@ -409,8 +405,6 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	unsigned long t_nfb;
- 	u32 pinv, r_sample;
- 
--	BUG_ON(hctx = NULL);
--
- 	/* we are only interested in ACKs */
- 	if (!(DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK ||
- 	      DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_DATAACK))
-@@ -551,8 +545,6 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 	struct ccid3_options_received *opt_recv;
- 
--	BUG_ON(hctx = NULL);
--
- 	opt_recv = &hctx->ccid3hctx_options_received;
- 
- 	if (opt_recv->ccid3or_seqno != dp->dccps_gsr) {
-@@ -626,8 +618,6 @@ static void ccid3_hc_tx_exit(struct sock *sk)
- {
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 
--	BUG_ON(hctx = NULL);
--
- 	ccid3_hc_tx_set_state(sk, TFRC_SSTATE_TERM);
- 	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
- 
-@@ -637,14 +627,13 @@ static void ccid3_hc_tx_exit(struct sock *sk)
- 
- static void ccid3_hc_tx_get_info(struct sock *sk, struct tcp_info *info)
- {
--	const struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
-+	struct ccid3_hc_tx_sock *hctx;
- 
- 	/* Listen socks doesn't have a private CCID block */
- 	if (sk->sk_state = DCCP_LISTEN)
- 		return;
- 
--	BUG_ON(hctx = NULL);
--
-+	hctx = ccid3_hc_tx_sk(sk);
- 	info->tcpi_rto = hctx->ccid3hctx_t_rto;
- 	info->tcpi_rtt = hctx->ccid3hctx_rtt;
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -143,6 +143,136 @@ static void dccp_feat_entry_destructor(s
+ 	}
  }
-@@ -652,13 +641,14 @@ static void ccid3_hc_tx_get_info(struct sock *sk, struct tcp_info *info)
- static int ccid3_hc_tx_getsockopt(struct sock *sk, const int optname, int len,
- 				  u32 __user *optval, int __user *optlen)
- {
--	const struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
-+	const struct ccid3_hc_tx_sock *hctx;
- 	const void *val;
  
- 	/* Listen socks doesn't have a private CCID block */
- 	if (sk->sk_state = DCCP_LISTEN)
- 		return -EINVAL;
- 
-+	hctx = ccid3_hc_tx_sk(sk);
- 	switch (optname) {
- 	case DCCP_SOCKOPT_CCID_TX_INFO:
- 		if (len < sizeof(hctx->ccid3hctx_tfrc))
-@@ -772,14 +762,13 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk)
- 
- static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
- {
--	const struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
-+	const struct ccid3_hc_rx_sock *hcrx;
- 	__be32 x_recv, pinv;
- 
--	BUG_ON(hcrx = NULL);
--
- 	if (!(sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN))
- 		return 0;
- 
-+	hcrx = ccid3_hc_rx_sk(sk);
- 	DCCP_SKB_CB(skb)->dccpd_ccval = hcrx->ccid3hcrx_ccval_last_counter;
- 
- 	if (dccp_packet_without_ack(skb))
-@@ -870,8 +859,6 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	int loss, payload_size;
- 	ktime_t now;
- 
--	BUG_ON(hcrx = NULL);
--
- 	opt_recv = &dccp_sk(sk)->dccps_options_received;
- 
- 	switch (DCCP_SKB_CB(skb)->dccpd_type) {
-@@ -985,8 +972,6 @@ static void ccid3_hc_rx_exit(struct sock *sk)
- {
- 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
- 
--	BUG_ON(hcrx = NULL);
--
- 	ccid3_hc_rx_set_state(sk, TFRC_RSTATE_TERM);
- 
- 	/* Empty packet history */
-@@ -998,14 +983,13 @@ static void ccid3_hc_rx_exit(struct sock *sk)
- 
- static void ccid3_hc_rx_get_info(struct sock *sk, struct tcp_info *info)
- {
--	const struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
-+	const struct ccid3_hc_rx_sock *hcrx;
- 
- 	/* Listen socks doesn't have a private CCID block */
- 	if (sk->sk_state = DCCP_LISTEN)
- 		return;
- 
--	BUG_ON(hcrx = NULL);
--
-+	hcrx = ccid3_hc_rx_sk(sk);
- 	info->tcpi_ca_state = hcrx->ccid3hcrx_state;
- 	info->tcpi_options  |= TCPI_OPT_TIMESTAMPS;
- 	info->tcpi_rcv_rtt  = hcrx->ccid3hcrx_rtt;
-@@ -1014,13 +998,14 @@ static void ccid3_hc_rx_get_info(struct sock *sk, struct tcp_info *info)
- static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
- 				  u32 __user *optval, int __user *optlen)
- {
--	const struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
-+	const struct ccid3_hc_rx_sock *hcrx;
- 	const void *val;
- 
- 	/* Listen socks doesn't have a private CCID block */
- 	if (sk->sk_state = DCCP_LISTEN)
- 		return -EINVAL;
- 
-+	hcrx = ccid3_hc_rx_sk(sk);
- 	switch (optname) {
- 	case DCCP_SOCKOPT_CCID_RX_INFO:
- 		if (len < sizeof(hcrx->ccid3hcrx_tfrc))
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index 7cbf2b1..ae99ec4 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -117,6 +117,15 @@ struct ccid3_hc_tx_sock {
- 	struct ccid3_options_received	ccid3hctx_options_received;
- };
- 
-+static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
++/*
++ *	List management functions
++ */
++
++/**
++ * dccp_feat_entry_new  -  Central list update routine (called by all others)
++ * @fn: list to add to
++ * @feat: feature number
++ * @is_local: whether the local (1) or remote feature with number @feat is meant
++ * The function maintains and relies on the following invariants:
++ *  - each feat_num in the list is known, ie. we know its type and default value
++ *  - each feat_num/is_local combination is unique (old entries are overwritten)
++ *  - SP values are always freshly allocated
++ *  - list is sorted in increasing order of feature number (faster lookup)
++ */
++static struct dccp_feat_entry *
++	      dccp_feat_entry_new(struct list_head *fn, u8 feat, u8 is_local)
 +{
-+    struct ccid3_hc_tx_sock *hctx = ccid_priv(dccp_sk(sk)->dccps_hc_tx_ccid);
-+#ifdef CONFIG_IP_DCCP_CCID3_DEBUG
-+    BUG_ON(hctx = NULL);
-+#endif
-+    return hctx;
++	struct dccp_feat_entry *entry;
++	struct list_head *pos_head = fn;
++
++	list_for_each(pos_head, fn) {
++		entry = list_entry(pos_head, struct dccp_feat_entry, node);
++		if (feat < entry->feat_num)
++			break;
++		if (entry->feat_num = feat && entry->is_local = is_local) {
++			dccp_feat_val_destructor(entry->feat_num, &entry->val);
++			return entry;
++		}
++	}
++	entry = kmalloc(sizeof(struct dccp_feat_entry), gfp_any());
++	if (entry != NULL) {
++		entry->feat_num = feat;
++		entry->is_local = is_local;
++		list_add_tail(&entry->node, pos_head);
++	}
++	return entry;
 +}
 +
- /* TFRC receiver states */
- enum ccid3_hc_rx_states {
- 	TFRC_RSTATE_NO_DATA = 1,
-@@ -161,14 +170,13 @@ struct ccid3_hc_rx_sock {
- 	u32				ccid3hcrx_elapsed_time;
- };
- 
--static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
--{
--    return ccid_priv(dccp_sk(sk)->dccps_hc_tx_ccid);
--}
--
- static inline struct ccid3_hc_rx_sock *ccid3_hc_rx_sk(const struct sock *sk)
++static struct dccp_feat_entry *dccp_feat_list_lookup(struct list_head *fn_list,
++						     u8 feat_num, u8 is_local)
++{
++	struct dccp_feat_entry *entry;
++
++	list_for_each_entry(entry, fn_list, node)
++		if (entry->feat_num = feat_num && entry->is_local = is_local)
++			return entry;
++		else if (entry->feat_num > feat_num)
++			break;
++	return NULL;
++}
++
++/**
++ * dccp_feat_push_change  -  Add/overwrite a Change option in the list
++ * @fn_list: feature-negotiation list to update
++ * @feat: one of %dccp_feature_numbers
++ * @local: whether local (1) or remote (0) @feat_num is meant
++ * @needs_mandatory: whether to use Mandatory feature negotiation options
++ * @fval: pointer to NN/SP value to be inserted (will be copied)
++ */
++static int dccp_feat_push_change(struct list_head *fn_list, u8 feat, u8 local,
++				 u8 mandatory, dccp_feat_val *fval)
++{
++	struct dccp_feat_entry *new = dccp_feat_entry_new(fn_list, feat, local);
++
++	if (new = NULL)
++		return -ENOMEM;
++
++	new->feat_num	     = feat;
++	new->is_local	     = local;
++	new->state	     = FEAT_INITIALISING;
++	new->needs_confirm   = 0;
++	new->empty_confirm   = 0;
++	new->val	     = *fval;
++	new->needs_mandatory = mandatory;
++
++	return 0;
++}
++
++/**
++ * dccp_feat_push_confirm  -  Add a Confirm entry to the FN list
++ * @fn_list: feature-negotiation list to add to
++ * @feat: one of %dccp_feature_numbers
++ * @local: whether local (1) or remote (0) @feat_num is being confirmed
++ * @fval: pointer to NN/SP value to be inserted or NULL
++ * Returns 0 on success, a Reset code for further processing otherwise.
++ */
++static int dccp_feat_push_confirm(struct list_head *fn_list, u8 feat, u8 local,
++				  dccp_feat_val *fval)
++{
++	struct dccp_feat_entry *new = dccp_feat_entry_new(fn_list, feat, local);
++
++	if (new = NULL)
++		return DCCP_RESET_CODE_TOO_BUSY;
++
++	new->feat_num	     = feat;
++	new->is_local	     = local;
++	new->state	     = FEAT_STABLE;	/* transition in 6.6.2 */
++	new->needs_confirm   = 1;
++	new->empty_confirm   = (fval = NULL);
++	new->val.nn	     = 0;		/* zeroes the whole structure */
++	if (!new->empty_confirm)
++		new->val     = *fval;
++	new->needs_mandatory = 0;
++
++	return 0;
++}
++
++static int dccp_push_empty_confirm(struct list_head *fn_list, u8 feat, u8 local)
++{
++	return dccp_feat_push_confirm(fn_list, feat, local, NULL);
++}
++
++static inline void dccp_feat_list_pop(struct dccp_feat_entry *entry)
++{
++	list_del(&entry->node);
++	dccp_feat_entry_destructor(entry);
++}
++
++void dccp_feat_list_purge(struct list_head *fn_list)
++{
++	struct dccp_feat_entry *entry, *next;
++
++	list_for_each_entry_safe(entry, next, fn_list, node)
++		dccp_feat_entry_destructor(entry);
++	INIT_LIST_HEAD(fn_list);
++}
++
++EXPORT_SYMBOL_GPL(dccp_feat_list_purge);
++
+ int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
+ 		     u8 *val, u8 len, gfp_t gfp)
  {
--    return ccid_priv(dccp_sk(sk)->dccps_hc_rx_ccid);
-+    struct ccid3_hc_rx_sock *hcrx = ccid_priv(dccp_sk(sk)->dccps_hc_rx_ccid);
-+#ifdef CONFIG_IP_DCCP_CCID3_DEBUG
-+    BUG_ON(hcrx = NULL);
-+#endif
-+    return hcrx;
- }
- 
- #endif /* _DCCP_CCID3_H_ */
--- 
-1.5.2.2
-
