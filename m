@@ -1,50 +1,64 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 29 Sep 2007 15:38:47 +0000
-Subject: [PATCH 06/13] [CCID2]: Remove ugly BUG_ON
-Message-Id: <20070929153847.GK23546@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 27 Sep 2007 14:21:21 +0000
+Subject: [PATCH 8/11]: Cleanup routines for feature negotiation
+Message-Id: <200709271521.21444@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This removes an ugly BUG_ON which has been pointed out by Arnaldo.
+[DCCP]: Cleanup routines for feature negotiation
 
-Instead of freezing up the machine, a `critical' message is now issued
-to the system log.
-
-There is potential of doing this more gracefully (eg. there are a few internal
-variables which could be updated despite the lack of memory), but that requires
-more complicated changes to the algorithm; thus a `FIXME' has been added.
+This inserts the required de-allocation routines for memory allocated
+by feature negotiation in the socket destructors.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/ccid2.c |   11 +++++------
- 1 files changed, 5 insertions(+), 6 deletions(-)
+ net/dccp/dccp.h  |    2 ++
+ net/dccp/ipv4.c  |    1 +
+ net/dccp/ipv6.c  |    1 +
+ net/dccp/proto.c |    1 +
+ 4 files changed, 5 insertions(+)
 
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index 5c6b4f9..3e4fa6b 100644
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -294,12 +294,11 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
- 	next = hctx->ccid2hctx_seqh->ccid2s_next;
- 	/* check if we need to alloc more space */
- 	if (next = hctx->ccid2hctx_seqt) {
--		int rc;
--
--		ccid2_pr_debug("allocating more space in history\n");
--		rc = ccid2_hc_tx_alloc_seq(hctx);
--		BUG_ON(rc); /* XXX what do we do? */
--
-+		if (ccid2_hc_tx_alloc_seq(hctx)) {
-+			DCCP_CRIT("packet history - out of memory!");
-+			/* FIXME: find a more graceful way to bail out */
-+			return;
-+		}
- 		next = hctx->ccid2hctx_seqh->ccid2s_next;
- 		BUG_ON(next = hctx->ccid2hctx_seqt);
- 	}
--- 
-1.5.2.2
-
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -422,6 +422,8 @@ static inline int dccp_ack_pending(const
+ 	       inet_csk_ack_scheduled(sk);
+ }
+ 
++extern void dccp_feat_list_purge(struct list_head *fn_list);
++
+ extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
+ extern int dccp_insert_options_rsk(struct dccp_request_sock*, struct sk_buff*);
+ extern int dccp_insert_option_elapsed_time(struct sock *sk,
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -553,6 +553,7 @@ static void dccp_v4_reqsk_destructor(str
+ {
+ 	struct dccp_request_sock *dreq = dccp_rsk(req);
+ 
++	dccp_feat_list_purge(&dreq->dreq_featneg);
+ 	if (dreq->dreq_tstamp != NULL)
+ 		kfree(dreq->dreq_tstamp);
+ 	kfree(inet_rsk(req)->opt);
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -297,6 +297,7 @@ static void dccp_v6_reqsk_destructor(str
+ {
+ 	struct dccp_request_sock *dreq = dccp_rsk(req);
+ 
++	dccp_feat_list_purge(&dreq->dreq_featneg);
+ 	if (dreq->dreq_tstamp != NULL)
+ 		kfree(dreq->dreq_tstamp);
+ 	if (inet6_rsk(req)->pktopts != NULL)
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -270,6 +270,7 @@ int dccp_destroy_sock(struct sock *sk)
+ 
+ 	/* clean up feature negotiation state */
+ 	dccp_feat_clean(dmsk);
++	dccp_feat_list_purge(&dp->dccps_featneg);
+ 
+ 	return 0;
+ }
