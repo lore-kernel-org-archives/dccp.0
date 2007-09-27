@@ -1,50 +1,58 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Wed, 26 Sep 2007 18:40:39 +0000
-Subject: [PATCH 7/8] [DCCP]: Sequence number wrap-around when sending reset
-Message-Id: <20070926184039.GI10932@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 27 Sep 2007 14:21:24 +0000
+Subject: [PATCH 9/11]: Provide documentation for undocumented sockopt struct
+Message-Id: <200709271521.24525@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This replaces normal addition with mod-48 addition so that sequence number
-wraparound is respected.
+[DCCP]: Provide documentation for undocumented sockopt struct
+
+Also changed the type of the value pointer to void*, to enable
+passing NN values (up to 48 bit) onto the socket.
+
+FIXME: I think that this struct might be useful for testing, but it
+       would be better to phase it out and replace it by proper socket
+       options (setsockopt code for the CCID follows in a later patch).
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
 ---
- net/dccp/ipv4.c |    2 +-
- net/dccp/ipv6.c |    2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ include/linux/dccp.h |   13 +++++++++----
+ net/dccp/proto.c     |    1 -
+ 2 files changed, 9 insertions(+), 5 deletions(-)
 
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index 2c62828..58a79c2 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -552,7 +552,7 @@ static void dccp_v4_ctl_send_reset(struct sock *sk, struct sk_buff *rxskb)
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -191,11 +191,16 @@ enum dccp_feature_numbers {
+ 	DCCPF_MAX_CCID_SPECIFIC = 255,
+ };
  
- 	/* See "8.3.1. Abnormal Termination" in RFC 4340 */
- 	if (DCCP_SKB_CB(rxskb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
--		dccp_set_seqno(&seqno, DCCP_SKB_CB(rxskb)->dccpd_ack_seq + 1);
-+		seqno = ADD48(DCCP_SKB_CB(rxskb)->dccpd_ack_seq, 1);
+-/* this structure is argument to DCCP_SOCKOPT_CHANGE_X */
++/**
++ * struct dccp_so_feat  -  setsockopt struct struct for DCCP_SOCKOPT_CHANGE_X
++ * @dccpsf_feat: feature number (from RFC 4340, 6.4 or related)
++ * @dccpsf_val: single u64 NN value or SP value (u8) plus preference list (u8)
++ * @dccpsf_len: length of @dccpsf_val in bytes (ie. 8 when NN, min 1 when SP)
++ */
+ struct dccp_so_feat {
+-	__u8 dccpsf_feat;
+-	__u8 __user *dccpsf_val;
+-	__u8 dccpsf_len;
++	__u8		dccpsf_feat;
++	void __user	*dccpsf_val;
++	__u8		dccpsf_len;
+ };
  
- 	dccp_hdr_set_seq(dh, seqno);
- 	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb), DCCP_SKB_CB(rxskb)->dccpd_seq);
-diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
-index b158c66..d954e83 100644
---- a/net/dccp/ipv6.c
-+++ b/net/dccp/ipv6.c
-@@ -336,7 +336,7 @@ static void dccp_v6_ctl_send_reset(struct sock *sk, struct sk_buff *rxskb)
+ /* DCCP socket options */
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -441,7 +441,6 @@ static int dccp_setsockopt_service(struc
+ 	return 0;
+ }
  
- 	/* See "8.3.1. Abnormal Termination" in RFC 4340 */
- 	if (DCCP_SKB_CB(rxskb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
--		dccp_set_seqno(&seqno, DCCP_SKB_CB(rxskb)->dccpd_ack_seq + 1);
-+		seqno = ADD48(DCCP_SKB_CB(rxskb)->dccpd_ack_seq, 1);
+-/* byte 1 is feature.  the rest is the preference list */
+ static int dccp_setsockopt_change(struct sock *sk, int type,
+ 				  struct dccp_so_feat __user *optval)
  
- 	dccp_hdr_set_seq(dh, seqno);
- 	dccp_hdr_set_ack(dccp_hdr_ack_bits(skb), DCCP_SKB_CB(rxskb)->dccpd_seq);
--- 
-1.5.2.2
-
