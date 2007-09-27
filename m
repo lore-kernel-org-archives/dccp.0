@@ -1,103 +1,137 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 27 Sep 2007 14:21:30 +0000
-Subject: [PATCH 11/11]: Disable setting timers for feature negotiation
-Message-Id: <200709271521.30742@strip-the-willow>
+Date: Thu, 27 Sep 2007 14:21:07 +0000
+Subject: [PATCH 5/11]: Implement lookup table for feature-negotiation information
+Message-Id: <200709271521.07675@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP]: Disable setting timers for feature negotiation
+[DCCP]: Implement lookup table for feature-negotiation information
 
-As a byproduct of restricting feature negotiation to connection setup, the feature-negotiation
-retransmit timer is no longer required. All retransmission is now mapped onto the protocol-level
-retransmission. To avoid interactions with the old code, this patch removes timer handling already.
-
-Implementation details indicating why timers are no longer needed can be found on 
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/feature_negotiation/implementation_notes.html
+A lookup table for feature-negotiation information, extracted from RFC 4340/42,
+is provided by this patch. All currently known features can be found in this 
+table, along with their feature location, their default value, and type.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/feat.c    |    6 ------
- net/dccp/options.c |   18 ------------------
- net/dccp/timer.c   |   12 ------------
- 3 files changed, 36 deletions(-)
+ include/linux/dccp.h |    9 +++---
+ net/dccp/feat.c      |   72 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 77 insertions(+), 4 deletions(-)
 
 --- a/net/dccp/feat.c
 +++ b/net/dccp/feat.c
-@@ -737,12 +737,6 @@ int dccp_feat_confirm_recv(struct sock *
- 			all_confirmed = 0;
- 	}
+@@ -23,6 +23,76 @@
  
--	/* fix re-transmit timer */
--	if (all_confirmed) {
--		dccp_pr_debug("clear feat negotiation timer %p\n", sk);
--		inet_csk_clear_xmit_timer(sk, ICSK_TIME_RETRANS);
--	}
--
- 	if (!found)
- 		dccp_pr_debug("%s(%d, ...) never requested\n",
- 			      dccp_feat_typename(type), feature);
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -468,7 +468,6 @@ static int dccp_insert_feat_opt(struct s
+ #define DCCP_FEAT_SP_NOAGREE (-123)
  
- static int dccp_insert_options_feat(struct sock *sk, struct sk_buff *skb)
++static const struct {
++	u8			feat_num;		/* DCCPF_xxx */
++	enum dccp_feat_type	rxtx;			/* RX or TX  */
++	enum dccp_feat_type	reconciliation;		/* SP or NN  */
++	u8			default_value;		/* as in 6.4 */
++/*
++ *    Lookup table for location and type of features (from RFC 4340/4342)
++ *  +--------------------------+----+-----+----+----+---------+-----------+
++ *  | Feature                  | Location | Reconc. | Initial |  Section  |
++ *  |                          | RX | TX  | SP | NN |  Value  | Reference |
++ *  +--------------------------+----+-----+----+----+---------+-----------+
++ *  | DCCPF_CCID               |    |  X  | X  |    |   2     | 10        |
++ *  | DCCPF_SHORT_SEQNOS       |    |  X  | X  |    |   0     |  7.6.1    |
++ *  | DCCPF_SEQUENCE_WINDOW    |    |  X  |    | X  | 100     |  7.5.2    |
++ *  | DCCPF_ECN_INCAPABLE      | X  |     | X  |    |   0     | 12.1      |
++ *  | DCCPF_ACK_RATIO          |    |  X  |    | X  |   2     | 11.3      |
++ *  | DCCPF_SEND_ACK_VECTOR    | X  |     | X  |    |   0     | 11.5      |
++ *  | DCCPF_SEND_NDP_COUNT     |    |  X  | X  |    |   0     |  7.7.2    |
++ *  | DCCPF_MIN_CSUM_COVER     | X  |     | X  |    |   0     |  9.2.1    |
++ *  | DCCPF_DATA_CHECKSUM      | X  |     | X  |    |   0     |  9.3.1    |
++ *  | DCCPF_SEND_LEV_RATE      | X  |     | X  |    |   0     | 4342/8.4  |
++ *  +--------------------------+----+-----+----+----+---------+-----------+
++ */
++} dccp_feat_table[] = {
++	{ DCCPF_CCID,		 FEAT_AT_TX, FEAT_SP, 2 },
++	{ DCCPF_SHORT_SEQNOS,	 FEAT_AT_TX, FEAT_SP, 0 },
++	{ DCCPF_SEQUENCE_WINDOW, FEAT_AT_TX, FEAT_NN, 100 },
++	{ DCCPF_ECN_INCAPABLE,	 FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_ACK_RATIO,	 FEAT_AT_TX, FEAT_NN, 2 },
++	{ DCCPF_SEND_ACK_VECTOR, FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_SEND_NDP_COUNT,  FEAT_AT_TX, FEAT_SP, 0 },
++	{ DCCPF_MIN_CSUM_COVER,  FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_DATA_CHECKSUM,	 FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_SEND_LEV_RATE,	 FEAT_AT_RX, FEAT_SP, 0 },
++};
++#define DCCP_FEAT_SUPPORTED_MAX		ARRAY_SIZE(dccp_feat_table)
++
++/**
++ * dccp_feat_index  -  Hash function to map feature number into array position
++ * Returns consecutive array index or -1 if the feature is not understood.
++ */
++static int dccp_feat_index(u8 feat_num)
++{
++	/* The first 9 entries are occupied by the types from RFC 4340, 6.4 */
++	if (feat_num > DCCPF_RESERVED && feat_num <= DCCPF_DATA_CHECKSUM)
++		return feat_num - 1;
++
++	/* Specific features: add new types here after adding to the table */
++	switch (feat_num) {
++	case DCCPF_SEND_LEV_RATE:	return (DCCP_FEAT_SUPPORTED_MAX-1);
++	}
++	return -1;
++}
++
++static u8 dccp_feat_type(u8 feat_num)
++{
++	int idx = dccp_feat_index(feat_num);
++
++	if (idx < 0)
++		return FEAT_UNKNOWN;
++	return dccp_feat_table[idx].reconciliation;
++}
++
++static int dccp_feat_default_value(u8 feat_num)
++{
++	int idx = dccp_feat_index(feat_num);
++
++	return idx < 0? idx : dccp_feat_table[idx].default_value;
++}
++
+ /* copy constructor, fval must not already contain allocated memory */
+ static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
  {
--	struct dccp_sock *dp = dccp_sk(sk);
- 	struct dccp_minisock *dmsk = dccp_msk(sk);
- 	struct dccp_opt_pend *opt, *next;
- 	int change = 0;
-@@ -509,23 +508,6 @@ static int dccp_insert_options_feat(stru
- 		}
- 	}
+@@ -689,6 +759,8 @@ const char *dccp_feat_name(const u8 feat
+ 	if (feat > DCCPF_DATA_CHECKSUM && feat < DCCPF_MIN_CCID_SPECIFIC)
+ 		return feature_names[DCCPF_RESERVED];
  
--	/* Retransmit timer.
--	 * If this is the master listening sock, we don't set a timer on it.  It
--	 * should be fine because if the dude doesn't receive our RESPONSE
--	 * [which will contain the CHANGE] he will send another REQUEST which
--	 * will "retrnasmit" the change.
--	 */
--	if (change && dp->dccps_role != DCCP_ROLE_LISTEN) {
--		dccp_pr_debug("reset feat negotiation timer %p\n", sk);
--
--		/* XXX don't reset the timer on re-transmissions.  I.e. reset it
--		 * only when sending new stuff i guess.  Currently the timer
--		 * never backs off because on re-transmission it just resets it!
--		 */
--		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
--					  inet_csk(sk)->icsk_rto, DCCP_RTO_MAX);
--	}
--
- 	return 0;
- }
++	if (feat =  DCCPF_SEND_LEV_RATE)
++		return "Send Loss Event Rate";
+ 	if (feat >= DCCPF_MIN_CCID_SPECIFIC)
+ 		return "CCID-specific";
  
---- a/net/dccp/timer.c
-+++ b/net/dccp/timer.c
-@@ -82,17 +82,6 @@ static void dccp_retransmit_timer(struct
- {
- 	struct inet_connection_sock *icsk = inet_csk(sk);
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -174,19 +174,20 @@ enum {
+ };
  
--	/* retransmit timer is used for feature negotiation throughout
--	 * connection.  In this case, no packet is re-transmitted, but rather an
--	 * ack is generated and pending changes are placed into its options.
--	 */
--	if (sk->sk_send_head = NULL) {
--		dccp_pr_debug("feat negotiation retransmit timeout %p\n", sk);
--		if (sk->sk_state = DCCP_OPEN)
--			dccp_send_ack(sk);
--		goto backoff;
--	}
--
- 	/*
- 	 * sk->sk_send_head has to have one skb with
- 	 * DCCP_SKB_CB(skb)->dccpd_type set to one of the retransmittable DCCP
-@@ -131,7 +120,6 @@ static void dccp_retransmit_timer(struct
- 		goto out;
- 	}
- 
--backoff:
- 	icsk->icsk_backoff++;
- 	icsk->icsk_retransmits++;
+ /* DCCP features (RFC 4340 section 6.4) */
+-enum {
++enum dccp_feature_numbers {
+ 	DCCPF_RESERVED = 0,
+ 	DCCPF_CCID = 1,
+-	DCCPF_SHORT_SEQNOS = 2,		/* XXX: not yet implemented */
++	DCCPF_SHORT_SEQNOS = 2,
+ 	DCCPF_SEQUENCE_WINDOW = 3,
+-	DCCPF_ECN_INCAPABLE = 4,	/* XXX: not yet implemented */
++	DCCPF_ECN_INCAPABLE = 4,
+ 	DCCPF_ACK_RATIO = 5,
+ 	DCCPF_SEND_ACK_VECTOR = 6,
+ 	DCCPF_SEND_NDP_COUNT = 7,
+ 	DCCPF_MIN_CSUM_COVER = 8,
+-	DCCPF_DATA_CHECKSUM = 9,	/* XXX: not yet implemented */
++	DCCPF_DATA_CHECKSUM = 9,
+ 	/* 10-127 reserved */
+ 	DCCPF_MIN_CCID_SPECIFIC = 128,
++	DCCPF_SEND_LEV_RATE = 192,	/* RFC 4342, sec. 8.4 */
+ 	DCCPF_MAX_CCID_SPECIFIC = 255,
+ };
  
