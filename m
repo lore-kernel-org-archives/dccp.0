@@ -1,7 +1,7 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 28 Sep 2007 11:33:51 +0000
+From: =?utf-8?q?R=C3=A9mi_Denis-Courmont?= <rdenis@simphalempin.com>
+Date: Fri, 28 Sep 2007 15:25:58 +0000
 Subject: Re: DCCP support in VLC
-Message-Id: <200709281233.51892@strip-the-willow>
+Message-Id: <200709281825.58935.rdenis@simphalempin.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200709271930.03854.rdenis@simphalempin.com>
 In-Reply-To: <200709271930.03854.rdenis@simphalempin.com>
@@ -10,44 +10,44 @@ Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 8bit
 To: dccp@vger.kernel.org
 
-Quoting Rémi Denis-Courmont:
-|  > |  I am having a few API problems now:
-|  > |
-|  > |  First, TCP-like non-blocking connect() error handling does not seem to
-|  > | work properly (2.6.22). I don't know if this is an intended difference
-|  > | from TCP. VLC follows a pretty typical non-blocking connect flow:
-|  > |
-|  > |  socket()
-|  > |  fcntl(F_SETFL, O_NONBLOCK)
-|  > |  connect() = -1 (errno = EINPROGRESS)
-|  > |  poll(POLLOUT) = 1
-|  > |  getsockopt(SOL_SOCKET, SO_ERROR) = 0 (val = ECONNREFUSED)
-|  > |
-|  > |  Alas with DCCP, getsockopt returns 0 instead of ECONNREFUSED, even
-|  > | though tcpdump reports a reset packet on the wire. And then VLC thinks
-|  > | the connection succeeded, and well, tries to read from the socket...
-<snip>
-|  But your other kernel patch solved that now :-)
-Thanks, this is good to know, but the patch that I sent you privately is not in a 
-submittable state; I will tidy that up and resubmit it to the list.
+Le Friday 28 September 2007 14:33:51 Gerrit Renker, vous avez écrit :
+> When the Reset closing the connection arrives, the same shutdown mask is
+> set as in TCP. What I thus think you could do as a
+> test-for-end-of-connection is to test whether the socket descriptor is
+> still read/writeable.
+
+If it works like TCP, shutdown-for-recv will make the socket always readable, 
+and will not affect writeability at all, since the sending half may still be 
+open. As such, I don't think it will solve the problem.
+
+Currently, I am assuming that length = 0 means end-of-connection, because I 
+only use RTP/RTCP, so zero bytes is not a valid packet length. But that's a 
+little bit ugly.
+
+Other than that, and apart from pending DCCP service code support I am happy 
+to announce that the official VLC development tree now support DCCP 
+out-of-the-box with RTP.
+
+Manually, on the sender (assuming sender IP is 2001:db8::1):
+$ vlc -vv /dev/dvd \
+--sout '#rtp{dccp,mux=ts,portP04}'
+
+On the receiver:
+$ vlc -vv dccp://[2001:db8::1]:5004
+
+Or advertized with SAP, on the sender:
+$ vlc -vv /dev/dvd \
+--sout '#rtp{dccp,mux=ts,portP04,dst 01:db8::1,sdp=sap,name=MyDVD}'
+
+On the receiver, enable SAP service discovery and click MyDVD from the 
+playlist.
 
 
-|  So so, now I have yet another API problem :-$ When the peer shutdowns/closes 
-|  the connection, recv() returns 0 (as with TCP). When the peer sends a 
-|  zero-byte payload datagram, recv() also seems to return 0 (as with UDP).
-|  How do I differentiate? With TCP and UDP, this is unambiguous because UDP has 
-|  no such thing as shutdown, and TCP has no framing, so no empty payloads at 
-|  application-layer.
-It seems you are trying to use length=0 as End-Of-File? Works in TCP since it is
-byte-stream, but DCCP is between UDP and TCP, so an empty frame is a valid pay-`load'.
+We cannot support multiple streams per session, because the live555 library 
+does not support DCCP at this time. But TS multiplexing works great anyway.
 
-When the Reset closing the connection arrives, the same shutdown mask is set as in TCP.
-What I thus think you could do as a test-for-end-of-connection is to test whether the
-socket descriptor is still read/writeable. 
+Thanks for your help!
 
-Arnaldo, Ian - do you have suggestions?
-
-A note on shutdown: this also works as in TCP. When you know that you will be using
-the connection only in one direction, calling shutdown() for the unused direction  has 
-distinct advantages, since it will mean that the CCID-halves which are not participating 
-in the traffic will be bypassed, which improves the performance.
+-- 
+Rémi Denis-Courmont
+http://www.remlab.net/
