@@ -1,109 +1,50 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 27 Sep 2007 13:41:10 +0000
-Subject: [PATCH v2 8/8]: Support inserting options during the 3-way handshake
-Message-Id: <200709271441.11012@strip-the-willow>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Sat, 29 Sep 2007 15:38:47 +0000
+Subject: [PATCH 06/13] [CCID2]: Remove ugly BUG_ON
+Message-Id: <20070929153847.GK23546@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Reworked patch, without the eyesore of the unrelated hunk from preceding patch.
+This removes an ugly BUG_ON which has been pointed out by Arnaldo.
 
--------------------------------< Patch v2 >------------------------------------
-[DCCP]: Support inserting options during the 3-way handshake
+Instead of freezing up the machine, a `critical' message is now issued
+to the system log.
 
-This provides a separate routine to insert options during the initial handshake.
-The main purpose is to conduct feature negotiation, for the moment the only user
-is the timestamp echo needed for the (CCID3) handshake RTT sample.
-
-Padding of options has been put into a small separate routine, to be shared among
-the two functions. This could also be used as a generic routine to finish inserting
-options.
-
-Also removed an `XXX' comment since its content was obvious.
+There is potential of doing this more gracefully (eg. there are a few internal
+variables which could be updated despite the lack of memory), but that requires
+more complicated changes to the algorithm; thus a `FIXME' has been added.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/dccp.h    |    1 +
- net/dccp/options.c |   38 +++++++++++++++++++++++++++-----------
- net/dccp/output.c  |    2 +-
- 3 files changed, 29 insertions(+), 12 deletions(-)
+ net/dccp/ccids/ccid2.c |   11 +++++------
+ 1 files changed, 5 insertions(+), 6 deletions(-)
 
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -303,7 +303,7 @@ struct sk_buff *dccp_make_response(struc
- 	DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_RESPONSE;
- 	DCCP_SKB_CB(skb)->dccpd_seq  = dreq->dreq_iss;
- 
--	if (dccp_insert_options(sk, skb)) {
-+	if (dccp_insert_options_rsk(dreq, skb)) {
- 		kfree_skb(skb);
- 		return NULL;
- 	}
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -422,6 +422,7 @@ static inline int dccp_ack_pending(const
- }
- 
- extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
-+extern int dccp_insert_options_rsk(struct dccp_request_sock*, struct sk_buff*);
- extern int dccp_insert_option_elapsed_time(struct sock *sk,
- 					    struct sk_buff *skb,
- 					    u32 elapsed_time);
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -525,6 +525,18 @@ static int dccp_insert_options_feat(stru
- 	return 0;
- }
- 
-+/* The length of all options needs to be a multiple of 4 (5.8) */
-+static void dccp_insert_option_padding(struct sk_buff *skb)
-+{
-+	int padding = DCCP_SKB_CB(skb)->dccpd_opt_len % 4;
-+
-+	if (padding != 0) {
-+		padding = 4 - padding;
-+		memset(skb_push(skb, padding), 0, padding);
-+		DCCP_SKB_CB(skb)->dccpd_opt_len += padding;
-+	}
-+}
-+
- int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
-@@ -568,18 +580,22 @@ int dccp_insert_options(struct sock *sk,
- 	    dccp_insert_option_timestamp_echo(&dp->dccps_tstamp, skb))
- 		return -1;
- 
--	/* XXX: insert other options when appropriate */
-+	dccp_insert_option_padding(skb);
-+	return 0;
-+}
-+
-+/**
-+ * dccp_insert_options_rsk  -  dccp_insert_options for request sockets
-+ * This function is analogous to above - also use with dccp_reserve_hdr_space().
-+ */
-+int dccp_insert_options_rsk(struct dccp_request_sock *dreq, struct sk_buff *skb)
-+{
-+	DCCP_SKB_CB(skb)->dccpd_opt_len = 0;
- 
--	if (DCCP_SKB_CB(skb)->dccpd_opt_len != 0) {
--		/* The length of all options has to be a multiple of 4 */
--		int padding = DCCP_SKB_CB(skb)->dccpd_opt_len % 4;
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 5c6b4f9..3e4fa6b 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -294,12 +294,11 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ 	next = hctx->ccid2hctx_seqh->ccid2s_next;
+ 	/* check if we need to alloc more space */
+ 	if (next = hctx->ccid2hctx_seqt) {
+-		int rc;
 -
--		if (padding != 0) {
--			padding = 4 - padding;
--			memset(skb_push(skb, padding), 0, padding);
--			DCCP_SKB_CB(skb)->dccpd_opt_len += padding;
--		}
--	}
-+	if (dreq->dreq_tstamp != NULL &&
-+	    dccp_insert_option_timestamp_echo(&dreq->dreq_tstamp, skb))
-+		return -1;
- 
-+	dccp_insert_option_padding(skb);
- 	return 0;
- }
+-		ccid2_pr_debug("allocating more space in history\n");
+-		rc = ccid2_hc_tx_alloc_seq(hctx);
+-		BUG_ON(rc); /* XXX what do we do? */
+-
++		if (ccid2_hc_tx_alloc_seq(hctx)) {
++			DCCP_CRIT("packet history - out of memory!");
++			/* FIXME: find a more graceful way to bail out */
++			return;
++		}
+ 		next = hctx->ccid2hctx_seqh->ccid2s_next;
+ 		BUG_ON(next = hctx->ccid2hctx_seqt);
+ 	}
+-- 
+1.5.2.2
+
