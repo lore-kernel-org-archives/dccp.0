@@ -1,64 +1,61 @@
 From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Sat, 29 Sep 2007 15:38:17 +0000
-Subject: [PATCH 03/13] [DCCP]: Make all `debug' parameters bool
-Message-Id: <20070929153817.GH23546@ghostprotocols.net>
+Date: Sat, 29 Sep 2007 15:38:56 +0000
+Subject: [PATCH 07/13] [CCID2]: Remove redundant BUG_ON
+Message-Id: <20070929153856.GL23546@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This just sets the parameter to bool, since debugging messages
-are either on or off.
+This removes a test for `val < 1' which would only have been triggered
+when val < 0, due to a preceding test for 0.
+Fixed by using an unsigned type for cwnd (as in TCP) instead.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/ccid2.c |    2 +-
- net/dccp/ccids/ccid3.c |    2 +-
- net/dccp/proto.c       |    2 +-
- 3 files changed, 3 insertions(+), 3 deletions(-)
+ net/dccp/ccids/ccid2.c |   11 +++--------
+ net/dccp/ccids/ccid2.h |    2 +-
+ 2 files changed, 4 insertions(+), 9 deletions(-)
 
 diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index d29b88f..c199f34 100644
+index 3e4fa6b..5114a2d 100644
 --- a/net/dccp/ccids/ccid2.c
 +++ b/net/dccp/ccids/ccid2.c
-@@ -835,7 +835,7 @@ static struct ccid_operations ccid2 = {
- };
+@@ -179,16 +179,11 @@ static void ccid2_change_l_ack_ratio(struct sock *sk, int val)
+ 	dp->dccps_l_ack_ratio = val;
+ }
  
- #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
--module_param(ccid2_debug, int, 0444);
-+module_param(ccid2_debug, bool, 0444);
- MODULE_PARM_DESC(ccid2_debug, "Enable debug messages");
- #endif
+-static void ccid2_change_cwnd(struct ccid2_hc_tx_sock *hctx, int val)
++static void ccid2_change_cwnd(struct ccid2_hc_tx_sock *hctx, u32 val)
+ {
+-	if (val = 0)
+-		val = 1;
+-
+ 	/* XXX do we need to change ack ratio? */
+-	ccid2_pr_debug("change cwnd to %d\n", val);
+-
+-	BUG_ON(val < 1);
+-	hctx->ccid2hctx_cwnd = val;
++	hctx->ccid2hctx_cwnd = val? : 1;
++	ccid2_pr_debug("changed cwnd to %u\n", hctx->ccid2hctx_cwnd);
+ }
  
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index a409939..25772c3 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -1046,7 +1046,7 @@ static struct ccid_operations ccid3 = {
- };
- 
- #ifdef CONFIG_IP_DCCP_CCID3_DEBUG
--module_param(ccid3_debug, int, 0444);
-+module_param(ccid3_debug, bool, 0444);
- MODULE_PARM_DESC(ccid3_debug, "Enable debug messages");
- #endif
- 
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index c0b685e..cc9bf1c 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -992,7 +992,7 @@ MODULE_PARM_DESC(thash_entries, "Number of ehash buckets");
- 
- #ifdef CONFIG_IP_DCCP_DEBUG
- int dccp_debug;
--module_param(dccp_debug, int, 0444);
-+module_param(dccp_debug, bool, 0444);
- MODULE_PARM_DESC(dccp_debug, "Enable debug messages");
- 
- EXPORT_SYMBOL_GPL(dccp_debug);
+ static void ccid2_change_srtt(struct ccid2_hc_tx_sock *hctx, long val)
+diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
+index ebd7949..d9daa53 100644
+--- a/net/dccp/ccids/ccid2.h
++++ b/net/dccp/ccids/ccid2.h
+@@ -50,7 +50,7 @@ struct ccid2_seq {
+  * @ccid2hctx_rpdupack - dupacks since rpseq
+ */
+ struct ccid2_hc_tx_sock {
+-	int			ccid2hctx_cwnd;
++	u32			ccid2hctx_cwnd;
+ 	int			ccid2hctx_ssacks;
+ 	int			ccid2hctx_acks;
+ 	unsigned int		ccid2hctx_ssthresh;
 -- 
 1.5.2.2
 
