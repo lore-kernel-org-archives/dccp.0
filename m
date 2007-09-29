@@ -1,31 +1,35 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 06 Sep 2007 04:44:50 +0000
-Subject: Re: [PATCH 8/10]: Use maximum-RTO backoff from DCCP spec
-Message-Id: <5640c7e00709052144n13ef9306mf4158d987af033ea@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Sat, 29 Sep 2007 15:39:41 +0000
+Subject: [PATCH 11/13] [DCCP]: Wrong format in printk
+Message-Id: <20070929153941.GP23546@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 7/13/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [DCCP]: Use maximum-RTO backoff from DCCP spec
->
-> This removes another Fixme, using the TCP maximum RTO rather than the value
-> specified by the DCCP specification. Across the sections in RFC 4340, 64
-> seconds is consistently suggested as maximum RTO backoff value; and this is
-> the value which is now used.
->
-> I have checked both termination cases for retransmissions of Close/CloseReq:
-> with the default value 15 of `retries2', and an initial icsk_retransmit = 0,
-> it takes about 614 seconds to declare a non-responding peer as dead, after
-> which the final terminating Reset is sent. With the TCP maximum RTO value of
-> 120 seconds it takes (as might be expected) almost twice as long, about 23
-> minutes.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+The elapsed time uses u32, but printk was using %d, not %u.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/options.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/net/dccp/options.c b/net/dccp/options.c
+index 172eb6b..d361b55 100644
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -179,7 +179,7 @@ int dccp_parse_options(struct sock *sk, struct sk_buff *skb)
+ 			else
+ 				elapsed_time = ntohl(*(__be32 *)(value + 4));
+ 
+-			dccp_pr_debug_cat(", ELAPSED_TIME=%d\n", elapsed_time);
++			dccp_pr_debug_cat(", ELAPSED_TIME=%u\n", elapsed_time);
+ 
+ 			/* Give precedence to the biggest ELAPSED_TIME */
+ 			if (elapsed_time > opt_recv->dccpor_elapsed_time)
 -- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+1.5.2.2
+
