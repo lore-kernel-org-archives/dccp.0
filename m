@@ -1,37 +1,76 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Mon, 01 Oct 2007 18:57:21 +0000
-Subject: Re: [PATCH 8/9]: Set per-connection CCIDs via socket options
-Message-Id: <20071001185721.GA7881@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 01 Oct 2007 14:18:13 +0000
+Subject: [PATCH 2/11]: Increase the scope of variable-length htonl/ntohl functions
+Message-Id: <200710011518.14022@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200709281630.33024@strip-the-willow>
-In-Reply-To: <200709281630.33024@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Tue, Oct 02, 2007 at 07:51:45AM +1300, Ian McDonald escreveu:
-> On 9/29/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> > [DCCP]: Set per-connection CCIDs via socket options
-> >
-> > With this patch, TX/RX CCIDs can now be changed on a per-connection basis, which
-> > overrides the defaults set by the global sysctl variables for TX/RX CCIDs.
-> >
-> > To make full use of this facility, the remaining patches of this patch set are
-> > needed, which track dependencies and activate negotiated feature values.
-> >
-> > Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> 
-> Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-> 
-> But see one comment below.
-> 
-> > +       BUILD_BUG_ON(sizeof(u8) != 1);
-> 
-> The whole point of u8 is that it is one byte as is u16 2 bytes etc. If
-> these change then the whole kernel breaks so this check is
-> unnecessary.
+[DCCP]: Increase the scope of variable-length htonl/ntohl functions
 
-Agreed.
+This extends the scope of two available functions, encode|decode_value_var,
+to work up to 6 (8) bytes, to match maximum requirements in the RFC.
 
-- Arnaldo
+These functions are going to be used both by general option processing and 
+feature negotiation code, hence declarations have been put into feat.h.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/feat.h    |    2 ++
+ net/dccp/options.c |   21 ++++++++++++++-------
+ 2 files changed, 16 insertions(+), 7 deletions(-)
+
+--- a/net/dccp/feat.h
++++ b/net/dccp/feat.h
+@@ -120,4 +120,6 @@ static inline u8 dccp_bytes_per_value(co
+ 	return value > 0xFFFF? 4 : (value > 0xFF? 2 : 1);
+ }
+ 
++extern void dccp_encode_value_var(const u64 value, u8 *to, const u8 len);
++extern u64  dccp_decode_value_var(const u8 *bf, const u8 len);
+ #endif /* _DCCP_FEAT_H */
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -23,16 +23,20 @@
+ #include "dccp.h"
+ #include "feat.h"
+ 
+-static u32 dccp_decode_value_var(const unsigned char *bf, const u8 len)
++u64 dccp_decode_value_var(const u8 *bf, const u8 len)
+ {
+-	u32 value = 0;
++	u64 value = 0;
+ 
++	if (len > 5)
++		value += ((u64)*bf++) << 40;
++	if (len > 4)
++		value += ((u64)*bf++) << 32;
+ 	if (len > 3)
+-		value += *bf++ << 24;
++		value += ((u64)*bf++) << 24;
+ 	if (len > 2)
+-		value += *bf++ << 16;
++		value += ((u64)*bf++) << 16;
+ 	if (len > 1)
+-		value += *bf++ << 8;
++		value += ((u64)*bf++) << 8;
+ 	if (len > 0)
+ 		value += *bf;
+ 
+@@ -286,9 +290,12 @@ out_invalid_option:
+ 
+ EXPORT_SYMBOL_GPL(dccp_parse_options);
+ 
+-static void dccp_encode_value_var(const u32 value, unsigned char *to,
+-				  const unsigned int len)
++void dccp_encode_value_var(const u64 value, u8 *to, const u8 len)
+ {
++	if (len > 5)
++		*to++ = (value & 0xFF0000000000ull) >> 40;
++	if (len > 4)
++		*to++ = (value & 0xFF00000000ull) >> 32;
+ 	if (len > 3)
+ 		*to++ = (value & 0xFF000000) >> 24;
+ 	if (len > 2)
