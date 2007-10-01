@@ -1,43 +1,45 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 11 Oct 2007 09:02:08 +0000
-Subject: Re: [PATCH 7/14]: No more CCID control blocks in LISTEN state
-Message-Id: <5640c7e00710110202i5bb63177i598ac4de76e4b515@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 01 Oct 2007 10:54:27 +0000
+Subject: Re: [PATCH 3/10]: Dedicated auxiliary states to support passive-close
+Message-Id: <200710011154.27825@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200710031502.43141@strip-the-willow>
-In-Reply-To: <200710031502.43141@strip-the-willow>
+References: <200707121523.40095@strip-the-willow>
+In-Reply-To: <200707121523.40095@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On 10/11/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Kernel 2.6.23 is out and I have updated this patch with a small change
-> which concerns the initialisation of hcrx/hctx after testing for OPEN|LISTEN|PARTOPEN.
->
-> Also updated the changelog for this patch. Ian - please check whether you are still ok
-> with this patch.
->
-> -------------------------------> Patch v2 <--------------------------------------------
-> [CCID3]: No more CCID control blocks in LISTEN state
->
-> The CCIDs are activated as last of the features, at the end of the handshake, were
-> the LISTEN state of the master socket is inherited into the server state of the child
-> socket. Thus, the only states visible to CCIDs now are OPEN/PARTOPEN, and the closing
-> states.
-> This allows to remove tests which were previously necessary to protect against referencing
-> a socket in the listening state (in CCID3), but which now have become redundant.
->
-> Thanks to Ian McDonald for discussion on this.
->
-> As a further byproduct of enabling the CCIDs only after the connection has been fully
-> established, several typecast-initialisations of ccid3_hc_{rx,tx}_sock can now be eliminated:
->  * the CCID is loaded, so it is not necessary to test if it is NULL,
->  * if it is possible to load a CCID and leave the private area NULL, then this is a bug, which
->    should crash loudly and earlier,
->  * the test for state=OPEN || state=PARTOPEN now reduces only to the closing phase (e.g. when
->    the node has received an unexpected Reset).
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Quoting Arnaldo Carvalho de Melo:
+|  > [DCCP]: Dedicated auxiliary states to support passive-close
+|  >=20
+|  > This adds two auxiliary states to deal with passive closes:
+|  > =A0 * PASSIVE_1 (reached from OPEN via reception of Close) and
+|  > =A0 * PASSIVE_2 (reached from OPEN via reception of CloseReq)
+| =20
+| =20
+|  Perhaps we should rename PASSIVE_1 (magic number) to PASSIVE_CLOSEREQ
+|  and PASSIVE_2 to PASSIVE_CLOSE, and also CLOSEREQ to ACTIVE_CLOSEREQ?
+No problems with the first two. With the third I was initially thinking
+`this name is from the RFC', but the RFC didn't help much here and your
+scheme makes the state much clearer - so, yes, I agree fully with that.
+=20
+|  I'll defer these patches till we get some more discussion. There are
+|  many more unrelated patches to work on after all :)
+What kind of discussion were you thinking of: in a previous thread Ian and I
+reached some agreement already that there is a problem here.
 
-Yes - still OK with it.
+The problem really is in taking the RFC 4340 state machine at face value: i=
+f this
+is done literally, short-lived connections will wipe the receive queue befo=
+re the
+userland application had a chance to read data; as documented on
+	http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/closing_states/
+If you don't believe this, it can readily be tested by writing a small test=
+ app which=20
+sends something like `hello world' to the server.
+All data is seen on the wire, but never by the application.
+
+A test app can be found in the directory misc/hello_world of
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/dccp_applications_lib.tar.=
+gz
