@@ -1,44 +1,34 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 02 Oct 2007 12:27:05 +0000
-Subject: Re: [PATCH 5/11]: Update insertion routine for feature-negotiation options
-Message-Id: <200710021327.05763@strip-the-willow>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Mon, 01 Oct 2007 18:51:45 +0000
+Subject: Re: [PATCH 8/9]: Set per-connection CCIDs via socket options
+Message-Id: <5640c7e00710011151q6809a55bx98fc11e2ffa2b65a@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200710011518.21775@strip-the-willow>
-In-Reply-To: <200710011518.21775@strip-the-willow>
+References: <200709281630.33024@strip-the-willow>
+In-Reply-To: <200709281630.33024@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting Ian McDonald:
-|  > @@ -124,4 +124,5 @@ extern void dccp_encode_value_var(const
-|  > =A0extern u64 =A0dccp_decode_value_var(const u8 *bf, const u8 len);
-|  >
-|  > =A0extern int =A0dccp_insert_option_mandatory(struct sk_buff *skb);
-|  > +extern int =A0dccp_insert_fn_opt(struct sk_buff *skb, u8, u8, u8 *, u=
-8, bool);
-| =20
-|  declarations in kernel should always have parameter names.
-I personally disagree since I would look at the function itself to tell me =
-what it
-does (the above had carefully been butchered to match the other constraint =
-of 80 linechars).
+On 9/29/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [DCCP]: Set per-connection CCIDs via socket options
+>
+> With this patch, TX/RX CCIDs can now be changed on a per-connection basis, which
+> overrides the defaults set by the global sysctl variables for TX/RX CCIDs.
+>
+> To make full use of this facility, the remaining patches of this patch set are
+> needed, which track dependencies and activate negotiated feature values.
+>
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-But I have changed it to the following (I omit the entire patch, the whole =
-lot will be put
-in the test tree when the discussion phase is over); the inter-diff is:
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 
---- a/net/dccp/feat.h
-+++ b/net/dccp/feat.h
-@@ -124,5 +124,6 @@ extern void dccp_encode_value_var(const=20
- extern u64  dccp_decode_value_var(const u8 *bf, const u8 len);
-=20
- extern int  dccp_insert_option_mandatory(struct sk_buff *skb);
--extern int  dccp_insert_fn_opt(struct sk_buff *skb, u8, u8, u8 *, u8, bool=
-);
-+extern int  dccp_insert_fn_opt(struct sk_buff *skb, u8 type, u8 feat,
-+			       u8 *val, u8 len, bool repeat_first);
- #endif /* _DCCP_FEAT_H */
+But see one comment below.
 
+> +       BUILD_BUG_ON(sizeof(u8) != 1);
 
+The whole point of u8 is that it is one byte as is u16 2 bytes etc. If
+these change then the whole kernel breaks so this check is
+unnecessary.
 
+Ian
