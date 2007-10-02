@@ -1,7 +1,7 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Mon, 01 Oct 2007 20:15:15 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 02 Oct 2007 10:04:34 +0000
 Subject: Re: [PATCH 3/3]: Convert Reset code into socket error number
-Message-Id: <20071001201515.GC7881@ghostprotocols.net>
+Message-Id: <200710021104.34922@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <200709291744.53552@strip-the-willow>
 In-Reply-To: <200709291744.53552@strip-the-willow>
@@ -10,23 +10,56 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Tue, Oct 02, 2007 at 09:07:24AM +1300, Ian McDonald escreveu:
-> On 10/2/07, Arnaldo Carvalho de Melo <acme@ghostprotocols.net> wrote:
-> > He used a "designated initializer", i.e. he said at which index in the
-> > array it the value is to be set. So it really doesn't matter the order.
-> > And when checking if the code was within the valid range he tested
-> > against the last entry in the enum. Correct code. :-)
-> >
-> > - Arnaldo
-> >
-> Yes you are correct. I misread the code.
-> 
-> However - I'd prefer another constant to match last in enum at the
-> same point as the declaration of the enum. This way if values are
-> added other code doesn't break. I've seen this done before quite a few
-> times. It is dangerous on relying on the last value when it's not
-> explicitly marked as the last value.
+|  > +static u8 dccp_reset_code_convert(const u8 code)
+|  > +{
+|  > +       const u8 error_code[] = {
+|  > +       [DCCP_RESET_CODE_CLOSED]             = 0,       /* normal termination */
+|  > +       [DCCP_RESET_CODE_UNSPECIFIED]        = 0,       /* nothing known */
+|  > +       [DCCP_RESET_CODE_ABORTED]            = ECONNRESET,
+|  > +
+|  > +       [DCCP_RESET_CODE_NO_CONNECTION]      = ECONNREFUSED,
+|  > +       [DCCP_RESET_CODE_CONNECTION_REFUSED] = ECONNREFUSED,
+|  > +       [DCCP_RESET_CODE_TOO_BUSY]           = EUSERS,
+|  > +       [DCCP_RESET_CODE_AGGRESSION_PENALTY] = EDQUOT,
+|  > +
+|  > +       [DCCP_RESET_CODE_PACKET_ERROR]       = ENOMSG,
+|  > +       [DCCP_RESET_CODE_BAD_INIT_COOKIE]    = EBADR,
+|  > +       [DCCP_RESET_CODE_BAD_SERVICE_CODE]   = EBADRQC,
+|  > +       [DCCP_RESET_CODE_OPTION_ERROR]       = EILSEQ,
+|  > +       [DCCP_RESET_CODE_MANDATORY_ERROR]    = EOPNOTSUPP,
+|  > +       };
+|  > +
+|  
+|  This array is inside the function so is local.
+|  
+|  > +       return code <= DCCP_RESET_CODE_AGGRESSION_PENALTY? error_code[code] : 0;
+|  
+|  and then you basically don't use half of it.
+|  > +}
+|
+There is no problem declaring a local array here and I don't understand what you mean by
+"basically don't use half of it" -- all are valid reset codes and all can appear on a
+DCCP connection. 
 
-Agreed, TCP_MAX_STATES, etc :-)
+|  So I presume the reason for doing this is that half the codes don't
+|  apply to reset.
+Please have a look at RFC 4340, 5.6.
+ 
+|  As such then the array should be shifted out of the local function
+|  into the main part of the file.
+For a standalone table one would have to perform the index-bounds test each time which I think
+is pretty bad, as the caller should not have to know about internals and bounds of Reset Codes.
+Also we are not yet at the end of the story of reset codes - have you thought about dealing with
+Data Dropped options - this is a different way of generating error codes: Drop code 1, "Application 
+Not Listening", for instance has an effect similar to EPIPE (11.7). 
+By using separate functions for translating the results, one can keep this separate.
 
-- Arnaldo
+NB: In the test tree I have changed the index-bounds test to 
+
+ return code > DCCP_RESET_CODE_AGGRESSION_PENALTY ?  0 : error_code[code];
+
+due to
+	(a) coding conventions (Arnaldos email)
+	(b) the reset codes 12-127 (reserved) and 128-255, CCID-specific codes, are
+            to be interpreted as `0', "Unspecified" and is now clearer in the above.
+
