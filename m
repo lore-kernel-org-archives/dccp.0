@@ -1,56 +1,106 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 02 Oct 2007 22:03:27 +0000
-Subject: Re: [PATCH v2 4/9]: Resolve dependencies of features on choice of CCID
-Message-Id: <5640c7e00710021503j2e57c309ne95d078125154d61@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 03 Oct 2007 14:02:36 +0000
+Subject: [PATCH 4/14]: Integration of dynamic feature activation - part 3 (client side)
+Message-Id: <200710031502.36443@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200710021306.55993@strip-the-willow>
-In-Reply-To: <200710021306.55993@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 10/3/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> ------------------------------> Patch v2 <-----------------------------------------
-> [DCCP]: Resolve dependencies of features on choice of CCID
->
-> This provides a missing link in the code chain, as several features implicitly
-> depend and/or rely on the choice of CCID. Most notably, this is the Send Ack Vector
-> feature, but the patch also takes care of Ack Ratio and Send Loss Event Rate.
->
-> For Send Ack Vector, the situation is as follows:
->  * since CCID2 mandates the use of Ack Vectors, there is no point in allowing endpoints
->    which use CCID2 to disable Send Ack Vector features on the corresponding half-connection;
->
->  * a peer with a TX CCID of CCID2 will always expect Ack Vectors, and a peer with a RX CCID
->    of CCID2 must always send Ack Vectors (RFC 4341, sec. 4);
->
->  * for all other CCIDs, the use of (Send) Ack Vector is optional and thus negotiable. However,
->    this implies that the code negotiating the use of Ack Vectors also supports it (i.e. is
->    able to supply and to either parse or ignore received Ack Vectors). Since this is not the
->    case (CCID3 has no Ack Vector support), the use of Ack Vectors is here disabled, with a
->    corresponding comment in the source code.
->
-> An analogous consideration arises for the Send Loss Event Rate feature, since the CCID3
-> implementation does not support the loss interval options of RFC 4342. To make such use explicit,
-> corresponding feature-negotiation options are inserted which signal the use of the loss event
-> rate option, as it is used by the CCID3 code.
->
-> Lastly, the values of the Ack Ratio feature are matched to the choice of CCID.
->
-> The patch implements this as a function which is called after the user has made all other
-> registrations for changing default values of features.
->
-> The table is variable-length, the reserved (and hence for feature-negotiation invalid, confirmed
-> by considering section 19.4 of RFC 4340) feature number of 0 is used to mark the end of the table.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+[DCCP]: Integration of dynamic feature activation - part 3 (client side)
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+This integrates feature-activation in the client, the following details needed to be addressed:
 
-(I have seen Arnaldo's/your later correspondence and happy enough that
-you'll resolve that)
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+1. When dccp_parse_options() fails, the reset code is already set, request_sent_state_process() 
+   currently overrides this with `Packet Error', which is not intended - so changed to use the 
+   reset code set in dccp_parse_options();
+
+2. There was a FIXME to change the error code when dccp_ackvec_add() fails. I have looked this
+   up and found that: 
+   * the check whether ackno < ISN is already made earlier,
+   * this Response is likely the first packet with an Ack number that the client gets,
+   * so when dccp_ackvec_add() fails, the reason is likely not due to a packet error.
+
+   There is another problem: when a connecting client sends a Reset in state REQUEST, the loop
+   in dccp_sendmsg(), which waits in sk_stream_wait_connect() for the transition to PARTOPEN,
+   does not (and will not) happen. The same problem also occurs if the feature negotiation 
+   during connection setup fails. Thus I have lumped this case together with the following:
+
+3. When feature negotiation fails, the socket should be marked as not usable, so that the
+   application is notified that an error occurs. This is achieved by a new label, which uses
+   an error code of `Aborted' and which sets the socket state to CLOSED, as well as sk_err.
+
+Since this addresses congestion-control initialisation, a corresponding FIXME has been removed.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/input.c |   28 ++++++++++++++++++++++++----
+ 1 file changed, 24 insertions(+), 4 deletions(-)
+
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -382,8 +382,13 @@ static int dccp_rcv_request_sent_state_p
+ 			goto out_invalid_packet;
+ 		}
+ 
++		/*
++		 * If option processing (Step 8) failed, return 1 here so that
++		 * dccp_v4_do_rcv() sends a Reset. The Reset code depends on
++		 * the option type and is set in dccp_parse_options().
++		 */
+ 		if (dccp_parse_options(sk, NULL, skb))
+-			goto out_invalid_packet;
++			return 1;
+ 
+ 		/* Obtain usec RTT sample from SYN exchange (used by CCID 3) */
+ 		if (likely(dp->dccps_options_received.dccpor_timestamp_echo))
+@@ -394,7 +399,7 @@ static int dccp_rcv_request_sent_state_p
+ 		    dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
+ 				    DCCP_SKB_CB(skb)->dccpd_seq,
+ 				    DCCP_ACKVEC_STATE_RECEIVED))
+-			goto out_invalid_packet; /* FIXME: change error code */
++			goto unable_to_proceed;
+ 
+ 		dp->dccps_isr = DCCP_SKB_CB(skb)->dccpd_seq;
+ 		dccp_update_gsr(sk, dp->dccps_isr);
+@@ -456,6 +461,13 @@ static int dccp_rcv_request_sent_state_p
+ 			__kfree_skb(skb);
+ 			return 0;
+ 		}
++		/*
++		 * If feature negotiation throws an error, we can not proceed
++		 * (one or more feature values are undefined), so we send a
++		 * Reset. Otherwise, the Ack will clear any pending Confirms.
++		 */
++		if (dccp_feat_activate_values(sk, &dp->dccps_featneg))
++			goto unable_to_proceed;
+ 		dccp_send_ack(sk);
+ 		return -1;
+ 	}
+@@ -464,6 +476,16 @@ out_invalid_packet:
+ 	/* dccp_v4_do_rcv will send a reset */
+ 	DCCP_SKB_CB(skb)->dccpd_reset_code = DCCP_RESET_CODE_PACKET_ERROR;
+ 	return 1;
++
++unable_to_proceed:
++	DCCP_SKB_CB(skb)->dccpd_reset_code = DCCP_RESET_CODE_ABORTED;
++	/*
++	 * We mark this socket as no longer usable, so that the loop in
++	 * dccp_sendmsg() terminates and the application gets notified.
++	 */
++	dccp_set_state(sk, DCCP_CLOSED);
++	sk->sk_err = ECOMM;
++	return 1;
+ }
+ 
+ static int dccp_rcv_respond_partopen_state_process(struct sock *sk,
+@@ -621,8 +643,6 @@ int dccp_rcv_state_process(struct sock *
+ 		return 1;
+ 
+ 	case DCCP_REQUESTING:
+-		/* FIXME: do congestion control initialization */
+-
+ 		queued = dccp_rcv_request_sent_state_process(sk, skb, dh, len);
+ 		if (queued >= 0)
+ 			return queued;
