@@ -1,28 +1,88 @@
-From: David Miller <davem@davemloft.net>
-Date: Wed, 24 Oct 2007 03:23:39 +0000
-Subject: Re: [PATCH][DCCP 1/1] Implement SIOCINQ/FIONREAD
-Message-Id: <20071023.202339.41634703.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 03 Oct 2007 14:02:34 +0000
+Subject: [PATCH 3/14]: Integration of dynamic feature activation - part 2 (server side)
+Message-Id: <200710031502.34134@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <20071023225137.GA6371@ghostprotocols.net>
-In-Reply-To: <20071023225137.GA6371@ghostprotocols.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: "=A3eandro_Sales" <leandroal@gmail.com>
-Date: Tue, 23 Oct 2007 21:25:36 -0300
+[DCCP]: Integration of dynamic feature activation - part 2 (server side)
 
-> Em 23/10/07, Ian McDonald<ian.mcdonald@jandi.co.nz> escreveu:
-> > On 10/24/07, Arnaldo Carvalho de Melo <acme@ghostprotocols.net> wrote:
-> > > Just like UDP.
-> > >
-> > > Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
-> > > Signed-off-by: Leandro Melo de Sales <leandroal@gmail.com>
-> > >
-> > Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-> >
->=20
-> Signed-off-by: Leandro Melo de Sales <leandroal@gmail.com>
+This patch integrates the activation of features at the end of negotiation into the
+server-side code.
 
-Applied, thanks everyone.
+Note: In dccp_create_openreq_child the request_sock argument is no longer constant,
+      since dccp_activate_values() uses the feature-negotiation list on dreq to
+      sort out the initialisation values for the different features of the child
+      socket; and purges this queue after usei (the `req' argument to openreq_child
+      was kept constant, however).
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/minisocks.c |   42 ++++++++++++------------------------------
+ 1 file changed, 12 insertions(+), 30 deletions(-)
+
+--- a/net/dccp/minisocks.c
++++ b/net/dccp/minisocks.c
+@@ -112,7 +112,7 @@ struct sock *dccp_create_openreq_child(s
+ 	struct sock *newsk = inet_csk_clone(sk, req, GFP_ATOMIC);
+ 
+ 	if (newsk != NULL) {
+-		const struct dccp_request_sock *dreq = dccp_rsk(req);
++		struct dccp_request_sock *dreq = dccp_rsk(req);
+ 		struct inet_connection_sock *newicsk = inet_csk(newsk);
+ 		struct dccp_sock *newdp = dccp_sk(newsk);
+ 		struct dccp_minisock *newdmsk = dccp_msk(newsk);
+@@ -125,35 +125,6 @@ struct sock *dccp_create_openreq_child(s
+ 		newicsk->icsk_rto	   = DCCP_TIMEOUT_INIT;
+ 
+ 		INIT_LIST_HEAD(&newdp->dccps_featneg);
+-		if (dccp_feat_clone(sk, newsk))
+-			goto out_free;
+-
+-		if (newdmsk->dccpms_send_ack_vector) {
+-			newdp->dccps_hc_rx_ackvec -						dccp_ackvec_alloc(GFP_ATOMIC);
+-			if (unlikely(newdp->dccps_hc_rx_ackvec = NULL))
+-				goto out_free;
+-		}
+-
+-		newdp->dccps_hc_rx_ccid -			    ccid_hc_rx_new(newdmsk->dccpms_rx_ccid,
+-					   newsk, GFP_ATOMIC);
+-		newdp->dccps_hc_tx_ccid -			    ccid_hc_tx_new(newdmsk->dccpms_tx_ccid,
+-					   newsk, GFP_ATOMIC);
+-		if (unlikely(newdp->dccps_hc_rx_ccid = NULL ||
+-			     newdp->dccps_hc_tx_ccid = NULL)) {
+-			dccp_ackvec_free(newdp->dccps_hc_rx_ackvec);
+-			ccid_hc_rx_delete(newdp->dccps_hc_rx_ccid, newsk);
+-			ccid_hc_tx_delete(newdp->dccps_hc_tx_ccid, newsk);
+-out_free:
+-			/* It is still raw copy of parent, so invalidate
+-			 * destructor and make plain sk_free() */
+-			newsk->sk_destruct = NULL;
+-			sk_free(newsk);
+-			return NULL;
+-		}
+-
+ 		/*
+ 		 * Step 3: Process LISTEN state
+ 		 *
+@@ -184,6 +155,17 @@ out_free:
+ 		dccp_set_seqno(&newdp->dccps_awl,
+ 			       max48(newdp->dccps_awl, newdp->dccps_iss));
+ 
++		/*
++		 * Activate features after initialising the sequence numbers since
++		 * CCID initialisation may depend on GSS, ISR, ISS etc.
++		 */
++		if (dccp_feat_activate_values(newsk, &dreq->dreq_featneg)) {
++			/* It is still raw copy of parent, so invalidate
++			 * destructor and make plain sk_free() */
++			newsk->sk_destruct = NULL;
++			sk_free(newsk);
++			return NULL;
++		}
+ 		dccp_init_xmit_timers(newsk);
+ 
+ 		DCCP_INC_STATS_BH(DCCP_MIB_PASSIVEOPENS);
