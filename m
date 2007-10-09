@@ -1,46 +1,30 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 29 Sep 2007 16:41:56 +0000
-Subject: [PATCH 0/3][BUG-FIX][RFC]: Error Codes on sockets
-Message-Id: <200709291741.56554@strip-the-willow>
+From: "=?ISO-8859-2?Q?=A3eandro_Sales?=" <leandroal@gmail.com>
+Date: Tue, 09 Oct 2007 02:05:02 +0000
+Subject: CCID3 and CCID4 share code status
+Message-Id: <5bc4c4570710081905t3838da79w52f921d7b1d540a1@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Arnaldo,
+Hi,
 
-can you please look at these patches with priority and consider these or a variation
-for mainline - it is in response to the comment made by Remi about handling non-blocking
-connect by looking at socket error codes.
+ I'm almost finishing the initial release of the dccp plugin for
+gstreamer and the integration patches of both, ccid3 and ccid4 (still
+with basic changes from ccid3) according to discussed in the mail
+list. Since gerrit changed the ccid3 module source code, I had to
+update the ccid4 code too. Due to this situation, it will be very
+interesting if we have as soon as possible the common lib to share
+common codes between ccid3 and ccid4, and this is my current job. Just
+FYI, I'm organizing the code according to arnaldo and gerrit
+suggestions, to use a separated source file, which I named it for
+ccid34_commons.c/h and link it in the Makefile of ccids/lib via trfc
+module, is this the correct way gerrit, accoding to your suggestion? I
+added the ccid34_commons.o in the trfc lib Makefile.
+ I already tested the solution and seems to be ok, but I need to
+provide some fixes to finally submit the patches. I think that this
+will happen in two more days, since I'm still a little bit busy with
+stuffs related to academic activities.
 
-Patches #1/#2 are related, but not the main point. They fix the error reporting when e.g.
-              the server has no DCCP loaded and ICMP "Protocol unavailable" is returned.
-              This was so far not interpretated.
-
-Patch #3 is the one for I would be glad for feedback. This fixes the problem Remi reported,
-         by interpreting the Reset code of the Reset packet. In this way, it is now possible
-         to separate clean termination (sk_err = 0) from genuine errors (sk_err != 0). Now,
-         the choices were:
-         1) Mimic tcp_reset() by mapping "No Connection"/"Connection refused" to ECONNREFUSED
-            and map everything else to ECONNRESET. 
-            The problem that I found with this is that it throws away the variety of Reset codes
-            defined by DCCP.
-	 2) Map "No Connection"/"Connection refused" to ECONNREFUSED and everything else using
-            a mapping scheme (e.g. bit-shift reset code + adding a constant). But this may lead
-            to strange error codes when the scheme overlaps with existing error codes.
-         3) Map as far as possible into error numbers. This has been done in the present patch,
-            using a table (which could be easily changed). The difficulty that I found here is
-            that the range of errnos is limited, so it is a kind of best-guess. For instance,
-            "Agression penalty" is mapped into EDQUOT, which looks a bit strange when directly
-            putting this into strerror(). But the advantage is that the API can catch and reinterpret
-            this.
-
-It is all very elementary, but has been found to work. I hope that there are ideas and suggestions as
-to how to extend this (for instance the Data 1 ... 3 fields are not yet interpreted), but in light of
-Remi's VLC patch it would be good to have at least a subset of this available in mainline - experimental
-things can then remain in the test tree.
-
-Best regards
-Gerrit
-       
+Leandro.
