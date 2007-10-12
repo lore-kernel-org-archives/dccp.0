@@ -1,29 +1,53 @@
-From: David Miller <davem@davemloft.net>
-Date: Fri, 26 Oct 2007 10:52:42 +0000
-Subject: Re: [PATCHES 0/5]: DCCP bug fixes
-Message-Id: <20071026.035242.47975775.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 12 Oct 2007 09:52:00 +0000
+Subject: [PATCH 5/5]: Reorder statements with regard to option length
+Message-Id: <200710121052.00451@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <20071024131025.GC6371@ghostprotocols.net>
-In-Reply-To: <20071024131025.GC6371@ghostprotocols.net>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Wed, 24 Oct 2007 11:10:25 -0200
+[ACKVEC]: Reorder statements with regard to option length
 
-> Hi David,
-> 
-> 	Please consider pulling from:
-> 
-> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6
-> 
-> Gerrit Renker (5):
->       [DCCP]: Retrieve packet sequence number for error reporting
->       [DCCP]: One more exemption from full sequence number checks
->       [DCCP]: Convert Reset code into socket error number
->       [DCCP]: Unaligned pointer access
->       [CCID2/3]: Initialisation assignments of 0 are redundant
+This re-orders two statements which both rely on dccpd_opt_len: the problem
+was that the test for `enough size for Ack Vector' comes before the insertion
+of the Elapsed Time time option, which itself reduces dccpd_opt_len by 6 bytes.
 
-Pulled, thanks a lot!
+Further added a FIXME for piggybacking of Ack Vectors and a warning message 
+which is triggered when running out of option space - to monitor this condition.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ackvec.c |   13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -78,9 +78,6 @@ int dccp_insert_option_ackvec(struct soc
+ 	struct dccp_ackvec_record *avr;
+ 	suseconds_t delta;
+ 
+-	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
+-		return -1;
+-
+ 	delta = ktime_us_delta(ktime_get_real(), av->dccpav_time);
+ 	elapsed_time = delta / 10;
+ 
+@@ -88,6 +85,16 @@ int dccp_insert_option_ackvec(struct soc
+ 	    dccp_insert_option_elapsed_time(sk, skb, elapsed_time))
+ 		return -1;
+ 
++	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN) {
++		/*
++		 * FIXME: when running out of option space while piggybacking on
++		 * DataAck, return 0 here and schedule a separate Ack instead.
++		 */
++		DCCP_WARN("Lacking space for %u bytes on %s packet\n", len,
++			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type));
++		return -1;
++	}
++
+ 	avr = dccp_ackvec_record_new();
+ 	if (avr = NULL)
+ 		return -1;
