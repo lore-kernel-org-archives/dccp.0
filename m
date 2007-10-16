@@ -1,127 +1,155 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Wed, 24 Oct 2007 13:11:20 +0000
-Subject: [PATCH 3/5] [DCCP]: Convert Reset code into socket error number
-Message-Id: <20071024131120.GF6371@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 16 Oct 2007 09:33:30 +0000
+Subject: [patch 1/1][Resent]: Collect all scattered sysctl variables into sysctl.c
+Message-Id: <200710161033.30981@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This adds support for converting the 11 currently defined Reset codes into system
-error numbers, which are stored in sk_err for further interpretation.
+I have pulled this out - this patch also applies to the latest netdev-2.6 with minor
+offsets and is from http://www.mail-archive.com/dccp@vger.kernel.org/msg02081.html
 
-This makes the externally visible API behaviour similar to TCP, since a client
-connecting to a non-existing port will experience ECONNREFUSED.
+---------------------> Patch <------------------------------------------------
+[DCCP]: Collect all scattered sysctl variables into sysctl.c
 
-* Code 0, Unspecified, is interpreted as non-error (0);
-* Code 1, Closed (normal termination), also maps into 0;
-* Code 2, Aborted, maps into "Connection reset by peer" (ECONNRESET);
-* Code 3, No Connection and
-  Code 7, Connection Refused, map into "Connection refused" (ECONNREFUSED);
-* Code 4, Packet Error, maps into "No message of desired type" (ENOMSG);
-* Code 5, Option Error, maps into "Illegal byte sequence" (EILSEQ);
-* Code 6, Mandatory Error, maps into "Operation not supported on transport endpoint" (EOPNOTSUPP);
-* Code 8, Bad Service Code, maps into "Invalid request code" (EBADRQC);
-* Code 9, Too Busy, maps into "Too many users" (EUSERS);
-* Code 10, Bad Init Cookie, maps into "Invalid request descriptor" (EBADR);
-* Code 11, Aggression Penalty, maps into "Quota exceeded" (EDQUOT)
-  which makes sense in terms of using more than the `fair share' of bandwidth.
+This
+ 1. organizes the sysctl variables which are scattered over many DCCP source 
+    files into sysctl.c - so that they can easier be found;
+ 2. wraps the compilation of the CONFIG_SYSCTL part into a conditional define 
+    - if not enabled, then only the variables will be `compiled';
+ 3. shortens the definitions of init/exit dummy functions in the header file.
+
+Hence mainly a tidy-up action. Code was found to compile and work
+cleanly with various Kconfig configurations for SYSCTL.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- include/linux/dccp.h |    2 ++
- net/dccp/input.c     |   48 +++++++++++++++++++++++++++++++++++++++---------
- 2 files changed, 41 insertions(+), 9 deletions(-)
+ net/dccp/Makefile  |    5 ++---
+ net/dccp/dccp.h    |   10 ++--------
+ net/dccp/options.c |    7 -------
+ net/dccp/proto.c   |    3 ---
+ net/dccp/sysctl.c  |   20 +++++++++++++++++---
+ net/dccp/timer.c   |    5 -----
+ 6 files changed, 21 insertions(+), 29 deletions(-)
 
-diff --git a/include/linux/dccp.h b/include/linux/dccp.h
-index 55d28cb..333c3ea 100644
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -144,6 +144,8 @@ enum dccp_reset_codes {
- 	DCCP_RESET_CODE_TOO_BUSY,
- 	DCCP_RESET_CODE_BAD_INIT_COOKIE,
- 	DCCP_RESET_CODE_AGGRESSION_PENALTY,
-+
-+	DCCP_MAX_RESET_CODES		/* Leave at the end!  */
- };
+--- a/net/dccp/timer.c
++++ b/net/dccp/timer.c
+@@ -15,11 +15,6 @@
  
- /* DCCP options */
-diff --git a/net/dccp/input.c b/net/dccp/input.c
-index 3560a2a..1ce1010 100644
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -58,6 +58,42 @@ static void dccp_rcv_closereq(struct sock *sk, struct sk_buff *skb)
- 	dccp_send_close(sk, 0);
- }
+ #include "dccp.h"
  
-+static u8 dccp_reset_code_convert(const u8 code)
-+{
-+	const u8 error_code[] = {
-+	[DCCP_RESET_CODE_CLOSED]	     = 0,	/* normal termination */
-+	[DCCP_RESET_CODE_UNSPECIFIED]	     = 0,	/* nothing known */
-+	[DCCP_RESET_CODE_ABORTED]	     = ECONNRESET,
-+
-+	[DCCP_RESET_CODE_NO_CONNECTION]	     = ECONNREFUSED,
-+	[DCCP_RESET_CODE_CONNECTION_REFUSED] = ECONNREFUSED,
-+	[DCCP_RESET_CODE_TOO_BUSY]	     = EUSERS,
-+	[DCCP_RESET_CODE_AGGRESSION_PENALTY] = EDQUOT,
-+
-+	[DCCP_RESET_CODE_PACKET_ERROR]	     = ENOMSG,
-+	[DCCP_RESET_CODE_BAD_INIT_COOKIE]    = EBADR,
-+	[DCCP_RESET_CODE_BAD_SERVICE_CODE]   = EBADRQC,
-+	[DCCP_RESET_CODE_OPTION_ERROR]	     = EILSEQ,
-+	[DCCP_RESET_CODE_MANDATORY_ERROR]    = EOPNOTSUPP,
-+	};
-+
-+	return code >= DCCP_MAX_RESET_CODES ? 0 : error_code[code];
-+}
-+
-+static void dccp_rcv_reset(struct sock *sk, struct sk_buff *skb)
-+{
-+	u8 err = dccp_reset_code_convert(dccp_hdr_reset(skb)->dccph_reset_code);
-+
-+	sk->sk_err = err;
-+
-+	/* Queue the equivalent of TCP fin so that dccp_recvmsg exits the loop */
-+	dccp_fin(sk, skb);
-+
-+	if (err && !sock_flag(sk, SOCK_DEAD))
-+		sk_wake_async(sk, 0, POLL_ERR);
-+	dccp_time_wait(sk, DCCP_TIME_WAIT, 0);
-+}
-+
- static void dccp_event_ack_recv(struct sock *sk, struct sk_buff *skb)
+-/* sysctl variables governing numbers of retransmission attempts */
+-int  sysctl_dccp_request_retries	__read_mostly = TCP_SYN_RETRIES;
+-int  sysctl_dccp_retries1		__read_mostly = TCP_RETR1;
+-int  sysctl_dccp_retries2		__read_mostly = TCP_RETR2;
+-
+ static void dccp_write_err(struct sock *sk)
  {
- 	struct dccp_sock *dp = dccp_sk(sk);
-@@ -191,9 +227,8 @@ static int __dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
- 		 *		S.state := TIMEWAIT
- 		 *		Set TIMEWAIT timer
- 		 *		Drop packet and return
--		*/
--		dccp_fin(sk, skb);
--		dccp_time_wait(sk, DCCP_TIME_WAIT, 0);
-+		 */
-+		dccp_rcv_reset(sk, skb);
- 		return 0;
- 	case DCCP_PKT_CLOSEREQ:
- 		dccp_rcv_closereq(sk, skb);
-@@ -521,12 +556,7 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
- 	 *		Drop packet and return
- 	*/
- 	if (dh->dccph_type = DCCP_PKT_RESET) {
--		/*
--		 * Queue the equivalent of TCP fin so that dccp_recvmsg
--		 * exits the loop
--		 */
--		dccp_fin(sk, skb);
--		dccp_time_wait(sk, DCCP_TIME_WAIT, 0);
-+		dccp_rcv_reset(sk, skb);
- 		return 0;
- 		/*
- 		 *   Step 7: Check for unexpected packet types
--- 
-1.5.3.4
-
+ 	sk->sk_err = sk->sk_err_soft ? : ETIMEDOUT;
+--- a/net/dccp/sysctl.c
++++ b/net/dccp/sysctl.c
+@@ -14,13 +14,26 @@
+ #include "dccp.h"
+ #include "feat.h"
+ 
+-#ifndef CONFIG_SYSCTL
+-#error This file should not be compiled without CONFIG_SYSCTL defined
+-#endif
++/* sysctls related to initialisation of option values */
++int sysctl_dccp_feat_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
++int sysctl_dccp_feat_rx_ccid	     = DCCPF_INITIAL_CCID;
++int sysctl_dccp_feat_tx_ccid	     = DCCPF_INITIAL_CCID;
++int sysctl_dccp_feat_ack_ratio	     = DCCPF_INITIAL_ACK_RATIO;
++int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
++int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
++
++/* the maximum queue length for tx in packets. 0 is no limit */
++int sysctl_dccp_tx_qlen		__read_mostly = 5;
++
++/* sysctl variables governing numbers of retransmission attempts */
++int sysctl_dccp_request_retries	__read_mostly = TCP_SYN_RETRIES;
++int sysctl_dccp_retries1	__read_mostly = TCP_RETR1;
++int sysctl_dccp_retries2	__read_mostly = TCP_RETR2;
+ 
+ /* rate-limit for syncs in reply to sequence-invalid packets; RFC 4340, 7.5.4 */
+ int sysctl_dccp_sync_ratelimit	__read_mostly = HZ / 8;
+ 
++#ifdef CONFIG_SYSCTL
+ static struct ctl_table dccp_default_table[] = {
+ 	{
+ 		.procname	= "seq_window",
+@@ -149,3 +162,4 @@ void dccp_sysctl_exit(void)
+ 		dccp_table_header = NULL;
+ 	}
+ }
++#endif
+--- a/net/dccp/Makefile
++++ b/net/dccp/Makefile
+@@ -1,6 +1,7 @@
+ obj-$(CONFIG_IP_DCCP) += dccp.o dccp_ipv4.o
+ 
+-dccp-y := ccid.o feat.o input.o minisocks.o options.o output.o proto.o timer.o
++dccp-y := ccid.o feat.o input.o minisocks.o options.o output.o proto.o timer.o \
++	  sysctl.o
+ 
+ dccp_ipv4-y := ipv4.o
+ 
+@@ -13,8 +14,6 @@ dccp-$(CONFIG_IP_DCCP_ACKVEC) += ackvec.
+ obj-$(CONFIG_INET_DCCP_DIAG) += dccp_diag.o
+ obj-$(CONFIG_NET_DCCPPROBE) += dccp_probe.o
+ 
+-dccp-$(CONFIG_SYSCTL) += sysctl.o
+-
+ dccp_diag-y := diag.o
+ dccp_probe-y := probe.o
+ 
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -430,14 +430,8 @@ extern int dccp_insert_option(struct soc
+ extern int dccp_sysctl_init(void);
+ extern void dccp_sysctl_exit(void);
+ #else
+-static inline int dccp_sysctl_init(void)
+-{
+-	return 0;
+-}
+-
+-static inline void dccp_sysctl_exit(void)
+-{
+-}
++#define dccp_sysctl_init(void)	(0)
++#define dccp_sysctl_exit(void)
+ #endif
+ 
+ #endif /* _DCCP_H */
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -23,13 +23,6 @@
+ #include "dccp.h"
+ #include "feat.h"
+ 
+-int sysctl_dccp_feat_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
+-int sysctl_dccp_feat_rx_ccid	      = DCCPF_INITIAL_CCID;
+-int sysctl_dccp_feat_tx_ccid	      = DCCPF_INITIAL_CCID;
+-int sysctl_dccp_feat_ack_ratio	      = DCCPF_INITIAL_ACK_RATIO;
+-int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
+-int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
+-
+ static u32 dccp_decode_value_var(const unsigned char *bf, const u8 len)
+ {
+ 	u32 value = 0;
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -52,9 +52,6 @@ struct inet_hashinfo __cacheline_aligned
+ 
+ EXPORT_SYMBOL_GPL(dccp_hashinfo);
+ 
+-/* the maximum queue length for tx in packets. 0 is no limit */
+-int sysctl_dccp_tx_qlen __read_mostly = 5;
+-
+ void dccp_set_state(struct sock *sk, const int state)
+ {
+ 	const int oldstate = sk->sk_state;
