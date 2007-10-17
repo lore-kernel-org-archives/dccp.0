@@ -1,22 +1,27 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 03 Oct 2007 21:06:25 +0000
-Subject: Re: [PATCH 10/14]: Initialisation framework for feature negotiation
-Message-Id: <5640c7e00710031406w38409b52j80c582776f7c337c@mail.gmail.com>
+From: "=?ISO-8859-2?Q?=A3eandro_Sales?=" <leandroal@gmail.com>
+Date: Wed, 17 Oct 2007 18:40:20 +0000
+Subject: Re: CONFLICT using git-pull
+Message-Id: <5bc4c4570710171140n70511e52n67d5943f81aebdf5@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200710031502.49899@strip-the-willow>
-In-Reply-To: <200710031502.49899@strip-the-willow>
+References: <5bc4c4570709181607n49026fa2pdda176bce4ea4d45@mail.gmail.com>
+In-Reply-To: <5bc4c4570709181607n49026fa2pdda176bce4ea4d45@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 10/4/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [DCCP]: Initialisation framework for feature negotiation
->
-> This initialises feature negotiation from two tables, which are initialised
-> from sysctls. Furthermore, specifics of the implementation (e.g. currently
-> short seqnos and ECN are not supported) are advertised for robustness.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+FYI, I started to use git-gui and it seems to be very helpful, but I'm
+still using quilt/gquilt to finish the patches series for ccid3/ccid4
+integration.
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+2007/9/20, Gerrit Renker <gerrit@erg.abdn.ac.uk>:
+> |  You said that will define a specific frequency
+> |  (for instance, every week) that you will do this. Did you already
+> |  define it?
+> The repository is synced normally every working day from Mon .. Fri,
+> based on the davem-2.6 tree - not the one used for the merge windows.
+> -
+> To unsubscribe from this list: send the line "unsubscribe dccp" in
+> the body of a message to majordomo@vger.kernel.org
+> More majordomo info at  http://vger.kernel.org/majordomo-info.html
+>
