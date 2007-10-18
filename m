@@ -1,128 +1,171 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Fri, 05 Oct 2007 17:11:59 +0000
-Subject: Re: [PATCH 7/8]: Handle timestamps on Request/Response exchange
-Message-Id: <20071005171159.GA5776@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 18 Oct 2007 11:30:56 +0000
+Subject: [PATCH v2 1/1]: Collect all scattered sysctl variables into sysctl.c
+Message-Id: <200710181230.56399@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200709251530.48514@strip-the-willow>
-In-Reply-To: <200709251530.48514@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Fri, Oct 05, 2007 at 11:25:24AM +0100, Gerrit Renker escreveu:
-> Arnaldo,
->=20
-> please disregard the earlier suggestion from below regarding ts_recent an=
-d feel free
-> to do with the structure as you see fit.=20
->=20
-> To me it seems that the main problems using a RFC1323-like algorithm are
->  * the ts_recent field is not enough, the algorithm requires other inform=
-ation (e.g. whether
->    an Ack advances the send window) to deal robustly with delays, holes, =
+This is an update with regard to the latest netdev-2.6 tree, the main
+change is that the sysctl_dccp_sync_ratelimit is also moved into sysctl.c
+(the sysctl variables are now from 4 different files, previously 3).
 
->  * it is hard to get right (e.g. omments above tcp_ack_saw_tstamp() in tc=
-p_input.c)
->  * the current solution of timing both send time and Ack arrival is the s=
-implest
->    and has the advantage of being responsive to receiver behaviour (as in=
- CCID3).
->    An additional advantage is that the current code already provides Elap=
-sed Time information
->    on each Ack Vector, so that dccp_sample_rtt() can be used.
->    Maybe CCID2 could benefit by upgrading from jiffies to ktime_t, as thi=
-s enables to
->    better determine whether multiple losses belong to the same RTT (with =
-1ms resolution
->    and Gbps speed this does not work so well).
+Ian please check if you are still okay with the Signed-off.
 
-CCID2 needs a lot of love and care, yes :-\
+--------------------> Patch v2 <-------------------------------------
+[DCCP]: Collect all scattered sysctl variables into sysctl.c
 
-> Please can you let me know whether:
->=20
->  * the outlined "struct dccp_request_sock" below is still the preferred f=
-ormat;
+This
+ 1. organizes the sysctl variables which are scattered over many DCCP source 
+    files into sysctl.c - so that they can easier be found;
+ 2. wraps the compilation of the CONFIG_SYSCTL part into a conditional define 
+    - if not enabled, then only the variables will be `compiled';
+ 3. shortens the definitions of init/exit dummy functions in the header file.
 
+Hence mainly a tidy-up action. Code was found to compile and work
+cleanly with various Kconfig configurations for SYSCTL.
 
-Please use the outlined one. I haven't checked, but if we use a struct
-like in your second option (below) we can end up with struct holes on
-64-bit arches.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ net/dccp/Makefile  |    5 ++---
+ net/dccp/dccp.h    |   10 ++--------
+ net/dccp/input.c   |    3 ---
+ net/dccp/options.c |    7 -------
+ net/dccp/proto.c   |    3 ---
+ net/dccp/sysctl.c  |   23 ++++++++++++++++++++---
+ net/dccp/timer.c   |    5 -----
+ 7 files changed, 24 insertions(+), 32 deletions(-)
 
->  * whether as an alternative the dreq_tstamp_{echo,time} fields can be co=
-mbined, i.e.
->    use a fixed member of type
-> 	struct dccp_ts_echo {
-> 	       	ktime_t         ts_time;
-> 	       	__u32           ts_echo;
-> 	};
->    or similar - but without the mallocing, and with overriding each time =
-a new timestamp arrives;
->  * or whether a different solution is planned.
->=20
-> I'd need to know so that I can rework the patches and resubmit them accor=
-dingly.
->=20
-> =09
-> Quoting Gerrit Renker:
-> |  Quoting Arnaldo Carvalho de Melo:
-> |  |  I suggest it to become:
-> |  | =20
-> |  |  [acme@mica net-2.6.24]$ pahole -C dccp_request_sock net/dccp/miniso=
-cks.o
-> |  | =20
-> |  |  struct dccp_request_sock {
-> |  |  =A0 =A0 =A0 =A0 struct inet_request_sock dreq_inet_rsk; =A0 =A0/* =
-=A00 56 */
-> |  |  =A0 =A0 =A0 =A0 __u64 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0dreq_i=
-ss; =A0 =A0 =A0 =A0 /* 56 =A08 */
-> |  |  =A0 =A0 =A0 =A0 /* --- cacheline 1 boundary (64 bytes) --- */
-> |  |  =A0 =A0 =A0 =A0 __u64 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0dreq_i=
-sr; =A0 =A0 =A0 =A0 /* 64 =A08 */
-> |  |  =A0 =A0 =A0 =A0 __be32 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 dreq_ser=
-vice; =A0 =A0 /* 72 =A04 */
-> |  |  =A0 =A0 =A0 =A0 __u32 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0dreq_t=
-stamp_echo; /* 76 =A04 */
-> |  |  =A0 =A0 =A0 =A0 ktime_t =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0dreq_tst=
-amp_time; /* 80 =A08 */
-> |  | =20
-> |  |  =A0 =A0 =A0 =A0 /* size: 88, cachelines: 2 */
-> |  |  =A0 =A0 =A0 =A0 /* last cacheline: 24 bytes */
-> |  |  };
-> |  | =20
-> |  |  Humm, these minisocks are getting fat... another thing for my TODO =
-list,
-> |  |  request_sock::ts_recent seems to be used only by the TCP machinery,=
- ripe
-> |  |  for the picking....
-> | =20
-> |  I have thought about this: do you think the following solution is bett=
-er -
-> |  the difference between kmallocing and fixed is now between pointer to =
-struct
-> |  and u64 (ktime_t).
-> | =20
-> | =20
-> |  struct dccp_request_sock {
-> |          struct inet_request_sock	dreq_inet_rsk;
-> |  	__u64                    	dreq_iss,
-> |  				 	dreq_isr;=20
-> |  	__be32                   	dreq_service;
-> |  #define dreq_tstamp_echo		dreq_inet_rsk.req.ts_recent=20
-> |  	ktime_t                  	dreq_tstamp_time;
-> |  };
-> | =20
-> | =20
-> |  The only other thing that is required is then to change the insertion =
-routine to
-> | =20
-> |  dccp_insert_option_timestamp_echo(struct sock *sk, struct dccp_request=
-_sock *dreq,
-> |                                    struct sk_buff *skb);
-> |  				  /* when @dreq is NULL, @sk is used */
-> | =20
-> | =20
-> | =20
-> |  On another note I think that the CCID2 code could benefit from using s=
-uch timestamps also, in particular
-> |  for high-speed networks.
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -52,9 +52,6 @@ struct inet_hashinfo __cacheline_aligned
+ 
+ EXPORT_SYMBOL_GPL(dccp_hashinfo);
+ 
+-/* the maximum queue length for tx in packets. 0 is no limit */
+-int sysctl_dccp_tx_qlen __read_mostly = 5;
+-
+ void dccp_set_state(struct sock *sk, const int state)
+ {
+ 	const int oldstate = sk->sk_state;
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -19,9 +19,6 @@
+ #include "ccid.h"
+ #include "dccp.h"
+ 
+-/* rate-limit for syncs in reply to sequence-invalid packets; RFC 4340, 7.5.4 */
+-int sysctl_dccp_sync_ratelimit	__read_mostly = HZ / 8;
+-
+ static void dccp_fin(struct sock *sk, struct sk_buff *skb)
+ {
+ 	sk->sk_shutdown |= RCV_SHUTDOWN;
+--- a/net/dccp/timer.c
++++ b/net/dccp/timer.c
+@@ -15,11 +15,6 @@
+ 
+ #include "dccp.h"
+ 
+-/* sysctl variables governing numbers of retransmission attempts */
+-int  sysctl_dccp_request_retries	__read_mostly = TCP_SYN_RETRIES;
+-int  sysctl_dccp_retries1		__read_mostly = TCP_RETR1;
+-int  sysctl_dccp_retries2		__read_mostly = TCP_RETR2;
+-
+ static void dccp_write_err(struct sock *sk)
+ {
+ 	sk->sk_err = sk->sk_err_soft ? : ETIMEDOUT;
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -23,13 +23,6 @@
+ #include "dccp.h"
+ #include "feat.h"
+ 
+-int sysctl_dccp_feat_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
+-int sysctl_dccp_feat_rx_ccid	      = DCCPF_INITIAL_CCID;
+-int sysctl_dccp_feat_tx_ccid	      = DCCPF_INITIAL_CCID;
+-int sysctl_dccp_feat_ack_ratio	      = DCCPF_INITIAL_ACK_RATIO;
+-int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
+-int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
+-
+ static u32 dccp_decode_value_var(const unsigned char *bf, const u8 len)
+ {
+ 	u32 value = 0;
+--- a/net/dccp/sysctl.c
++++ b/net/dccp/sysctl.c
+@@ -14,10 +14,26 @@
+ #include "dccp.h"
+ #include "feat.h"
+ 
+-#ifndef CONFIG_SYSCTL
+-#error This file should not be compiled without CONFIG_SYSCTL defined
+-#endif
++/* sysctls related to initialisation of option values */
++int sysctl_dccp_feat_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
++int sysctl_dccp_feat_rx_ccid	     = DCCPF_INITIAL_CCID;
++int sysctl_dccp_feat_tx_ccid	     = DCCPF_INITIAL_CCID;
++int sysctl_dccp_feat_ack_ratio	     = DCCPF_INITIAL_ACK_RATIO;
++int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
++int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
++
++/* the maximum queue length for tx in packets. 0 is no limit */
++int sysctl_dccp_tx_qlen		__read_mostly = 5;
++
++/* sysctl variables governing numbers of retransmission attempts */
++int sysctl_dccp_request_retries	__read_mostly = TCP_SYN_RETRIES;
++int sysctl_dccp_retries1	__read_mostly = TCP_RETR1;
++int sysctl_dccp_retries2	__read_mostly = TCP_RETR2;
++
++/* rate-limit for syncs in reply to sequence-invalid packets; RFC 4340, 7.5.4 */
++int sysctl_dccp_sync_ratelimit	__read_mostly = HZ / 8;
+ 
++#ifdef CONFIG_SYSCTL
+ static struct ctl_table dccp_default_table[] = {
+ 	{
+ 		.procname	= "seq_window",
+@@ -146,3 +162,4 @@ void dccp_sysctl_exit(void)
+ 		dccp_table_header = NULL;
+ 	}
+ }
++#endif
+--- a/net/dccp/Makefile
++++ b/net/dccp/Makefile
+@@ -1,6 +1,7 @@
+ obj-$(CONFIG_IP_DCCP) += dccp.o dccp_ipv4.o
+ 
+-dccp-y := ccid.o feat.o input.o minisocks.o options.o output.o proto.o timer.o
++dccp-y := ccid.o feat.o input.o minisocks.o options.o output.o proto.o timer.o \
++	  sysctl.o
+ 
+ dccp_ipv4-y := ipv4.o
+ 
+@@ -13,8 +14,6 @@ dccp-$(CONFIG_IP_DCCP_ACKVEC) += ackvec.
+ obj-$(CONFIG_INET_DCCP_DIAG) += dccp_diag.o
+ obj-$(CONFIG_NET_DCCPPROBE) += dccp_probe.o
+ 
+-dccp-$(CONFIG_SYSCTL) += sysctl.o
+-
+ dccp_diag-y := diag.o
+ dccp_probe-y := probe.o
+ 
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -430,14 +430,8 @@ extern int dccp_insert_option(struct soc
+ extern int dccp_sysctl_init(void);
+ extern void dccp_sysctl_exit(void);
+ #else
+-static inline int dccp_sysctl_init(void)
+-{
+-	return 0;
+-}
+-
+-static inline void dccp_sysctl_exit(void)
+-{
+-}
++#define dccp_sysctl_init(void)	(0)
++#define dccp_sysctl_exit(void)
+ #endif
+ 
+ #endif /* _DCCP_H */
