@@ -1,35 +1,36 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 03 Oct 2007 22:18:56 +0000
-Subject: Re: [PATCH 13/14]: Initialisation and type-checking of feature sysctls
-Message-Id: <5640c7e00710031518m795f056br1034eca4242909e@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 20 Oct 2007 15:54:35 +0000
+Subject: [RFC]: field name identifier conventions
+Message-Id: <200710201654.35326@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200710031502.56454@strip-the-willow>
-In-Reply-To: <200710031502.56454@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 10/4/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [DCCP]: Initialisation and type-checking of feature sysctls
->
-> The number of feature sysctls is now smaller (it is instead now possible
-> to set values on a per-connection basis via sockops); this patch takes care
-> of their initialisation and some rudimentary type-checking:
->
->  * Sequence Window uses the specified Wmin2, the maximum is ulong (4 bytes), I have
->    tested and confirmed that it works up to 4294967295 - let's use it for Gbps;
->  * Ack Ratio is between 0 .. 0xFFFF (2-byte unsigned integer);
->  * CCIDs are between 0 .. 255 (FIXME: write handler for available ones);
->  * request_retries, retries1, retries2 also between 0..255 for good measure;
->  * tx_qlen is checked to be non-negative;
->  * sync_ratelimit remains as before.
->
-> The sysctls are initialised with the known default values for each feature
-> at boot or module load time; for the type-checking the value constraints from
-> RFC 4340 have been used. Type checking is important since some of the sysctls
-> now directly act on the feature-negotiation process.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+I have a question/suggestion for DCCP/CCID field names, which have a tendency to grow
+into really_quite_long_strings. The convention for field members seems to be
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+
+	"x"->"x"_<fieldname>
+
+Examples are in particular
+
+   * hctx->ccid2hctx_<fieldname>
+   * hcrx->ccid3hcrx_<fieldname>
+   * avr->dccpavr_<fieldname>
+   * av->dccpav_<fieldname>
+
+The problem is that this naming convention has no apparent benefits: 
+  
+  * which struct is used is evident from the context and need not be encoded
+  * someone reading the code is only interested in the fieldnames
+  * with the line length limit of 80 characters this convention almost inevitably leads to
+    multi-line expression for even the simplest kinds of comparisons and expressions.
+
+Hence my suggestion is to reduce the replicated "x" field prefix, so that field members become
+shorter, as will be expressions, and the code would be easier to read.
+
+What is the opinion of other developers / maintainer regarding this? 
+
+
