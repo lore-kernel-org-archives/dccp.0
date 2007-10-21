@@ -1,45 +1,66 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 01 Oct 2007 10:54:27 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sun, 21 Oct 2007 01:35:57 +0000
 Subject: Re: [PATCH 3/10]: Dedicated auxiliary states to support passive-close
-Message-Id: <200710011154.27825@strip-the-willow>
+Message-Id: <5640c7e00710201835u74f51a3ama00ee94218766a92@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200707121523.40095@strip-the-willow>
 In-Reply-To: <200707121523.40095@strip-the-willow>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting Arnaldo Carvalho de Melo:
-|  > [DCCP]: Dedicated auxiliary states to support passive-close
-|  >=20
-|  > This adds two auxiliary states to deal with passive closes:
-|  > =A0 * PASSIVE_1 (reached from OPEN via reception of Close) and
-|  > =A0 * PASSIVE_2 (reached from OPEN via reception of CloseReq)
-| =20
-| =20
-|  Perhaps we should rename PASSIVE_1 (magic number) to PASSIVE_CLOSEREQ
-|  and PASSIVE_2 to PASSIVE_CLOSE, and also CLOSEREQ to ACTIVE_CLOSEREQ?
-No problems with the first two. With the third I was initially thinking
-`this name is from the RFC', but the RFC didn't help much here and your
-scheme makes the state much clearer - so, yes, I agree fully with that.
-=20
-|  I'll defer these patches till we get some more discussion. There are
-|  many more unrelated patches to work on after all :)
-What kind of discussion were you thinking of: in a previous thread Ian and I
-reached some agreement already that there is a problem here.
+On 7/13/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [DCCP]: Dedicated auxiliary states to support passive-close
+>
+> This adds two auxiliary states to deal with passive closes:
+>   * PASSIVE_1 (reached from OPEN via reception of Close) and
+>   * PASSIVE_2 (reached from OPEN via reception of CloseReq)
+> to the internal state machine.
+>
+> The PASSIVE_1 and PASSIVE_2 states represent the two ways a passive-close
+> can happen in DCCP.  The addition of these states is not merely to
+> increase clarity. These states are required by the implementation to
+> allow a receiver to process unread data before acknowledging the received
+> connection-termination-request (i.e. the Close/CloseReq).
+>
+> Fix:
+> ----
+>  This patch uses the PASSIVE_1 and PASSIVE_2 states to explicitly refer to
+>  passive-closing states and to protect against external wipeout of internal
+>  receive queues. The macroscopic behaviour is compatible with RFC 4340, but
+>  without the auxiliary states, buggy, absurd and abnormal behaviour of the
+>  socket API will continue. Which is to say, without auxiliary states it does
+>  not work.
+>
+>  As a consequence, the count of DCCP_STATE_MASK has been increased, to account
+>  for the number of new states.
+>
+>
+> Implementation Note:
+> --------------------
+>  To keep compatibility with sk_stream_wait_connect():
+>  * DCCP_CLOSING continues to map into TCP_CLOSING (since this state can be
+>    either passive- or active-close)
+>  * DCCP_CLOSEREQ maps into TCP_FIN_WAIT1 (since it is always active-close)
+>
+>  It is tempting to keep the clever merge of the CLOSEREQ and CLOSING states.
+>  However, with the number of possible state transitions, this would require:
+>
+>  * quite a number of `if' statements to distinguish all predecessors of
+>    the CLOSING state (server/client, active/passive, server timewait yes/no);
+>
+>  * two different branches from the CLOSING state:
+>    - to TIMEWAIT if it is not an active server-close without keeping timewait state
+>    - to CLOSED otherwise (and requiring to receive a Close instead of a Reset).
+>
+>  In light of this, I think it is cleaner to implement separate CLOSEREQ and CLOSING
+>  states (this is done by the subsequent patches).
+>
+> Further documentation is on http://www.erg.abdn.ac.uk/users/gerrit/dccp/docs/closing_states/
+>
+>
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-The problem really is in taking the RFC 4340 state machine at face value: i=
-f this
-is done literally, short-lived connections will wipe the receive queue befo=
-re the
-userland application had a chance to read data; as documented on
-	http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/closing_states/
-If you don't believe this, it can readily be tested by writing a small test=
- app which=20
-sends something like `hello world' to the server.
-All data is seen on the wire, but never by the application.
-
-A test app can be found in the directory misc/hello_world of
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/dccp_applications_lib.tar.=
-gz
+This was signed off by me on Sep 6th but seems to have got lost so:
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
