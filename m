@@ -1,7 +1,7 @@
 From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sun, 21 Oct 2007 01:30:51 +0000
-Subject: Re: [PATCH 7/8]: Remove unused inline function
-Message-Id: <5640c7e00710201830r59a91701i8945e5d455092f3@mail.gmail.com>
+Date: Sun, 21 Oct 2007 01:32:49 +0000
+Subject: Re: [PATCH 8/8]: Initialisation assignments of 0 are redundant
+Message-Id: <5640c7e00710201832v3a26ff54xb2137d867c1b6824@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -9,15 +9,31 @@ Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
 On 7/9/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [DCCP]: Remove unused inline function
+> [CCID3]: Initialisation assignments of 0 are redundant
 >
-> The function follows48(), which is a special-case of dccp_delta_seqno(),
-> is nowhere used in the DCCP code, thus removed by this patch.
+> Assigning initial values of `0' is redundant when loading a new CCID structure,
+> since in net/dccp/ccid.c the entire CCID structure is zeroed out prior to
+> initialisation in ccid_new():
+>
+>         struct ccid {
+>                 struct ccid_operations *ccid_ops;
+>                 char                   ccid_priv[0];
+>         };
+>
+>         // ...
+>         if (rx) {
+>                 memset(ccid + 1, 0, ccid_ops->ccid_hc_rx_obj_size);
+>                 if (ccid->ccid_ops->ccid_hc_rx_init != NULL &&
+>                     ccid->ccid_ops->ccid_hc_rx_init(ccid, sk) != 0)
+>                         goto out_free_ccid;
+>         } else {
+>                 memset(ccid + 1, 0, ccid_ops->ccid_hc_tx_obj_size);
+>                 /* analogous to the rx case */
+>         }
+>
+> This patch therefore removes the redundant assignments. Thanks to Arnaldo for
+> the inspiration.
 >
 > Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
