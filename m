@@ -1,25 +1,29 @@
 From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 03 Oct 2007 18:10:47 +0000
-Subject: Re: [PATCH v3 4/9]: Resolve dependencies of features on choice of CCID
-Message-Id: <5640c7e00710031110g2db19c39jab3dc3774f56f907@mail.gmail.com>
+Date: Sun, 21 Oct 2007 01:29:20 +0000
+Subject: Re: [PATCH 2/6]: Provide fallback RTT value when none is available
+Message-Id: <5640c7e00710201829m1503d3a9la2c5936726651b6b@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200710030945.53328@strip-the-willow>
-In-Reply-To: <200710030945.53328@strip-the-willow>
+References: <200706091958.08037@strip-the-willow>
+In-Reply-To: <200706091958.08037@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 10/3/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Reworked patch, updated as requested:
->  * removed `typedef const'
->  * made all initialisation explicit, using field initialisers
->    This increases the space somewhat, but indeed much better readability.
->  * Ian I have added your Acked-by as requested, but please have another look and let me know
->    whether you are ok with this revision
+On 6/10/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [DCCP]: Provide fallback RTT value when none is available
 >
-I'm OK with this revision.
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+> This implements RFC 4340, section 3.4:
+>
+>  "Each DCCP implementation thus defines a default round-trip time
+>   for use when no estimate is  available.  This parameter should
+>   default to not less than 0.2 seconds [...]."
+>
+> In addition, the upper bound of 4 seconds for an RTT sample has now been reduced,
+> to 3 seconds: to match the initial TCP RTO value as specified in [RFC 1122, 4.2.3.1].
+>
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+
+I signed off on this on June 16th but this seems to have got lost so:
+
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
