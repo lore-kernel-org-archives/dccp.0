@@ -1,26 +1,68 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 02 Oct 2007 00:36:25 +0000
-Subject: Re: [PATCH 10/11]: Process incoming Change requests
-Message-Id: <5640c7e00710011736pe177dcdq1840b30f3476134d@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Tue, 23 Oct 2007 22:51:37 +0000
+Subject: [PATCH][DCCP 1/1] Implement SIOCINQ/FIONREAD
+Message-Id: <20071023225137.GA6371@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
-References: <200710011518.33998@strip-the-willow>
-In-Reply-To: <200710011518.33998@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 10/2/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [DCCP]: Process incoming Change requests
->
-> This adds/replaces code for processing incoming Change feature-negotiation options.
->
-> The main difference is that mandatory FN options are now interpreted inside the function
-> (there are too many individual cases to do this externally); the function returns an
-> appropriate Reset code or 0, which is then used by dccp_parse_options.
->
-> Old code, which is no longer used or referenced, has been removed.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Just like UDP.
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Signed-off-by: Leandro Melo de Sales <leandroal@gmail.com>
+
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index cc9bf1c..723c29e 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -26,6 +26,7 @@
+ #include <net/sock.h>
+ #include <net/xfrm.h>
+ 
++#include <asm/ioctls.h>
+ #include <asm/semaphore.h>
+ #include <linux/spinlock.h>
+ #include <linux/timer.h>
+@@ -377,9 +378,37 @@ unsigned int dccp_poll(struct file *file, struct socket *sock,
+ EXPORT_SYMBOL_GPL(dccp_poll);
+ 
+ int dccp_ioctl(struct sock *sk, int cmd, unsigned long arg)
+-{
+-	dccp_pr_debug("entry\n");
+-	return -ENOIOCTLCMD;
++{	
++	int rc = -ENOTCONN;
++
++	lock_sock(sk);
++
++	if (sk->sk_state = DCCP_LISTEN)
++		goto out;
++
++	switch (cmd) {
++	case SIOCINQ: {
++		struct sk_buff *skb;
++		unsigned long amount = 0;
++
++		skb = skb_peek(&sk->sk_receive_queue);
++		if (skb != NULL) {
++			/*
++			 * We will only return the amount of this packet since
++			 * that is all that will be read.
++			 */
++			amount = skb->len;
++		}
++		rc = put_user(amount, (int __user *)arg);
++	}
++		break;
++	default:
++		rc = -ENOIOCTLCMD;
++		break;
++	}
++out:
++	release_sock(sk);
++	return rc;
+ }
+ 
+ EXPORT_SYMBOL_GPL(dccp_ioctl);
