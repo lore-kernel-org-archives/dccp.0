@@ -1,30 +1,35 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 27 Oct 2007 22:17:26 +0000
-Subject: Re: [PATCH 2/6]: Bug in reading Ack Vectors
-Message-Id: <5640c7e00710271517yd6969c0k5f30db1eef70dfb6@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
+Date: Wed, 24 Oct 2007 13:10:25 +0000
+Subject: [PATCHES 0/5]: DCCP bug fixes
+Message-Id: <20071024131025.GC6371@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
-References: <200710271234.21096@strip-the-willow>
-In-Reply-To: <200710271234.21096@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 10/28/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> [CCID2]: Bug in reading Ack Vectors
->
-> In CCID2 the receiver-history is sorted in ascending order of sequence number,
-> but the processing of received Ack Vectors requires the list traversal in the
-> opposite direction.
->
-> The current code has a bug in this regard: the list traversal is upwards. As a
-> consequence, only Ack Vectors with a run length of 1 will pass, in all other
-> Ack Vectors the remaining (acked) sequence numbers are missed, and may later
-> falsely be identified as lost.
->
-> Note: This bug is only visible when Ack Ratio > 1, since otherwise the run
->       lengths of Ack Vectors are 0.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Hi David,
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+	Please consider pulling from:
+
+master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6
+
+Gerrit Renker (5):
+      [DCCP]: Retrieve packet sequence number for error reporting
+      [DCCP]: One more exemption from full sequence number checks
+      [DCCP]: Convert Reset code into socket error number
+      [DCCP]: Unaligned pointer access
+      [CCID2/3]: Initialisation assignments of 0 are redundant
+
+ include/linux/dccp.h   |   12 ++++++------
+ net/dccp/ccids/ccid2.c |    4 ----
+ net/dccp/ccids/ccid3.c |   15 +++++++--------
+ net/dccp/input.c       |   48 +++++++++++++++++++++++++++++++++++++++---------
+ net/dccp/ipv4.c        |    6 +++---
+ net/dccp/ipv6.c        |    4 ++--
+ net/dccp/options.c     |   33 ++++++++++++++++++++++-----------
+ 7 files changed, 79 insertions(+), 43 deletions(-)
+
+Best Regards,
+
+- Arnaldo
