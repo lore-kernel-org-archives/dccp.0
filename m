@@ -1,119 +1,31 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 02 Oct 2007 12:17:20 +0000
-Subject: [PATCH v2 8/9]: Set per-connection CCIDs via socket options
-Message-Id: <200710021317.20705@strip-the-willow>
+Date: Wed, 24 Oct 2007 12:28:20 +0000
+Subject: [PATCH 0/1][RFC]: field name identifier conventions
+Message-Id: <200710241328.20335@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Revised patch - removed unnecessary BUILD_BUG_ON and checked documentation again.
-
-----------------------------> Patch v2 <-----------------------------------------
-[DCCP]: Set per-connection CCIDs via socket options
-
-With this patch, TX/RX CCIDs can now be changed on a per-connection basis, which
-overrides the defaults set by the global sysctl variables for TX/RX CCIDs.
-
-To make full use of this facility, the remaining patches of this patch set are
-needed, which track dependencies and activate negotiated feature values.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
----
- Documentation/networking/dccp.txt |   14 ++++++++++++++
- include/linux/dccp.h              |    5 +++++
- net/dccp/proto.c                  |   32 ++++++++++++++++++++++++++++++++
- 3 files changed, 51 insertions(+)
-
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -61,6 +61,20 @@ DCCP_SOCKOPT_AVAILABLE_CCIDS is also rea
- supported by the endpoint (see include/linux/dccp.h for symbolic constants).
- The caller needs to provide a sufficiently large (> 2) array of type uint8_t.
+Following the earlier discussion I have created two patches which shorten
+the identifiers in some of the structs:
  
-+DCCP_SOCKOPT_CCID is write-only and sets both the TX and RX CCIDs at the same
-+time, combining the operation of the next two socket options. This option is
-+preferrable over the latter two, since often applications will use the same
-+type of CCID for both directions; and mixed use of CCIDs is not currently well
-+understood. This socket option takes as argument at least one uint8_t value, or
-+an array of uint8_t values, which must match available CCIDS (see above). CCIDs
-+must be registered on the socket before calling connect() or listen().
-+
-+DCCP_SOCKOPT_TX_CCID is read/write. It returns the current CCID (if set) or sets
-+the preference list for the TX CCID, using the same format as DCCP_SOCKOPT_CCID.
-+Please note that the getsockopt argument type here is `int', not uint8_t.
-+
-+DCCP_SOCKOPT_RX_CCID is analogous to DCCP_SOCKOPT_TX_CCID, but for the RX CCID.
-+
- DCCP_SOCKOPT_SERVER_TIMEWAIT enables the server (listening socket) to hold
- timewait state when closing the connection (RFC 4340, 8.3). The usual case is
- that the closing server sends a CloseReq, whereupon the client holds timewait
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -215,11 +215,16 @@ struct dccp_so_feat {
- #define DCCP_SOCKOPT_SEND_CSCOV		10
- #define DCCP_SOCKOPT_RECV_CSCOV		11
- #define DCCP_SOCKOPT_AVAILABLE_CCIDS	12
-+#define DCCP_SOCKOPT_CCID		13
-+#define DCCP_SOCKOPT_TX_CCID		14
-+#define DCCP_SOCKOPT_RX_CCID		15
- #define DCCP_SOCKOPT_CCID_RX_INFO	128
- #define DCCP_SOCKOPT_CCID_TX_INFO	192
- 
- /* maximum number of services provided on the same listening port */
- #define DCCP_SERVICE_LIST_MAX_LEN      32
-+/* maximum number of CCID preferences that can be registered at one time */
-+#define DCCP_CCID_LIST_MAX_LEN	       16
- 
- #ifdef __KERNEL__
- 
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -445,6 +445,34 @@ static int dccp_setsockopt_service(struc
- 	return 0;
- }
- 
-+static int dccp_setsockopt_ccid(struct sock *sk, int type,
-+				char __user *optval, int optlen)
-+{
-+	u8 *val;
-+	int rc = 0;
-+
-+	if (optlen < 1 || optlen > DCCP_CCID_LIST_MAX_LEN)
-+		return -EINVAL;
-+
-+	val = kmalloc(optlen, GFP_KERNEL);
-+	if (val = NULL)
-+		return -ENOMEM;
-+
-+	if (copy_from_user(val, optval, optlen))
-+		rc = -EFAULT;
-+
-+	lock_sock(sk);
-+	if (!rc && (type = DCCP_SOCKOPT_TX_CCID || type = DCCP_SOCKOPT_CCID))
-+		rc = dccp_feat_register_change(sk, DCCPF_CCID, 1, val, optlen);
-+
-+	if (!rc && (type = DCCP_SOCKOPT_RX_CCID || type = DCCP_SOCKOPT_CCID))
-+		rc = dccp_feat_register_change(sk, DCCPF_CCID, 0, val, optlen);
-+	release_sock(sk);
-+
-+	kfree(val);
-+	return rc;
-+}
-+
- static int dccp_setsockopt_change(struct sock *sk, char __user *optval,
- 				  int optlen, bool is_local)
- {
-@@ -521,6 +549,10 @@ static int do_dccp_setsockopt(struct soc
- 		return dccp_setsockopt_change(sk, optval, optlen, true);
- 	case DCCP_SOCKOPT_CHANGE_R:
- 		return dccp_setsockopt_change(sk, optval, optlen, false);
-+	case DCCP_SOCKOPT_CCID:
-+	case DCCP_SOCKOPT_RX_CCID:
-+	case DCCP_SOCKOPT_TX_CCID:
-+		return dccp_setsockopt_ccid(sk, optname, optval, optlen);
- 	default:
- 		if (optlen < sizeof(int))
- 			return -EINVAL;
+  1) A patch for the CCIDs, where I used the scheme suggested by Arnaldo
+     (i.e. "c<N>{tx,rx}", e.g. hcrx->c2tx_ssthresh). This resulted in a 
+     rather large patch (66k) and was rather disappointing - there was not
+     much of the expected reduction in multiline expressions. For these
+     reasons I think it is better to stick with the old scheme.
+     But if people are still interested in this and may have different opinion,
+     have a look at how the conversion looks at:
+
+     http://www.erg.abdn.ac.uk/users/gerrit/dccp/rfc_patch_new_ccid_field_ids.diff
+
+
+  2) A patch for ackvec.{c,h}. This follows next and simply replaces the `dccp' in
+     the struct dccp_ackvec{,_record} fields. I like this patch because it makes
+     the code easier to read.
+
+     Arnaldo can you please indicate whether you find this patch acceptable - I am
+     working on Ack Vectors (adding a tail pointer and fixing acknowledging old 
+     Ack Vectors): if you are not ok with the patch, then I use the old scheme.
