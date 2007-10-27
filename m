@@ -1,40 +1,30 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 27 Oct 2007 11:34:21 +0000
-Subject: [PATCH 2/6]: Bug in reading Ack Vectors
-Message-Id: <200710271234.21096@strip-the-willow>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sat, 27 Oct 2007 22:17:26 +0000
+Subject: Re: [PATCH 2/6]: Bug in reading Ack Vectors
+Message-Id: <5640c7e00710271517yd6969c0k5f30db1eef70dfb6@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <200710271234.21096@strip-the-willow>
+In-Reply-To: <200710271234.21096@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[CCID2]: Bug in reading Ack Vectors
+On 10/28/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> [CCID2]: Bug in reading Ack Vectors
+>
+> In CCID2 the receiver-history is sorted in ascending order of sequence number,
+> but the processing of received Ack Vectors requires the list traversal in the
+> opposite direction.
+>
+> The current code has a bug in this regard: the list traversal is upwards. As a
+> consequence, only Ack Vectors with a run length of 1 will pass, in all other
+> Ack Vectors the remaining (acked) sequence numbers are missed, and may later
+> falsely be identified as lost.
+>
+> Note: This bug is only visible when Ack Ratio > 1, since otherwise the run
+>       lengths of Ack Vectors are 0.
+>
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-In CCID2 the receiver-history is sorted in ascending order of sequence number,
-but the processing of received Ack Vectors requires the list traversal in the
-opposite direction.
-
-The current code has a bug in this regard: the list traversal is upwards. As a
-consequence, only Ack Vectors with a run length of 1 will pass, in all other
-Ack Vectors the remaining (acked) sequence numbers are missed, and may later
-falsely be identified as lost.
-
-Note: This bug is only visible when Ack Ratio > 1, since otherwise the run
-      lengths of Ack Vectors are 0.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/ccid2.c |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
-
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -666,7 +666,7 @@ static void ccid2_hc_tx_packet_recv(stru
- 					done = 1;
- 					break;
- 				}
--				seqp = seqp->ccid2s_next;
-+				seqp = seqp->ccid2s_prev;
- 			}
- 			if (done)
- 				break;
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
