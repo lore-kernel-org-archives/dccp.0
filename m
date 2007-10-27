@@ -1,31 +1,36 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 24 Oct 2007 12:28:20 +0000
-Subject: [PATCH 0/1][RFC]: field name identifier conventions
-Message-Id: <200710241328.20335@strip-the-willow>
+Date: Sat, 27 Oct 2007 11:34:17 +0000
+Subject: [PATCH 0/6]: Bug fixes part 1
+Message-Id: <200710271234.17427@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Following the earlier discussion I have created two patches which shorten
-the identifiers in some of the structs:
- 
-  1) A patch for the CCIDs, where I used the scheme suggested by Arnaldo
-     (i.e. "c<N>{tx,rx}", e.g. hcrx->c2tx_ssthresh). This resulted in a 
-     rather large patch (66k) and was rather disappointing - there was not
-     much of the expected reduction in multiline expressions. For these
-     reasons I think it is better to stick with the old scheme.
-     But if people are still interested in this and may have different opinion,
-     have a look at how the conversion looks at:
-
-     http://www.erg.abdn.ac.uk/users/gerrit/dccp/rfc_patch_new_ccid_field_ids.diff
+A small batch of bug fixes, all for CCID2 apart from the first one.
+I have another small batch of CCID2 fixes and cleanups, which will
+be sent next week. All fixes are related to the problem that CCID2
+can not currently deal well with Ack Ratios different from 1. To 
+fully tackle this, Ack Vectors need a slight upgrade (see below).
 
 
-  2) A patch for ackvec.{c,h}. This follows next and simply replaces the `dccp' in
-     the struct dccp_ackvec{,_record} fields. I like this patch because it makes
-     the code easier to read.
+Patch #1: Fixes a Feature-Negotiation problem where an Ack was parsed twice.
+          I submit this for the record, but would like to merge this patch
+          (one-liner) with the one it is supposed to improve: this is the 
+          test-tree patch:
+          "[DCCP]: Integration of dynamic feature activation - part 3 (client side)"
 
-     Arnaldo can you please indicate whether you find this patch acceptable - I am
-     working on Ack Vectors (adding a tail pointer and fixing acknowledging old 
-     Ack Vectors): if you are not ok with the patch, then I use the old scheme.
+Patch #2: Fixes a CCID2 bug in parsing Ack Vectors (triggers congestion event).
+
+Patch #3: Fixes sequence number arithmetic in CCID2.
+
+Patch #4: Avoids using negative values for Ack Ratio in assignment.
+
+Patch #5: Tackles the problem of deadlock when cwnd < Ack Ratio.
+
+Patch #6: Larger Initial Windows (RFC 3390) now also for CCID2.
+
+
+Ack Vector update: The design and initial testing is largely finished, documentation
+                   is on http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ack_vectors/
