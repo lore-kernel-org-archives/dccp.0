@@ -1,50 +1,45 @@
-From: Arnaldo Carvalho de Melo <acme@ghostprotocols.net>
-Date: Wed, 21 Nov 2007 14:18:52 +0000
-Subject: Re: Test tree patch inventory - update: 3rd batch
-Message-Id: <20071121141852.GE24995@ghostprotocols.net>
+From: Leandro <leandroal@gmail.com>
+Date: Thu, 01 Nov 2007 00:30:12 +0000
+Subject: [PATCH 5/25] Enforces a minimum interval of 10 milliseconds as per CCID-4 draft
+Message-Id: <200710312130.12981.leandroal@gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20071121124214.GC24995@ghostprotocols.net>
-In-Reply-To: <20071121124214.GC24995@ghostprotocols.net>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Wed, Nov 21, 2007 at 02:07:43PM +0000, Gerrit Renker escreveu:
-> | > 7. Miscellaneous DCCP updates
-> | > -----------------------------
-> <snip>
-> | > 	[DCCP]: Promote CCID2 as default CCID
-> | 
-> | Applied to simplify things for now, but I still think that for some
-> | setups it may be interesting to allow CCID2 not to be built. 
-> | 
-> Yes, there is room to revise this for something better later on. I think
-> this is much similar to the "use Reno or Cubic as default" in TCP, and 
-> maybe one could use a similar Kconfig menu as it is currently done for
-> the TCP modules.
->   
-> | > 
-> | > 8. The Feature-Negotiation patch set
-> | > ------------------------------------
-> | > The set splits into several smaller (self-contained) blocks, all documented in this section.
-> | > The first block is distinct from feature negotiation, it only concerns request sockets:
-> | > 
-> | > 	[DCCP]: Allow to parse options on Request Sockets
-> | 
-> | This one can be folded with the next, I guess, since its only use of
-> | the newly introduce dreq on dccp_parse_options is to test against NULL,
-> | but that could be achieved by checking the packet type.
-> | 
-> | > 	[DCCP]: Add (missing) option parsing to request_sock processing
-> Yes this is a tiny one. The first patch introduces the general code, the
-> second is separate just because it adds the newly updated
-> dccp_parse_options() to dccp_check_req(). 
+[CCID-4] Enforces a minimum interval of 10 milliseconds as per CCID-4 draft
 
-OK, will do, just trying to be more informative about how I think its
-correct so that in the future we do further fine tuning on how to
-present patches.
+Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+Signed-off-by: Tommi Saviranta <wnd@iki.fi>
 
-You're doing well and has showed great patience, keep it up!
-
-- Arnaldo
+Index: leandro.new/net/dccp/ccids/ccid4.c
+=================================--- leandro.new.orig/net/dccp/ccids/ccid4.c
++++ leandro.new/net/dccp/ccids/ccid4.c
+@@ -111,9 +111,11 @@ static inline u64 rfc3390_initial_rate(s
+  */
+ static inline void ccid4_update_send_interval(struct ccid4_hc_tx_sock *hctx)
+ {
+-	/* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second) */
+-	hctx->ccid4hctx_t_ipi = scaled_div32(((u64)hctx->ccid4hctx_s) << 6,
+-					     hctx->ccid4hctx_x);
++        /* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second).
++         * TFRC-SP enforces a minimum interval of 10 milliseconds. */
++        hctx->ccid4hctx_t_ipi +              max_t(u32, scaled_div32(((u64)hctx->ccid4hctx_s) << 6,
++                                      hctx->ccid4hctx_x), MIN_SEND_RATE);
+ 
+ 	/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
+ 	hctx->ccid4hctx_delta = min_t(u32, hctx->ccid4hctx_t_ipi / 2,
+Index: leandro.new/net/dccp/ccids/ccid4.h
+=================================--- leandro.new.orig/net/dccp/ccids/ccid4.h
++++ leandro.new/net/dccp/ccids/ccid4.h
+@@ -68,6 +68,9 @@
+ /* The nominal packet size to be used into TFRC equation as per CCID-4 draft*/
+ #define NOM_PACKET_SIZE            1460
+ 
++/* Mininum sending rate as per CCID-4 draft */
++#define MIN_SEND_RATE              10000
++
+ enum ccid4_options {
+ 	TFRC_OPT_LOSS_EVENT_RATE = 192,
+ 	TFRC_OPT_LOSS_INTERVALS	 = 193,
