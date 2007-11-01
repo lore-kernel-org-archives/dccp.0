@@ -1,25 +1,51 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Wed, 07 Nov 2007 18:09:32 +0000
-Subject: Re: [PATCH 6/9] [CCID2]: Redundant debugging output
-Message-Id: <5640c7e00711071009w6d04f883sdaebdf5b675a50eb@mail.gmail.com>
+From: "=?ISO-8859-2?Q?=A3eandro_Sales?=" <leandroal@gmail.com>
+Date: Thu, 01 Nov 2007 14:26:10 +0000
+Subject: DCCP and GStreamer: File descriptor sharing
+Message-Id: <5bc4c4570711010726h5580c72dt59748c57be50b064@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200711031323.52814@strip-the-willow>
-In-Reply-To: <200711031323.52814@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/4/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> This reduces the amount of redundant debugging messages:
->
->  * pipe/cwnd are printed in both tx_send_packet() and tx_packet_sent().
->    Both functions are called immediately after one another, so one occurrence is sufficient.
->
->  * Since tx_packet_sent() prints pipe/cwnd already, the second printk for pipe is redundant.
->
->  * In tx_packet_sent() the check_sanity function is called twice (at the begin and at the end).
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Hi all,
+   I want to share a same socket-fd between two process using dccp.
+The gstreamer plugin architecture uses a concept of sink and src (each
+one named element), where sink send and src receive data. In this
+case, one of then connects and inform the file descriptor to the
+other. Then I thought that if I just share the socket_fd the things
+will work, but it didn't. I need something like this:
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+On dccp_server_sink_element:
+
+1 - sock_fd = socket(...);  // sock_id = 10 (for instance), sink tell
+dccp_server_src_element this value
+2 - bind(sock_fd);
+3 - listen(sock_fd);
+
+On dccp_server_src_element:
+
+1 - sock_fd = 10 // for the first version I will just pass this value
+via set property, but after I will use unix_socket (as suggested by
+Arnaldo) to communicate both elements
+2 - wrote = send(sock_fd, ...);
+
+In the client side (similar to server side:
+
+On dccp_client_sink_element:
+
+1 - sock_fd = socket(...);  // sock_id = 5 (for instance)
+2 - connect(sock_fd);
+3 - send(sock_fd);
+
+On dccp_client_src_element:
+
+1 - read(sock_fd) // passed by dccp_client_sink_element.
+
+Is there any additional manipulation to enable the sock_fd sharing.
+The error show is "Invalid File Descriptor" when I try to use it in
+the srcs elements.
+
+Thanks,
+
+Leandro.
