@@ -1,28 +1,21 @@
-From: Leandro <leandroal@gmail.com>
-Date: Thu, 01 Nov 2007 00:32:04 +0000
-Subject: [PATCH 22/25] Minor adjustments to probe.c to use tfrc_ccids
-Message-Id: <200710312132.04423.leandroal@gmail.com>
+From: Tommi Saviranta <wnd@iki.fi>
+Date: Thu, 01 Nov 2007 12:42:21 +0000
+Subject: Re: [PATCH 22/25] Minor adjustments to probe.c to use tfrc_ccids
+Message-Id: <20071101124221.GN19989@kikai.katei.fi>
 List-Id: <dccp.vger.kernel.org>
+References: <200710312132.04423.leandroal@gmail.com>
+In-Reply-To: <200710312132.04423.leandroal@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[DCCP] Minor adjustments to probe.c to use ccid34_lib
+On Wed, Oct 31, 2007 at 21:32:04 -0300, Leandro wrote:
+> [DCCP] Minor adjustments to probe.c to use ccid34_lib
+> 
+> This will also facilitate the implementation of ccid-4 debug.
+> 
+> Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
 
-This will also facilitate the implementation of ccid-4 debug.
+Acked-by: Tommi Saviranta <wnd@iki.fi>
 
-Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
-
-Index: leandro.new/net/dccp/probe.c
-=================================--- leandro.new.orig/net/dccp/probe.c
-+++ leandro.new/net/dccp/probe.c
-@@ -34,7 +34,7 @@
- 
- #include "dccp.h"
- #include "ccid.h"
--#include "ccids/ccid3.h"
-+#include "ccids/lib/tfrc_ccids.h"
- 
- static int port;
- 
