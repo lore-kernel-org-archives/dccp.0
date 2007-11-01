@@ -1,23 +1,30 @@
-From: Herbert Xu <herbert@gondor.apana.org.au>
-Date: Mon, 26 Nov 2007 11:55:27 +0000
-Subject: Re: [PATCHES 0/18]: DCCP patches for 2.6.25
-Message-Id: <20071126115527.GA26773@gondor.apana.org.au>
+From: Tommi Saviranta <wnd@iki.fi>
+Date: Thu, 01 Nov 2007 12:22:49 +0000
+Subject: Re: [PATCH 3/25] Adjustments of the ccid-4 copyright and kernel
+Message-Id: <20071101122248.GB19989@kikai.katei.fi>
 List-Id: <dccp.vger.kernel.org>
-References: <1195950103-18102-1-git-send-email-acme@redhat.com>
-In-Reply-To: <1195950103-18102-1-git-send-email-acme@redhat.com>
+References: <200710312021.53536.leandroal@gmail.com>
+In-Reply-To: <200710312021.53536.leandroal@gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="hz-gb-2312"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-T24gU2F0LCBOb3YgMjQsIDIwMDcgYXQgMTA6MjE6MjVQTSAtMDIwMCwgQXJuYWxkbyBDYXJ2YWxo
-byBkZSBNZWxvIHdyb3RlOgo+IEhpIEhlcmJlcnQsCj4gCj4gCVBsZWFzZSBjb25zaWRlciBwdWxs
-aW5nIGZyb206Cj4gCj4gbWFzdGVyLmtlcm5lbC5vcmc6L3B1Yi9zY20vbGludXgva2VybmVsL2dp
-dC9hY21lL25ldC0yLjYuMjUKCkFsbCBwdWxsZWQuICBUaGFua3MgQXJuYWxkbyEKLS0gClZpc2l0
-IE9wZW5zd2FuIGF0IGh0dHA6Ly93d3cub3BlbnN3YW4ub3JnLwpFbWFpbDogSGVyYmVydCBYdSB+
-e1BtVj5ISX59IDxoZXJiZXJ0QGdvbmRvci5hcGFuYS5vcmcuYXU+CkhvbWUgUGFnZTogaHR0cDov
-L2dvbmRvci5hcGFuYS5vcmcuYXUvfmhlcmJlcnQvClBHUCBLZXk6IGh0dHA6Ly9nb25kb3IuYXBh
-bmEub3JnLmF1L35oZXJiZXJ0L3B1YmtleS50eHQKLQpUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMg
-bGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJvZHkgb2YgYSBt
-ZXNzYWdlIHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRvbW8gaW5mbyBh
-dCAgaHR0cDovL3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5odG1s
+On Wed, Oct 31, 2007 at 20:21:53 -0300, Leandro wrote:
+> [CCID-4] Adjustments of the ccid-4 copyright and kernel module authors
+> 
+> Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+> Signed-off-by: Tommi Saviranta <wnd@iki.fi>
+> 
+> Index: leandro.new/net/dccp/ccids/ccid4.h
+> =================================> --- leandro.new.orig/net/dccp/ccids/ccid4.h
+> +++ leandro.new/net/dccp/ccids/ccid4.h
+> @@ -1,14 +1,26 @@
+>  #ifndef _DCCP_CCID4_H_
+>  #define _DCCP_CCID4_H_
+>  /*
+> - *  net/dccp/ccids/ccid4.h
+> + *  net/dccp/ccids/ccid4.c
+
+Is this intentional? ccid2.h and ccid3.h both have ccidX.h.
+
