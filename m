@@ -1,43 +1,92 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 08 Nov 2007 11:24:21 +0000
-Subject: Re: [PATCH 7/25] Initial lib for sharing common code between ccid-3/ccid-4
-Message-Id: <20071108112421.GD15246@gerrit.erg.abdn.ac.uk>
+From: Leandro <leandroal@gmail.com>
+Date: Thu, 01 Nov 2007 00:31:57 +0000
+Subject: [PATCH 19/25] Share ccid3_hc_tx_idle_rtt function via tfrc_ccids
+Message-Id: <200710312131.57558.leandroal@gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200710312130.24513.leandroal@gmail.com>
-In-Reply-To: <200710312130.24513.leandroal@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting Tommi:
-| On Wed, Oct 31, 2007 at 21:30:24 -0300, Leandro wrote:
-| > [CCID-3/4 lib] Initial lib for sharing common code between ccid-3/ccid-4
-| > 
-| > The lib is called tfrc_ccids.o
-| 
-| > Index: leandro.new/net/dccp/ccids/lib/Makefile
-| > =================================| > --- leandro.new.orig/net/dccp/ccids/lib/Makefile
-| > +++ leandro.new/net/dccp/ccids/lib/Makefile
-| > @@ -1,4 +1,5 @@
-| >  obj-$(CONFIG_IP_DCCP_TFRC_LIB) += dccp_tfrc_lib.o
-| >  
-| >  dccp_tfrc_lib-y := tfrc_module.o    tfrc_equation.o \
-| > -                   packet_history.o loss_interval.o
-| > +                   packet_history.o loss_interval.o \
-| > +		   tfrc_ccids.o
-| 
-| Whitespace police hits! I don't remember Documentation/CodingStyle
-| mentioning anything about whitespaces in Makefiles. Nevertheless,
-| packet_history.o is indented here with spaces, tfrc_ccids.o with
-| tabulators, I think we should stick to just one kind of whitespace.
-| 
-| > -                   packet_history.o loss_interval.o
-| > +                   packet_history.o loss_interval.o \
-| > +                   tfrc_ccids.o
-| 
-Leandro is right, tabs are ok in this place (it is a line continuation).
-I just found that in the online version the patch looks as suggested
-above (I run my whitespace scripts routinely over patch sets, and have
-done this here as well).
+[CCID-3/4] Share ccid3_hc_tx_idle_rtt function via tfrc_ccids
 
+Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+
+Index: leandro.new/net/dccp/ccids/ccid3.c
+=================================--- leandro.new.orig/net/dccp/ccids/ccid3.c
++++ leandro.new/net/dccp/ccids/ccid3.c
+@@ -121,13 +121,6 @@ static inline void ccid3_update_send_int
+ 
+ }
+ 
+-static u32 ccid3_hc_tx_idle_rtt(struct ccid3_hc_tx_sock *hctx, ktime_t now)
+-{
+-	u32 delta = ktime_us_delta(now, hctx->ccid3hctx_t_last_win_count);
+-
+-	return delta/hctx->ccid3hctx_rtt;
+-}
+-
+ /**
+  * ccid3_hc_tx_update_x  -  Update allowed sending rate X
+  * @stamp: most recent time if available - can be left NULL.
+@@ -151,7 +144,7 @@ static void ccid3_hc_tx_update_x(struct 
+ 	 * a sender is idle if it has not sent anything over a 2-RTT-period.
+ 	 * For consistency with X and X_recv, min_rate is also scaled by 2^6.
+ 	 */
+-	if (ccid3_hc_tx_idle_rtt(hctx, now) >= 2) {
++	if (tfrc_hc_tx_idle_rtt(hctx, now) >= 2) {
+ 		min_rate = rfc3390_initial_rate(sk);
+ 		min_rate = max(min_rate, 2 * hctx->ccid3hctx_x_recv);
+ 	}
+Index: leandro.new/net/dccp/ccids/ccid4.c
+=================================--- leandro.new.orig/net/dccp/ccids/ccid4.c
++++ leandro.new/net/dccp/ccids/ccid4.c
+@@ -133,13 +133,6 @@ static inline void ccid4_update_send_int
+ 
+ }
+ 
+-static u32 ccid4_hc_tx_idle_rtt(struct ccid4_hc_tx_sock *hctx, ktime_t now)
+-{
+-	u32 delta = ktime_us_delta(now, hctx->ccid4hctx_t_last_win_count);
+-
+-	return delta/hctx->ccid4hctx_rtt;
+-}
+-
+ /**
+  * ccid4_hc_tx_x_header_penalty  -  Update allower sending rate X
+  * @hctx: half-connection to adjust
+@@ -174,7 +167,7 @@ static void ccid4_hc_tx_update_x(struct 
+ 	 * a sender is idle if it has not sent anything over a 2-RTT-period.
+ 	 * For consistency with X and X_recv, min_rate is also scaled by 2^6.
+ 	 */
+-	if (ccid4_hc_tx_idle_rtt(hctx, now) >= 2) {
++	if (tfrc_hc_tx_idle_rtt(hctx, now) >= 2) {
+ 		min_rate = rfc3390_initial_rate(sk);
+ 		min_rate = max(min_rate, 2 * hctx->ccid4hctx_x_recv);
+ 	}
+Index: leandro.new/net/dccp/ccids/lib/tfrc_ccids.c
+=================================--- leandro.new.orig/net/dccp/ccids/lib/tfrc_ccids.c
++++ leandro.new/net/dccp/ccids/lib/tfrc_ccids.c
+@@ -32,3 +32,13 @@ inline u64 rfc3390_initial_rate(struct s
+ }
+ 
+ EXPORT_SYMBOL_GPL(rfc3390_initial_rate);
++
++u32 tfrc_hc_tx_idle_rtt(struct tfrc_hc_tx_sock *hctx, ktime_t now)
++{
++	u32 delta = ktime_us_delta(now, hctx->tfrchctx_t_last_win_count);
++
++	return delta/hctx->tfrchctx_rtt;
++}
++
++EXPORT_SYMBOL_GPL(tfrc_hc_tx_idle_rtt);
++
+Index: leandro.new/net/dccp/ccids/lib/tfrc_ccids.h
+=================================--- leandro.new.orig/net/dccp/ccids/lib/tfrc_ccids.h
++++ leandro.new/net/dccp/ccids/lib/tfrc_ccids.h
+@@ -173,3 +173,5 @@ static const char *tfrc_tx_state_name(en
+ #endif
+ 
+ extern u64 rfc3390_initial_rate(struct sock *sk);
++
++extern u32 tfrc_hc_tx_idle_rtt(struct tfrc_hc_tx_sock *hctx, ktime_t now);
