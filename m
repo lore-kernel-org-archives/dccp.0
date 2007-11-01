@@ -1,40 +1,48 @@
-From: "Arnaldo Carvalho de Melo" <acme@redhat.com>
-Date: Thu, 01 Nov 2007 17:28:58 +0000
-Subject: Re: DCCP and GStreamer: File descriptor sharing
-Message-Id: <20071101172858.GH13130@ghostprotocols.net>
+From: Leandro <leandroal@gmail.com>
+Date: Thu, 01 Nov 2007 00:31:40 +0000
+Subject: [PATCH 14/25] Basic implementation for ccid-4 dropped packet option
+Message-Id: <200710312131.40317.leandroal@gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <5bc4c4570711010726h5580c72dt59748c57be50b064@mail.gmail.com>
-In-Reply-To: <5bc4c4570711010726h5580c72dt59748c57be50b064@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="windows-1252"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Thu, Nov 01, 2007 at 11:26:10AM -0300, =C5=81eandro Sales escreveu:
-> Hi all,
->    I want to share a same socket-fd between two process using dccp.
-> The gstreamer plugin architecture uses a concept of sink and src (each
-> one named element), where sink send and src receive data. In this
-> case, one of then connects and inform the file descriptor to the
-> other. Then I thought that if I just share the socket_fd the things
-> will work, but it didn't. I need something like this:
->=20
-> On dccp_server_sink_element:
->=20
-> 1 - sock_fd =3D socket(...);  // sock_id =3D 10 (for instance), sink tell
-> dccp_server_src_element this value
-> 2 - bind(sock_fd);
-> 3 - listen(sock_fd);
->=20
-> On dccp_server_src_element:
->=20
-> 1 - sock_fd =3D 10 // for the first version I will just pass this value
-> via set property, but after I will use unix_socket (as suggested by
-> Arnaldo) to communicate both elements
+[CCID-4] Basic implementation for ccid-4 dropped packet option as per ccid-4 draft
 
-You _have_ to use unix sockets to pass the fd. fd 10 on one process has
-absolutely nothing to do with fd 10 on another process, only if both
-were created by the same parent, but from your description it doesn't
-seems to be the case.
+Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
 
-- Arnaldo
+Index: leandro.new/net/dccp/ccids/lib/tfrc_ccids.h
+=================================--- leandro.new.orig/net/dccp/ccids/lib/tfrc_ccids.h
++++ leandro.new/net/dccp/ccids/lib/tfrc_ccids.h
+@@ -36,12 +36,15 @@ enum tfrc_options {
+ 	TFRC_OPT_LOSS_EVENT_RATE = 192,
+ 	TFRC_OPT_LOSS_INTERVALS	 = 193,
+ 	TFRC_OPT_RECEIVE_RATE	 = 194,
++	TFRC_OPT_DROPPED_PACKETS = 195, /* as per ccid-4 draft, section 8 */
+ };
+ 
+ struct tfrc_options_received {
+ 	u64 tfrcor_seqno:48,
+-	    tfrcor_loss_intervals_idx:16;
+-	u16 tfrcor_loss_intervals_len;
++	    tfrcor_loss_intervals_idx:16,
++	    tfrcor_dropped_packets_idx:16;
++	u16 tfrcor_loss_intervals_len,
++            tfrcor_dropped_packets_len;
+ 	u32 tfrcor_loss_event_rate;
+ 	u32 tfrcor_receive_rate;
+ };
+Index: leandro.new/net/dccp/ccids/ccid4.c
+=================================--- leandro.new.orig/net/dccp/ccids/ccid4.c
++++ leandro.new/net/dccp/ccids/ccid4.c
+@@ -590,6 +590,9 @@ static int ccid4_hc_tx_parse_options(str
+ 				       opt_recv->tfrcor_receive_rate);
+ 		}
+ 		break;
++        case TFRC_OPT_DROPPED_PACKETS:
++                /* FIXME: Implement this sock option according to ccid-4 draft */
++                break;
+ 	}
+ 
+ 	return rc;
