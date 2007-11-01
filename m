@@ -1,33 +1,105 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 03 Nov 2007 22:00:59 +0000
-Subject: Re: [PATCH 1/9] [CCID2]: Disable broken Ack Ratio adaptation algorithm
-Message-Id: <5640c7e00711031500p74cd528fs15800beb11ebfad1@mail.gmail.com>
+From: Leandro <leandroal@gmail.com>
+Date: Thu, 01 Nov 2007 00:31:55 +0000
+Subject: [PATCH 18/25] Share rfc3390_initial_rate function via tfrc_ccids
+Message-Id: <200710312131.55301.leandroal@gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200711031323.36246@strip-the-willow>
-In-Reply-To: <200711031323.36246@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/4/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> This comments out a problematic section comprising a half-finished algorithm:
->
->  - The variable `ccid2hctx_ackloss' is never initialised to a value different from 0 and
->    hence in fact is a read-only constant.
->  - The `arsent' variable counts packets other than Acks (it is incremented for every packet),
->    and there is no test for Ack Loss.
->  - The concept of counting Acks as such leads to a complex calculation, and the calculation
->    at the moment is inconsistent with this concept.
->    The problem is that the number of Acks - rather than the number of windows - is counted,
->    which leads to a complex (cubic/quadratic) expression - this is not even implemented.
->
-> In its current state, the commented-out algorithm interferes with normal processing by
-> changing Ack Ratio incorrectly, and at the wrong times.
->
-> A new algorithm is necessary, which will not necessarily use the same variables as used by
-> the unfinished one; hence the old variables have been removed.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+[CCID-3/4] Share rfc3390_initial_rate function via tfrc_ccids
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+
+Index: leandro.new/net/dccp/ccids/ccid3.c
+=================================--- leandro.new.orig/net/dccp/ccids/ccid3.c
++++ leandro.new/net/dccp/ccids/ccid3.c
+@@ -103,24 +103,6 @@ static void ccid3_hc_tx_set_state(struct
+ }
+ 
+ /*
+- * Compute the initial sending rate X_init in the manner of RFC 3390:
+- *
+- *	X_init  =  min(4 * s, max(2 * s, 4380 bytes)) / RTT
+- *
+- * Note that RFC 3390 uses MSS, RFC 4342 refers to RFC 3390, and rfc3448bis
+- * (rev-02) clarifies the use of RFC 3390 with regard to the above formula.
+- * For consistency with other parts of the code, X_init is scaled by 2^6.
+- */
+-static inline u64 rfc3390_initial_rate(struct sock *sk)
+-{
+-	const struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+-	const __u32 w_init = min_t(__u32, 4 * hctx->ccid3hctx_s,
+-				   max_t(__u32, 2 * hctx->ccid3hctx_s, 4380));
+-
+-	return scaled_div(w_init << 6, hctx->ccid3hctx_rtt);
+-}
+-
+-/*
+  * Recalculate t_ipi and delta (should be called whenever X changes)
+  */
+ static inline void ccid3_update_send_interval(struct ccid3_hc_tx_sock *hctx)
+Index: leandro.new/net/dccp/ccids/ccid4.c
+=================================--- leandro.new.orig/net/dccp/ccids/ccid4.c
++++ leandro.new/net/dccp/ccids/ccid4.c
+@@ -113,24 +113,6 @@ static void ccid4_hc_tx_set_state(struct
+ }
+ 
+ /*
+- * Compute the initial sending rate X_init in the manner of RFC 3390:
+- *
+- *	X_init  =  min(4 * s, max(2 * s, 4380 bytes)) / RTT
+- *
+- * Note that RFC 3390 uses MSS, RFC 4342 refers to RFC 3390, and rfc3448bis
+- * (rev-02) clarifies the use of RFC 3390 with regard to the above formula.
+- * For consistency with other parts of the code, X_init is scaled by 2^6.
+- */
+-static inline u64 rfc3390_initial_rate(struct sock *sk)
+-{
+-	const struct ccid4_hc_tx_sock *hctx = ccid4_hc_tx_sk(sk);
+-	const __u32 w_init = min_t(__u32, 4 * hctx->ccid4hctx_s,
+-				   max_t(__u32, 2 * hctx->ccid4hctx_s, 4380));
+-
+-	return scaled_div(w_init << 6, hctx->ccid4hctx_rtt);
+-}
+-
+-/*
+  * Recalculate t_ipi and delta (should be called whenever X changes)
+  */
+ static inline void ccid4_update_send_interval(struct ccid4_hc_tx_sock *hctx)
+Index: leandro.new/net/dccp/ccids/lib/tfrc_ccids.c
+=================================--- leandro.new.orig/net/dccp/ccids/lib/tfrc_ccids.c
++++ leandro.new/net/dccp/ccids/lib/tfrc_ccids.c
+@@ -12,3 +12,23 @@
+  *  (at your option) any later version.
+  */
+ #include "tfrc_ccids.h"
++
++/*
++ * Compute the initial sending rate X_init in the manner of RFC 3390:
++ *
++ *	X_init  =  min(4 * s, max(2 * s, 4380 bytes)) / RTT
++ *
++ * Note that RFC 3390 uses MSS, RFC 4342 refers to RFC 3390, and rfc3448bis
++ * (rev-02) clarifies the use of RFC 3390 with regard to the above formula.
++ * For consistency with other parts of the code, X_init is scaled by 2^6.
++ */
++inline u64 rfc3390_initial_rate(struct sock *sk)
++{
++	const struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
++	const __u32 w_init = min_t(__u32, 4 * hctx->tfrchctx_s,
++				   max_t(__u32, 2 * hctx->tfrchctx_s, 4380));
++
++	return scaled_div(w_init << 6, hctx->tfrchctx_rtt);
++}
++
++EXPORT_SYMBOL_GPL(rfc3390_initial_rate);
+Index: leandro.new/net/dccp/ccids/lib/tfrc_ccids.h
+=================================--- leandro.new.orig/net/dccp/ccids/lib/tfrc_ccids.h
++++ leandro.new/net/dccp/ccids/lib/tfrc_ccids.h
+@@ -172,3 +172,4 @@ static const char *tfrc_tx_state_name(en
+ }
+ #endif
+ 
++extern u64 rfc3390_initial_rate(struct sock *sk);
