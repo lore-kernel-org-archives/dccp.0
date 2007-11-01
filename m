@@ -1,34 +1,35 @@
-From: "=?ISO-8859-2?Q?=A3eandro_Sales?=" <leandroal@gmail.com>
-Date: Thu, 01 Nov 2007 04:13:54 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 01 Nov 2007 09:48:42 +0000
 Subject: Re: Gstreamer e DCCP: issues related to ccid-3
-Message-Id: <5bc4c4570710312113r485b7869x2b5014a77421b959@mail.gmail.com>
+Message-Id: <200711010948.42800@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570710242047h1d9b1c64k6381ba5c3a421355@mail.gmail.com>
 In-Reply-To: <5bc4c4570710242047h1d9b1c64k6381ba5c3a421355@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-2007/10/25, Ian McDonald <ian.mcdonald@jandi.co.nz>:
-> On 10/25/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> > /* something like (but do have a look at the paraslash sources)
-> >     do {
-> >         wrote = send (socket, (const char *) buf + bytes_written,
-> >                              count - bytes_written, MSG_NOSIGNAL);
-> >     }  while (wrote < 0 && errno = EAGAIN);
-> > */
-> >
-> >
-> You can also look at iperf code, ttcp code etc.
-> --
-> Web1: http://wand.net.nz/~iam4/
-> Web2: http://www.jandi.co.nz
-> Blog: http://iansblog.jandi.co.nz
->
-
-Did you implemented a similar solution in the code that you sent to
-me? I didn't have enough time to check your code because I was busy on
-the ccid-4 patches.
-
-Leandro.
+UXVvdGluZyDFgWVhbmRybyBTYWxlczoKfCAgMjAwNy8xMC8yNSwgSWFuIE1jRG9uYWxkIDxpYW4u
+bWNkb25hbGRAamFuZGkuY28ubno+Ogp8ICA+IE9uIDEwLzI1LzA3LCBHZXJyaXQgUmVua2VyIDxn
+ZXJyaXRAZXJnLmFiZG4uYWMudWs+IHdyb3RlOgp8ICA+ID4gLyogc29tZXRoaW5nIGxpa2UgKGJ1
+dCBkbyBoYXZlIGEgbG9vayBhdCB0aGUgcGFyYXNsYXNoIHNvdXJjZXMpCnwgID4gPiAgICAgZG8g
+ewp8ICA+ID4gICAgICAgICB3cm90ZSA9IHNlbmQgKHNvY2tldCwgKGNvbnN0IGNoYXIgKikgYnVm
+ICsgYnl0ZXNfd3JpdHRlbiwKfCAgPiA+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgY291
+bnQgLSBieXRlc193cml0dGVuLCBNU0dfTk9TSUdOQUwpOwp8ICA+ID4gICAgIH0gIHdoaWxlICh3
+cm90ZSA8IDAgJiYgZXJybm8gPSBFQUdBSU4pOwp8ICA+ID4gKi8KfCAgPiA+CnwgID4gPgp8ICA+
+IFlvdSBjYW4gYWxzbyBsb29rIGF0IGlwZXJmIGNvZGUsIHR0Y3AgY29kZSBldGMuCnwgID4gLS0K
+fCAgPiBXZWIxOiBodHRwOi8vd2FuZC5uZXQubnovfmlhbTQvCnwgID4gV2ViMjogaHR0cDovL3d3
+dy5qYW5kaS5jby5uegp8ICA+IEJsb2c6IGh0dHA6Ly9pYW5zYmxvZy5qYW5kaS5jby5uegp8ICA+
+CnwgIAp8ICBEaWQgeW91IGltcGxlbWVudGVkIGEgc2ltaWxhciBzb2x1dGlvbiBpbiB0aGUgY29k
+ZSB0aGF0IHlvdSBzZW50IHRvCnwgIG1lPyBJIGRpZG4ndCBoYXZlIGVub3VnaCB0aW1lIHRvIGNo
+ZWNrIHlvdXIgY29kZSBiZWNhdXNlIEkgd2FzIGJ1c3kgb24KfCAgdGhlIGNjaWQtNCBwYXRjaGVz
+Lgp8ICAKQ2hlY2sKCSogdHRjcCAoYWxsIHZlcnNpb25zLCBBcm5hbGRvJ3MsIElhbidzLCBvciBt
+aW5lKQoJKiBpcGVyZiBodHRwOi8vd3d3LmVyZy5hYmRuLmFjLnVrL3VzZXJzL2dlcnJpdC9kY2Nw
+L2FwcHMvI2lwZXJmCgkqIGJ1dCBtb3N0IG9mIGFsbDogcGFyYXNsYXNoCgkJLSBodHRwOi8vd3d3
+LnN5c3RlbWxpbnV4Lm9yZy9+bWFhbi9wYXJhc2xhc2gvCgkJLSBnZXQgaHR0cDovL3d3dy5zeXN0
+ZW1saW51eC5vcmcvfm1hYW4vcGFyYXNsYXNoL3ZlcnNpb25zL3BhcmFzbGFzaC1naXQudGFyLmJ6
+MgotClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNj
+cmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2Vy
+bmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21h
+am9yZG9tby1pbmZvLmh0bWw=
