@@ -1,58 +1,127 @@
-From: "=?ISO-8859-2?Q?=A3eandro_Sales?=" <leandroal@gmail.com>
-Date: Tue, 13 Nov 2007 16:14:17 +0000
-Subject: Re: [PATCH 17/25] Share ccid3_tx_state_name function via tfrc_ccids
-Message-Id: <5bc4c4570711130814g1964259en7ba7274dbbae0374@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 03 Nov 2007 12:04:22 +0000
+Subject: [PATCH 8/9] [CCID2]: Remove redundant ack-counting variable
+Message-Id: <200711031323.59832@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200710312131.52573.leandroal@gmail.com>
-In-Reply-To: <200710312131.52573.leandroal@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-2007/11/10, Gerrit Renker <gerrit@erg.abdn.ac.uk>:
-> | [CCID-3/4] Share ccid3_tx_state_name function via tfrc_ccids
->
-> There is a build problem in declaring the following routines as shared:
->
-> #if defined(CONFIG_IP_DCCP_CCID3_DEBUG) || defined(CONFIG_IP_DCCP_CCID4_DEBUG)
-> static const char *tfrc_tx_state_name(enum tfrc_hc_tx_states state)
-> {
->         /* ... */
-> }
-> #endif
->
-> #if defined(CONFIG_IP_DCCP_CCID3_DEBUG) || defined(CONFIG_IP_DCCP_CCID4_DEBUG)
-> static const char *tfrc_rx_state_name(enum tfrc_hc_rx_states state)
-> {
->         /* ... */
-> #endif
->
-> When enabling CCID3_DEBUG, but not CCID4_DEBUG, the following build warnings result:
->
-> /usr/src/davem-2.6/net/dccp/ccids/lib/tfrc_ccids.h:163: warning: 'tfrc_tx_state_name' defined but not used
-> /usr/src/davem-2.6/net/dccp/ccids/lib/tfrc_ccids.h:180: warning: 'tfrc_rx_state_name' defined but not used
->
-> The reason is that the header file is #included in ccid4.c and this function is only called from
-> within ccid4_pr_debug(). But when CCID4_DEBUG is disabled, this macro expands to an emptry string,
-> so the compiler thinks that tfrc_{rx,tx}_state_name() is not used -- which is actually the case.
->
-> So not very happy with the above solution. When getting serious about abstracting and sharing
-> common code, the best think is probably to use a single debugging function, tfrc_pr_debug.
-> This would be enabled when at least one of CCID3_DEBUG or CCID4_DEBUG is enabled, and one could
-> add some magic that the module parameters influence the boolean variable tfrc_debug.
->
-> The same could be done for the RTO timer - since the identical menu appears in both places.
->
-> Maybe it is better for the moment to `un-share' the code.
-> -
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
->
+The code used two different variables to count Acks, one of them redundant.
+This patch reduces the number of Ack counters to one.
 
-Yes Gerrit, this is one of the point that I will talk to you about. I
-also agree with you, the best for the moment is to "un-share" this
-function.
+The type of the Ack counter has also been changed to u32 (twice the range of int);
+and the variable has been renamed into `packets_acked' - for consistency with
+RFC 3465 (and similarly named variables are used by TCP and SCTP).
 
-Leandro.
+Lastly, a slightly less aggressive `maxincr' increment is used (for even Ack Ratios,
+maxincr was Ack Ratio/2 + 1 instead of Ack Ratio/2).
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid2.c |   46 +++++++++++++++-------------------------------
+ net/dccp/ccids/ccid2.h |    6 ++----
+ 2 files changed, 17 insertions(+), 35 deletions(-)
+
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 97ebc39..839e705 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -199,9 +199,8 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
+ 	hctx->ccid2hctx_pipe	 = 0;
+ 
+ 	/* clear state about stuff we sent */
+-	hctx->ccid2hctx_seqt	= hctx->ccid2hctx_seqh;
+-	hctx->ccid2hctx_ssacks	= 0;
+-	hctx->ccid2hctx_acks	= 0;
++	hctx->ccid2hctx_seqt = hctx->ccid2hctx_seqh;
++	hctx->ccid2hctx_packets_acked = 0;
+ 
+ 	/* clear ack ratio state. */
+ 	hctx->ccid2hctx_rpseq	 = 0;
+@@ -406,31 +405,15 @@ static inline void ccid2_new_ack(struct sock *sk,
+ {
+ 	struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
+ 
+-	/* slow start */
+ 	if (hctx->ccid2hctx_cwnd < hctx->ccid2hctx_ssthresh) {
+-		hctx->ccid2hctx_acks = 0;
+-
+-		/* We can increase cwnd at most maxincr [ack_ratio/2] */
+-		if (*maxincr) {
+-			/* increase every 2 acks */
+-			hctx->ccid2hctx_ssacks++;
+-			if (hctx->ccid2hctx_ssacks = 2) {
+-				hctx->ccid2hctx_cwnd++;
+-				hctx->ccid2hctx_ssacks = 0;
+-				*maxincr = *maxincr - 1;
+-			}
+-		} else {
+-			/* increased cwnd enough for this single ack */
+-			hctx->ccid2hctx_ssacks = 0;
+-		}
+-	} else {
+-		hctx->ccid2hctx_ssacks = 0;
+-		hctx->ccid2hctx_acks++;
+-
+-		if (hctx->ccid2hctx_acks >= hctx->ccid2hctx_cwnd) {
+-			hctx->ccid2hctx_cwnd++;
+-			hctx->ccid2hctx_acks = 0;
++		if (*maxincr > 0 && ++hctx->ccid2hctx_packets_acked = 2) {
++			hctx->ccid2hctx_cwnd += 1;
++			*maxincr	     -= 1;
++			hctx->ccid2hctx_packets_acked = 0;
+ 		}
++	} else if (++hctx->ccid2hctx_packets_acked >= hctx->ccid2hctx_cwnd) {
++			hctx->ccid2hctx_cwnd += 1;
++			hctx->ccid2hctx_packets_acked = 0;
+ 	}
+ 
+ 	/* update RTO */
+@@ -596,12 +579,13 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 		}
+ 	}
+ 
+-	/* If in slow-start, cwnd can increase at most Ack Ratio / 2 packets for
+-	 * this single ack.  I round up.
+-	 * -sorbo.
++	/*
++	 * In slow-start, cwnd can increase up to a maximum of Ack Ratio/2
++	 * packets per acknowledgement. Rounding up avoids that cwnd is not
++	 * advanced when Ack Ratio is 1 and gives a slight edge otherwise.
+ 	 */
+-	maxincr = dp->dccps_l_ack_ratio >> 1;
+-	maxincr++;
++	if (hctx->ccid2hctx_cwnd < hctx->ccid2hctx_ssthresh)
++		maxincr = DIV_ROUND_UP(dp->dccps_l_ack_ratio, 2);
+ 
+ 	/* go through all ack vectors */
+ 	while ((offset = ccid2_ackvector(sk, skb, offset,
+diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
+index 2671f8e..2c94ca0 100644
+--- a/net/dccp/ccids/ccid2.h
++++ b/net/dccp/ccids/ccid2.h
+@@ -43,8 +43,7 @@ struct ccid2_seq {
+ /** struct ccid2_hc_tx_sock - CCID2 TX half connection
+  *
+  * @ccid2hctx_{cwnd,ssthresh,pipe}: as per RFC 4341, section 5
+- * @ccid2hctx_ssacks - ACKs recv in slow start
+- * @ccid2hctx_acks - ACKS recv in AI phase
++ * @ccid2hctx_packets_acked - Ack counter for deriving cwnd growth (RFC 3465)
+  * @ccid2hctx_lastrtt -time RTT was last measured
+  * @ccid2hctx_rpseq - last consecutive seqno
+  * @ccid2hctx_rpdupack - dupacks since rpseq
+@@ -53,8 +52,7 @@ struct ccid2_hc_tx_sock {
+ 	u32			ccid2hctx_cwnd;
+ 	u32			ccid2hctx_ssthresh;
+ 	u32			ccid2hctx_pipe;
+-	int			ccid2hctx_ssacks;
+-	int			ccid2hctx_acks;
++	u32			ccid2hctx_packets_acked;
+ 	struct ccid2_seq	*ccid2hctx_seqbuf[CCID2_SEQBUF_MAX];
+ 	int			ccid2hctx_seqbufc;
+ 	struct ccid2_seq	*ccid2hctx_seqh;
+-- 
+1.5.2.2.238.g7cbf2f2-dirty
+
