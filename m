@@ -1,66 +1,71 @@
-From: Tommi Saviranta <wnd@iki.fi>
-Date: Thu, 01 Nov 2007 12:58:59 +0000
-Subject: Re: [PATCH 24/25] Final adjustments to probe.c to use tfrc_ccids
-Message-Id: <20071101125859.GO19989@kikai.katei.fi>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 03 Nov 2007 12:04:08 +0000
+Subject: [PATCH 2/9] [CCID2]: Remove unused variable
+Message-Id: <200711031323.39901@strip-the-willow>
 List-Id: <dccp.vger.kernel.org>
-References: <200710312132.08440.leandroal@gmail.com>
-In-Reply-To: <200710312132.08440.leandroal@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, Oct 31, 2007 at 21:32:08 -0300, Leandro wrote:
-> [DCCP] Final adjustments to probe.c to use ccid34_lib
-> 
-> According to the chosen strategy explained in [PATCH 15/25], some
-> defines become unnecessary. This patch removes them and adjusts
-> probe.c to use ccid34_lib definitions directly
-> 
-> Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
-> 
-> Index: leandro.new/net/dccp/probe.c
-> =================================
->  			 struct msghdr *msg, size_t size)
->  {
->  	const struct inet_sock *inet = inet_sk(sk);
-> -	struct ccid3_hc_tx_sock *hctx = NULL;
-> +	struct tfrc_hc_tx_sock *hctx = NULL;
->  
-> -	if (ccid_get_current_id(dccp_sk(sk), false) = DCCPC_CCID3)
-> -		hctx = ccid3_hc_tx_sk(sk);
-> +        int current_ccid = ccid_get_current_id(dccp_sk(sk), false);
-> +        switch (current_ccid) {
-> +                case DCCPC_CCID3:
-> +                case DCCPC_CCID4:
-> +		        hctx = tfrc_hc_tx_sk(sk);
-> +                        break;
-> +        }
->  
->  	if (port = 0 || ntohs(inet->dport) = port ||
->  	    ntohs(inet->sport) = port) {
+This removes a variable `ccid2hctx_sent' which is incremented but
+never referenced/read (i.e., dead code).
 
-Another whitespace police hit. Also, I think declaration and assignment
-of current_ccid should be grouped with other declarations.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid2.c |    4 ----
+ net/dccp/ccids/ccid2.h |    2 --
+ 2 files changed, 0 insertions(+), 6 deletions(-)
 
----
- 			 struct msghdr *msg, size_t size)
- {
- 	const struct inet_sock *inet = inet_sk(sk);
--	struct ccid3_hc_tx_sock *hctx = NULL;
-+	struct tfrc_hc_tx_sock *hctx = NULL;
-+	int current_ccid = ccid_get_current_id(dccp_sk(sk), false);
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 683d4c2..722d481 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -221,7 +221,6 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
+ 	hctx->ccid2hctx_seqt	= hctx->ccid2hctx_seqh;
+ 	hctx->ccid2hctx_ssacks	= 0;
+ 	hctx->ccid2hctx_acks	= 0;
+-	hctx->ccid2hctx_sent	= 0;
  
--	if (ccid_get_current_id(dccp_sk(sk), false) = DCCPC_CCID3)
--		hctx = ccid3_hc_tx_sk(sk);
-+	switch (current_ccid) {
-+	case DCCPC_CCID3:
-+	case DCCPC_CCID4:
-+		hctx = tfrc_hc_tx_sk(sk);
-+		break;
-+	}
+ 	/* clear ack ratio state. */
+ 	hctx->ccid2hctx_rpseq	 = 0;
+@@ -285,8 +284,6 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ 	ccid2_pr_debug("cwnd=%d pipe=%d\n", hctx->ccid2hctx_cwnd,
+ 		       hctx->ccid2hctx_pipe);
  
- 	if (port = 0 || ntohs(inet->dport) = port ||
- 	    ntohs(inet->sport) = port) {
----
+-	hctx->ccid2hctx_sent++;
+-
+ 	/*
+ 	 * FIXME: The code below is broken and the variables have been removed
+ 	 * from the socket struct. The `ackloss' variable was always set to 0,
+@@ -517,7 +514,6 @@ static inline void ccid2_new_ack(struct sock *sk,
+ 		ccid2_pr_debug("srtt: %ld rttvar: %ld rto: %ld (HZ=%d) R=%lu\n",
+ 			       hctx->ccid2hctx_srtt, hctx->ccid2hctx_rttvar,
+ 			       hctx->ccid2hctx_rto, HZ, r);
+-		hctx->ccid2hctx_sent = 0;
+ 	}
+ 
+ 	/* we got a new ack, so re-start RTO timer */
+diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
+index ed95f8f..6d0b4e3 100644
+--- a/net/dccp/ccids/ccid2.h
++++ b/net/dccp/ccids/ccid2.h
+@@ -42,7 +42,6 @@ struct ccid2_seq {
+  *
+  * @ccid2hctx_ssacks - ACKs recv in slow start
+  * @ccid2hctx_acks - ACKS recv in AI phase
+- * @ccid2hctx_sent - packets sent in this window
+  * @ccid2hctx_lastrtt -time RTT was last measured
+  * @ccid2hctx_rpseq - last consecutive seqno
+  * @ccid2hctx_rpdupack - dupacks since rpseq
+@@ -61,7 +60,6 @@ struct ccid2_hc_tx_sock {
+ 	long			ccid2hctx_rto;
+ 	long			ccid2hctx_srtt;
+ 	long			ccid2hctx_rttvar;
+-	int			ccid2hctx_sent;
+ 	unsigned long		ccid2hctx_lastrtt;
+ 	struct timer_list	ccid2hctx_rtotimer;
+ 	u64			ccid2hctx_rpseq;
+-- 
+1.5.2.2.238.g7cbf2f2-dirty
 
