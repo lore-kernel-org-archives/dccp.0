@@ -1,7 +1,7 @@
-From: Tommi Saviranta <wnd@iki.fi>
-Date: Thu, 01 Nov 2007 12:28:39 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 08 Nov 2007 10:24:34 +0000
 Subject: Re: [PATCH 12/25] Share TFRC receiver states via tfrc_ccids
-Message-Id: <20071101122839.GE19989@kikai.katei.fi>
+Message-Id: <20071108102434.GD11792@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <200710312131.13219.leandroal@gmail.com>
 In-Reply-To: <200710312131.13219.leandroal@gmail.com>
@@ -10,10 +10,13 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, Oct 31, 2007 at 21:31:13 -0300, Leandro wrote:
-> [CCID-3/4] Share TFRC receiver states via tfrc_ccids
-> 
-> Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+Another candidate: both translate the same enum into strings.
+| +static const char *ccid4_rx_state_name(enum tfrc_hc_rx_states state)
+|  {
+|  	static char *ccid4_rx_state_names[] = {
+|  	[TFRC_RSTATE_NO_DATA] = "NO_DATA",
 
-Acked-by: Tommi Saviranta <wnd@iki.fi>
-
+| +static const char *ccid3_rx_state_name(enum tfrc_hc_rx_states state)
+|  {
+|  	static char *ccid3_rx_state_names[] = {
+|  	[TFRC_RSTATE_NO_DATA] = "NO_DATA",
