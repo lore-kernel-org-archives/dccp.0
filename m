@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sun, 04 Nov 2007 17:39:11 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 08 Nov 2007 10:21:44 +0000
 Subject: Re: [PATCH 11/25] Share TFRC sender states via tfrc_ccids
-Message-Id: <5640c7e00711040939s5d67c0e8meb8599bf2c4a675f@mail.gmail.com>
+Message-Id: <20071108102144.GC11792@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <200710312131.03012.leandroal@gmail.com>
 In-Reply-To: <200710312131.03012.leandroal@gmail.com>
@@ -10,22 +10,25 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/2/07, Tommi Saviranta <wnd@iki.fi> wrote:
-> On Wed, Oct 31, 2007 at 21:31:02 -0300, Leandro wrote:
-> > [CCID-3/4] Share TFRC sender states via tfrc_ccids
-> >
-> > Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
->
-> Acked-by: Tommi Saviranta <wnd@iki.fi>
->
-> -
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
->
-
-
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
-Blog: http://iansblog.jandi.co.nz
+| @@ -76,16 +76,16 @@ static const char *ccid4_tx_state_name(e
+|  #endif
+|  
+|  static void ccid4_hc_tx_set_state(struct sock *sk,
+| -				  enum ccid4_hc_tx_states state)
+| +				  enum tfrc_hc_tx_states state)
+|  {
+|  	struct ccid4_hc_tx_sock *hctx = ccid4_hc_tx_sk(sk);
+| -	enum ccid4_hc_tx_states oldstate = hctx->ccid4hctx_state;
+| +	enum tfrc_hc_tx_states oldstate = hctx->tfrchctx_state;
+|  
+|  	ccid4_pr_debug("%s(%p) %-8.8s -> %s\n",
+|  		       dccp_role(sk), sk, ccid4_tx_state_name(oldstate),
+|  		       ccid4_tx_state_name(state));
+|  	WARN_ON(state = oldstate);
+| -	hctx->ccid4hctx_state = state;
+| +	hctx->tfrchctx_state = state;
+|  }
+|  
+I think this function is a candidate for sharing: no need to keep
+this function separate for CCID3/4 when both use the same enum of
+states; i.e. the function could be written tfrc_hc_tx_set_state().
