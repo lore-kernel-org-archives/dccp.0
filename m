@@ -1,7 +1,7 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Fri, 02 Nov 2007 08:42:37 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 08 Nov 2007 10:57:37 +0000
 Subject: Re: [PATCH 1/25] CCID-4 Kconfig and Makefile
-Message-Id: <5640c7e00711020142u6db11559q745940c58eda61c4@mail.gmail.com>
+Message-Id: <20071108105737.GA15246@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <200710312018.36512.leandroal@gmail.com>
 In-Reply-To: <200710312018.36512.leandroal@gmail.com>
@@ -10,12 +10,31 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/1/07, Leandro <leandroal@gmail.com> wrote:
-> [CCID-4] CCID-4 Kconfig and Makefile
->
-> Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
-> Signed-off-by: Tommi Saviranta <wnd@iki.fi>
->
-> Index: leandro.new/net/dccp/ccids/Kconfig
+| +config IP_DCCP_CCID4_DEBUG
+| +         bool "CCID4 debugging messages"
+| +         depends on IP_DCCP_CCID4
+<snip>
+| +# The TFRC Library: currently has CCID 3 and CCID 4 as customer
+|  config IP_DCCP_TFRC_LIB
+| -	depends on IP_DCCP_CCID3
+| +	depends on IP_DCCP_CCID3 || IP_DCCP_CCID4
+|  	def_tristate IP_DCCP_CCID3
+|  
+|  config IP_DCCP_TFRC_DEBUG
+Suggestion: if CCID3 is not compiled as module, there will currently be
+no TFRC debugging output for dccp_tfrc_lib when only CCID4 is enabled.
+Something like
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+config IP_DCCP_TFRC_DEBUG
+	bool
+	default y if IP_DCCP_CCID3_DEBUG || IP_DCCP_CCID4_DEBUG 
+
+would enable this.
+
+On the other hand, the number of `debugs' keeps continually growing.
+Maybe it is possible to just use tfrc_debug for everything that speaks
+TFRC, otherwise we currently have
+ * tfrc_debug   to enable debug messages in dccp_tfrc_lib
+ * ccid3_debug            "                 dccp_ccid3
+ * ccid4_debug            "                 dccp_ccid4
+ * dccp_debug   to see the rest
