@@ -1,7 +1,7 @@
-From: Tommi Saviranta <wnd@iki.fi>
-Date: Fri, 09 Nov 2007 14:15:55 +0000
+From: "Arnaldo Carvalho de Melo" <acme@redhat.com>
+Date: Fri, 09 Nov 2007 14:30:00 +0000
 Subject: Re: How much is available for reading on the socket?
-Message-Id: <20071109141555.GA2861@kikai.katei.fi>
+Message-Id: <20071109143000.GB12019@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570710211900o6ccbc9belf2cc904c1b3af0c6@mail.gmail.com>
 In-Reply-To: <5bc4c4570710211900o6ccbc9belf2cc904c1b3af0c6@mail.gmail.com>
@@ -10,13 +10,22 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Fri, Nov 09, 2007 at 13:51:27 +0000, Gerrit Renker wrote:
+Em Fri, Nov 09, 2007 at 01:51:27PM +0000, Gerrit Renker escreveu:
+> | > using "ioctl (socket, FIONREAD, &readsize)" I can get how much is
+> | > available to read from the socket using TCP. Is there a equivalent
+> | > option for DCCP?
+> | 
+> | Looks like dccp_ioctl() happily returns -ENOIOCTLCMD (for now). If you
+> | have IO and memory to waste, you can always recv(..., MSG_PEEK) to work
+> | around this.
+> | 
 > Arnaldo wrote a patch which realises SIOCINQ (it is in 2.6.24-rc1/2).
 
-No, not one of these days again... Yes, I took a brief look at the patch
-and its brief follow up. I was going through my inbox, including all the
-mails I have postponed to deal with later, and spotted this one,
-completely forgetting it's no longer relevant.
+And, on Linux:
 
-Sorry for the spam (like this email would make things any better).
+include/linux/sockios.h
 
+/* Linux-specific socket ioctls */
+#define SIOCINQ         FIONREAD
+
+- Arnaldo
