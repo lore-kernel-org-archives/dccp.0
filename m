@@ -1,110 +1,228 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Sun, 25 Nov 2007 00:21:33 +0000
-Subject: [PATCH 08/18] [CCID2]: Disable broken Ack Ratio adaptation algorithm
-Message-Id: <1195950103-18102-9-git-send-email-acme@redhat.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 17 Nov 2007 09:29:42 +0000
+Subject: [PATCH 15/16] [CCID 3]: Implement rfc3448bis changes to feedback reception
+Message-Id: <11952917843057-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+This implements the algorithm to update the allowed sending rate X upon
+receiving feedback packets, as described in draft rfc3448bis, 4.2/4.3.
 
-This comments out a problematic section comprising a half-finished algorithm:
+The patch further removes two irrelevant states in TX feedback handling:
 
- - The variable `ccid2hctx_ackloss' is never initialised to a value different from 0 and
-   hence in fact is a read-only constant.
- - The `arsent' variable counts packets other than Acks (it is incremented for every packet),
-   and there is no test for Ack Loss.
- - The concept of counting Acks as such leads to a complex calculation, and the calculation
-   at the moment is inconsistent with this concept.
-   The problem is that the number of Acks - rather than the number of windows - is counted,
-   which leads to a complex (cubic/quadratic) expression - this is not even implemented.
-
-In its current state, the commented-out algorithm interfers with normal processing by
-changing Ack Ratio incorrectly, and at the wrong times.
-
-A new algorithm is necessary, which will not necessarily use the same variables as used by
-the unfinished one; hence the old variables have been removed.
+ * the NO_SENT state is only triggered in bidirectional mode,
+   costing unnecessary processing.
+ * the TERM (terminating) state is irrelevant.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/ccids/ccid2.c |   23 +++++++++++++++++++++--
- net/dccp/ccids/ccid2.h |    4 ----
- 2 files changed, 21 insertions(+), 6 deletions(-)
+ net/dccp/ccids/ccid3.c |  171 ++++++++++++++++++++++++------------------------
+ 1 files changed, 86 insertions(+), 85 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index 9c5b6c7..a901202 100644
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -224,8 +224,6 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
- 	hctx->ccid2hctx_sent	= 0;
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 18ace1c..c631c3b 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -405,110 +405,111 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	      DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_DATAACK))
+ 		return;
  
- 	/* clear ack ratio state. */
--	hctx->ccid2hctx_arsent	 = 0;
--	hctx->ccid2hctx_ackloss  = 0;
- 	hctx->ccid2hctx_rpseq	 = 0;
- 	hctx->ccid2hctx_rpdupack = -1;
- 	ccid2_change_l_ack_ratio(sk, 1);
-@@ -289,6 +287,26 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
++	/* ... and only in the established state */
++	switch (hctx->ccid3hctx_state) {
++	case TFRC_SSTATE_NO_FBACK:	/* fall through */
++	case TFRC_SSTATE_FBACK:		break;
++	default:			return;
++	}
++
++	/* estimate RTT from history if ACK number is valid */
++	if (! tfrc_tx_hist_when(&t_send, &hctx->ccid3hctx_hist,
++			        DCCP_SKB_CB(skb)->dccpd_ack_seq)) {
++		DCCP_WARN("%s(%p): %s with bogus ACK-%llu\n", dccp_role(sk), sk,
++			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type),
++			  (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq);
++		return;
++	}
++
+ 	opt_recv = &hctx->ccid3hctx_options_received;
  
- 	hctx->ccid2hctx_sent++;
+-	switch (hctx->ccid3hctx_state) {
+-	case TFRC_SSTATE_NO_FBACK:
+-	case TFRC_SSTATE_FBACK:
+-		/* estimate RTT from history if ACK number is valid */
+-		if (! tfrc_tx_hist_when(&t_send, &hctx->ccid3hctx_hist,
+-				        DCCP_SKB_CB(skb)->dccpd_ack_seq)) {
+-			DCCP_WARN("%s(%p): %s with bogus ACK-%llu\n", dccp_role(sk), sk,
+-				  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type),
+-				  (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq);
+-			return;
+-		}
++	/* Update receive rate in units of 64 * bytes/second */
++	hctx->ccid3hctx_x_recv = opt_recv->ccid3or_receive_rate;
++	hctx->ccid3hctx_x_recv <<= 6;
  
+-		/* Update receive rate in units of 64 * bytes/second */
+-		hctx->ccid3hctx_x_recv = opt_recv->ccid3or_receive_rate;
+-		hctx->ccid3hctx_x_recv <<= 6;
++	/* Update loss event rate (which is scaled by 1e6) */
++	pinv = opt_recv->ccid3or_loss_event_rate;
++	if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
++		hctx->ccid3hctx_p = 0;
++	else				       /* can not exceed 100% */
++		hctx->ccid3hctx_p = scaled_div(1, pinv);
+ 
+-		/* Update loss event rate */
+-		pinv = opt_recv->ccid3or_loss_event_rate;
+-		if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
+-			hctx->ccid3hctx_p = 0;
+-		else				       /* can not exceed 100% */
+-			hctx->ccid3hctx_p = 1000000 / pinv;
 +	/*
-+	 * FIXME: The code below is broken and the variables have been removed
-+	 * from the socket struct. The `ackloss' variable was always set to 0,
-+	 * and with arsent there are several problems:
-+	 *  (i) it doesn't just count the number of Acks, but all sent packets;
-+	 *  (ii) it is expressed in # of packets, not # of windows, so the
-+	 *  comparison below uses the wrong formula: Appendix A of RFC 4341
-+	 *  comes up with the number K = cwnd / (R^2 - R) of consecutive windows
-+	 *  of data with no lost or marked Ack packets. If arsent were the # of
-+	 *  consecutive Acks received without loss, then Ack Ratio needs to be
-+	 *  decreased by 1 when
-+	 *	      arsent >=  K * cwnd / R  =  cwnd^2 / (R^3 - R^2)
-+	 *  where cwnd / R is the number of Acks received per window of data
-+	 *  (cf. RFC 4341, App. A). The problems are that
-+	 *  - arsent counts other packets as well;
-+	 *  - the comparison uses a formula different from RFC 4341;
-+	 *  - computing a cubic/quadratic equation each time is too complicated.
-+	 *  Hence a different algorithm is needed.
++	 * Calculate new RTT sample and update moving average
 +	 */
-+#if 0
- 	/* Ack Ratio.  Need to maintain a concept of how many windows we sent */
- 	hctx->ccid2hctx_arsent++;
- 	/* We had an ack loss in this window... */
-@@ -316,6 +334,7 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
- 			hctx->ccid2hctx_arsent = 0; /* or maybe set it to cwnd*/
- 		}
- 	}
-+#endif
++	now = ktime_get_real();
++	r_sample = dccp_sample_rtt(sk, ktime_us_delta(now, t_send));
++	hctx->ccid3hctx_rtt = tfrc_ewma(hctx->ccid3hctx_rtt, r_sample, 9);
  
- 	/* setup RTO timer */
- 	if (!timer_pending(&hctx->ccid2hctx_rtotimer))
-diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
-index d9daa53..ed95f8f 100644
---- a/net/dccp/ccids/ccid2.h
-+++ b/net/dccp/ccids/ccid2.h
-@@ -44,8 +44,6 @@ struct ccid2_seq {
-  * @ccid2hctx_acks - ACKS recv in AI phase
-  * @ccid2hctx_sent - packets sent in this window
-  * @ccid2hctx_lastrtt -time RTT was last measured
-- * @ccid2hctx_arsent - packets sent [ack ratio]
-- * @ccid2hctx_ackloss - ack was lost in this win
-  * @ccid2hctx_rpseq - last consecutive seqno
-  * @ccid2hctx_rpdupack - dupacks since rpseq
- */
-@@ -66,8 +64,6 @@ struct ccid2_hc_tx_sock {
- 	int			ccid2hctx_sent;
- 	unsigned long		ccid2hctx_lastrtt;
- 	struct timer_list	ccid2hctx_rtotimer;
--	unsigned long		ccid2hctx_arsent;
--	int			ccid2hctx_ackloss;
- 	u64			ccid2hctx_rpseq;
- 	int			ccid2hctx_rpdupack;
- 	int			ccid2hctx_sendwait;
+-		now = ktime_get_real();
+-		/*
+-		 * Calculate new RTT sample and update moving average
+-		 */
+-		r_sample = dccp_sample_rtt(sk, ktime_us_delta(now, t_send));
+-		hctx->ccid3hctx_rtt = tfrc_ewma(hctx->ccid3hctx_rtt, r_sample, 9);
++	/*
++	 *	Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
++	 */
++	if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
++
++		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
+ 
+-		if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
++		if (hctx->ccid3hctx_t_rto = 0) {
+ 			/*
+-			 * Larger Initial Windows [RFC 4342, sec. 5]
++			 * Initial feedback packet: Larger Initial Windows (4.2)
+ 			 */
+ 			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
+ 			hctx->ccid3hctx_t_ld = now;
+ 
+ 			ccid3_update_send_interval(hctx);
+ 
+-			ccid3_pr_debug("%s(%p), s=%u, MSS=%u, "
+-				       "R_sample=%uus, X=%u\n", dccp_role(sk),
+-				       sk, hctx->ccid3hctx_s,
+-				       dccp_sk(sk)->dccps_mss_cache, r_sample,
+-				       (unsigned)(hctx->ccid3hctx_x >> 6));
++			goto done_computing_x;
+ 
+-			ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
+-		} else {
+-
+-			/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
+-			if (hctx->ccid3hctx_p > 0)
+-				hctx->ccid3hctx_x_calc -					tfrc_calc_x(hctx->ccid3hctx_s,
+-						    hctx->ccid3hctx_rtt,
+-						    hctx->ccid3hctx_p);
+-			ccid3_hc_tx_update_x(sk, &now);
+-
+-			ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, "
+-				       "p=%u, X_calc=%u, X_recv=%u, X=%u\n",
+-				       dccp_role(sk),
+-				       sk, hctx->ccid3hctx_rtt, r_sample,
+-				       hctx->ccid3hctx_s, hctx->ccid3hctx_p,
+-				       hctx->ccid3hctx_x_calc,
+-				       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
+-				       (unsigned)(hctx->ccid3hctx_x >> 6));
++		} else if (hctx->ccid3hctx_p = 0) {
++			/*
++			 * First feedback after nofeedback timer expiry (4.3)
++			 */
++			goto done_computing_x;
+ 		}
++	}
++	/* perform step (4) of draft rfc3448bis, section 4.3 */
++	if (hctx->ccid3hctx_p > 0)
++		hctx->ccid3hctx_x_calc = tfrc_calc_x(hctx->ccid3hctx_s,
++						     hctx->ccid3hctx_rtt,
++						     hctx->ccid3hctx_p);
++	ccid3_hc_tx_update_x(sk, &now);
++
++done_computing_x:
++	ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, p=%u, X_calc=%u, "
++		       "X_recv=%u, X=%u\n", dccp_role(sk), sk,
++		       hctx->ccid3hctx_rtt, r_sample, hctx->ccid3hctx_s,
++		       hctx->ccid3hctx_p, hctx->ccid3hctx_x_calc,
++		       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
++		       (unsigned)(hctx->ccid3hctx_x >> 6));
++
++	/* unschedule no feedback timer */
++	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
+ 
+-		/* unschedule no feedback timer */
+-		sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
+-
+-		/*
+-		 * As we have calculated new ipi, delta, t_nom it is possible
+-		 * that we now can send a packet, so wake up dccp_wait_for_ccid
+-		 */
+-		sk->sk_write_space(sk);
++	/*
++	 * As we have calculated new ipi, delta, t_nom it is possible
++	 * that we now can send a packet, so wake up dccp_wait_for_ccid
++	 */
++	sk->sk_write_space(sk);
+ 
+-		/*
+-		 * Update timeout interval for the nofeedback timer.
+-		 * We use a configuration option to increase the lower bound.
+-		 * This can help avoid triggering the nofeedback timer too
+-		 * often ('spinning') on LANs with small RTTs.
+-		 */
+-		hctx->ccid3hctx_t_rto = max_t(u32, 4 * hctx->ccid3hctx_rtt,
+-						   CONFIG_IP_DCCP_CCID3_RTO *
+-						   (USEC_PER_SEC/1000));
+-		/*
+-		 * Schedule no feedback timer to expire in
+-		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
+-		 */
+-		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
++	/*
++	 * Update timeout interval for the nofeedback timer.
++	 * We use a configuration option to increase the lower bound.
++	 * This can help avoid triggering the nofeedback timer too
++	 * often ('spinning') on LANs with small RTTs.
++	 */
++	hctx->ccid3hctx_t_rto = max_t(u32, 4 * hctx->ccid3hctx_rtt,
++					   CONFIG_IP_DCCP_CCID3_RTO *
++					   (USEC_PER_SEC/1000));
++	/*
++	 * Schedule no feedback timer to expire in
++	 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
++	 */
++	t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
+ 
+-		ccid3_pr_debug("%s(%p), Scheduled no feedback timer to "
+-			       "expire in %lu jiffies (%luus)\n",
+-			       dccp_role(sk),
+-			       sk, usecs_to_jiffies(t_nfb), t_nfb);
++	sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
++			   jiffies + usecs_to_jiffies(t_nfb));
+ 
+-		sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
+-				   jiffies + usecs_to_jiffies(t_nfb));
+-		break;
+-	case TFRC_SSTATE_NO_SENT:	/* fall through */
+-	case TFRC_SSTATE_TERM:		/* ignore feedback when closing */
+-		break;
+-	}
++	ccid3_pr_debug("Scheduled no feedback timer to expire in %lu jiffies"
++		       "(%luus)\n", usecs_to_jiffies(t_nfb), t_nfb);
+ }
+ 
+ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
 -- 
-1.5.3.4
+1.5.2.2.238.g7cbf2f2-dirty
 
