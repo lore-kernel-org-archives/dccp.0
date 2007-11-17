@@ -1,395 +1,394 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 17 Nov 2007 09:29:32 +0000
-Subject: [PATCH 05/16] [TFRC]: Migrate TX history to singly-linked list
-Message-Id: <11952917831070-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sat, 17 Nov 2007 09:29:40 +0000
+Subject: [PATCH 13/16] [TFRC]: Remove previous loss intervals implementation
+Message-Id: <1195291784131-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-The patch set migrates TFRC TX history to a singly-linked list.
-
-The details are:
- * use of a consistent naming scheme (all TFRC functions now begin with `tfrc_');
- * allocation and cleanup are taken care of internally;
- * provision of a lookup function, which is used by the CCID TX infrastructure
-   to determine the time a packet was sent (in turn used for RTT sampling);
- * integration of the new interface with the present use in CCID3.
-
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/ccids/ccid3.c              |   53 ++++++-------------
- net/dccp/ccids/ccid3.h              |    3 +-
- net/dccp/ccids/lib/packet_history.c |  100 +++++++++++++++++++++++++++++++++-
- net/dccp/ccids/lib/packet_history.h |   42 ++++++++++++++-
- 4 files changed, 155 insertions(+), 43 deletions(-)
+ net/dccp/ccids/lib/loss_interval.c |  284 +----------------------------------
+ net/dccp/ccids/lib/loss_interval.h |    9 -
+ net/dccp/ccids/lib/tfrc_module.c   |    8 +-
+ 3 files changed, 13 insertions(+), 288 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index e07d817..51fd07b 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -49,7 +49,7 @@ static int ccid3_debug;
- #define ccid3_pr_debug(format, a...)
- #endif
+diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
+index 437ab9f..c6afecd 100644
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -14,15 +14,6 @@
+ #include <net/sock.h>
+ #include "tfrc.h"
  
--static struct dccp_tx_hist *ccid3_tx_hist;
-+DECLARE_TFRC_TX_CACHE(ccid3_tx_hist);
- static struct dccp_rx_hist *ccid3_rx_hist;
- 
- /*
-@@ -389,29 +389,18 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, int more,
- 				    unsigned int len)
- {
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
--	struct dccp_tx_hist_entry *packet;
- 
- 	ccid3_hc_tx_update_s(hctx, len);
- 
--	packet = dccp_tx_hist_entry_new(ccid3_tx_hist, GFP_ATOMIC);
--	if (unlikely(packet = NULL)) {
-+	if (tfrc_tx_hist_add(&hctx->ccid3hctx_hist, dccp_sk(sk)->dccps_gss))
- 		DCCP_CRIT("packet history - out of memory!");
--		return;
--	}
--	dccp_tx_hist_add_entry(&hctx->ccid3hctx_hist, packet);
+-#define DCCP_LI_HIST_IVAL_F_LENGTH  8
 -
--	packet->dccphtx_tstamp = ktime_get_real();
--	packet->dccphtx_seqno  = dccp_sk(sk)->dccps_gss;
--	packet->dccphtx_rtt    = hctx->ccid3hctx_rtt;
--	packet->dccphtx_sent   = 1;
+-struct dccp_li_hist_entry {
+-	struct list_head dccplih_node;
+-	u64		 dccplih_seqno:48,
+-			 dccplih_win_count:4;
+-	u32		 dccplih_interval;
+-};
+-
+ static struct kmem_cache  *tfrc_lh_slab  __read_mostly;
+ /* Loss Interval weights from [RFC 3448, 5.4], scaled by 10 */
+ static const int tfrc_lh_weights[NINTERVAL] = { 10, 10, 10, 10, 8, 6, 4, 2 };
+@@ -68,77 +59,6 @@ void tfrc_lh_cleanup(struct tfrc_loss_hist *lh)
  }
+ EXPORT_SYMBOL_GPL(tfrc_lh_cleanup);
  
- static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- {
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
- 	struct ccid3_options_received *opt_recv;
--	struct dccp_tx_hist_entry *packet;
--	ktime_t now;
-+	ktime_t t_send, now;
- 	unsigned long t_nfb;
- 	u32 pinv, r_sample;
- 
-@@ -425,14 +414,12 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	switch (hctx->ccid3hctx_state) {
- 	case TFRC_SSTATE_NO_FBACK:
- 	case TFRC_SSTATE_FBACK:
--		/* get packet from history to look up t_recvdata */
--		packet = dccp_tx_hist_find_entry(&hctx->ccid3hctx_hist,
--					      DCCP_SKB_CB(skb)->dccpd_ack_seq);
--		if (unlikely(packet = NULL)) {
--			DCCP_WARN("%s(%p), seqno %llu(%s) doesn't exist "
--				  "in history!\n",  dccp_role(sk), sk,
--			    (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq,
--				dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type));
-+		/* estimate RTT from history if ACK number is valid */
-+		if (! tfrc_tx_hist_when(&t_send, &hctx->ccid3hctx_hist,
-+				        DCCP_SKB_CB(skb)->dccpd_ack_seq)) {
-+			DCCP_WARN("%s(%p): %s with bogus ACK-%llu\n", dccp_role(sk), sk,
-+				  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type),
-+				  (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq);
- 			return;
- 		}
- 
-@@ -451,7 +438,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		/*
- 		 * Calculate new RTT sample and update moving average
- 		 */
--		r_sample = dccp_sample_rtt(sk, ktime_us_delta(now, packet->dccphtx_tstamp));
-+		r_sample = dccp_sample_rtt(sk, ktime_us_delta(now, t_send));
- 		hctx->ccid3hctx_rtt = tfrc_ewma(hctx->ccid3hctx_rtt, r_sample, 9);
- 
- 		if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
-@@ -493,9 +480,6 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		/* unschedule no feedback timer */
- 		sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
- 
--		/* remove all packets older than the one acked from history */
--		dccp_tx_hist_purge_older(ccid3_tx_hist,
--					 &hctx->ccid3hctx_hist, packet);
- 		/*
- 		 * As we have calculated new ipi, delta, t_nom it is possible
- 		 * that we now can send a packet, so wake up dccp_wait_for_ccid
-@@ -598,7 +582,7 @@ static int ccid3_hc_tx_init(struct ccid *ccid, struct sock *sk)
- 	struct ccid3_hc_tx_sock *hctx = ccid_priv(ccid);
- 
- 	hctx->ccid3hctx_state = TFRC_SSTATE_NO_SENT;
--	INIT_LIST_HEAD(&hctx->ccid3hctx_hist);
-+	tfrc_tx_hist_init(&hctx->ccid3hctx_hist, ccid3_tx_hist);
- 
- 	hctx->ccid3hctx_no_feedback_timer.function  				ccid3_hc_tx_no_feedback_timer;
-@@ -616,7 +600,7 @@ static void ccid3_hc_tx_exit(struct sock *sk)
- 	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
- 
- 	/* Empty packet history */
--	dccp_tx_hist_purge(ccid3_tx_hist, &hctx->ccid3hctx_hist);
-+	tfrc_tx_hist_cleanup(&hctx->ccid3hctx_hist);
- }
- 
- static void ccid3_hc_tx_get_info(struct sock *sk, struct tcp_info *info)
-@@ -1039,8 +1023,7 @@ static __init int ccid3_module_init(void)
- 	if (ccid3_rx_hist = NULL)
- 		goto out;
- 
--	ccid3_tx_hist = dccp_tx_hist_new("ccid3");
--	if (ccid3_tx_hist = NULL)
-+	if (tfrc_tx_cache_init(&ccid3_tx_hist, "ccid3"))
- 		goto out_free_rx;
- 
- 	rc = ccid_register(&ccid3);
-@@ -1050,8 +1033,7 @@ out:
- 	return rc;
- 
- out_free_tx:
--	dccp_tx_hist_delete(ccid3_tx_hist);
--	ccid3_tx_hist = NULL;
-+	tfrc_tx_cache_cleanup(ccid3_tx_hist);
- out_free_rx:
- 	dccp_rx_hist_delete(ccid3_rx_hist);
- 	ccid3_rx_hist = NULL;
-@@ -1063,10 +1045,9 @@ static __exit void ccid3_module_exit(void)
- {
- 	ccid_unregister(&ccid3);
- 
--	if (ccid3_tx_hist != NULL) {
--		dccp_tx_hist_delete(ccid3_tx_hist);
--		ccid3_tx_hist = NULL;
+-static struct kmem_cache *dccp_li_cachep __read_mostly;
+-
+-static inline struct dccp_li_hist_entry *dccp_li_hist_entry_new(const gfp_t prio)
+-{
+-	return kmem_cache_alloc(dccp_li_cachep, prio);
+-}
+-
+-static inline void dccp_li_hist_entry_delete(struct dccp_li_hist_entry *entry)
+-{
+-	if (entry != NULL)
+-		kmem_cache_free(dccp_li_cachep, entry);
+-}
+-
+-void dccp_li_hist_purge(struct list_head *list)
+-{
+-	struct dccp_li_hist_entry *entry, *next;
+-
+-	list_for_each_entry_safe(entry, next, list, dccplih_node) {
+-		list_del_init(&entry->dccplih_node);
+-		kmem_cache_free(dccp_li_cachep, entry);
 -	}
-+	if (ccid3_tx_hist != NULL)
-+		tfrc_tx_cache_cleanup(ccid3_tx_hist);
-+
- 	if (ccid3_rx_hist != NULL) {
- 		dccp_rx_hist_delete(ccid3_rx_hist);
- 		ccid3_rx_hist = NULL;
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index 36eca34..fd363f0 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -40,6 +40,7 @@
- #include <linux/list.h>
- #include <linux/types.h>
- #include <linux/tfrc.h>
-+#include "lib/packet_history.h"
- #include "../ccid.h"
- 
- /* Two seconds as per RFC 3448 4.2 */
-@@ -111,7 +112,7 @@ struct ccid3_hc_tx_sock {
- 	ktime_t				ccid3hctx_t_ld;
- 	ktime_t				ccid3hctx_t_nom;
- 	u32				ccid3hctx_delta;
--	struct list_head		ccid3hctx_hist;
-+	struct tfrc_tx_hist_head	ccid3hctx_hist;
- 	struct ccid3_options_received	ccid3hctx_options_received;
- };
- 
-diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
-index 34c4f60..5651de4 100644
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -1,7 +1,8 @@
- /*
-  *  net/dccp/packet_history.c
-  *
-- *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ *  Copyright (c) 2005-7 The University of Waikato, Hamilton, New Zealand.
-  *
-  *  An implementation of the DCCP protocol
-  *
-@@ -41,6 +42,37 @@
- /*
-  * 	Transmitter History Routines
-  */
-+int tfrc_tx_cache_init(struct kmem_cache **cache, const char *name)
-+{
-+	static const char dccp_tx_hist_mask[] = "tx_hist_%s";
-+	char *slab_name;
-+
-+	slab_name = kmalloc(strlen(name) + sizeof(dccp_tx_hist_mask) - 1,
-+			    GFP_ATOMIC);
-+	if (slab_name = NULL)
-+		goto fail;
-+
-+	sprintf(slab_name, dccp_tx_hist_mask, name);
-+	*cache = kmem_cache_create(slab_name, sizeof(struct tfrc_tx_hist),
-+					      0, SLAB_HWCACHE_ALIGN, NULL);
-+	if (*cache != NULL)
-+		return 0;
-+
-+	kfree(slab_name);
-+fail:
-+	return -ENOBUFS;
-+}
-+EXPORT_SYMBOL_GPL(tfrc_tx_cache_init);
-+
-+void tfrc_tx_cache_cleanup(struct kmem_cache *cache)
-+{
-+	const char* name = kmem_cache_name(cache);
-+
-+	kmem_cache_destroy(cache);
-+	kfree(name);
-+}
-+EXPORT_SYMBOL_GPL(tfrc_tx_cache_cleanup);
-+
- struct dccp_tx_hist *dccp_tx_hist_new(const char *name)
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_li_hist_purge);
+-
+-/* Weights used to calculate loss event rate */
+-/*
+- * These are integers as per section 8 of RFC3448. We can then divide by 4 *
+- * when we use it.
+- */
+-static const int dccp_li_hist_w[DCCP_LI_HIST_IVAL_F_LENGTH] = {
+-	4, 4, 4, 4, 3, 2, 1, 1,
+-};
+-
+-u32 dccp_li_hist_calc_i_mean(struct list_head *list)
+-{
+-	struct dccp_li_hist_entry *li_entry, *li_next;
+-	int i = 0;
+-	u32 i_tot;
+-	u32 i_tot0 = 0;
+-	u32 i_tot1 = 0;
+-	u32 w_tot  = 0;
+-
+-	list_for_each_entry_safe(li_entry, li_next, list, dccplih_node) {
+-		if (li_entry->dccplih_interval != ~0U) {
+-			i_tot0 += li_entry->dccplih_interval * dccp_li_hist_w[i];
+-			w_tot  += dccp_li_hist_w[i];
+-			if (i != 0)
+-				i_tot1 += li_entry->dccplih_interval * dccp_li_hist_w[i - 1];
+-		}
+-
+-
+-		if (++i > DCCP_LI_HIST_IVAL_F_LENGTH)
+-			break;
+-	}
+-
+-	if (i != DCCP_LI_HIST_IVAL_F_LENGTH)
+-		return 0;
+-
+-	i_tot = max(i_tot0, i_tot1);
+-
+-	if (!w_tot) {
+-		DCCP_WARN("w_tot = 0\n");
+-		return 1;
+-	}
+-
+-	return i_tot / w_tot;
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_li_hist_calc_i_mean);
+-
+ static void tfrc_lh_calc_i_mean(struct tfrc_loss_hist *lh)
  {
- 	struct dccp_tx_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
-@@ -101,6 +133,69 @@ struct dccp_tx_hist_entry *
+ 	u32 i_i, i_tot0 = 0, i_tot1 = 0, w_tot = 0;
+@@ -198,194 +118,6 @@ u8 tfrc_lh_update_i_mean(struct tfrc_loss_hist *lh, struct sk_buff *skb)
+ }
+ EXPORT_SYMBOL_GPL(tfrc_lh_update_i_mean);
  
- EXPORT_SYMBOL_GPL(dccp_tx_hist_find_entry);
- 
-+int tfrc_tx_hist_add(struct tfrc_tx_hist_head *head, u64 seqno)
-+{
-+	struct tfrc_tx_hist *new = kmem_cache_alloc(head->cache, gfp_any());
-+
-+	if (new = NULL)
-+		return -ENOBUFS;
-+	new->seqno = seqno;
-+	new->stamp = ktime_get_real();
-+	new->next  = head->first;
-+
-+	head->first = new;
-+	return 0;
-+}
-+EXPORT_SYMBOL_GPL(tfrc_tx_hist_add);
-+
-+static void tfrc_tx_hist_remove_tail(struct tfrc_tx_hist **pptr,
-+				     struct kmem_cache *cache)
-+{
-+	struct tfrc_tx_hist *ptr;
-+
-+	for (ptr = *pptr; ptr != NULL; ptr = *pptr) {
-+		*pptr = ptr->next;
-+		kmem_cache_free(cache, ptr);
-+	}
-+}
-+
-+void tfrc_tx_hist_cleanup(struct tfrc_tx_hist_head *head)
-+{
-+	tfrc_tx_hist_remove_tail(&head->first, head->cache);
-+}
-+EXPORT_SYMBOL_GPL(tfrc_tx_hist_cleanup);
-+
-+static struct tfrc_tx_hist
-+	     *tfrc_tx_hist_lookup(struct tfrc_tx_hist_head *head, u64 seqno)
-+{
-+	struct tfrc_tx_hist *entry;
-+
-+	for (entry = head->first; entry != NULL; entry = entry->next)
-+		if (entry->seqno = seqno)
-+			return entry;
-+	return NULL;
-+}
-+
-+/**
-+ *  tfrc_tx_hist_when  -  Retrieve send time of past packet
-+ *  @stamp: send time to look up (returns value result)
-+ *  @head:  TX history to search in
-+ *  @ackno: ACK number which indicates the sent packet's sequence number
-+ *  If successful, it garbage-collects older (irrelevant) entries and returns 1.
-+ */
-+int tfrc_tx_hist_when(ktime_t *stamp, struct tfrc_tx_hist_head *head, u64 ackno)
-+{
-+	struct tfrc_tx_hist *entry = tfrc_tx_hist_lookup(head, ackno);
-+
-+	if (entry != NULL) {
-+		*stamp = entry->stamp;
-+		tfrc_tx_hist_remove_tail(&entry->next, head->cache);
-+		return 1;
-+	}
-+	return 0;
-+}
-+EXPORT_SYMBOL_GPL(tfrc_tx_hist_when);
-+
- void dccp_tx_hist_purge(struct dccp_tx_hist *hist, struct list_head *list)
- {
- 	struct dccp_tx_hist_entry *entry, *next;
-@@ -147,8 +242,7 @@ struct dccp_rx_hist *dccp_rx_hist_new(const char *name)
- 	sprintf(slab_name, dccp_rx_hist_mask, name);
- 	hist->dccprxh_slab = kmem_cache_create(slab_name,
- 					     sizeof(struct dccp_rx_hist_entry),
--					       0, SLAB_HWCACHE_ALIGN,
--					       NULL);
-+					     0, SLAB_HWCACHE_ALIGN, NULL);
- 	if (hist->dccprxh_slab = NULL)
- 		goto out_free_slab_name;
- out:
-diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
-index 032bb61..bb253f1 100644
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -1,10 +1,9 @@
- /*
-- *  net/dccp/packet_history.h
-+ *  Packet RX/TX history data structures and routines for TFRC-based protocols.
-  *
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-  *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
-  *
-- *  An implementation of the DCCP protocol
+-static int dccp_li_hist_interval_new(struct list_head *list,
+-				     const u64 seq_loss, const u8 win_loss)
+-{
+-	struct dccp_li_hist_entry *entry;
+-	int i;
+-
+-	for (i = 0; i < DCCP_LI_HIST_IVAL_F_LENGTH; i++) {
+-		entry = dccp_li_hist_entry_new(GFP_ATOMIC);
+-		if (entry = NULL) {
+-			dccp_li_hist_purge(list);
+-			DCCP_BUG("loss interval list entry is NULL");
+-			return 0;
+-		}
+-		entry->dccplih_interval = ~0;
+-		list_add(&entry->dccplih_node, list);
+-	}
+-
+-	entry->dccplih_seqno     = seq_loss;
+-	entry->dccplih_win_count = win_loss;
+-	return 1;
+-}
+-
+-/* calculate first loss interval
 - *
-  *  This code has been developed by the University of Waikato WAND
-  *  research group. For further information please see http://www.wand.net.nz/
-  *  or e-mail Ian McDonald - ian.mcdonald@jandi.co.nz
-@@ -52,6 +51,11 @@
- /*
-  * 	Transmitter History data structures and declarations
-  */
-+#define DECLARE_TFRC_TX_CACHE(name)	static struct kmem_cache *(name);
-+
-+extern int  tfrc_tx_cache_init(struct kmem_cache **cache, const char *name);
-+extern void tfrc_tx_cache_cleanup(struct kmem_cache *cache);
-+
- struct dccp_tx_hist_entry {
- 	struct list_head dccphtx_node;
- 	u64		 dccphtx_seqno:48,
-@@ -67,6 +71,35 @@ struct dccp_tx_hist {
- extern struct dccp_tx_hist *dccp_tx_hist_new(const char *name);
- extern void 		    dccp_tx_hist_delete(struct dccp_tx_hist *hist);
+- * returns estimated loss interval in usecs */
+-static u32 dccp_li_calc_first_li(struct sock *sk,
+-				 struct list_head *hist_list,
+-				 ktime_t last_feedback,
+-				 u16 s, u32 bytes_recv,
+-				 u32 previous_x_recv)
+-{
+-	/*
+-	 * XXX This function still relies on the old RX interface and thus can not be
+-	 * kept. But it can also not be removed since the loss interval code calls it.
+-	 * Since it will be replaced anyway, comment it out for this moment.
+-	 */
+-#ifdef __THIS_IS_RESOLVED_IN_NEXT_PATCH__
+-	struct dccp_rx_hist_entry *entry, *next, *tail = NULL;
+-	u32 x_recv, p;
+-	suseconds_t rtt, delta;
+-	ktime_t tstamp = ktime_set(0, 0);
+-	int interval = 0;
+-	int win_count = 0;
+-	int step = 0;
+-	u64 fval;
+-
+-	list_for_each_entry_safe(entry, next, hist_list, dccphrx_node) {
+-		if (dccp_rx_hist_entry_data_packet(entry)) {
+-			tail = entry;
+-
+-			switch (step) {
+-			case 0:
+-				tstamp	  = entry->dccphrx_tstamp;
+-				win_count = entry->dccphrx_ccval;
+-				step = 1;
+-				break;
+-			case 1:
+-				interval = win_count - entry->dccphrx_ccval;
+-				if (interval < 0)
+-					interval += TFRC_WIN_COUNT_LIMIT;
+-				if (interval > 4)
+-					goto found;
+-				break;
+-			}
+-		}
+-	}
+-
+-	if (unlikely(step = 0)) {
+-		DCCP_WARN("%s(%p), packet history has no data packets!\n",
+-			  dccp_role(sk), sk);
+-		return ~0;
+-	}
+-
+-	if (unlikely(interval = 0)) {
+-		DCCP_WARN("%s(%p), Could not find a win_count interval > 0."
+-			  "Defaulting to 1\n", dccp_role(sk), sk);
+-		interval = 1;
+-	}
+-found:
+-	if (!tail) {
+-		DCCP_CRIT("tail is null\n");
+-		return ~0;
+-	}
+-
+-	delta = ktime_us_delta(tstamp, tail->dccphrx_tstamp);
+-	DCCP_BUG_ON(delta < 0);
+-
+-	rtt = delta * 4 / interval;
+-	dccp_pr_debug("%s(%p), approximated RTT to %dus\n",
+-		      dccp_role(sk), sk, (int)rtt);
+-
+-	/*
+-	 * Determine the length of the first loss interval via inverse lookup.
+-	 * Assume that X_recv can be computed by the throughput equation
+-	 *		    s
+-	 *	X_recv = --------
+-	 *		 R * fval
+-	 * Find some p such that f(p) = fval; return 1/p [RFC 3448, 6.3.1].
+-	 */
+-	if (rtt = 0) {			/* would result in divide-by-zero */
+-		DCCP_WARN("RTT=0\n");
+-		return ~0;
+-	}
+-
+-	delta = ktime_us_delta(ktime_get_real(), last_feedback);
+-	DCCP_BUG_ON(delta <= 0);
+-
+-	x_recv = scaled_div32(bytes_recv, delta);
+-	if (x_recv = 0) {		/* would also trigger divide-by-zero */
+-		DCCP_WARN("X_recv=0\n");
+-		if (previous_x_recv = 0) {
+-			DCCP_BUG("stored value of X_recv is zero");
+-			return ~0;
+-		}
+-		x_recv = previous_x_recv;
+-	}
+-
+-	fval = scaled_div(s, rtt);
+-	fval = scaled_div32(fval, x_recv);
+-	p = tfrc_calc_x_reverse_lookup(fval);
+-
+-	dccp_pr_debug("%s(%p), receive rate=%u bytes/s, implied "
+-		      "loss rate=%u\n", dccp_role(sk), sk, x_recv, p);
+-
+-	if (p = 0)
+-		return ~0;
+-	else
+-		return 1000000 / p;
+-#else
+-	return ~0;
+-#endif
+-}
+-
+-void dccp_li_update_li(struct sock *sk,
+-		       struct list_head *li_hist_list,
+-		       struct list_head *hist_list,
+-		       ktime_t last_feedback, u16 s, u32 bytes_recv,
+-		       u32 previous_x_recv, u64 seq_loss, u8 win_loss)
+-{
+-	struct dccp_li_hist_entry *head;
+-	u64 seq_temp;
+-
+-	if (list_empty(li_hist_list)) {
+-		if (!dccp_li_hist_interval_new(li_hist_list, seq_loss,
+-					       win_loss))
+-			return;
+-
+-		head = list_entry(li_hist_list->next, struct dccp_li_hist_entry,
+-				  dccplih_node);
+-		head->dccplih_interval = dccp_li_calc_first_li(sk, hist_list,
+-							       last_feedback,
+-							       s, bytes_recv,
+-							       previous_x_recv);
+-	} else {
+-		struct dccp_li_hist_entry *entry;
+-		struct list_head *tail;
+-
+-		head = list_entry(li_hist_list->next, struct dccp_li_hist_entry,
+-				  dccplih_node);
+-		/* FIXME win count check removed as was wrong */
+-		/* should make this check with receive history */
+-		/* and compare there as per section 10.2 of RFC4342 */
+-
+-		/* new loss event detected */
+-		/* calculate last interval length */
+-		seq_temp = dccp_delta_seqno(head->dccplih_seqno, seq_loss);
+-		entry = dccp_li_hist_entry_new(GFP_ATOMIC);
+-
+-		if (entry = NULL) {
+-			DCCP_BUG("out of memory - can not allocate entry");
+-			return;
+-		}
+-
+-		list_add(&entry->dccplih_node, li_hist_list);
+-
+-		tail = li_hist_list->prev;
+-		list_del(tail);
+-		kmem_cache_free(dccp_li_cachep, tail);
+-
+-		/* Create the newest interval */
+-		entry->dccplih_seqno = seq_loss;
+-		entry->dccplih_interval = seq_temp;
+-		entry->dccplih_win_count = win_loss;
+-	}
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_li_update_li);
+-
+ /* Determine if `new_loss' does begin a new loss interval [RFC 4342, 10.2] */
+ static inline u8 tfrc_lh_is_new_loss(struct tfrc_loss_interval *cur,
+ 				     struct tfrc_rx_hist_entry *new_loss)
+@@ -434,15 +166,17 @@ int tfrc_lh_interval_add(struct tfrc_loss_hist *lh, struct tfrc_rx_hist *rh,
+ }
+ EXPORT_SYMBOL_GPL(tfrc_lh_interval_add);
  
-+/**
-+ *  tfrc_tx_hist  -  Simple singly-linked TX history list
-+ *  @next:  next oldest entry (LIFO order)
-+ *  @seqno: sequence number of this entry
-+ *  @stamp: send time of packet with sequence number @seqno
-+ */
-+struct tfrc_tx_hist {
-+	struct tfrc_tx_hist	*next;
-+	u64			seqno;
-+	ktime_t			stamp;
-+};
+-int dccp_li_init(void)
++int __init li_init(void)
+ {
+-	dccp_li_cachep = kmem_cache_create("dccp_li_hist",
+-					   sizeof(struct dccp_li_hist_entry),
+-					   0, SLAB_HWCACHE_ALIGN, NULL);
+-	return dccp_li_cachep = NULL ? -ENOBUFS : 0;
++	tfrc_lh_slab = kmem_cache_create("tfrc_loss_history",
++					 sizeof(struct tfrc_loss_interval),
++					 0, SLAB_HWCACHE_ALIGN, NULL);
 +
-+/**
-+ *  tfrc_tx_hist_head  -  Head of TX history
-+ *  @first: begin of the list
-+ *  @cache: where list entries are allocated from
-+ */
-+struct tfrc_tx_hist_head {
-+	struct tfrc_tx_hist	*first;
-+	struct kmem_cache	*cache;
-+};
-+
-+static inline void tfrc_tx_hist_init(struct tfrc_tx_hist_head *head,
-+				     struct kmem_cache *cache)
-+{
-+	head->first = NULL;
-+	head->cache = cache;
-+}
-+
- static inline struct dccp_tx_hist_entry *
- 			dccp_tx_hist_entry_new(struct dccp_tx_hist *hist,
- 					       const gfp_t prio)
-@@ -94,6 +127,9 @@ static inline struct dccp_tx_hist_entry *
- extern struct dccp_tx_hist_entry *
- 			dccp_tx_hist_find_entry(const struct list_head *list,
- 						const u64 seq);
-+extern int  tfrc_tx_hist_add(struct tfrc_tx_hist_head *head, u64 seqno);
-+extern int  tfrc_tx_hist_when(ktime_t *, struct tfrc_tx_hist_head *, u64);
-+extern void tfrc_tx_hist_cleanup(struct tfrc_tx_hist_head *head);
++	return tfrc_lh_slab = NULL ? -ENOBUFS : 0;
+ }
  
- static inline void dccp_tx_hist_add_entry(struct list_head *list,
- 					  struct dccp_tx_hist_entry *entry)
+-void dccp_li_exit(void)
++void __exit li_cleanup(void)
+ {
+-	kmem_cache_destroy(dccp_li_cachep);
++	if (tfrc_lh_slab != NULL)
++		kmem_cache_destroy(tfrc_lh_slab);
+ }
+diff --git a/net/dccp/ccids/lib/loss_interval.h b/net/dccp/ccids/lib/loss_interval.h
+index 16d37fb..8124040 100644
+--- a/net/dccp/ccids/lib/loss_interval.h
++++ b/net/dccp/ccids/lib/loss_interval.h
+@@ -67,19 +67,10 @@ static inline u8 tfrc_lh_length(struct tfrc_loss_hist *lh)
+ 	return min(lh->counter, (u8)LIH_SIZE);
+ }
+ 
+-extern void dccp_li_hist_purge(struct list_head *list);
+ struct tfrc_rx_hist;
+ extern int  tfrc_lh_interval_add(struct tfrc_loss_hist *, struct tfrc_rx_hist *,
+ 				 u32 (*first_li)(struct sock *), struct sock *);
+ extern u8   tfrc_lh_update_i_mean(struct tfrc_loss_hist *lh, struct sk_buff *);
+ extern void tfrc_lh_cleanup(struct tfrc_loss_hist *lh);
+ 
+-extern u32 dccp_li_hist_calc_i_mean(struct list_head *list);
+-
+-extern void dccp_li_update_li(struct sock *sk,
+-			      struct list_head *li_hist_list,
+-			      struct list_head *hist_list,
+-			      ktime_t last_feedback, u16 s,
+-			      u32 bytes_recv, u32 previous_x_recv,
+-			      u64 seq_loss, u8 win_loss);
+ #endif /* _DCCP_LI_HIST_ */
+diff --git a/net/dccp/ccids/lib/tfrc_module.c b/net/dccp/ccids/lib/tfrc_module.c
+index d432665..a09fba5 100644
+--- a/net/dccp/ccids/lib/tfrc_module.c
++++ b/net/dccp/ccids/lib/tfrc_module.c
+@@ -8,14 +8,14 @@
+ #include "tfrc.h"
+ 
+ /* Initialisation / Clean-up routines */
+-extern int  dccp_li_init(void);
+-extern void dccp_li_exit(void);
++extern int  li_init(void);
++extern void li_cleanup(void);
+ extern int  packet_history_init(void);
+ extern void packet_history_cleanup(void);
+ 
+ static int __init tfrc_module_init(void)
+ {
+-	int rc = dccp_li_init();
++	int rc = li_init();
+ 
+ 	if (rc = 0)
+ 		rc = packet_history_init();
+@@ -26,7 +26,7 @@ static int __init tfrc_module_init(void)
+ static void __exit tfrc_module_exit(void)
+ {
+ 	packet_history_cleanup();
+-	dccp_li_exit();
++	li_cleanup();
+ }
+ 
+ module_init(tfrc_module_init);
 -- 
 1.5.2.2.238.g7cbf2f2-dirty
 
