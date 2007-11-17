@@ -1,61 +1,90 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Sun, 25 Nov 2007 00:21:32 +0000
-Subject: [PATCH 07/18] [CCID2]: Larger initial windows also for CCID2
-Message-Id: <1195950103-18102-8-git-send-email-acme@redhat.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 17 Nov 2007 09:29:41 +0000
+Subject: [PATCH 14/16] [CCID 3]: Use a function to update p_inv, and p is never used
+Message-Id: <11952917843264-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-
-RFC 4341, sec. 5 states that "The cwnd parameter is initialized to at most
-four packets for new connections, following the rules from [RFC3390]", which
-is implemented by this patch.
+This patch
+ 1) removes the redundant `p' field member of the CCID3 RX sock;
+ 2) concentrates previously scattered computation of p_inv into one function;
+ 3) makes the tfrc_rx_info structure standalone, only used on demand.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/ccids/ccid2.c |   20 +++++++++++++++-----
- 1 files changed, 15 insertions(+), 5 deletions(-)
+ net/dccp/ccids/ccid3.c |   11 ++++++++---
+ net/dccp/ccids/ccid3.h |   11 ++++-------
+ 2 files changed, 12 insertions(+), 10 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index ef19fb8..9c5b6c7 100644
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -741,15 +741,25 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- static int ccid2_hc_tx_init(struct ccid *ccid, struct sock *sk)
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index ea218b2..18ace1c 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -908,6 +908,7 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
  {
- 	struct ccid2_hc_tx_sock *hctx = ccid_priv(ccid);
-+	struct dccp_sock *dp = dccp_sk(sk);
-+	u32 max_ratio;
+ 	const struct ccid3_hc_rx_sock *hcrx;
+ 	const void *val;
++	struct tfrc_rx_info rx_info;
  
--	ccid2_change_cwnd(hctx, 1);
--	/* Initialize ssthresh to infinity.  This means that we will exit the
--	 * initial slow-start after the first packet loss.  This is what we
--	 * want.
--	 */
-+	/* RFC 4341, 5: initialise ssthresh to arbitrarily high (max) value */
- 	hctx->ccid2hctx_ssthresh  = ~0;
- 	hctx->ccid2hctx_numdupack = 3;
+ 	/* Listen socks doesn't have a private CCID block */
+ 	if (sk->sk_state = DCCP_LISTEN)
+@@ -916,10 +917,14 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
+ 	hcrx = ccid3_hc_rx_sk(sk);
+ 	switch (optname) {
+ 	case DCCP_SOCKOPT_CCID_RX_INFO:
+-		if (len < sizeof(hcrx->ccid3hcrx_tfrc))
++		if (len < sizeof(rx_info))
+ 			return -EINVAL;
+-		len = sizeof(hcrx->ccid3hcrx_tfrc);
+-		val = &hcrx->ccid3hcrx_tfrc;
++		len = sizeof(rx_info);
++		val = &rx_info;
++		rx_info.tfrcrx_x_recv	= hcrx->ccid3hcrx_x_recv;
++		rx_info.tfrcrx_rtt	= hcrx->ccid3hcrx_rtt;
++		rx_info.tfrcrx_p	= hcrx->ccid3hcrx_pinv = 0 ? ~0U
++					: scaled_div(1, hcrx->ccid3hcrx_pinv);
+ 		break;
+ 	default:
+ 		return -ENOPROTOOPT;
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index b156359..36fa44c 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -140,12 +140,11 @@ enum ccid3_fback_type {
  
-+	/*
-+	 * RFC 4341, 5: "The cwnd parameter is initialized to at most four
-+	 * packets for new connections, following the rules from [RFC3390]".
-+	 * We need to convert the bytes of RFC3390 into the packets of RFC 4341.
-+	 */
-+	hctx->ccid2hctx_cwnd = min(4U, max(2U, 4380U / dp->dccps_mss_cache));
-+
-+	/* Make sure that Ack Ratio is enabled and within bounds. */
-+	max_ratio = DIV_ROUND_UP(hctx->ccid2hctx_cwnd, 2);
-+	if (dp->dccps_l_ack_ratio = 0 || dp->dccps_l_ack_ratio > max_ratio)
-+		dp->dccps_l_ack_ratio = max_ratio;
-+
- 	/* XXX init ~ to window size... */
- 	if (ccid2_hc_tx_alloc_seq(hctx))
- 		return -ENOMEM;
+ /** struct ccid3_hc_rx_sock - CCID3 receiver half-connection socket
+  *
+- *  @ccid3hcrx_x_recv  -  Receiver estimate of send rate (RFC 3448 4.3)
+- *  @ccid3hcrx_rtt  -  Receiver estimate of rtt (non-standard)
+- *  @ccid3hcrx_p  -  current loss event rate (RFC 3448 5.4)
+  *  @ccid3hcrx_last_counter  -  Tracks window counter (RFC 4342, 8.1)
+  *  @ccid3hcrx_state  -  Receiver state, one of %ccid3_hc_rx_states
+  *  @ccid3hcrx_bytes_recv  -  Total sum of DCCP payload bytes
++ *  @ccid3hcrx_x_recv  -  Receiver estimate of send rate (RFC 3448, sec. 4.3)
++ *  @ccid3hcrx_rtt  -  Receiver estimate of RTT
+  *  @ccid3hcrx_last_feedback  -  Time at which last feedback was sent
+  *  @ccid3hcrx_hist  -  Packet history, exported by TFRC module
+  *  @ccid3hcrx_li_hist  -  Loss Interval database, exported by TFRC module
+@@ -153,13 +152,11 @@ enum ccid3_fback_type {
+  *  @ccid3hcrx_pinv  -  Inverse of Loss Event Rate (RFC 4342, sec. 8.5)
+  */
+ struct ccid3_hc_rx_sock {
+-	struct tfrc_rx_info		ccid3hcrx_tfrc;
+-#define ccid3hcrx_x_recv		ccid3hcrx_tfrc.tfrcrx_x_recv
+-#define ccid3hcrx_rtt			ccid3hcrx_tfrc.tfrcrx_rtt
+-#define ccid3hcrx_p			ccid3hcrx_tfrc.tfrcrx_p
+ 	u8				ccid3hcrx_last_counter:4;
+ 	enum ccid3_hc_rx_states		ccid3hcrx_state:8;
+ 	u32				ccid3hcrx_bytes_recv;
++	u32				ccid3hcrx_x_recv;
++	u32				ccid3hcrx_rtt;
+ 	ktime_t				ccid3hcrx_last_feedback;
+ 	struct tfrc_rx_hist		ccid3hcrx_hist;
+ 	struct tfrc_loss_hist		ccid3hcrx_li_hist;
 -- 
-1.5.3.4
+1.5.2.2.238.g7cbf2f2-dirty
 
