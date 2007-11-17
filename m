@@ -1,153 +1,105 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Wed, 28 Nov 2007 15:23:50 +0000
-Subject: [PATCH 3/5] [DCCP]: Dedicated auxiliary states to support passive-close
-Message-Id: <1196263432-17390-4-git-send-email-acme@redhat.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 17 Nov 2007 09:29:30 +0000
+Subject: [PATCH 03/16] [CCID3]: Accurately determine idle & application-limited periods
+Message-Id: <11952917832786-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+This fixes/updates the handling of idle and application-limited periods in CCID3,
+which currently is broken: there is no detection as to how long a sender has been
+idle - there is only one flag which is toggled in between function calls.
 
-This adds two auxiliary states to deal with passive closes:
-  * PASSIVE_CLOSE    (reached from OPEN via reception of Close)    and
-  * PASSIVE_CLOSEREQ (reached from OPEN via reception of CloseReq)
-as internal intermediate states.
-
-These states are used to allow a receiver to process unread data before
-acknowledging the received connection-termination-request (the Close/CloseReq).
-
-Without such support, it will happen that passively-closed sockets enter CLOSED
-state while there is still unprocessed data in the queue; leading to unexpected
-and erratic API behaviour.
-
-PASSIVE_CLOSE has been mapped into TCPF_CLOSE_WAIT, so that the code will
-seamlessly work with inet_accept() (which tests for this state).
-
-The state names are thanks to Arnaldo, who suggested this naming scheme
-following an earlier revision of this patch.
+Being obsolete now, the `idle' flag is removed.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- include/linux/dccp.h |   56 ++++++++++++++++++++++++++++++++++---------------
- net/dccp/proto.c     |   22 ++++++++++---------
- 2 files changed, 51 insertions(+), 27 deletions(-)
+ net/dccp/ccids/ccid3.c |   18 ++++++++++--------
+ net/dccp/ccids/ccid3.h |    2 --
+ 2 files changed, 10 insertions(+), 10 deletions(-)
 
-diff --git a/include/linux/dccp.h b/include/linux/dccp.h
-index a007326..8b3f9ad 100644
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -227,29 +227,51 @@ struct dccp_so_feat {
- #include <net/tcp_states.h>
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index e153366..5ff4231 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -119,6 +119,13 @@ static inline void ccid3_update_send_interval(struct ccid3_hc_tx_sock *hctx)
  
- enum dccp_state {
--	DCCP_OPEN	= TCP_ESTABLISHED,
--	DCCP_REQUESTING	= TCP_SYN_SENT,
--	DCCP_LISTEN	= TCP_LISTEN,
--	DCCP_RESPOND	= TCP_SYN_RECV,
--	DCCP_CLOSING	= TCP_CLOSING,
--	DCCP_TIME_WAIT	= TCP_TIME_WAIT,
--	DCCP_CLOSED	= TCP_CLOSE,
--	DCCP_PARTOPEN	= TCP_MAX_STATES,
-+	DCCP_OPEN	     = TCP_ESTABLISHED,
-+	DCCP_REQUESTING	     = TCP_SYN_SENT,
-+	DCCP_LISTEN	     = TCP_LISTEN,
-+	DCCP_RESPOND	     = TCP_SYN_RECV,
-+	/*
-+	 * States involved in closing a DCCP connection:
-+	 * 1) ACTIVE_CLOSEREQ is entered by a server sending a CloseReq.
-+	 *
-+	 * 2) CLOSING can have three different meanings (RFC 4340, 8.3):
-+	 *  a. Client has performed active-close, has sent a Close to the server
-+	 *     from state OPEN or PARTOPEN, and is waiting for the final Reset
-+	 *     (in this case, SOCK_DONE = 1).
-+	 *  b. Client is asked to perform passive-close, by receiving a CloseReq
-+	 *     in (PART)OPEN state. It sends a Close and waits for final Reset
-+	 *     (in this case, SOCK_DONE = 0).
-+	 *  c. Server performs an active-close as in (a), keeps TIMEWAIT state.
-+	 *
-+	 * 3) The following intermediate states are employed to give passively
-+	 *    closing nodes a chance to process their unread data:
-+	 *    - PASSIVE_CLOSE    (from OPEN => CLOSED) and
-+	 *    - PASSIVE_CLOSEREQ (from (PART)OPEN to CLOSING; case (b) above).
-+	 */
-+	DCCP_ACTIVE_CLOSEREQ = TCP_FIN_WAIT1,
-+	DCCP_PASSIVE_CLOSE   = TCP_CLOSE_WAIT,	/* any node receiving a Close */
-+	DCCP_CLOSING	     = TCP_CLOSING,
-+	DCCP_TIME_WAIT	     = TCP_TIME_WAIT,
-+	DCCP_CLOSED	     = TCP_CLOSE,
-+	DCCP_PARTOPEN	     = TCP_MAX_STATES,
-+	DCCP_PASSIVE_CLOSEREQ,			/* clients receiving CloseReq */
- 	DCCP_MAX_STATES
- };
+ }
  
--#define DCCP_STATE_MASK 0xf
-+#define DCCP_STATE_MASK 0x1f
- #define DCCP_ACTION_FIN (1<<7)
++static u32 ccid3_hc_tx_idle_rtt(struct ccid3_hc_tx_sock *hctx, ktime_t now)
++{
++	u32 delta = ktime_us_delta(now, hctx->ccid3hctx_t_last_win_count);
++
++	return delta/hctx->ccid3hctx_rtt;
++}
++
+ /**
+  * ccid3_hc_tx_update_x  -  Update allowed sending rate X
+  * @stamp: most recent time if available - can be left NULL.
+@@ -139,10 +146,11 @@ static void ccid3_hc_tx_update_x(struct sock *sk, ktime_t *stamp)
  
- enum {
--	DCCPF_OPEN	 = TCPF_ESTABLISHED,
--	DCCPF_REQUESTING = TCPF_SYN_SENT,
--	DCCPF_LISTEN	 = TCPF_LISTEN,
--	DCCPF_RESPOND	 = TCPF_SYN_RECV,
--	DCCPF_CLOSING	 = TCPF_CLOSING,
--	DCCPF_TIME_WAIT	 = TCPF_TIME_WAIT,
--	DCCPF_CLOSED	 = TCPF_CLOSE,
--	DCCPF_PARTOPEN	 = 1 << DCCP_PARTOPEN,
-+	DCCPF_OPEN	      = TCPF_ESTABLISHED,
-+	DCCPF_REQUESTING      = TCPF_SYN_SENT,
-+	DCCPF_LISTEN	      = TCPF_LISTEN,
-+	DCCPF_RESPOND	      = TCPF_SYN_RECV,
-+	DCCPF_ACTIVE_CLOSEREQ = TCPF_FIN_WAIT1,
-+	DCCPF_CLOSING	      = TCPF_CLOSING,
-+	DCCPF_TIME_WAIT	      = TCPF_TIME_WAIT,
-+	DCCPF_CLOSED	      = TCPF_CLOSE,
-+	DCCPF_PARTOPEN	      = (1 << DCCP_PARTOPEN),
- };
+ 	/*
+ 	 * Handle IDLE periods: do not reduce below RFC3390 initial sending rate
+-	 * when idling [RFC 4342, 5.1]. See also draft-ietf-dccp-rfc3448bis.
++	 * when idling [RFC 4342, 5.1]. Definition of idling is from rfc3448bis:
++	 * a sender is idle if it has not sent anything over a 2-RTT-period.
+ 	 * For consistency with X and X_recv, min_rate is also scaled by 2^6.
+ 	 */
+-	if (unlikely(hctx->ccid3hctx_idle)) {
++	if (ccid3_hc_tx_idle_rtt(hctx, now) >= 2) {
+ 		min_rate = rfc3390_initial_rate(sk);
+ 		min_rate = max(min_rate, 2 * hctx->ccid3hctx_x_recv);
+ 	}
+@@ -228,8 +236,6 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+ 	ccid3_pr_debug("%s(%p, state=%s) - entry \n", dccp_role(sk), sk,
+ 		       ccid3_tx_state_name(hctx->ccid3hctx_state));
  
- static inline struct dccp_hdr *dccp_hdr(const struct sk_buff *skb)
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 73006b7..3489d3f 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -60,8 +60,7 @@ void dccp_set_state(struct sock *sk, const int state)
- {
- 	const int oldstate = sk->sk_state;
+-	hctx->ccid3hctx_idle = 1;
+-
+ 	switch (hctx->ccid3hctx_state) {
+ 	case TFRC_SSTATE_NO_FBACK:
+ 		/* RFC 3448, 4.4: Halve send rate directly */
+@@ -372,7 +378,6 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 	/* prepare to send now (add options etc.) */
+ 	dp->dccps_hc_tx_insert_options = 1;
+ 	DCCP_SKB_CB(skb)->dccpd_ccval = hctx->ccid3hctx_last_win_count;
+-	hctx->ccid3hctx_idle = 0;
  
--	dccp_pr_debug("%s(%p) %-10.10s -> %s\n",
--		      dccp_role(sk), sk,
-+	dccp_pr_debug("%s(%p)  %s  -->  %s\n", dccp_role(sk), sk,
- 		      dccp_state_name(oldstate), dccp_state_name(state));
- 	WARN_ON(state = oldstate);
+ 	/* set the nominal send time for the next following packet */
+ 	hctx->ccid3hctx_t_nom = ktime_add_us(hctx->ccid3hctx_t_nom,
+@@ -531,9 +536,6 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
  
-@@ -134,14 +133,17 @@ EXPORT_SYMBOL_GPL(dccp_packet_name);
- const char *dccp_state_name(const int state)
- {
- 	static char *dccp_state_names[] = {
--	[DCCP_OPEN]	  = "OPEN",
--	[DCCP_REQUESTING] = "REQUESTING",
--	[DCCP_PARTOPEN]	  = "PARTOPEN",
--	[DCCP_LISTEN]	  = "LISTEN",
--	[DCCP_RESPOND]	  = "RESPOND",
--	[DCCP_CLOSING]	  = "CLOSING",
--	[DCCP_TIME_WAIT]  = "TIME_WAIT",
--	[DCCP_CLOSED]	  = "CLOSED",
-+	[DCCP_OPEN]		= "OPEN",
-+	[DCCP_REQUESTING]	= "REQUESTING",
-+	[DCCP_PARTOPEN]		= "PARTOPEN",
-+	[DCCP_LISTEN]		= "LISTEN",
-+	[DCCP_RESPOND]		= "RESPOND",
-+	[DCCP_CLOSING]		= "CLOSING",
-+	[DCCP_ACTIVE_CLOSEREQ]	= "CLOSEREQ",
-+	[DCCP_PASSIVE_CLOSE]	= "PASSIVE_CLOSE",
-+	[DCCP_PASSIVE_CLOSEREQ]	= "PASSIVE_CLOSEREQ",
-+	[DCCP_TIME_WAIT]	= "TIME_WAIT",
-+	[DCCP_CLOSED]		= "CLOSED",
- 	};
- 
- 	if (state >= DCCP_MAX_STATES)
+ 		sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
+ 				   jiffies + usecs_to_jiffies(t_nfb));
+-
+-		/* set idle flag */
+-		hctx->ccid3hctx_idle = 1;
+ 		break;
+ 	case TFRC_SSTATE_NO_SENT:	/* fall through */
+ 	case TFRC_SSTATE_TERM:		/* ignore feedback when closing */
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index 83467c3..36eca34 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -88,7 +88,6 @@ enum ccid3_hc_tx_states {
+  * @ccid3hctx_t_last_win_count - Timestamp of earliest packet
+  *				 with last_win_count value sent
+  * @ccid3hctx_no_feedback_timer - Handle to no feedback timer
+- * @ccid3hctx_idle - Flag indicating that sender is idling
+  * @ccid3hctx_t_ld - Time last doubled during slow start
+  * @ccid3hctx_t_nom - Nominal send time of next packet
+  * @ccid3hctx_delta - Send timer delta (RFC 3448, 4.6) in usecs
+@@ -107,7 +106,6 @@ struct ccid3_hc_tx_sock {
+ 	u16				ccid3hctx_s;
+ 	enum ccid3_hc_tx_states		ccid3hctx_state:8;
+ 	u8				ccid3hctx_last_win_count;
+-	u8				ccid3hctx_idle;
+ 	ktime_t				ccid3hctx_t_last_win_count;
+ 	struct timer_list		ccid3hctx_no_feedback_timer;
+ 	ktime_t				ccid3hctx_t_ld;
 -- 
-1.5.3.4
+1.5.2.2.238.g7cbf2f2-dirty
 
