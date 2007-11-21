@@ -1,228 +1,112 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 17 Nov 2007 09:29:42 +0000
-Subject: [PATCH 15/16] [CCID 3]: Implement rfc3448bis changes to feedback reception
-Message-Id: <11952917843057-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Wed, 21 Nov 2007 15:28:30 +0000
+Subject: [PATCH 08/11] [DCCP]: Promote CCID2 as default CCID
+Message-Id: <1195658913-24840-9-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This implements the algorithm to update the allowed sending rate X upon
-receiving feedback packets, as described in draft rfc3448bis, 4.2/4.3.
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-The patch further removes two irrelevant states in TX feedback handling:
+This patch addresses the following problems:
 
- * the NO_SENT state is only triggered in bidirectional mode,
-   costing unnecessary processing.
- * the TERM (terminating) state is irrelevant.
+ 1. DCCP relies for its proper functioning on having at least one CCID module
+    enabled (as in TCP plugable congestion control). Currently it is possible to
+    disable both CCIDs and thus leave the DCCP module in a compiled, but entirely
+    non-functional state: no sockets can be created when no CCID is available.
+    Furthermore, the protocol is (again like TCP) not intended to be used without
+    CCIDs. Last, a non-empty CCID list is needed for doing CCID feature negotiation.
+
+ 2. Internally the default CCID that is advertised by the Linux host is set to CCID2
+    (DCCPF_INITIAL_CCID in include/linux/dccp.h). Disabling CCID2 in the Kconfig
+    menu without changing the defaults leads to a failure `module not found' when
+    trying to load the dccp module (which internally tries to load the default CCID).
+
+ 3. The specification (RFC 4340, sec. 10) treats CCID2 somewhat like a
+    `minimum common denominator'; the specification says that:
+
+    * "New connections start with CCID 2 for both endpoints"
+
+    * "A DCCP implementation intended for general use, such as an implementation in a
+       general-purpose operating system kernel, SHOULD implement at least CCID 2.
+       The intent is to make CCID 2 broadly available for interoperability [...]"
+
+    Providing CCID2 as minimum-required CCID (like Reno/Cubic in TCP) thus seems reasonable.
+
+Hence this patch automatically selects CCID2 when DCCP is enabled. Documentation also added.
+
+Discussions with Ian McDonald on this subject are gratefully acknowledged.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/ccid3.c |  171 ++++++++++++++++++++++++------------------------
- 1 files changed, 86 insertions(+), 85 deletions(-)
+ Documentation/networking/dccp.txt |   11 +++++++++--
+ net/dccp/Kconfig                  |    1 +
+ net/dccp/ccids/Kconfig            |   13 ++-----------
+ 3 files changed, 12 insertions(+), 13 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 18ace1c..c631c3b 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -405,110 +405,111 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	      DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_DATAACK))
- 		return;
+diff --git a/Documentation/networking/dccp.txt b/Documentation/networking/dccp.txt
+index fdc93be..ffb9ca9 100644
+--- a/Documentation/networking/dccp.txt
++++ b/Documentation/networking/dccp.txt
+@@ -14,8 +14,15 @@ Introduction
+ ======
  
-+	/* ... and only in the established state */
-+	switch (hctx->ccid3hctx_state) {
-+	case TFRC_SSTATE_NO_FBACK:	/* fall through */
-+	case TFRC_SSTATE_FBACK:		break;
-+	default:			return;
-+	}
-+
-+	/* estimate RTT from history if ACK number is valid */
-+	if (! tfrc_tx_hist_when(&t_send, &hctx->ccid3hctx_hist,
-+			        DCCP_SKB_CB(skb)->dccpd_ack_seq)) {
-+		DCCP_WARN("%s(%p): %s with bogus ACK-%llu\n", dccp_role(sk), sk,
-+			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type),
-+			  (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq);
-+		return;
-+	}
-+
- 	opt_recv = &hctx->ccid3hctx_options_received;
+ Datagram Congestion Control Protocol (DCCP) is an unreliable, connection
+-based protocol designed to solve issues present in UDP and TCP particularly
+-for real time and multimedia traffic.
++oriented protocol designed to solve issues present in UDP and TCP, particularly
++for real-time and multimedia (streaming) traffic.
++It divides into a base protocol (RFC 4340) and plugable congestion control
++modules called CCIDs. Like plugable TCP congestion control, at least one CCID
++needs to be enabled in order for the protocol to function properly. In the Linux
++implementation, this is the TCP-like CCID2 (RFC 4341). Additional CCIDs, such as
++the TCP-friendly CCID3 (RFC 4342), are optional.
++For a brief introduction to CCIDs and suggestions for choosing a CCID to match
++given applications, see section 10 of RFC 4340.
  
--	switch (hctx->ccid3hctx_state) {
--	case TFRC_SSTATE_NO_FBACK:
--	case TFRC_SSTATE_FBACK:
--		/* estimate RTT from history if ACK number is valid */
--		if (! tfrc_tx_hist_when(&t_send, &hctx->ccid3hctx_hist,
--				        DCCP_SKB_CB(skb)->dccpd_ack_seq)) {
--			DCCP_WARN("%s(%p): %s with bogus ACK-%llu\n", dccp_role(sk), sk,
--				  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type),
--				  (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq);
--			return;
--		}
-+	/* Update receive rate in units of 64 * bytes/second */
-+	hctx->ccid3hctx_x_recv = opt_recv->ccid3or_receive_rate;
-+	hctx->ccid3hctx_x_recv <<= 6;
+ It has a base protocol and pluggable congestion control IDs (CCIDs).
  
--		/* Update receive rate in units of 64 * bytes/second */
--		hctx->ccid3hctx_x_recv = opt_recv->ccid3or_receive_rate;
--		hctx->ccid3hctx_x_recv <<= 6;
-+	/* Update loss event rate (which is scaled by 1e6) */
-+	pinv = opt_recv->ccid3or_loss_event_rate;
-+	if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
-+		hctx->ccid3hctx_p = 0;
-+	else				       /* can not exceed 100% */
-+		hctx->ccid3hctx_p = scaled_div(1, pinv);
+diff --git a/net/dccp/Kconfig b/net/dccp/Kconfig
+index 0549e47..7aa2a7a 100644
+--- a/net/dccp/Kconfig
++++ b/net/dccp/Kconfig
+@@ -1,6 +1,7 @@
+ menuconfig IP_DCCP
+ 	tristate "The DCCP Protocol (EXPERIMENTAL)"
+ 	depends on INET && EXPERIMENTAL
++	select IP_DCCP_CCID2
+ 	---help---
+ 	  Datagram Congestion Control Protocol (RFC 4340)
  
--		/* Update loss event rate */
--		pinv = opt_recv->ccid3or_loss_event_rate;
--		if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
--			hctx->ccid3hctx_p = 0;
--		else				       /* can not exceed 100% */
--			hctx->ccid3hctx_p = 1000000 / pinv;
-+	/*
-+	 * Calculate new RTT sample and update moving average
-+	 */
-+	now = ktime_get_real();
-+	r_sample = dccp_sample_rtt(sk, ktime_us_delta(now, t_send));
-+	hctx->ccid3hctx_rtt = tfrc_ewma(hctx->ccid3hctx_rtt, r_sample, 9);
+diff --git a/net/dccp/ccids/Kconfig b/net/dccp/ccids/Kconfig
+index 80f4698..f37af17 100644
+--- a/net/dccp/ccids/Kconfig
++++ b/net/dccp/ccids/Kconfig
+@@ -20,18 +20,9 @@ config IP_DCCP_CCID2
+ 	  to the user.  For example, a hypothetical application that
+ 	  transferred files over DCCP, using application-level retransmissions
+ 	  for lost packets, would prefer CCID 2 to CCID 3.  On-line games may
+-	  also prefer CCID 2.
++	  also prefer CCID 2.  See RFC 4341 for further details.
  
--		now = ktime_get_real();
--		/*
--		 * Calculate new RTT sample and update moving average
--		 */
--		r_sample = dccp_sample_rtt(sk, ktime_us_delta(now, t_send));
--		hctx->ccid3hctx_rtt = tfrc_ewma(hctx->ccid3hctx_rtt, r_sample, 9);
-+	/*
-+	 *	Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
-+	 */
-+	if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
-+
-+		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
- 
--		if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
-+		if (hctx->ccid3hctx_t_rto = 0) {
- 			/*
--			 * Larger Initial Windows [RFC 4342, sec. 5]
-+			 * Initial feedback packet: Larger Initial Windows (4.2)
- 			 */
- 			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
- 			hctx->ccid3hctx_t_ld = now;
- 
- 			ccid3_update_send_interval(hctx);
- 
--			ccid3_pr_debug("%s(%p), s=%u, MSS=%u, "
--				       "R_sample=%uus, X=%u\n", dccp_role(sk),
--				       sk, hctx->ccid3hctx_s,
--				       dccp_sk(sk)->dccps_mss_cache, r_sample,
--				       (unsigned)(hctx->ccid3hctx_x >> 6));
-+			goto done_computing_x;
- 
--			ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
--		} else {
+-	  CCID 2 is further described in RFC 4341,
+-	  http://www.ietf.org/rfc/rfc4341.txt
 -
--			/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
--			if (hctx->ccid3hctx_p > 0)
--				hctx->ccid3hctx_x_calc -					tfrc_calc_x(hctx->ccid3hctx_s,
--						    hctx->ccid3hctx_rtt,
--						    hctx->ccid3hctx_p);
--			ccid3_hc_tx_update_x(sk, &now);
+-	  This text was extracted from RFC 4340 (sec. 10.1),
+-	  http://www.ietf.org/rfc/rfc4340.txt
 -
--			ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, "
--				       "p=%u, X_calc=%u, X_recv=%u, X=%u\n",
--				       dccp_role(sk),
--				       sk, hctx->ccid3hctx_rtt, r_sample,
--				       hctx->ccid3hctx_s, hctx->ccid3hctx_p,
--				       hctx->ccid3hctx_x_calc,
--				       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
--				       (unsigned)(hctx->ccid3hctx_x >> 6));
-+		} else if (hctx->ccid3hctx_p = 0) {
-+			/*
-+			 * First feedback after nofeedback timer expiry (4.3)
-+			 */
-+			goto done_computing_x;
- 		}
-+	}
-+	/* perform step (4) of draft rfc3448bis, section 4.3 */
-+	if (hctx->ccid3hctx_p > 0)
-+		hctx->ccid3hctx_x_calc = tfrc_calc_x(hctx->ccid3hctx_s,
-+						     hctx->ccid3hctx_rtt,
-+						     hctx->ccid3hctx_p);
-+	ccid3_hc_tx_update_x(sk, &now);
-+
-+done_computing_x:
-+	ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, p=%u, X_calc=%u, "
-+		       "X_recv=%u, X=%u\n", dccp_role(sk), sk,
-+		       hctx->ccid3hctx_rtt, r_sample, hctx->ccid3hctx_s,
-+		       hctx->ccid3hctx_p, hctx->ccid3hctx_x_calc,
-+		       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
-+		       (unsigned)(hctx->ccid3hctx_x >> 6));
-+
-+	/* unschedule no feedback timer */
-+	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
- 
--		/* unschedule no feedback timer */
--		sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
+-	  To compile this CCID as a module, choose M here: the module will be
+-	  called dccp_ccid2.
 -
--		/*
--		 * As we have calculated new ipi, delta, t_nom it is possible
--		 * that we now can send a packet, so wake up dccp_wait_for_ccid
--		 */
--		sk->sk_write_space(sk);
-+	/*
-+	 * As we have calculated new ipi, delta, t_nom it is possible
-+	 * that we now can send a packet, so wake up dccp_wait_for_ccid
-+	 */
-+	sk->sk_write_space(sk);
+-	  If in doubt, say M.
++	  CCID2 is the default CCID used by DCCP.
  
--		/*
--		 * Update timeout interval for the nofeedback timer.
--		 * We use a configuration option to increase the lower bound.
--		 * This can help avoid triggering the nofeedback timer too
--		 * often ('spinning') on LANs with small RTTs.
--		 */
--		hctx->ccid3hctx_t_rto = max_t(u32, 4 * hctx->ccid3hctx_rtt,
--						   CONFIG_IP_DCCP_CCID3_RTO *
--						   (USEC_PER_SEC/1000));
--		/*
--		 * Schedule no feedback timer to expire in
--		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
--		 */
--		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
-+	/*
-+	 * Update timeout interval for the nofeedback timer.
-+	 * We use a configuration option to increase the lower bound.
-+	 * This can help avoid triggering the nofeedback timer too
-+	 * often ('spinning') on LANs with small RTTs.
-+	 */
-+	hctx->ccid3hctx_t_rto = max_t(u32, 4 * hctx->ccid3hctx_rtt,
-+					   CONFIG_IP_DCCP_CCID3_RTO *
-+					   (USEC_PER_SEC/1000));
-+	/*
-+	 * Schedule no feedback timer to expire in
-+	 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
-+	 */
-+	t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
- 
--		ccid3_pr_debug("%s(%p), Scheduled no feedback timer to "
--			       "expire in %lu jiffies (%luus)\n",
--			       dccp_role(sk),
--			       sk, usecs_to_jiffies(t_nfb), t_nfb);
-+	sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
-+			   jiffies + usecs_to_jiffies(t_nfb));
- 
--		sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
--				   jiffies + usecs_to_jiffies(t_nfb));
--		break;
--	case TFRC_SSTATE_NO_SENT:	/* fall through */
--	case TFRC_SSTATE_TERM:		/* ignore feedback when closing */
--		break;
--	}
-+	ccid3_pr_debug("Scheduled no feedback timer to expire in %lu jiffies"
-+		       "(%luus)\n", usecs_to_jiffies(t_nfb), t_nfb);
- }
- 
- static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
+ config IP_DCCP_CCID2_DEBUG
+ 	  bool "CCID2 debugging messages"
 -- 
-1.5.2.2.238.g7cbf2f2-dirty
+1.5.3.4
 
