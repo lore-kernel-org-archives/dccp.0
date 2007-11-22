@@ -1,23 +1,47 @@
-From: Herbert Xu <herbert@gondor.apana.org.au>
-Date: Fri, 30 Nov 2007 13:08:10 +0000
-Subject: Re: [PATCH 1/1][TFRC]: Hide tx history details from the CCIDs
-Message-Id: <20071130130810.GJ26848@gondor.apana.org.au>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 22 Nov 2007 15:38:43 +0000
+Subject: [RFC]: Withdrawal of passive-close patches
+Message-Id: <20071122153843.GA13762@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <20071130015812.GP12069@ghostprotocols.net>
-In-Reply-To: <20071130015812.GP12069@ghostprotocols.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="hz-gb-2312"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-T24gVGh1LCBOb3YgMjksIDIwMDcgYXQgMTE6NTg6MTJQTSAtMDIwMCwgQXJuYWxkbyBDYXJ2YWxo
-byBkZSBNZWxvIHdyb3RlOgo+IAo+IAlQbGVhc2UgY29uc2lkZXIgcHVsbGluZyBmcm9tOgo+IAo+
-IAltYXN0ZXIua2VybmVsLm9yZzovcHViL3NjbS9saW51eC9rZXJuZWwvZ2l0L2FjbWUvbmV0LTIu
-Ni4yNQoKUHVsbGVkLiAgVGhhbmtzIEFybmFsZG8hCi0tIApWaXNpdCBPcGVuc3dhbiBhdCBodHRw
-Oi8vd3d3Lm9wZW5zd2FuLm9yZy8KRW1haWw6IEhlcmJlcnQgWHUgfntQbVY+SEl+fSA8aGVyYmVy
-dEBnb25kb3IuYXBhbmEub3JnLmF1PgpIb21lIFBhZ2U6IGh0dHA6Ly9nb25kb3IuYXBhbmEub3Jn
-LmF1L35oZXJiZXJ0LwpQR1AgS2V5OiBodHRwOi8vZ29uZG9yLmFwYW5hLm9yZy5hdS9+aGVyYmVy
-dC9wdWJrZXkudHh0Ci0KVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxpc3Q6IHNlbmQgdGhlIGxp
-bmUgInVuc3Vic2NyaWJlIGRjY3AiIGluCnRoZSBib2R5IG9mIGEgbWVzc2FnZSB0byBtYWpvcmRv
-bW9Admdlci5rZXJuZWwub3JnCk1vcmUgbWFqb3Jkb21vIGluZm8gYXQgIGh0dHA6Ly92Z2VyLmtl
-cm5lbC5vcmcvbWFqb3Jkb21vLWluZm8uaHRtbA==
+After fixing the issue with the leaked-skbs I spent nearly a day trying
+to provoke the problem that lead to the following two patches:
+
+   [DCCP]: Dedicated auxiliary states to support passive-close
+   [DCCP]: Basic support for passive-close
+   [DCCP]: More informative state names
+
+It is almost 8 months ago that I worked on these (my notes say 28th March)
+and I don't have the source code of the test program I used. I was sure
+that there was a problem since I was able to see the data on the wire
+but it didn't reach the application.
+
+Really, I can't remember what the condition was. It may have been some
+kind of race condition, or something which can be dealt with at the
+application programming level rather than at the kernel level.
+
+The case may be that ... 
+ 1. I misjudged the cause of the problem;
+ 2. the problem may have disappeared during the 8 months of kernel changes;
+ 3. the problem may re-appear later on.
+
+The current solution is to enqueue the DCCP-Close and DCCP-Reset so that
+these come last in the receive buffer. I am actually hoping that I am 
+wrong (case (1)), since the current solution is much simpler than the one
+I was suggesting and "simpler is better".
+
+So I suggest to remove / not consider the following three patches:
+   [DCCP]: Dedicated auxiliary states to support passive-close
+   [DCCP]: Basic support for passive-close
+   [DCCP]: More informative state names
+
+If you or anyone on the list can create a condition which will lead to
+"application received data but didn't have a chance to read it", I'd like
+to hear about it.
+
+For now, I will update the test tree (remove the above trio) and remove
+the online notes: they may at best be outdated and at worst plain wrong.
