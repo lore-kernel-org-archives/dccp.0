@@ -1,35 +1,23 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Wed, 21 Nov 2007 15:28:22 +0000
-Subject: [PATCHES 0/11]: DCCP patches for 2.6.25
-Message-Id: <1195658913-24840-1-git-send-email-acme@redhat.com>
+From: Herbert Xu <herbert@gondor.apana.org.au>
+Date: Fri, 23 Nov 2007 11:00:24 +0000
+Subject: Re: [PATCHES 0/11]: DCCP patches for 2.6.25
+Message-Id: <20071123110024.GA18823@gondor.apana.org.au>
 List-Id: <dccp.vger.kernel.org>
+References: <1195658913-24840-1-git-send-email-acme@redhat.com>
+In-Reply-To: <1195658913-24840-1-git-send-email-acme@redhat.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="hz-gb-2312"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-Hi Herbert,
-
-	Please consider pulling from:
-
-master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.25
-
-Best Regards,
-
-- Arnaldo
-
- Documentation/networking/dccp.txt |   33 ++++++++++++++++------
- Documentation/networking/dccp.txt |    2 +
- include/linux/dccp.h              |   15 ++--------
- net/dccp/Kconfig                  |    1
- net/dccp/ccids/Kconfig            |   14 +--------
- net/dccp/ccids/ccid3.c            |   22 ++++++++------
- net/dccp/ccids/ccid3.h            |    3 --
- net/dccp/ccids/lib/tfrc.h         |   10 ++++++
- net/dccp/input.c                  |   27 +++++++++++++-----
- net/dccp/options.c                |   14 ++++-----
- net/dccp/proto.c                  |    3 --
- net/dccp/ccids/Kconfig            |    5 ---
- net/dccp/ccids/ccid3.c            |   53 ++++++++++--------------------------
- net/dccp/ccids/ccid3.h            |    3 --
- 14 files changed, 97 insertions(+), 108 deletions(-)
+T24gV2VkLCBOb3YgMjEsIDIwMDcgYXQgMDE6Mjg6MjJQTSAtMDIwMCwgQXJuYWxkbyBDYXJ2YWxo
+byBkZSBNZWxvIHdyb3RlOgo+IEhpIEhlcmJlcnQsCj4gCj4gCVBsZWFzZSBjb25zaWRlciBwdWxs
+aW5nIGZyb206Cj4gCj4gbWFzdGVyLmtlcm5lbC5vcmc6L3B1Yi9zY20vbGludXgva2VybmVsL2dp
+dC9hY21lL25ldC0yLjYuMjUKCkFsbCBjaGFuZ2VzIHB1bGxlZC4gIFRoYW5rcyBBcm5hbGRvIQot
+LSAKVmlzaXQgT3BlbnN3YW4gYXQgaHR0cDovL3d3dy5vcGVuc3dhbi5vcmcvCkVtYWlsOiBIZXJi
+ZXJ0IFh1IH57UG1WPkhJfn0gPGhlcmJlcnRAZ29uZG9yLmFwYW5hLm9yZy5hdT4KSG9tZSBQYWdl
+OiBodHRwOi8vZ29uZG9yLmFwYW5hLm9yZy5hdS9+aGVyYmVydC8KUEdQIEtleTogaHR0cDovL2dv
+bmRvci5hcGFuYS5vcmcuYXUvfmhlcmJlcnQvcHVia2V5LnR4dAotClRvIHVuc3Vic2NyaWJlIGZy
+b20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9k
+eSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9t
+byBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
