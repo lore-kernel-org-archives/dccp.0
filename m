@@ -1,26 +1,64 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Thu, 08 Nov 2007 01:33:03 +0000
-Subject: Re: [PATCH 8/9] [CCID2]: Remove redundant ack-counting variable
-Message-Id: <5640c7e00711071733m405849a0n8f1761255c1fa38d@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Sun, 25 Nov 2007 00:21:31 +0000
+Subject: [PATCH 06/18] [DCCP]: Initialize dccp_sock before calling the ccid constructors
+Message-Id: <1195950103-18102-7-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200711031323.59832@strip-the-willow>
-In-Reply-To: <200711031323.59832@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/4/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> The code used two different variables to count Acks, one of them redundant.
-> This patch reduces the number of Ack counters to one.
->
-> The type of the Ack counter has also been changed to u32 (twice the range of int);
-> and the variable has been renamed into `packets_acked' - for consistency with
-> RFC 3465 (and similarly named variables are used by TCP and SCTP).
->
-> Lastly, a slightly less aggressive `maxincr' increment is used (for even Ack Ratios,
-> maxincr was Ack Ratio/2 + 1 instead of Ack Ratio/2).
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+This is because in the next patch CCID2 will assume that dccps_mss_cache is
+non-zero.
 
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/proto.c |   25 +++++++++++++------------
+ 1 files changed, 13 insertions(+), 12 deletions(-)
+
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 0aec735..d48005f 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -174,6 +174,19 @@ int dccp_init_sock(struct sock *sk, const __u8 ctl_sock_initialized)
+ 
+ 	dccp_minisock_init(&dp->dccps_minisock);
+ 
++	icsk->icsk_rto		= DCCP_TIMEOUT_INIT;
++	icsk->icsk_syn_retries	= sysctl_dccp_request_retries;
++	sk->sk_state		= DCCP_CLOSED;
++	sk->sk_write_space	= dccp_write_space;
++	icsk->icsk_sync_mss	= dccp_sync_mss;
++	dp->dccps_mss_cache	= 536;
++	dp->dccps_rate_last	= jiffies;
++	dp->dccps_role		= DCCP_ROLE_UNDEFINED;
++	dp->dccps_service	= DCCP_SERVICE_CODE_IS_ABSENT;
++	dp->dccps_l_ack_ratio	= dp->dccps_r_ack_ratio = 1;
++
++	dccp_init_xmit_timers(sk);
++
+ 	/*
+ 	 * FIXME: We're hardcoding the CCID, and doing this at this point makes
+ 	 * the listening (master) sock get CCID control blocks, which is not
+@@ -213,18 +226,6 @@ int dccp_init_sock(struct sock *sk, const __u8 ctl_sock_initialized)
+ 		INIT_LIST_HEAD(&dmsk->dccpms_conf);
+ 	}
+ 
+-	dccp_init_xmit_timers(sk);
+-	icsk->icsk_rto		= DCCP_TIMEOUT_INIT;
+-	icsk->icsk_syn_retries	= sysctl_dccp_request_retries;
+-	sk->sk_state		= DCCP_CLOSED;
+-	sk->sk_write_space	= dccp_write_space;
+-	icsk->icsk_sync_mss	= dccp_sync_mss;
+-	dp->dccps_mss_cache	= 536;
+-	dp->dccps_rate_last	= jiffies;
+-	dp->dccps_role		= DCCP_ROLE_UNDEFINED;
+-	dp->dccps_service	= DCCP_SERVICE_CODE_IS_ABSENT;
+-	dp->dccps_l_ack_ratio	= dp->dccps_r_ack_ratio = 1;
+-
+ 	return 0;
+ }
+ 
+-- 
+1.5.3.4
+
