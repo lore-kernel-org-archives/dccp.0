@@ -1,42 +1,59 @@
-From: "=?ISO-8859-2?Q?=A3eandro_Sales?=" <leandroal@gmail.com>
-Date: Tue, 13 Nov 2007 16:33:46 +0000
-Subject: Re: [PATCH 11/25] Share TFRC sender states via tfrc_ccids
-Message-Id: <5bc4c4570711130833l5a4c7897m4d9e62188cea0f35@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Sun, 25 Nov 2007 00:21:28 +0000
+Subject: [PATCH 03/18] [CCID2]: Fix sequence number arithmetic/comparisons
+Message-Id: <1195950103-18102-4-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200710312131.03012.leandroal@gmail.com>
-In-Reply-To: <200710312131.03012.leandroal@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-2007/11/8, Gerrit Renker <gerrit@erg.abdn.ac.uk>:
-> | @@ -76,16 +76,16 @@ static const char *ccid4_tx_state_name(e
-> |  #endif
-> |
-> |  static void ccid4_hc_tx_set_state(struct sock *sk,
-> | -                               enum ccid4_hc_tx_states state)
-> | +                               enum tfrc_hc_tx_states state)
-> |  {
-> |       struct ccid4_hc_tx_sock *hctx = ccid4_hc_tx_sk(sk);
-> | -     enum ccid4_hc_tx_states oldstate = hctx->ccid4hctx_state;
-> | +     enum tfrc_hc_tx_states oldstate = hctx->tfrchctx_state;
-> |
-> |       ccid4_pr_debug("%s(%p) %-8.8s -> %s\n",
-> |                      dccp_role(sk), sk, ccid4_tx_state_name(oldstate),
-> |                      ccid4_tx_state_name(state));
-> |       WARN_ON(state = oldstate);
-> | -     hctx->ccid4hctx_state = state;
-> | +     hctx->tfrchctx_state = state;
-> |  }
-> |
-> I think this function is a candidate for sharing: no need to keep
-> this function separate for CCID3/4 when both use the same enum of
-> states; i.e. the function could be written tfrc_hc_tx_set_state().
-> -
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
->
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-Yes, I already have a patch to share this function.
+This replaces use of normal subtraction with modulo-48 subtraction.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/ccids/ccid2.c |    9 ++-------
+ 1 files changed, 2 insertions(+), 7 deletions(-)
+
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 7873dc7..5552218 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -24,9 +24,6 @@
+ 
+ /*
+  * This implementation should follow RFC 4341
+- *
+- * BUGS:
+- * - sequence number wrapping
+  */
+ 
+ #include "../ccid.h"
+@@ -619,9 +616,8 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 		/* go through this ack vector */
+ 		while (veclen--) {
+ 			const u8 rl = *vector & DCCP_ACKVEC_LEN_MASK;
+-			u64 ackno_end_rl;
++			u64 ackno_end_rl = SUB48(ackno, rl);
+ 
+-			dccp_set_seqno(&ackno_end_rl, ackno - rl);
+ 			ccid2_pr_debug("ackvec start:%llu end:%llu\n",
+ 				       (unsigned long long)ackno,
+ 				       (unsigned long long)ackno_end_rl);
+@@ -671,8 +667,7 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 			if (done)
+ 				break;
+ 
+-
+-			dccp_set_seqno(&ackno, ackno_end_rl - 1);
++			ackno = SUB48(ackno_end_rl, 1);
+ 			vector++;
+ 		}
+ 		if (done)
+-- 
+1.5.3.4
+
