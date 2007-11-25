@@ -1,38 +1,58 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Wed, 21 Nov 2007 15:28:33 +0000
-Subject: [PATCH 11/11] [DCCP]: Update documentation on ioctls
-Message-Id: <1195658913-24840-12-git-send-email-acme@redhat.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sun, 25 Nov 2007 17:24:18 +0000
+Subject: Re: Passive-close patches
+Message-Id: <20071125172418.GA6678@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+After further analysis, I think that the way passive-close was implemented 
+by the patches (using intermediate states) is the cleanest (and maybe the
+simplest solution). 
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
----
- Documentation/networking/dccp.txt |    6 ++++++
- 1 files changed, 6 insertions(+), 0 deletions(-)
+It would be nice if it worked with the present approach of just enqueueing 
+via dccp_fin, but several demands make a simple solution very difficult:
 
-diff --git a/Documentation/networking/dccp.txt b/Documentation/networking/dccp.txt
-index ffb9ca9..d76905a 100644
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -136,6 +136,12 @@ sync_ratelimit = 125 ms
- 	sequence-invalid packets on the same socket (RFC 4340, 7.5.4). The unit
- 	of this parameter is milliseconds; a value of 0 disables rate-limiting.
- 
-+IOCTLS
-+===
-+FIONREAD
-+	Works as in udp(7): returns in the `int' argument pointer the size of
-+	the next pending datagram in bytes, or 0 when no datagram is pending.
-+
- Notes
- == 
--- 
-1.5.3.4
+ * passive-close can be a received Close (server holds timewait state) or
+   a received CloseReq (which is what the current code supports);
+ * the code needs to interact correctly with the inet_stream socket implementation,
+   in particular inet_stream_connect (must not enter DCCP_CLOSED too early) and inet_accept();
+ * the application may not even read the queue (bug, programming error, program suspended etc.).
 
+In a previous discussion with Ian the question of a simpler solution also came up; Ian also tried
+to find a more simple solution. After several days of thinking this over, it seems that a simpler
+solution is not possible. 
+
+Thus, the state of this is:
+
+ * documentation has been revised and uploaded to (this includes the test program)
+   http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/closing_states/
+
+ * I am revising this patch set; the leaked-skb issue has been fixed, I am currently testing the
+   patch and will resubmit it
+
+
+---------------------------------------------------------------------------------------------------
+For the record, I have found my old notes which identified the two problems leading to this patch:
+
+  1.) The first problem lies in using inet_stream_connect():
+
+  An absurd case arises if we let the protocol machinery, not the application,
+  go through the states. If the protocol machinery allows to proceed to DCCP_CLOSED
+  (which corresponds to TCP_CLOSE), connect() returns with -ECONNABORTED, even if
+  there was data in the receive queue. 
+  
+  Therefore, if we want to keep the useful abstraction of inet_stream_connect(), we
+  need to make sure that a passive close can not lead to DCCP_CLOSED via the protocol
+  machinery alone. 
+  
+  2.) The second problem is also related to entering DCCP_CLOSED too early: 
+  
+  Even if connect() were fixed, if a passive-close can directly trigger a state 
+  transition from OPEN to DCCP_CLOSED, the receiver may not be able to read data
+  from its input queue. The reason is that DCCP_CLOSED state has been entered while
+  the SOCK_DONE flag has not yet been set.  Consequently, any subsequent call to 
+  dccp_recvmsg() terminates in -ENOTCONN, despite of a potentially full receive queue.
+---------------------------------------------------------------------------------------------------
