@@ -1,7 +1,7 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Wed, 21 Nov 2007 15:28:26 +0000
-Subject: [PATCH 04/11] [CCID3]: Inline for moving average
-Message-Id: <1195658913-24840-5-git-send-email-acme@redhat.com>
+Date: Sun, 25 Nov 2007 00:21:33 +0000
+Subject: [PATCH 08/18] [CCID2]: Disable broken Ack Ratio adaptation algorithm
+Message-Id: <1195950103-18102-9-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -10,102 +10,101 @@ To: dccp@vger.kernel.org
 
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-The moving average computation occurs so frequently in the CCID 3 code that
-it merits an inline function  of its own. This is uses a suggestion by
-Arnaldo as per http://www.mail-archive.com/dccp@vger.kernel.org/msg01662.html
+This comments out a problematic section comprising a half-finished algorithm:
+
+ - The variable `ccid2hctx_ackloss' is never initialised to a value different from 0 and
+   hence in fact is a read-only constant.
+ - The `arsent' variable counts packets other than Acks (it is incremented for every packet),
+   and there is no test for Ack Loss.
+ - The concept of counting Acks as such leads to a complex calculation, and the calculation
+   at the moment is inconsistent with this concept.
+   The problem is that the number of Acks - rather than the number of windows - is counted,
+   which leads to a complex (cubic/quadratic) expression - this is not even implemented.
+
+In its current state, the commented-out algorithm interfers with normal processing by
+changing Ack Ratio incorrectly, and at the wrong times.
+
+A new algorithm is necessary, which will not necessarily use the same variables as used by
+the unfinished one; hence the old variables have been removed.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/ccid3.c    |   25 +++++--------------------
- net/dccp/ccids/lib/tfrc.h |    9 +++++++++
- 2 files changed, 14 insertions(+), 20 deletions(-)
+ net/dccp/ccids/ccid2.c |   23 +++++++++++++++++++++--
+ net/dccp/ccids/ccid2.h |    4 ----
+ 2 files changed, 21 insertions(+), 6 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index a6111e5..964ec91 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -192,7 +192,7 @@ static inline void ccid3_hc_tx_update_s(struct ccid3_hc_tx_sock *hctx, int len)
- {
- 	const u16 old_s = hctx->ccid3hctx_s;
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 9c5b6c7..a901202 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -224,8 +224,6 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
+ 	hctx->ccid2hctx_sent	= 0;
  
--	hctx->ccid3hctx_s = old_s = 0 ? len : (9 * old_s + len) / 10;
-+	hctx->ccid3hctx_s = tfrc_ewma(hctx->ccid3hctx_s, len, 9);
+ 	/* clear ack ratio state. */
+-	hctx->ccid2hctx_arsent	 = 0;
+-	hctx->ccid2hctx_ackloss  = 0;
+ 	hctx->ccid2hctx_rpseq	 = 0;
+ 	hctx->ccid2hctx_rpdupack = -1;
+ 	ccid2_change_l_ack_ratio(sk, 1);
+@@ -289,6 +287,26 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
  
- 	if (hctx->ccid3hctx_s != old_s)
- 		ccid3_update_send_interval(hctx);
-@@ -449,25 +449,15 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	hctx->ccid2hctx_sent++;
  
- 		now = ktime_get_real();
- 		/*
--		 * Calculate new round trip sample as per [RFC 3448, 4.3] by
--		 *	R_sample  =  (now - t_recvdata) - t_elapsed
-+		 * Calculate new RTT sample and update moving average
- 		 */
- 		r_sample = dccp_sample_rtt(sk, ktime_us_delta(now, packet->dccphtx_tstamp));
-+		hctx->ccid3hctx_rtt = tfrc_ewma(hctx->ccid3hctx_rtt, r_sample, 9);
++	/*
++	 * FIXME: The code below is broken and the variables have been removed
++	 * from the socket struct. The `ackloss' variable was always set to 0,
++	 * and with arsent there are several problems:
++	 *  (i) it doesn't just count the number of Acks, but all sent packets;
++	 *  (ii) it is expressed in # of packets, not # of windows, so the
++	 *  comparison below uses the wrong formula: Appendix A of RFC 4341
++	 *  comes up with the number K = cwnd / (R^2 - R) of consecutive windows
++	 *  of data with no lost or marked Ack packets. If arsent were the # of
++	 *  consecutive Acks received without loss, then Ack Ratio needs to be
++	 *  decreased by 1 when
++	 *	      arsent >=  K * cwnd / R  =  cwnd^2 / (R^3 - R^2)
++	 *  where cwnd / R is the number of Acks received per window of data
++	 *  (cf. RFC 4341, App. A). The problems are that
++	 *  - arsent counts other packets as well;
++	 *  - the comparison uses a formula different from RFC 4341;
++	 *  - computing a cubic/quadratic equation each time is too complicated.
++	 *  Hence a different algorithm is needed.
++	 */
++#if 0
+ 	/* Ack Ratio.  Need to maintain a concept of how many windows we sent */
+ 	hctx->ccid2hctx_arsent++;
+ 	/* We had an ack loss in this window... */
+@@ -316,6 +334,7 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ 			hctx->ccid2hctx_arsent = 0; /* or maybe set it to cwnd*/
+ 		}
+ 	}
++#endif
  
--		/*
--		 * Update RTT estimate by
--		 * If (No feedback recv)
--		 *    R = R_sample;
--		 * Else
--		 *    R = q * R + (1 - q) * R_sample;
--		 *
--		 * q is a constant, RFC 3448 recomments 0.9
--		 */
- 		if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
- 			/*
- 			 * Larger Initial Windows [RFC 4342, sec. 5]
- 			 */
--			hctx->ccid3hctx_rtt  = r_sample;
- 			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
- 			hctx->ccid3hctx_t_ld = now;
- 
-@@ -481,8 +471,6 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 
- 			ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
- 		} else {
--			hctx->ccid3hctx_rtt = (9 * hctx->ccid3hctx_rtt +
--						   r_sample) / 10;
- 
- 			/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
- 			if (hctx->ccid3hctx_p > 0)
-@@ -700,11 +688,8 @@ static void ccid3_hc_rx_set_state(struct sock *sk,
- 
- static inline void ccid3_hc_rx_update_s(struct ccid3_hc_rx_sock *hcrx, int len)
- {
--	if (unlikely(len = 0))	/* don't update on empty packets (e.g. ACKs) */
--		ccid3_pr_debug("Packet payload length is 0 - not updating\n");
--	else
--		hcrx->ccid3hcrx_s = hcrx->ccid3hcrx_s = 0 ? len :
--				    (9 * hcrx->ccid3hcrx_s + len) / 10;
-+	if (likely(len > 0))	/* don't update on empty packets (e.g. ACKs) */
-+		hcrx->ccid3hcrx_s = tfrc_ewma(hcrx->ccid3hcrx_s, len, 9);
- }
- 
- static void ccid3_hc_rx_send_feedback(struct sock *sk)
-diff --git a/net/dccp/ccids/lib/tfrc.h b/net/dccp/ccids/lib/tfrc.h
-index faf5f7e..5a0ba86 100644
---- a/net/dccp/ccids/lib/tfrc.h
-+++ b/net/dccp/ccids/lib/tfrc.h
-@@ -37,6 +37,15 @@ static inline u32 scaled_div32(u64 a, u32 b)
- 	return result;
- }
- 
-+/**
-+ * tfrc_ewma  -  Exponentially weighted moving average
-+ * @weight: Weight to be used as damping factor, in units of 1/10
-+ */
-+static inline u32 tfrc_ewma(const u32 avg, const u32 newval, const u8 weight)
-+{
-+	return avg ? (weight * avg + (10 - weight) * newval) / 10 : newval;
-+}
-+
- extern u32 tfrc_calc_x(u16 s, u32 R, u32 p);
- extern u32 tfrc_calc_x_reverse_lookup(u32 fvalue);
- 
+ 	/* setup RTO timer */
+ 	if (!timer_pending(&hctx->ccid2hctx_rtotimer))
+diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
+index d9daa53..ed95f8f 100644
+--- a/net/dccp/ccids/ccid2.h
++++ b/net/dccp/ccids/ccid2.h
+@@ -44,8 +44,6 @@ struct ccid2_seq {
+  * @ccid2hctx_acks - ACKS recv in AI phase
+  * @ccid2hctx_sent - packets sent in this window
+  * @ccid2hctx_lastrtt -time RTT was last measured
+- * @ccid2hctx_arsent - packets sent [ack ratio]
+- * @ccid2hctx_ackloss - ack was lost in this win
+  * @ccid2hctx_rpseq - last consecutive seqno
+  * @ccid2hctx_rpdupack - dupacks since rpseq
+ */
+@@ -66,8 +64,6 @@ struct ccid2_hc_tx_sock {
+ 	int			ccid2hctx_sent;
+ 	unsigned long		ccid2hctx_lastrtt;
+ 	struct timer_list	ccid2hctx_rtotimer;
+-	unsigned long		ccid2hctx_arsent;
+-	int			ccid2hctx_ackloss;
+ 	u64			ccid2hctx_rpseq;
+ 	int			ccid2hctx_rpdupack;
+ 	int			ccid2hctx_sendwait;
 -- 
 1.5.3.4
 
