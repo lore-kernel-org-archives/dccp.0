@@ -1,72 +1,82 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 17 Nov 2007 09:29:28 +0000
-Subject: [PATCH 01/16] [CCID3]: Revert use of MSS instead of s
-Message-Id: <11952917833474-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Sun, 25 Nov 2007 00:21:39 +0000
+Subject: [PATCH 14/18] [CCID2]: Remove redundant synchronisation variable
+Message-Id: <1195950103-18102-15-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This updates the CCID3 code with regard to two instances of using `MSS' in place of `s':
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
- 1. The RFC3390-based initial rate: both rfc3448bis as well as the Faster Restart
-    draft now consistently use `s' instead of MSS.
+This removes the synchronisation variable `ccid2hctx_sendwait', which is set to 1
+when the CCID2 sender may send a new packet, and which is set to 0 otherwise
 
- 2. Now agrees with section 4.2 of rfc3448bis: "If the sender is ready to send data when
-    it does not yet have a round trip sample, the value of X is set to s bytes per
-    second, for segment size s [...]"
+The variable is redundant, since it is only used in combination with the hc_tx_send_packet/
+hc_tx_packet_sent function pair. Both functions are called under socket lock, so the
+following happens when the CCID2 may send a new packet:
+
+ * it sets sendwait = 1 in tx_send_packet and returns 0;
+ * the subsequent call to tx_packet_sent clears the sendwait flag;
+ * since tx_send_packet returns 0 if and only if sendwait = 1, the BUG_ON condition
+   in tx_packet_sent is never satisfied, since that function is never called when
+   tx_send_packet returns a value different from 0 (cf. dccp_write_xmit);
+ * the call to tx_packet_sent clears the flag so that the condition "!sendwait" is
+   true the next time tx_packet_sent is called.
+
+In other words, it is sufficient to just return 0 / not-0 to synchronise tx_send_packet
+and tx_packet_sent -- which is what the patch does.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/ccid3.c |   21 ++++++++++++---------
- 1 files changed, 12 insertions(+), 9 deletions(-)
+ net/dccp/ccids/ccid2.c |   11 ++---------
+ net/dccp/ccids/ccid2.h |    1 -
+ 2 files changed, 2 insertions(+), 10 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 19b3358..52b8e4c 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -83,18 +83,21 @@ static void ccid3_hc_tx_set_state(struct sock *sk,
- }
- 
- /*
-- * Compute the initial sending rate X_init according to RFC 3390:
-- *	w_init   =    min(4 * MSS, max(2 * MSS, 4380 bytes))
-- *	X_init   =    w_init / RTT
-+ * Compute the initial sending rate X_init in the manner of RFC 3390:
-+ *
-+ *	X_init  =  min(4 * s, max(2 * s, 4380 bytes)) / RTT
-+ *
-+ * Note that RFC 3390 uses MSS, RFC 4342 refers to RFC 3390, and rfc3448bis
-+ * (rev-02) clarifies the use of RFC 3390 with regard to the above formula.
-  * For consistency with other parts of the code, X_init is scaled by 2^6.
-  */
- static inline u64 rfc3390_initial_rate(struct sock *sk)
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 2d1b7e3..4f6c352 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -126,13 +126,8 @@ static int ccid2_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
  {
--	const struct dccp_sock *dp = dccp_sk(sk);
--	const __u32 w_init = min(4 * dp->dccps_mss_cache,
--				 max(2 * dp->dccps_mss_cache, 4380U));
-+	const struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
-+	const __u32 w_init = min_t(__u32, 4 * hctx->ccid3hctx_s,
-+				   max_t(__u32, 2 * hctx->ccid3hctx_s, 4380));
+ 	struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
  
--	return scaled_div(w_init << 6, ccid3_hc_tx_sk(sk)->ccid3hctx_rtt);
-+	return scaled_div(w_init << 6, hctx->ccid3hctx_rtt);
+-	if (hctx->ccid2hctx_pipe < hctx->ccid2hctx_cwnd) {
+-		/* OK we can send... make sure previous packet was sent off */
+-		if (!hctx->ccid2hctx_sendwait) {
+-			hctx->ccid2hctx_sendwait = 1;
+-			return 0;
+-		}
+-	}
++	if (hctx->ccid2hctx_pipe < hctx->ccid2hctx_cwnd)
++		return 0;
+ 
+ 	return 1; /* XXX CCID should dequeue when ready instead of polling */
  }
+@@ -236,8 +231,6 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ 	struct ccid2_seq *next;
+ 	u64 seq;
  
- /*
-@@ -336,8 +339,8 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
- 			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
- 			hctx->ccid3hctx_t_ld = now;
- 		} else {
--			/* Sender does not have RTT sample: X = MSS/second */
--			hctx->ccid3hctx_x = dp->dccps_mss_cache;
-+			/* Sender does not have RTT sample: X_pps = 1 pkt/sec */
-+			hctx->ccid3hctx_x = hctx->ccid3hctx_s;
- 			hctx->ccid3hctx_x <<= 6;
- 		}
- 		ccid3_update_send_interval(hctx);
+-	BUG_ON(!hctx->ccid2hctx_sendwait);
+-	hctx->ccid2hctx_sendwait = 0;
+ 	hctx->ccid2hctx_pipe++;
+ 
+ 	/* There is an issue.  What if another packet is sent between
+diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
+index bc659f0..2671f8e 100644
+--- a/net/dccp/ccids/ccid2.h
++++ b/net/dccp/ccids/ccid2.h
+@@ -66,7 +66,6 @@ struct ccid2_hc_tx_sock {
+ 	struct timer_list	ccid2hctx_rtotimer;
+ 	u64			ccid2hctx_rpseq;
+ 	int			ccid2hctx_rpdupack;
+-	int			ccid2hctx_sendwait;
+ 	unsigned long		ccid2hctx_last_cong;
+ 	u64			ccid2hctx_high_ack;
+ };
 -- 
-1.5.2.2.238.g7cbf2f2-dirty
+1.5.3.4
 
