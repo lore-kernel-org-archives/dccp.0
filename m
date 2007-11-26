@@ -1,29 +1,23 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Sun, 25 Nov 2007 00:21:25 +0000
-Subject: [PATCHES 0/18]: DCCP patches for 2.6.25
-Message-Id: <1195950103-18102-1-git-send-email-acme@redhat.com>
+From: Herbert Xu <herbert@gondor.apana.org.au>
+Date: Mon, 26 Nov 2007 11:55:27 +0000
+Subject: Re: [PATCHES 0/18]: DCCP patches for 2.6.25
+Message-Id: <20071126115527.GA26773@gondor.apana.org.au>
 List-Id: <dccp.vger.kernel.org>
+References: <1195950103-18102-1-git-send-email-acme@redhat.com>
+In-Reply-To: <1195950103-18102-1-git-send-email-acme@redhat.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="hz-gb-2312"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-Hi Herbert,
-
-	Please consider pulling from:
-
-master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.25
-
-Best Regards,
-
-- Arnaldo
-
- b/net/dccp/ackvec.c      |  163 +++++++++++++++------------------
- b/net/dccp/ackvec.h      |   63 ++++++------
- b/net/dccp/ccids/ccid2.c |    3 
- b/net/dccp/ccids/ccid2.h |    5 -
- b/net/dccp/proto.c       |   26 ++---
- net/dccp/ccids/ccid2.c   |  230 ++++++++++++++++++++---------------------------
- net/dccp/ccids/ccid2.h   |   23 +---
- net/dccp/proto.c         |   27 ++++-
- 8 files changed, 248 insertions(+), 292 deletions(-)
+T24gU2F0LCBOb3YgMjQsIDIwMDcgYXQgMTA6MjE6MjVQTSAtMDIwMCwgQXJuYWxkbyBDYXJ2YWxo
+byBkZSBNZWxvIHdyb3RlOgo+IEhpIEhlcmJlcnQsCj4gCj4gCVBsZWFzZSBjb25zaWRlciBwdWxs
+aW5nIGZyb206Cj4gCj4gbWFzdGVyLmtlcm5lbC5vcmc6L3B1Yi9zY20vbGludXgva2VybmVsL2dp
+dC9hY21lL25ldC0yLjYuMjUKCkFsbCBwdWxsZWQuICBUaGFua3MgQXJuYWxkbyEKLS0gClZpc2l0
+IE9wZW5zd2FuIGF0IGh0dHA6Ly93d3cub3BlbnN3YW4ub3JnLwpFbWFpbDogSGVyYmVydCBYdSB+
+e1BtVj5ISX59IDxoZXJiZXJ0QGdvbmRvci5hcGFuYS5vcmcuYXU+CkhvbWUgUGFnZTogaHR0cDov
+L2dvbmRvci5hcGFuYS5vcmcuYXUvfmhlcmJlcnQvClBHUCBLZXk6IGh0dHA6Ly9nb25kb3IuYXBh
+bmEub3JnLmF1L35oZXJiZXJ0L3B1YmtleS50eHQKLQpUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMg
+bGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJvZHkgb2YgYSBt
+ZXNzYWdlIHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRvbW8gaW5mbyBh
+dCAgaHR0cDovL3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5odG1s
