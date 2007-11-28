@@ -1,7 +1,7 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Sun, 25 Nov 2007 00:21:39 +0000
-Subject: [PATCH 14/18] [CCID2]: Remove redundant synchronisation variable
-Message-Id: <1195950103-18102-15-git-send-email-acme@redhat.com>
+Date: Wed, 28 Nov 2007 15:23:50 +0000
+Subject: [PATCH 3/5] [DCCP]: Dedicated auxiliary states to support passive-close
+Message-Id: <1196263432-17390-4-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -10,73 +10,144 @@ To: dccp@vger.kernel.org
 
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-This removes the synchronisation variable `ccid2hctx_sendwait', which is set to 1
-when the CCID2 sender may send a new packet, and which is set to 0 otherwise
+This adds two auxiliary states to deal with passive closes:
+  * PASSIVE_CLOSE    (reached from OPEN via reception of Close)    and
+  * PASSIVE_CLOSEREQ (reached from OPEN via reception of CloseReq)
+as internal intermediate states.
 
-The variable is redundant, since it is only used in combination with the hc_tx_send_packet/
-hc_tx_packet_sent function pair. Both functions are called under socket lock, so the
-following happens when the CCID2 may send a new packet:
+These states are used to allow a receiver to process unread data before
+acknowledging the received connection-termination-request (the Close/CloseReq).
 
- * it sets sendwait = 1 in tx_send_packet and returns 0;
- * the subsequent call to tx_packet_sent clears the sendwait flag;
- * since tx_send_packet returns 0 if and only if sendwait = 1, the BUG_ON condition
-   in tx_packet_sent is never satisfied, since that function is never called when
-   tx_send_packet returns a value different from 0 (cf. dccp_write_xmit);
- * the call to tx_packet_sent clears the flag so that the condition "!sendwait" is
-   true the next time tx_packet_sent is called.
+Without such support, it will happen that passively-closed sockets enter CLOSED
+state while there is still unprocessed data in the queue; leading to unexpected
+and erratic API behaviour.
 
-In other words, it is sufficient to just return 0 / not-0 to synchronise tx_send_packet
-and tx_packet_sent -- which is what the patch does.
+PASSIVE_CLOSE has been mapped into TCPF_CLOSE_WAIT, so that the code will
+seamlessly work with inet_accept() (which tests for this state).
+
+The state names are thanks to Arnaldo, who suggested this naming scheme
+following an earlier revision of this patch.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/ccid2.c |   11 ++---------
- net/dccp/ccids/ccid2.h |    1 -
- 2 files changed, 2 insertions(+), 10 deletions(-)
+ include/linux/dccp.h |   56 ++++++++++++++++++++++++++++++++++---------------
+ net/dccp/proto.c     |   22 ++++++++++---------
+ 2 files changed, 51 insertions(+), 27 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index 2d1b7e3..4f6c352 100644
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -126,13 +126,8 @@ static int ccid2_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
- {
- 	struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
+diff --git a/include/linux/dccp.h b/include/linux/dccp.h
+index a007326..8b3f9ad 100644
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -227,29 +227,51 @@ struct dccp_so_feat {
+ #include <net/tcp_states.h>
  
--	if (hctx->ccid2hctx_pipe < hctx->ccid2hctx_cwnd) {
--		/* OK we can send... make sure previous packet was sent off */
--		if (!hctx->ccid2hctx_sendwait) {
--			hctx->ccid2hctx_sendwait = 1;
--			return 0;
--		}
--	}
-+	if (hctx->ccid2hctx_pipe < hctx->ccid2hctx_cwnd)
-+		return 0;
- 
- 	return 1; /* XXX CCID should dequeue when ready instead of polling */
- }
-@@ -236,8 +231,6 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
- 	struct ccid2_seq *next;
- 	u64 seq;
- 
--	BUG_ON(!hctx->ccid2hctx_sendwait);
--	hctx->ccid2hctx_sendwait = 0;
- 	hctx->ccid2hctx_pipe++;
- 
- 	/* There is an issue.  What if another packet is sent between
-diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
-index bc659f0..2671f8e 100644
---- a/net/dccp/ccids/ccid2.h
-+++ b/net/dccp/ccids/ccid2.h
-@@ -66,7 +66,6 @@ struct ccid2_hc_tx_sock {
- 	struct timer_list	ccid2hctx_rtotimer;
- 	u64			ccid2hctx_rpseq;
- 	int			ccid2hctx_rpdupack;
--	int			ccid2hctx_sendwait;
- 	unsigned long		ccid2hctx_last_cong;
- 	u64			ccid2hctx_high_ack;
+ enum dccp_state {
+-	DCCP_OPEN	= TCP_ESTABLISHED,
+-	DCCP_REQUESTING	= TCP_SYN_SENT,
+-	DCCP_LISTEN	= TCP_LISTEN,
+-	DCCP_RESPOND	= TCP_SYN_RECV,
+-	DCCP_CLOSING	= TCP_CLOSING,
+-	DCCP_TIME_WAIT	= TCP_TIME_WAIT,
+-	DCCP_CLOSED	= TCP_CLOSE,
+-	DCCP_PARTOPEN	= TCP_MAX_STATES,
++	DCCP_OPEN	     = TCP_ESTABLISHED,
++	DCCP_REQUESTING	     = TCP_SYN_SENT,
++	DCCP_LISTEN	     = TCP_LISTEN,
++	DCCP_RESPOND	     = TCP_SYN_RECV,
++	/*
++	 * States involved in closing a DCCP connection:
++	 * 1) ACTIVE_CLOSEREQ is entered by a server sending a CloseReq.
++	 *
++	 * 2) CLOSING can have three different meanings (RFC 4340, 8.3):
++	 *  a. Client has performed active-close, has sent a Close to the server
++	 *     from state OPEN or PARTOPEN, and is waiting for the final Reset
++	 *     (in this case, SOCK_DONE = 1).
++	 *  b. Client is asked to perform passive-close, by receiving a CloseReq
++	 *     in (PART)OPEN state. It sends a Close and waits for final Reset
++	 *     (in this case, SOCK_DONE = 0).
++	 *  c. Server performs an active-close as in (a), keeps TIMEWAIT state.
++	 *
++	 * 3) The following intermediate states are employed to give passively
++	 *    closing nodes a chance to process their unread data:
++	 *    - PASSIVE_CLOSE    (from OPEN => CLOSED) and
++	 *    - PASSIVE_CLOSEREQ (from (PART)OPEN to CLOSING; case (b) above).
++	 */
++	DCCP_ACTIVE_CLOSEREQ = TCP_FIN_WAIT1,
++	DCCP_PASSIVE_CLOSE   = TCP_CLOSE_WAIT,	/* any node receiving a Close */
++	DCCP_CLOSING	     = TCP_CLOSING,
++	DCCP_TIME_WAIT	     = TCP_TIME_WAIT,
++	DCCP_CLOSED	     = TCP_CLOSE,
++	DCCP_PARTOPEN	     = TCP_MAX_STATES,
++	DCCP_PASSIVE_CLOSEREQ,			/* clients receiving CloseReq */
+ 	DCCP_MAX_STATES
  };
+ 
+-#define DCCP_STATE_MASK 0xf
++#define DCCP_STATE_MASK 0x1f
+ #define DCCP_ACTION_FIN (1<<7)
+ 
+ enum {
+-	DCCPF_OPEN	 = TCPF_ESTABLISHED,
+-	DCCPF_REQUESTING = TCPF_SYN_SENT,
+-	DCCPF_LISTEN	 = TCPF_LISTEN,
+-	DCCPF_RESPOND	 = TCPF_SYN_RECV,
+-	DCCPF_CLOSING	 = TCPF_CLOSING,
+-	DCCPF_TIME_WAIT	 = TCPF_TIME_WAIT,
+-	DCCPF_CLOSED	 = TCPF_CLOSE,
+-	DCCPF_PARTOPEN	 = 1 << DCCP_PARTOPEN,
++	DCCPF_OPEN	      = TCPF_ESTABLISHED,
++	DCCPF_REQUESTING      = TCPF_SYN_SENT,
++	DCCPF_LISTEN	      = TCPF_LISTEN,
++	DCCPF_RESPOND	      = TCPF_SYN_RECV,
++	DCCPF_ACTIVE_CLOSEREQ = TCPF_FIN_WAIT1,
++	DCCPF_CLOSING	      = TCPF_CLOSING,
++	DCCPF_TIME_WAIT	      = TCPF_TIME_WAIT,
++	DCCPF_CLOSED	      = TCPF_CLOSE,
++	DCCPF_PARTOPEN	      = (1 << DCCP_PARTOPEN),
+ };
+ 
+ static inline struct dccp_hdr *dccp_hdr(const struct sk_buff *skb)
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 73006b7..3489d3f 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -60,8 +60,7 @@ void dccp_set_state(struct sock *sk, const int state)
+ {
+ 	const int oldstate = sk->sk_state;
+ 
+-	dccp_pr_debug("%s(%p) %-10.10s -> %s\n",
+-		      dccp_role(sk), sk,
++	dccp_pr_debug("%s(%p)  %s  -->  %s\n", dccp_role(sk), sk,
+ 		      dccp_state_name(oldstate), dccp_state_name(state));
+ 	WARN_ON(state = oldstate);
+ 
+@@ -134,14 +133,17 @@ EXPORT_SYMBOL_GPL(dccp_packet_name);
+ const char *dccp_state_name(const int state)
+ {
+ 	static char *dccp_state_names[] = {
+-	[DCCP_OPEN]	  = "OPEN",
+-	[DCCP_REQUESTING] = "REQUESTING",
+-	[DCCP_PARTOPEN]	  = "PARTOPEN",
+-	[DCCP_LISTEN]	  = "LISTEN",
+-	[DCCP_RESPOND]	  = "RESPOND",
+-	[DCCP_CLOSING]	  = "CLOSING",
+-	[DCCP_TIME_WAIT]  = "TIME_WAIT",
+-	[DCCP_CLOSED]	  = "CLOSED",
++	[DCCP_OPEN]		= "OPEN",
++	[DCCP_REQUESTING]	= "REQUESTING",
++	[DCCP_PARTOPEN]		= "PARTOPEN",
++	[DCCP_LISTEN]		= "LISTEN",
++	[DCCP_RESPOND]		= "RESPOND",
++	[DCCP_CLOSING]		= "CLOSING",
++	[DCCP_ACTIVE_CLOSEREQ]	= "CLOSEREQ",
++	[DCCP_PASSIVE_CLOSE]	= "PASSIVE_CLOSE",
++	[DCCP_PASSIVE_CLOSEREQ]	= "PASSIVE_CLOSEREQ",
++	[DCCP_TIME_WAIT]	= "TIME_WAIT",
++	[DCCP_CLOSED]		= "CLOSED",
+ 	};
+ 
+ 	if (state >= DCCP_MAX_STATES)
 -- 
 1.5.3.4
 
