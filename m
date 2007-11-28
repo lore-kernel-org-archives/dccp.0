@@ -1,19 +1,34 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 03 Nov 2007 23:51:50 +0000
-Subject: Re: [PATCH 2/9] [CCID2]: Remove unused variable
-Message-Id: <5640c7e00711031651l140594edhb1306761d9b643f8@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 28 Nov 2007 08:35:08 +0000
+Subject: [PATCH 1/4]: Use AF-independent rebuild_header routine
+Message-Id: <11962389111717-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <200711031323.39901@strip-the-willow>
-In-Reply-To: <200711031323.39901@strip-the-willow>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/4/07, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> This removes a variable `ccid2hctx_sent' which is incremented but
-> never referenced/read (i.e., dead code).
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+[DCCP]: Use AF-independent rebuild_header routine
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+This fixes a nasty bug: dccp_send_reset() is called by both DCCPv4 and DCCPv6, but uses
+inet_sk_rebuild_header() in each case. This leads to unpredictable and weird behaviour:
+under some conditions, DCCPv6 Resets were sent, in other not.
+
+The fix is to use the AF-independent rebuild_header routine.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/output.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -391,7 +391,7 @@ int dccp_send_reset(struct sock *sk, enu
+ 	 * FIXME: what if rebuild_header fails?
+ 	 * Should we be doing a rebuild_header here?
+ 	 */
+-	int err = inet_sk_rebuild_header(sk);
++	int err = inet_csk(sk)->icsk_af_ops->rebuild_header(sk);
+ 
+ 	if (err != 0)
+ 		return err;
