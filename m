@@ -1,20 +1,36 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Sat, 08 Dec 2007 17:08:24 +0000
-Subject: Re: [PATCH 1/8] [TFRC]: Whitespace cleanups
-Message-Id: <20071208170824.GB3180@ghostprotocols.net>
+Date: Sun, 02 Dec 2007 21:36:55 +0000
+Subject: [PATCH 6/7] [CCID3]: The receiver of a half-connection does not set window counter values
+Message-Id: <1196631416-17778-7-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
-References: <11971083881862-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <11971083881862-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Sat, Dec 08, 2007 at 10:06:21AM +0000, Gerrit Renker escreveu:
-> Just some tidy-ups to keep git/quilt happy. Also moved up the
-> comment "Receiver routines" above the first occurrence of RX
-> history routines.
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-Thanks, applied.
+Only the sender sets window counters [RFC 4342, sections 5 and 8.1].
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/ccids/ccid3.c |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
+
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index c95dca8..5ff5aab 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -733,7 +733,6 @@ static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
+ 		return 0;
+ 
+ 	hcrx = ccid3_hc_rx_sk(sk);
+-	DCCP_SKB_CB(skb)->dccpd_ccval = hcrx->ccid3hcrx_ccval_last_counter;
+ 
+ 	if (dccp_packet_without_ack(skb))
+ 		return 0;
+-- 
+1.5.3.4
+
