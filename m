@@ -1,145 +1,326 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Sun, 30 Dec 2007 15:18:36 +0000
-Subject: Re: panic on 2.6.24rc5
-Message-Id: <200712301618.36350.tomasz@grobelny.oswiecenia.net>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Sun, 02 Dec 2007 21:36:53 +0000
+Subject: [PATCH 4/7] [TFRC]: Make the rx history slab be global
+Message-Id: <1196631416-17778-5-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
-References: <200712280016.56674.tomasz@grobelny.oswiecenia.net>
-In-Reply-To: <200712280016.56674.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Friday 28 December 2007, I wrote:
-> Dnia Wednesday 26 of December 2007, napisa=B3e=B6:
-> > What are the panics you are getting? It might be worth posting them to
-> > the list.
->
-> Here is the screenshot I captured a few days ago. Details:
->  - kernel-vanilla 2.6.24rc5,
-Now I'm using kernel as described in Arnaldo's mail (davem/net-2.6.25 +=20
-patches 0001 to 0051).
+This is in preparation for merging the new rx history code written by Gerrit Renker.
 
->  - netem+tbf limited traffic on lo interface,
->  - the panic was preceeded by several dmesg entries like that:
-When netem is not used used there are no BUG entries in dmesg, if it is I g=
-et:
-BUG: err=3D1 after ccid_hc_tx_packet_sent=20
-at /home/users/tomek/samba/dccp_exp/output.c:284/dccp_write_xmit()
-Pid: 1745, comm: sclient Not tainted 2.6.24_vanilla-0.1smp #1
- [<e08afe4a>] dccp_write_xmit+0x14a/0x220 [dccp]
- [<e08b26f0>] dccp_write_xmit_timer+0x0/0x50 [dccp]
- [<e08b2739>] dccp_write_xmit_timer+0x49/0x50 [dccp]
- [<c013519b>] run_timer_softirq+0xbb/0x190
- [<c0143691>] hrtimer_interrupt+0x131/0x1e0
- [<c0130ec4>] __do_softirq+0xd4/0xf0
- [<c0130f18>] do_softirq+0x38/0x40
- [<c0130fc5>] irq_exit+0x75/0x80
- [<c0117c4a>] smp_apic_timer_interrupt+0x2a/0x40
- [<c0104c64>] apic_timer_interrupt+0x28/0x30
- [<c030c648>] _spin_unlock_irqrestore+0x8/0x10
- [<c025f5de>] n_tty_receive_buf+0x20e/0xaf0
- [<c01403f0>] autoremove_wake_function+0x0/0x50
- [<c016704a>] prep_new_page+0xca/0x120
- [<c0294dd4>] sys_sendto+0xc4/0xf0
- [<c0261c15>] pty_write+0x45/0x50
- [<c025edaf>] opost_block+0x7f/0x110
- [<c0260aed>] write_chan+0x18d/0x220
- [<c0125da0>] default_wake_function+0x0/0x10
- [<c0142b30>] lock_hrtimer_base+0x20/0x50
- [<c0125da0>] default_wake_function+0x0/0x10
- [<c025bde5>] tty_write+0x185/0x1f0
- [<c01439f1>] hrtimer_nanosleep+0x41/0xc0
- [<c0260960>] write_chan+0x0/0x220
- [<c0185acf>] vfs_write+0xbf/0x150
- [<c0185c27>] sys_write+0x47/0x80
- [<c0104196>] sysenter_past_esp+0x5f/0x85
- =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D
->  - dccp seemed to be painfully slow at sending packets from queue (but I
-> have no numbers to prove that),
-Ok, now I do have numbers. I wrote a program (sclient) which sends an 80 by=
-te=20
-packet every 100ms. Here are the times of arrival (ie. time(0)) on the othe=
-r=20
-end of the connection (note that this is on loopback interface with no=20
-limiting):
-1199023603
-1199023603
-1199023603
-1199023603
-1199023604
-1199023604
-1199023604
-1199023604
-1199023604
-1199023604
-1199023604
-1199023604
-1199023604
-1199023604
-1199023605
-1199023605
-1199023605
-1199023605
-1199023605
-1199023605
-1199023605
-1199023605
-1199023605
-1199023605
-1199023606
-1199023606
-1199023606
-1199023606
-1199023606
-1199023606
-1199023606
-1199023606
-1199023606
-1199023606
-1199023607
-1199023607
-1199023607
-1199023607
-1199023607
-1199023608
-1199023608
-1199023609
-1199023610
-1199023613
-1199023615
-1199023619
-1199023624
-1199023633
-1199023642
-1199023659
-1199023677
-1199023713
-1199023749
-1199023813
-1199023877
-1199023941
-1199024005
-1199024069
-1199024133
-1199024197
-1199024261
-1199024325
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/ccids/ccid3.c              |   35 ++-----------
+ net/dccp/ccids/lib/packet_history.c |   95 ++++++++++++++++++-----------------
+ net/dccp/ccids/lib/packet_history.h |   43 ++--------------
+ 3 files changed, 60 insertions(+), 113 deletions(-)
 
-during this time I get 4 lines in dmesg:
-dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 0
-dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 2
-dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 5dea690..07920bb 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -49,8 +49,6 @@ static int ccid3_debug;
+ #define ccid3_pr_debug(format, a...)
+ #endif
+ 
+-static struct dccp_rx_hist *ccid3_rx_hist;
+-
+ /*
+  *	Transmitter Half-Connection Routines
+  */
+@@ -807,9 +805,9 @@ static int ccid3_hc_rx_detect_loss(struct sock *sk,
+ 	}
+ 
+ detect_out:
+-	dccp_rx_hist_add_packet(ccid3_rx_hist, &hcrx->ccid3hcrx_hist,
+-		   &hcrx->ccid3hcrx_li_hist, packet,
+-		   hcrx->ccid3hcrx_seqno_nonloss);
++	dccp_rx_hist_add_packet(&hcrx->ccid3hcrx_hist,
++				&hcrx->ccid3hcrx_li_hist, packet,
++				hcrx->ccid3hcrx_seqno_nonloss);
+ 	return loss;
+ }
+ 
+@@ -852,8 +850,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 		return;
+ 	}
+ 
+-	packet = dccp_rx_hist_entry_new(ccid3_rx_hist, opt_recv->dccpor_ndp,
+-					skb, GFP_ATOMIC);
++	packet = dccp_rx_hist_entry_new(opt_recv->dccpor_ndp, skb, GFP_ATOMIC);
+ 	if (unlikely(packet = NULL)) {
+ 		DCCP_WARN("%s(%p), Not enough mem to add rx packet "
+ 			  "to history, consider it lost!\n", dccp_role(sk), sk);
+@@ -936,7 +933,7 @@ static void ccid3_hc_rx_exit(struct sock *sk)
+ 	ccid3_hc_rx_set_state(sk, TFRC_RSTATE_TERM);
+ 
+ 	/* Empty packet history */
+-	dccp_rx_hist_purge(ccid3_rx_hist, &hcrx->ccid3hcrx_hist);
++	dccp_rx_hist_purge(&hcrx->ccid3hcrx_hist);
+ 
+ 	/* Empty loss interval history */
+ 	dccp_li_hist_purge(&hcrx->ccid3hcrx_li_hist);
+@@ -1013,33 +1010,13 @@ MODULE_PARM_DESC(ccid3_debug, "Enable debug messages");
+ 
+ static __init int ccid3_module_init(void)
+ {
+-	int rc = -ENOBUFS;
+-
+-	ccid3_rx_hist = dccp_rx_hist_new("ccid3");
+-	if (ccid3_rx_hist = NULL)
+-		goto out;
+-
+-	rc = ccid_register(&ccid3);
+-	if (rc != 0)
+-		goto out_free_rx;
+-out:
+-	return rc;
+-
+-out_free_rx:
+-	dccp_rx_hist_delete(ccid3_rx_hist);
+-	ccid3_rx_hist = NULL;
+-	goto out;
++	return ccid_register(&ccid3);
+ }
+ module_init(ccid3_module_init);
+ 
+ static __exit void ccid3_module_exit(void)
+ {
+ 	ccid_unregister(&ccid3);
+-
+-	if (ccid3_rx_hist != NULL) {
+-		dccp_rx_hist_delete(ccid3_rx_hist);
+-		ccid3_rx_hist = NULL;
+-	}
+ }
+ module_exit(ccid3_module_exit);
+ 
+diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
+index b628714..e1ab853 100644
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -114,48 +114,33 @@ EXPORT_SYMBOL_GPL(tfrc_tx_hist_rtt);
+ /*
+  * 	Receiver History Routines
+  */
+-struct dccp_rx_hist *dccp_rx_hist_new(const char *name)
++static struct kmem_cache *tfrc_rx_hist_slab;
++
++struct dccp_rx_hist_entry *dccp_rx_hist_entry_new(const u32 ndp,
++						  const struct sk_buff *skb,
++						  const gfp_t prio)
+ {
+-	struct dccp_rx_hist *hist = kmalloc(sizeof(*hist), GFP_ATOMIC);
+-	static const char dccp_rx_hist_mask[] = "rx_hist_%s";
+-	char *slab_name;
+-
+-	if (hist = NULL)
+-		goto out;
+-
+-	slab_name = kmalloc(strlen(name) + sizeof(dccp_rx_hist_mask) - 1,
+-			    GFP_ATOMIC);
+-	if (slab_name = NULL)
+-		goto out_free_hist;
+-
+-	sprintf(slab_name, dccp_rx_hist_mask, name);
+-	hist->dccprxh_slab = kmem_cache_create(slab_name,
+-					     sizeof(struct dccp_rx_hist_entry),
+-					     0, SLAB_HWCACHE_ALIGN, NULL);
+-	if (hist->dccprxh_slab = NULL)
+-		goto out_free_slab_name;
+-out:
+-	return hist;
+-out_free_slab_name:
+-	kfree(slab_name);
+-out_free_hist:
+-	kfree(hist);
+-	hist = NULL;
+-	goto out;
+-}
++	struct dccp_rx_hist_entry *entry = kmem_cache_alloc(tfrc_rx_hist_slab,
++							    prio);
+ 
+-EXPORT_SYMBOL_GPL(dccp_rx_hist_new);
++	if (entry != NULL) {
++		const struct dccp_hdr *dh = dccp_hdr(skb);
+ 
+-void dccp_rx_hist_delete(struct dccp_rx_hist *hist)
+-{
+-	const char* name = kmem_cache_name(hist->dccprxh_slab);
++		entry->dccphrx_seqno = DCCP_SKB_CB(skb)->dccpd_seq;
++		entry->dccphrx_ccval = dh->dccph_ccval;
++		entry->dccphrx_type  = dh->dccph_type;
++		entry->dccphrx_ndp   = ndp;
++		entry->dccphrx_tstamp = ktime_get_real();
++	}
+ 
+-	kmem_cache_destroy(hist->dccprxh_slab);
+-	kfree(name);
+-	kfree(hist);
++	return entry;
+ }
++EXPORT_SYMBOL_GPL(dccp_rx_hist_entry_new);
+ 
+-EXPORT_SYMBOL_GPL(dccp_rx_hist_delete);
++static inline void dccp_rx_hist_entry_delete(struct dccp_rx_hist_entry *entry)
++{
++	kmem_cache_free(tfrc_rx_hist_slab, entry);
++}
+ 
+ int dccp_rx_hist_find_entry(const struct list_head *list, const u64 seq,
+ 			    u8 *ccval)
+@@ -192,11 +177,10 @@ struct dccp_rx_hist_entry *
+ 
+ EXPORT_SYMBOL_GPL(dccp_rx_hist_find_data_packet);
+ 
+-void dccp_rx_hist_add_packet(struct dccp_rx_hist *hist,
+-			    struct list_head *rx_list,
+-			    struct list_head *li_list,
+-			    struct dccp_rx_hist_entry *packet,
+-			    u64 nonloss_seqno)
++void dccp_rx_hist_add_packet(struct list_head *rx_list,
++			     struct list_head *li_list,
++			     struct dccp_rx_hist_entry *packet,
++			     u64 nonloss_seqno)
+ {
+ 	struct dccp_rx_hist_entry *entry, *next;
+ 	u8 num_later = 0;
+@@ -211,7 +195,7 @@ void dccp_rx_hist_add_packet(struct dccp_rx_hist *hist,
+ 				if (after48(nonloss_seqno,
+ 				   entry->dccphrx_seqno)) {
+ 					list_del_init(&entry->dccphrx_node);
+-					dccp_rx_hist_entry_delete(hist, entry);
++					dccp_rx_hist_entry_delete(entry);
+ 				}
+ 			} else if (dccp_rx_hist_entry_data_packet(entry))
+ 				--num_later;
+@@ -253,7 +237,7 @@ void dccp_rx_hist_add_packet(struct dccp_rx_hist *hist,
+ 					break;
+ 				case 3:
+ 					list_del_init(&entry->dccphrx_node);
+-					dccp_rx_hist_entry_delete(hist, entry);
++					dccp_rx_hist_entry_delete(entry);
+ 					break;
+ 				}
+ 			} else if (dccp_rx_hist_entry_data_packet(entry))
+@@ -264,13 +248,13 @@ void dccp_rx_hist_add_packet(struct dccp_rx_hist *hist,
+ 
+ EXPORT_SYMBOL_GPL(dccp_rx_hist_add_packet);
+ 
+-void dccp_rx_hist_purge(struct dccp_rx_hist *hist, struct list_head *list)
++void dccp_rx_hist_purge(struct list_head *list)
+ {
+ 	struct dccp_rx_hist_entry *entry, *next;
+ 
+ 	list_for_each_entry_safe(entry, next, list, dccphrx_node) {
+ 		list_del_init(&entry->dccphrx_node);
+-		kmem_cache_free(hist->dccprxh_slab, entry);
++		dccp_rx_hist_entry_delete(entry);
+ 	}
+ }
+ 
+@@ -281,8 +265,22 @@ __init int packet_history_init(void)
+ 	tfrc_tx_hist_slab = kmem_cache_create("tfrc_tx_hist",
+ 					      sizeof(struct tfrc_tx_hist_entry), 0,
+ 					      SLAB_HWCACHE_ALIGN, NULL);
++	if (tfrc_tx_hist_slab = NULL)
++		goto out_err;
+ 
+-	return tfrc_tx_hist_slab = NULL ? -ENOBUFS : 0;
++	tfrc_rx_hist_slab = kmem_cache_create("tfrc_rx_hist",
++					      sizeof(struct dccp_rx_hist_entry), 0,
++					      SLAB_HWCACHE_ALIGN, NULL);
++	if (tfrc_rx_hist_slab = NULL)
++		goto out_free_tx;
++
++	return 0;
++
++out_free_tx:
++	kmem_cache_destroy(tfrc_tx_hist_slab);
++	tfrc_tx_hist_slab = NULL;
++out_err:
++	return -ENOBUFS;
+ }
+ 
+ void packet_history_exit(void)
+@@ -291,4 +289,9 @@ void packet_history_exit(void)
+ 		kmem_cache_destroy(tfrc_tx_hist_slab);
+ 		tfrc_tx_hist_slab = NULL;
+ 	}
++
++	if (tfrc_rx_hist_slab != NULL) {
++		kmem_cache_destroy(tfrc_rx_hist_slab);
++		tfrc_rx_hist_slab = NULL;
++	}
+ }
+diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
+index 9a2642e..34b180b 100644
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -66,34 +66,10 @@ struct dccp_rx_hist_entry {
+ 	ktime_t		 dccphrx_tstamp;
+ };
+ 
+-struct dccp_rx_hist {
+-	struct kmem_cache *dccprxh_slab;
+-};
+-
+-extern struct dccp_rx_hist *dccp_rx_hist_new(const char *name);
+-extern void 		dccp_rx_hist_delete(struct dccp_rx_hist *hist);
+-
+-static inline struct dccp_rx_hist_entry *
+-			dccp_rx_hist_entry_new(struct dccp_rx_hist *hist,
+-					       const u32 ndp,
++extern struct dccp_rx_hist_entry *
++			dccp_rx_hist_entry_new(const u32 ndp,
+ 					       const struct sk_buff *skb,
+-					       const gfp_t prio)
+-{
+-	struct dccp_rx_hist_entry *entry = kmem_cache_alloc(hist->dccprxh_slab,
+-							    prio);
+-
+-	if (entry != NULL) {
+-		const struct dccp_hdr *dh = dccp_hdr(skb);
+-
+-		entry->dccphrx_seqno = DCCP_SKB_CB(skb)->dccpd_seq;
+-		entry->dccphrx_ccval = dh->dccph_ccval;
+-		entry->dccphrx_type  = dh->dccph_type;
+-		entry->dccphrx_ndp   = ndp;
+-		entry->dccphrx_tstamp = ktime_get_real();
+-	}
+-
+-	return entry;
+-}
++					       const gfp_t prio);
+ 
+ static inline struct dccp_rx_hist_entry *
+ 			dccp_rx_hist_head(struct list_head *list)
+@@ -111,21 +87,12 @@ extern int dccp_rx_hist_find_entry(const struct list_head *list, const u64 seq,
+ extern struct dccp_rx_hist_entry *
+ 		dccp_rx_hist_find_data_packet(const struct list_head *list);
+ 
+-extern void dccp_rx_hist_add_packet(struct dccp_rx_hist *hist,
+-				    struct list_head *rx_list,
++extern void dccp_rx_hist_add_packet(struct list_head *rx_list,
+ 				    struct list_head *li_list,
+ 				    struct dccp_rx_hist_entry *packet,
+ 				    u64 nonloss_seqno);
+ 
+-static inline void dccp_rx_hist_entry_delete(struct dccp_rx_hist *hist,
+-					     struct dccp_rx_hist_entry *entry)
+-{
+-	if (entry != NULL)
+-		kmem_cache_free(hist->dccprxh_slab, entry);
+-}
+-
+-extern void dccp_rx_hist_purge(struct dccp_rx_hist *hist,
+-			       struct list_head *list);
++extern void dccp_rx_hist_purge(struct list_head *list);
+ 
+ static inline int
+ 	dccp_rx_hist_entry_data_packet(const struct dccp_rx_hist_entry *entry)
+-- 
+1.5.3.4
 
-As you can see for the first few seconds all is fine (packets arrive 9-10 a=
-=20
-second), but then the speed drops to 1 packet every 64 seconds. Can anybody=
-=20
-reproduce that? Or what may I be doing wrong?
-
->  - the crash is pretty much reproducible.
-The crash seems to be gone. But for me dccp is still unusable...
---=20
-Regards,
-Tomasz Grobelny
