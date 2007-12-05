@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 05 Dec 2007 11:19:45 +0000
+Date: Wed, 05 Dec 2007 11:19:46 +0000
 Subject: [PATCH v2 0/3][BUG-FIX]: Test tree updates and bug fixes
-Message-Id: <11968535861091-git-send-email-gerrit@erg.abdn.ac.uk>
+Message-Id: <11968535861367-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <11968535863312-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <11968535863312-git-send-email-gerrit@erg.abdn.ac.uk>
@@ -10,242 +10,54 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This fixes a problem in the initial revision of the patch: The loss interval
-history was not de-allocated when the initialisation of the packet history
-failed.  The identification of this problem is also thanks due to Arnaldo.
+This patch removes the following redundancies:
+  * ccid3_hc_rx_update_s() is only called for data packets (that is what it should be called for);
+  * each call to ccid3_hc_rx_update_s() is wrapped inside a "if (is_data_packet)" test';
+  * therefore testing each time if "len > 0" is redundant (pointed out by Arnaldo);
+  * no other code calls this function, hence the inline function can go.
 
-The interdiff to the previous revision is:
-
-	--- b/net/dccp/ccids/lib/tfrc_module.c
-	+++ b/net/dccp/ccids/lib/tfrc_module.c
-	@@ -26,7 +26,12 @@
-	 
-		if (rc = 0)
-			rc = packet_history_init();
-	+	if (rc = 0)
-	+		goto out;
-	 
-	+out_free_loss_intervals:
-	+	dccp_li_exit();
-	+out:
-		return rc;
-	 }
-
--------------------------> Patch v2 <---------------------------------------
-[TFRC]: Provide central source file and debug facility
-
-This patch changes the tfrc_lib module in the following manner:
-
- (1) a dedicated tfrc_module source file  (this is later populated 
-     with TX/RX hist and LI Database routines);
- (2) a dedicated tfrc_pr_debug macro with toggle switch `tfrc_debug'.
+Also replaced the first call to updating s with direct assignment of `payload_size'; this has also
+been pointed out by Arnaldo.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/ccids/Kconfig              |   12 +++++---
- net/dccp/ccids/lib/Makefile         |    3 +-
- net/dccp/ccids/lib/loss_interval.c  |    2 -
- net/dccp/ccids/lib/packet_history.c |   28 ++------------------
- net/dccp/ccids/lib/packet_history.h |    3 --
- net/dccp/ccids/lib/tfrc.h           |   17 +++++++++---
- net/dccp/ccids/lib/tfrc_module.c    |   50 ++++++++++++++++++++++++++++++++++++
- 7 files changed, 78 insertions(+), 37 deletions(-)
+ net/dccp/ccids/ccid3.c |   13 +++++--------
+ 1 file changed, 5 insertions(+), 8 deletions(-)
 
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -39,8 +39,7 @@
- #include <linux/ktime.h>
- #include <linux/list.h>
- #include <linux/slab.h>
--
--#include "../../dccp.h"
-+#include "tfrc.h"
- 
- /* Number of later packets received before one is considered lost */
- #define TFRC_RECV_NUM_LATE_LOSS	 3
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -35,7 +35,6 @@
-  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-  */
- 
--#include <linux/module.h>
- #include <linux/string.h>
- #include "packet_history.h"
- 
-@@ -277,39 +276,18 @@ void dccp_rx_hist_purge(struct dccp_rx_h
- 
- EXPORT_SYMBOL_GPL(dccp_rx_hist_purge);
- 
--extern int __init dccp_li_init(void);
--extern void dccp_li_exit(void);
--
--static __init int packet_history_init(void)
-+int __init packet_history_init(void)
- {
--	if (dccp_li_init() != 0)
--		goto out;
--
- 	tfrc_tx_hist = kmem_cache_create("tfrc_tx_hist",
- 					 sizeof(struct tfrc_tx_hist_entry), 0,
- 					 SLAB_HWCACHE_ALIGN, NULL);
--	if (tfrc_tx_hist = NULL)
--		goto out_li_exit;
--
--	return 0;
--out_li_exit:
--	dccp_li_exit();
--out:
--	return -ENOBUFS;
-+	return tfrc_tx_hist = NULL ? -ENOBUFS : 0;
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -654,12 +654,6 @@ static void ccid3_hc_rx_set_state(struct
+ 	hcrx->ccid3hcrx_state = state;
  }
--module_init(packet_history_init);
  
--static __exit void packet_history_exit(void)
-+void __exit packet_history_exit(void)
+-static inline void ccid3_hc_rx_update_s(struct ccid3_hc_rx_sock *hcrx, int len)
+-{
+-	if (likely(len > 0))	/* don't update on empty packets (e.g. ACKs) */
+-		hcrx->ccid3hcrx_s = tfrc_ewma(hcrx->ccid3hcrx_s, len, 9);
+-}
+-
+ static void ccid3_hc_rx_send_feedback(struct sock *sk, struct sk_buff *skb,
+ 				      enum ccid3_fback_type fbtype)
  {
- 	if (tfrc_tx_hist != NULL) {
- 		kmem_cache_destroy(tfrc_tx_hist);
- 		tfrc_tx_hist = NULL;
+@@ -788,8 +782,8 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	if (unlikely(hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA)) {
+ 		if (is_data_packet) {
+ 			do_feedback = FBACK_INITIAL;
++			hcrx->ccid3hcrx_s = payload_size;
+ 			ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
+-			ccid3_hc_rx_update_s(hcrx, payload_size);
+ 		}
+ 		goto update_records;
  	}
--	dccp_li_exit();
- }
--module_exit(packet_history_exit);
--
--MODULE_AUTHOR("Ian McDonald <ian.mcdonald@jandi.co.nz>, "
--	      "Arnaldo Carvalho de Melo <acme@ghostprotocols.net>");
--MODULE_DESCRIPTION("DCCP TFRC library");
--MODULE_LICENSE("GPL");
---- a/net/dccp/ccids/lib/tfrc.h
-+++ b/net/dccp/ccids/lib/tfrc.h
-@@ -3,10 +3,11 @@
- /*
-  *  net/dccp/ccids/lib/tfrc.h
-  *
-- *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
-- *  Copyright (c) 2005 Ian McDonald <ian.mcdonald@jandi.co.nz>
-- *  Copyright (c) 2005 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-- *  Copyright (c) 2003 Nils-Erik Mattsson, Joacim Haggmark, Magnus Erixzon
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
-+ *  Copyright (c) 2005-6 Ian McDonald <ian.mcdonald@jandi.co.nz>
-+ *  Copyright (c) 2005   Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-+ *  Copyright (c) 2003   Nils-Erik Mattsson, Joacim Haggmark, Magnus Erixzon
-  *
-  *  This program is free software; you can redistribute it and/or modify
-  *  it under the terms of the GNU General Public License as published by
-@@ -15,6 +16,14 @@
-  */
- #include <linux/types.h>
- #include <asm/div64.h>
-+#include "../../dccp.h"
-+
-+#ifdef CONFIG_IP_DCCP_TFRC_DEBUG
-+extern int tfrc_debug;
-+#define tfrc_pr_debug(format, a...)	DCCP_PR_DEBUG(tfrc_debug, format, ##a)
-+#else
-+#define tfrc_pr_debug(format, a...)
-+#endif
+@@ -798,7 +792,10 @@ static void ccid3_hc_rx_packet_recv(stru
+ 		goto done_receiving;
  
- /* integer-arithmetic divisions of type (a * 1000000)/b */
- static inline u64 scaled_div(u64 a, u32 b)
---- /dev/null
-+++ b/net/dccp/ccids/lib/tfrc_module.c
-@@ -0,0 +1,50 @@
-+/*
-+ * TFRC: main module holding the pieces of the TFRC library together
-+ *
-+ * Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ */
-+#include <linux/module.h>
-+#include <linux/moduleparam.h>
-+#include "tfrc.h"
-+
-+/* Initialisation / Clean-up routines */
-+extern int  packet_history_init(void);
-+extern void packet_history_exit(void);
-+
-+extern int  dccp_li_init(void);
-+extern void dccp_li_exit(void);
-+
-+#ifdef CONFIG_IP_DCCP_TFRC_DEBUG
-+int tfrc_debug;
-+module_param(tfrc_debug, bool, 0444);
-+MODULE_PARM_DESC(tfrc_debug, "Enable debug messages");
-+#endif
-+
-+static int __init tfrc_module_init(void)
-+{
-+	int rc = dccp_li_init();
-+
-+	if (rc = 0)
-+		rc = packet_history_init();
-+	if (rc = 0)
-+		goto out;
-+
-+out_free_loss_intervals:
-+	dccp_li_exit();
-+out:
-+	return rc;
-+}
-+module_init(tfrc_module_init);
-+
-+static void __exit tfrc_module_exit(void)
-+{
-+	packet_history_exit();
-+	dccp_li_exit();
-+}
-+module_exit(tfrc_module_exit);
-+
-+MODULE_AUTHOR("Gerrit Renker <gerrit@erg.abdn.ac.uk>, "
-+	      "Ian McDonald <ian.mcdonald@jandi.co.nz>, "
-+	      "Arnaldo Carvalho de Melo <acme@ghostprotocols.net>");
-+MODULE_DESCRIPTION("DCCP TFRC library");
-+MODULE_LICENSE("GPL");
---- a/net/dccp/ccids/lib/Makefile
-+++ b/net/dccp/ccids/lib/Makefile
-@@ -1,3 +1,4 @@
- obj-$(CONFIG_IP_DCCP_TFRC_LIB) += dccp_tfrc_lib.o
+ 	if (is_data_packet) {
+-		ccid3_hc_rx_update_s(hcrx, payload_size);
++		/*
++		 * Update moving-average of s and the sum of received payload bytes
++		 */
++		hcrx->ccid3hcrx_s = tfrc_ewma(hcrx->ccid3hcrx_s, payload_size, 9);
+ 		hcrx->ccid3hcrx_bytes_recv += payload_size;
+ 	}
  
--dccp_tfrc_lib-y := loss_interval.o packet_history.o tfrc_equation.o
-+dccp_tfrc_lib-y := tfrc_module.o    tfrc_equation.o \
-+                   packet_history.o loss_interval.o
---- a/net/dccp/ccids/Kconfig
-+++ b/net/dccp/ccids/Kconfig
-@@ -63,10 +63,6 @@ config IP_DCCP_CCID3
- 
- 	  If in doubt, say M.
- 
--config IP_DCCP_TFRC_LIB
--	depends on IP_DCCP_CCID3
--	def_tristate IP_DCCP_CCID3
--
- config IP_DCCP_CCID3_DEBUG
- 	  bool "CCID3 debugging messages"
- 	  depends on IP_DCCP_CCID3
-@@ -110,5 +106,13 @@ config IP_DCCP_CCID3_RTO
- 	    is serious network congestion: experimenting with larger values should
- 	    therefore not be performed on WANs.
- 
-+# The TFRC Library: currently only has CCID 3 as customer
-+config IP_DCCP_TFRC_LIB
-+	depends on IP_DCCP_CCID3
-+	def_tristate IP_DCCP_CCID3
-+
-+config IP_DCCP_TFRC_DEBUG
-+	bool
-+	default y if IP_DCCP_CCID3_DEBUG
- 
- endmenu
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -285,7 +285,7 @@ int __init dccp_li_init(void)
- 	return dccp_li_cachep = NULL ? -ENOBUFS : 0;
- }
- 
--void dccp_li_exit(void)
-+void __exit dccp_li_exit(void)
- {
- 	if (dccp_li_cachep != NULL) {
- 		kmem_cache_destroy(dccp_li_cachep);
