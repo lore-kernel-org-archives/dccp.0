@@ -1,7 +1,7 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Wed, 05 Dec 2007 14:13:10 +0000
+Date: Wed, 05 Dec 2007 14:23:21 +0000
 Subject: Re: [PATCH v2 0/3][BUG-FIX]: Test tree updates and bug fixes
-Message-Id: <20071205141310.GF4653@ghostprotocols.net>
+Message-Id: <20071205142321.GH4653@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 References: <11968535863312-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <11968535863312-git-send-email-gerrit@erg.abdn.ac.uk>
@@ -10,16 +10,31 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Wed, Dec 05, 2007 at 11:19:44AM +0000, Gerrit Renker escreveu:
-> This revision fixes a bug present in the per-socket allocation of RX history 
-> entries; identification of this bug is thanks to Arnaldo Carvalho de Melo.
+Em Wed, Dec 05, 2007 at 01:55:11PM +0000, Gerrit Renker escreveu:
+> | > @@ -788,8 +782,8 @@ static void ccid3_hc_rx_packet_recv(stru
+> | >  	if (unlikely(hcrx->ccid3hcrx_state = TFRC_RSTATE_NO_DATA)) {
+> | >  		if (is_data_packet) {
+> | >  			do_feedback = FBACK_INITIAL;
+> | > +			hcrx->ccid3hcrx_s = payload_size;
+> | >  			ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
+> | > -			ccid3_hc_rx_update_s(hcrx, payload_size);
+> | 
+> | We have to set ccid3hcrx_bytes_recv to the payload_size here too, I'm
+> | fixing this on the reworked patch that introduces the RX history.
+> | 
+> I almost did the same error again by wanting to agree too prematurely.
 > 
-> The bug was in not deallocating history entries when the allocation of 
-> one array element failed. The solution in this revised patch set is the
-> original one written by Arnaldo.
+> But updating ccid3hcrx_bytes_recv is in fact not needed here and if it
+> would be done it would not have a useable effect. The reason is that the
+> first data packet will trigger the initial feedback; and in the initial
+> feedback packet X_recv (which is ccid3hcrx_bytes_recv / the_time_spent)
+> is set to 0 (RFC 3448, 6.3).
+> 
+> For this reason, updating bytes_recv for the first data packet is also not
+> in the flowchart on 
+> http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ccid3_packet_reception/
 
-Ok, this one I posted with some other comments and explanations about
-changes other than namespacing, renaming of some functions and removal
-of functions not used in this patch.
- 
+OK, I will add a comment on the code stating why it is not needed so
+that new people don't commit the same mistake again.
+
 - Arnaldo
