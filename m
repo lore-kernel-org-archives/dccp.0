@@ -1,8 +1,10 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Sun, 02 Dec 2007 21:36:55 +0000
+Date: Thu, 06 Dec 2007 21:02:53 +0000
 Subject: [PATCH 6/7] [CCID3]: The receiver of a half-connection does not set window counter values
-Message-Id: <1196631416-17778-7-git-send-email-acme@redhat.com>
+Message-Id: <1196974974-31531-7-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
+References: <1196631416-17778-7-git-send-email-acme@redhat.com>
+In-Reply-To: <1196631416-17778-7-git-send-email-acme@redhat.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
