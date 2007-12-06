@@ -1,8 +1,10 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Sun, 02 Dec 2007 21:36:51 +0000
+Date: Thu, 06 Dec 2007 21:02:49 +0000
 Subject: [PATCH 2/7] [DCCP]: Introduce generic function to test for `data packets'
-Message-Id: <1196631416-17778-3-git-send-email-acme@redhat.com>
+Message-Id: <1196974974-31531-3-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
+References: <1196631416-17778-3-git-send-email-acme@redhat.com>
+In-Reply-To: <1196631416-17778-3-git-send-email-acme@redhat.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
