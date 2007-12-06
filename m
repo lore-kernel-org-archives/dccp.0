@@ -1,38 +1,35 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Thu, 06 Dec 2007 21:02:53 +0000
-Subject: [PATCH 6/7] [CCID3]: The receiver of a half-connection does not set window counter values
-Message-Id: <1196974974-31531-7-git-send-email-acme@redhat.com>
+Date: Thu, 06 Dec 2007 21:02:47 +0000
+Subject: [PATCHES 0/7]: DCCP patches for 2.6.25
+Message-Id: <1196974974-31531-1-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1196631416-17778-7-git-send-email-acme@redhat.com>
-In-Reply-To: <1196631416-17778-7-git-send-email-acme@redhat.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Hi David,
 
-Only the sender sets window counters [RFC 4342, sections 5 and 8.1].
+	Please consider pulling from:
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
----
- net/dccp/ccids/ccid3.c |    1 -
- 1 files changed, 0 insertions(+), 1 deletions(-)
+master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.25
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index c95dca8..5ff5aab 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -733,7 +733,6 @@ static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
- 		return 0;
- 
- 	hcrx = ccid3_hc_rx_sk(sk);
--	DCCP_SKB_CB(skb)->dccpd_ccval = hcrx->ccid3hcrx_ccval_last_counter;
- 
- 	if (dccp_packet_without_ack(skb))
- 		return 0;
--- 
-1.5.3.4
+Best Regards,
 
+- Arnaldo
+
+ b/net/dccp/ccids/Kconfig              |   13 
+ b/net/dccp/ccids/ccid3.c              |   35 --
+ b/net/dccp/ccids/ccid3.h              |   14 
+ b/net/dccp/ccids/lib/Makefile         |    2 
+ b/net/dccp/ccids/lib/loss_interval.c  |   14 
+ b/net/dccp/ccids/lib/packet_history.c |   27 -
+ b/net/dccp/ccids/lib/packet_history.h |    3 
+ b/net/dccp/ccids/lib/tfrc.c           |   48 +++
+ b/net/dccp/ccids/lib/tfrc.h           |   18 -
+ b/net/dccp/dccp.h                     |   13 
+ net/dccp/ccids/ccid3.c                |  322 ++++++++--------------
+ net/dccp/ccids/lib/loss_interval.c    |   13 
+ net/dccp/ccids/lib/packet_history.c   |  496 +++++++++++++++++++---------------
+ net/dccp/ccids/lib/packet_history.h   |  177 ++++--------
+ 14 files changed, 579 insertions(+), 616 deletions(-)
