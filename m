@@ -1,35 +1,20 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Thu, 06 Dec 2007 21:02:47 +0000
-Subject: [PATCHES 0/7]: DCCP patches for 2.6.25
-Message-Id: <1196974974-31531-1-git-send-email-acme@redhat.com>
+From: David Miller <davem@davemloft.net>
+Date: Fri, 07 Dec 2007 06:49:49 +0000
+Subject: Re: [PATCHES 0/7]: DCCP patches for 2.6.25
+Message-Id: <20071206.224949.256826968.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
+References: <1196974974-31531-1-git-send-email-acme@redhat.com>
+In-Reply-To: <1196974974-31531-1-git-send-email-acme@redhat.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi David,
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Thu,  6 Dec 2007 19:02:47 -0200
 
-	Please consider pulling from:
+> 	Please consider pulling from:
+> 
+> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.25
 
-master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.25
-
-Best Regards,
-
-- Arnaldo
-
- b/net/dccp/ccids/Kconfig              |   13 
- b/net/dccp/ccids/ccid3.c              |   35 --
- b/net/dccp/ccids/ccid3.h              |   14 
- b/net/dccp/ccids/lib/Makefile         |    2 
- b/net/dccp/ccids/lib/loss_interval.c  |   14 
- b/net/dccp/ccids/lib/packet_history.c |   27 -
- b/net/dccp/ccids/lib/packet_history.h |    3 
- b/net/dccp/ccids/lib/tfrc.c           |   48 +++
- b/net/dccp/ccids/lib/tfrc.h           |   18 -
- b/net/dccp/dccp.h                     |   13 
- net/dccp/ccids/ccid3.c                |  322 ++++++++--------------
- net/dccp/ccids/lib/loss_interval.c    |   13 
- net/dccp/ccids/lib/packet_history.c   |  496 +++++++++++++++++++---------------
- net/dccp/ccids/lib/packet_history.h   |  177 ++++--------
- 14 files changed, 579 insertions(+), 616 deletions(-)
+Pulled and pushed out to net-2.6.25, thanks!
