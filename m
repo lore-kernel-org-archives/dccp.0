@@ -1,7 +1,7 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Wed, 12 Dec 2007 16:36:47 +0000
-Subject: [PATCH 1/7] [TFRC]: Put RX/TX initialisation into tfrc.c
-Message-Id: <1197477413-1456-2-git-send-email-acme@redhat.com>
+Date: Sat, 08 Dec 2007 18:52:13 +0000
+Subject: [PATCH 3/3] [CCID3]: HC-receiver should not insert timestamps as HC-sender doesn't uses it
+Message-Id: <1197139933-11609-4-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -10,162 +10,26 @@ To: dccp@vger.kernel.org
 
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-This separates RX/TX initialisation and puts all packet history / loss intervals
-initialisation into tfrc.c.
-The organisation is uniform: slab declaration -> {rx,tx}_init() -> {rx,tx}_exit()
-
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/lib/packet_history.c |   68 ++++++++++++++++------------------
- net/dccp/ccids/lib/tfrc.c           |   31 ++++++++++++----
- 2 files changed, 55 insertions(+), 44 deletions(-)
+ net/dccp/ccids/ccid3.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
-diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
-index af44082..727b17d 100644
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -57,6 +57,22 @@ struct tfrc_tx_hist_entry {
-  */
- static struct kmem_cache *tfrc_tx_hist_slab;
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index a5246f7..60fcb31 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -750,8 +750,7 @@ static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
+ 	x_recv = htonl(hcrx->ccid3hcrx_x_recv);
+ 	pinv   = htonl(hcrx->ccid3hcrx_pinv);
  
-+int __init tfrc_tx_packet_history_init(void)
-+{
-+	tfrc_tx_hist_slab = kmem_cache_create("tfrc_tx_hist",
-+					      sizeof(struct tfrc_tx_hist_entry),
-+					      0, SLAB_HWCACHE_ALIGN, NULL);
-+	return tfrc_tx_hist_slab = NULL ? -ENOBUFS : 0;
-+}
-+
-+void tfrc_tx_packet_history_exit(void)
-+{
-+	if (tfrc_tx_hist_slab != NULL) {
-+		kmem_cache_destroy(tfrc_tx_hist_slab);
-+		tfrc_tx_hist_slab = NULL;
-+	}
-+}
-+
- static struct tfrc_tx_hist_entry *
- 	tfrc_tx_hist_find_entry(struct tfrc_tx_hist_entry *head, u64 seqno)
- {
-@@ -119,6 +135,22 @@ EXPORT_SYMBOL_GPL(tfrc_tx_hist_rtt);
-  */
- static struct kmem_cache *tfrc_rx_hist_slab;
- 
-+int __init tfrc_rx_packet_history_init(void)
-+{
-+	tfrc_rx_hist_slab = kmem_cache_create("tfrc_rxh_cache",
-+					      sizeof(struct tfrc_rx_hist_entry),
-+					      0, SLAB_HWCACHE_ALIGN, NULL);
-+	return tfrc_rx_hist_slab = NULL ? -ENOBUFS : 0;
-+}
-+
-+void tfrc_rx_packet_history_exit(void)
-+{
-+	if (tfrc_rx_hist_slab != NULL) {
-+		kmem_cache_destroy(tfrc_rx_hist_slab);
-+		tfrc_rx_hist_slab = NULL;
-+	}
-+}
-+
- /**
-  * tfrc_rx_hist_index - index to reach n-th entry after loss_start
-  */
-@@ -316,39 +348,3 @@ keep_ref_for_next_time:
- 	return sample;
- }
- EXPORT_SYMBOL_GPL(tfrc_rx_hist_sample_rtt);
--
--__init int packet_history_init(void)
--{
--	tfrc_tx_hist_slab = kmem_cache_create("tfrc_tx_hist",
--					      sizeof(struct tfrc_tx_hist_entry), 0,
--					      SLAB_HWCACHE_ALIGN, NULL);
--	if (tfrc_tx_hist_slab = NULL)
--		goto out_err;
--
--	tfrc_rx_hist_slab = kmem_cache_create("tfrc_rx_hist",
--					      sizeof(struct tfrc_rx_hist_entry), 0,
--					      SLAB_HWCACHE_ALIGN, NULL);
--	if (tfrc_rx_hist_slab = NULL)
--		goto out_free_tx;
--
--	return 0;
--
--out_free_tx:
--	kmem_cache_destroy(tfrc_tx_hist_slab);
--	tfrc_tx_hist_slab = NULL;
--out_err:
--	return -ENOBUFS;
--}
--
--void packet_history_exit(void)
--{
--	if (tfrc_tx_hist_slab != NULL) {
--		kmem_cache_destroy(tfrc_tx_hist_slab);
--		tfrc_tx_hist_slab = NULL;
--	}
--
--	if (tfrc_rx_hist_slab != NULL) {
--		kmem_cache_destroy(tfrc_rx_hist_slab);
--		tfrc_rx_hist_slab = NULL;
--	}
--}
-diff --git a/net/dccp/ccids/lib/tfrc.c b/net/dccp/ccids/lib/tfrc.c
-index 3a7a183..20763fa 100644
---- a/net/dccp/ccids/lib/tfrc.c
-+++ b/net/dccp/ccids/lib/tfrc.c
-@@ -14,27 +14,42 @@ module_param(tfrc_debug, bool, 0444);
- MODULE_PARM_DESC(tfrc_debug, "Enable debug messages");
- #endif
- 
-+extern int  tfrc_tx_packet_history_init(void);
-+extern void tfrc_tx_packet_history_exit(void);
-+extern int  tfrc_rx_packet_history_init(void);
-+extern void tfrc_rx_packet_history_exit(void);
-+
- extern int  dccp_li_init(void);
- extern void dccp_li_exit(void);
--extern int packet_history_init(void);
--extern void packet_history_exit(void);
- 
- static int __init tfrc_module_init(void)
- {
- 	int rc = dccp_li_init();
- 
--	if (rc = 0) {
--		rc = packet_history_init();
--		if (rc != 0)
--			dccp_li_exit();
--	}
-+	if (rc)
-+		goto out;
-+
-+	rc = tfrc_tx_packet_history_init();
-+	if (rc)
-+		goto out_free_loss_intervals;
- 
-+	rc = tfrc_rx_packet_history_init();
-+	if (rc)
-+		goto out_free_tx_history;
-+	return 0;
-+
-+out_free_tx_history:
-+	tfrc_tx_packet_history_exit();
-+out_free_loss_intervals:
-+	dccp_li_exit();
-+out:
- 	return rc;
- }
- 
- static void __exit tfrc_module_exit(void)
- {
--	packet_history_exit();
-+	tfrc_rx_packet_history_exit();
-+	tfrc_tx_packet_history_exit();
- 	dccp_li_exit();
- }
- 
+-	if (dccp_insert_option_timestamp(sk, skb) ||
+-	    dccp_insert_option(sk, skb, TFRC_OPT_LOSS_EVENT_RATE,
++	if (dccp_insert_option(sk, skb, TFRC_OPT_LOSS_EVENT_RATE,
+ 			       &pinv, sizeof(pinv)) ||
+ 	    dccp_insert_option(sk, skb, TFRC_OPT_RECEIVE_RATE,
+ 			       &x_recv, sizeof(x_recv)))
 -- 
 1.5.3.4
 
