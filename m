@@ -1,101 +1,100 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 21 Dec 2007 10:22:28 +0000
-Subject: [DCCP] [Patch 1/1] [Bug-Fix]: Need to ignore Ack Vectors on request sockets
-Message-Id: <20071221102228.GB17653@gerrit.erg.abdn.ac.uk>
+Date: Sat, 08 Dec 2007 10:06:27 +0000
+Subject: [PATCH 7/8] [TFRC]: CCID3 (and CCID4) needs to access these inlines
+Message-Id: <11971083881748-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[ACKVEC]: Need to ignore Ack Vectors on request sockets
-
-This fixes an oversight (mine) from an earlier patch and is in principle a 
-bug-fix, although the bug will with the current code not become visible.
-
-The issue is that Ack Vectors must not be parsed on request sockets, since
-the Ack Vector feature depends on the selection of the (TX) CCID. During the
-initial handshake the CCIDs are undefined, and so RFC 4340, 10.3 applies:
-
- "Using CCID-specific options and feature options during a negotiation
-  for the corresponding CCID feature is NOT RECOMMENDED [...]"
-
-Worse, it is not even possible: when the server receives the Request from the 
-client, the CCID and Ack vector features are undefined; when the Ack finalising
-the 3-way hanshake arrives, the request socket has not been cloned yet into a
-new (full) socket. This order is necessary, since otherwise the newly created
-socket would have to be destroyed whenever an option error occurred (a malicious
-hacker could simply send garbage options and exploit this).
-As a result, it is not feasible to parse Ack Vectors on request sockets, since
-their destination (the CCIDs interested in using Ack Vector information) is
-undefined. Hence disabled by this patch.
-
-Two more changes suggested itself:
- * replaced magic numbers for CCID-specific options with symbolic constants;
- * replaced local variables `idx' with computation in argument list.
+This moves two inlines back to packet_history.h: these are not private
+to packet_history.c, but are needed by CCID3/4 to detect whether a new
+loss is indicated, or whether a loss is already pending.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- include/linux/dccp.h |    6 ++++--
- net/dccp/options.c   |   19 +++++++------------
- 2 files changed, 11 insertions(+), 14 deletions(-)
+ net/dccp/ccids/lib/packet_history.c |   26 --------------------------
+ net/dccp/ccids/lib/packet_history.h |   28 ++++++++++++++++++++++++++--
+ 2 files changed, 26 insertions(+), 28 deletions(-)
 
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -104,9 +104,10 @@ int dccp_parse_options(struct sock *sk, 
- 		 *
- 		 * CCID-specific options are ignored during connection setup, as
- 		 * negotiation may still be in progress (see RFC 4340, 10.3).
--		 *
-+		 * The same applies to Ack Vectors, as these depend on the CCID.
- 		 */
--		if (dreq != NULL && opt >= 128)
-+		if (dreq != NULL && (opt >= DCCPO_MIN_RX_CCID_SPECIFIC ||
-+		    opt = DCCPO_ACK_VECTOR_0 || opt = DCCPO_ACK_VECTOR_1))
- 			goto ignore_option;
+diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
+index a421032..760631e 100644
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -188,32 +188,6 @@ void tfrc_rx_hist_add_packet(struct tfrc_rx_hist *h,
+ }
+ EXPORT_SYMBOL_GPL(tfrc_rx_hist_add_packet);
  
- 		switch (opt) {
-@@ -222,23 +223,17 @@ int dccp_parse_options(struct sock *sk, 
- 			dccp_pr_debug("%s rx opt: ELAPSED_TIME=%d\n",
- 				      dccp_role(sk), elapsed_time);
- 			break;
--		case 128 ... 191: {
--			const u16 idx = value - options;
+-/* initialise loss detection and disable RTT sampling */
+-static inline void tfrc_rx_hist_loss_indicated(struct tfrc_rx_hist *h)
+-{
+-	h->loss_count = 1;
+-}
 -
-+		case DCCPO_MIN_RX_CCID_SPECIFIC ... DCCPO_MAX_RX_CCID_SPECIFIC:
- 			if (ccid_hc_rx_parse_options(dp->dccps_hc_rx_ccid, sk,
--						     opt, len, idx,
-+						     opt, len, value - options,
- 						     value) != 0)
- 				goto out_invalid_option;
--		}
- 			break;
--		case 192 ... 255: {
--			const u16 idx = value - options;
+-/* indicate whether previously a packet was detected missing */
+-static inline int tfrc_rx_hist_loss_pending(const struct tfrc_rx_hist *h)
+-{
+-	return h->loss_count;
+-}
 -
-+		case DCCPO_MIN_TX_CCID_SPECIFIC ... DCCPO_MAX_TX_CCID_SPECIFIC:
- 			if (ccid_hc_tx_parse_options(dp->dccps_hc_tx_ccid, sk,
--						     opt, len, idx,
-+						     opt, len, value - options,
- 						     value) != 0)
- 				goto out_invalid_option;
--		}
- 			break;
- 		default:
- 			DCCP_CRIT("DCCP(%p): option %d(len=%d) not "
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -165,8 +165,10 @@ enum {
- 	DCCPO_TIMESTAMP_ECHO = 42,
- 	DCCPO_ELAPSED_TIME = 43,
- 	DCCPO_MAX = 45,
--	DCCPO_MIN_CCID_SPECIFIC = 128,
--	DCCPO_MAX_CCID_SPECIFIC = 255,
-+	DCCPO_MIN_RX_CCID_SPECIFIC = 128,	/* from sender to receiver */
-+	DCCPO_MAX_RX_CCID_SPECIFIC = 191,
-+	DCCPO_MIN_TX_CCID_SPECIFIC = 192,	/* from receiver to sender */
-+	DCCPO_MAX_TX_CCID_SPECIFIC = 255,
- };
+-/* any data packets missing between last reception and skb ? */
+-int tfrc_rx_hist_new_loss_indicated(struct tfrc_rx_hist *h,
+-				    const struct sk_buff *skb, u32 ndp)
+-{
+-	int delta = dccp_delta_seqno(tfrc_rx_hist_last_rcv(h)->tfrchrx_seqno,
+-				     DCCP_SKB_CB(skb)->dccpd_seq);
+-
+-	if (delta > 1 && ndp < delta)
+-		tfrc_rx_hist_loss_indicated(h);
+-
+-	return tfrc_rx_hist_loss_pending(h);
+-}
+-EXPORT_SYMBOL_GPL(tfrc_rx_hist_new_loss_indicated);
+-
+ static void tfrc_rx_hist_swap(struct tfrc_rx_hist_entry **a,
+ 			      struct tfrc_rx_hist_entry **b)
+ {
+diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
+index 6df9582..cb3220f 100644
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -115,12 +115,36 @@ static inline struct tfrc_rx_hist_entry *
+ 	return h->ring[h->loss_start];
+ }
  
- /* DCCP CCIDS */
--- 
++/* initialise loss detection and disable RTT sampling */
++static inline void tfrc_rx_hist_loss_indicated(struct tfrc_rx_hist *h)
++{
++	h->loss_count = 1;
++}
++
++/* indicate whether previously a packet was detected missing */
++static inline int tfrc_rx_hist_loss_pending(const struct tfrc_rx_hist *h)
++{
++	return h->loss_count;
++}
++
++/* any data packets missing between last reception and skb ? */
++static inline int tfrc_rx_hist_new_loss_indicated(struct tfrc_rx_hist *h,
++						  const struct sk_buff *skb, u32 ndp)
++{
++	int delta = dccp_delta_seqno(tfrc_rx_hist_last_rcv(h)->tfrchrx_seqno,
++				     DCCP_SKB_CB(skb)->dccpd_seq);
++
++	if (delta > 1 && ndp < delta)
++		tfrc_rx_hist_loss_indicated(h);
++
++	return tfrc_rx_hist_loss_pending(h);
++}
++
+ extern void tfrc_rx_hist_add_packet(struct tfrc_rx_hist *h,
+ 				    const struct sk_buff *skb, const u32 ndp);
+ 
+ extern int tfrc_rx_hist_duplicate(struct tfrc_rx_hist *h, struct sk_buff *skb);
+-extern int tfrc_rx_hist_new_loss_indicated(struct tfrc_rx_hist *h,
+-					   const struct sk_buff *skb, u32 ndp);
++
+ struct tfrc_loss_hist;
+ extern int  tfrc_rx_handle_loss(struct tfrc_rx_hist *, struct tfrc_loss_hist *,
+ 				struct sk_buff *skb, u32 ndp,
