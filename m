@@ -1,7 +1,7 @@
-From: Burak Gorkemli <burakgmail-jvt@yahoo.com>
-Date: Wed, 12 Dec 2007 20:40:57 +0000
+From: Alessio Botta <a.botta@unina.it>
+Date: Wed, 12 Dec 2007 23:19:11 +0000
 Subject: Re: [Announce]: Test results with latest CCID3 patch set
-Message-Id: <402454.43276.qm@web30005.mail.mud.yahoo.com>
+Message-Id: <47606C6F.3090100@unina.it>
 List-Id: <dccp.vger.kernel.org>
 References: <20071210154008.GA16839@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20071210154008.GA16839@gerrit.erg.abdn.ac.uk>
@@ -10,95 +10,105 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+
+
+Gerrit Renker ha scritto:
+> | I am new of this mailing list and I am really interested in the
+> | measurements you are performing with DCCP.
+> This was more of a regression test, as there had been recent changes in
+> the test tree, to see that the kernel (not userspace) still performs in
+> a predictable way.
 > 
-> | The scenario that I mostly use is limiting the bandwidth with a
+> | Which tool are you using ? Are you using Iperf for such measurements ?
+> The setup is the one from
+> 	http://www.linux-foundation.org/en/Net:DCCP_Testing#Regression_testing
+> and, yes, it uses iperf.	
 > 
- middlebox running TBF. However, all of the recent trees 
-> | except 2.6.20final_dccp (2.6.20 patched with Ian's
-> modifications)
+> | Have you ever heard about D-ITG ?
 > 
- that I have tested fail to achieve acceptable transfer rates. 
-> Thank you for the report, but the material as-is does not help us
-> very much. What is missing is the link speed of the
-> ethernet cards that lead to the middlebox, and have you monitored
-> the 
- loss rate p? 
-> Using a TBF in this setting means slowing down the link speed by
-> a 
- factor of 10 .. 20, and unless you are using large
-> FIFOs in addition to the TBF, the loss rate will very soon reach
-> high 
- values.
+> | You can find more information here:
+> | http://www.grid.unina.it/software/ITG
+> | 
+> | I am one of the authors of such platform and I have also
+> | performed some very preliminary tests with DCCP.
+> | 
+> | I would be very glad to have your opinion on that and I'm very interested
+> | in improving its features, also with specific regard to the support of
+> | transport protocols.
+> | 
+> It is a very nice tool with many features. I only ran simple tests with it (version 2.6),
+> again only as basic sanity tests -- the throughput result was similar to the one tested with
+> iperf.
 > 
-
-Link speed is 100 Mbps, and I tested DCCP under various bottleneck
-bandwidths, like 1000, 2000, 5000 and 10000 Mbps. I will repeat the
-tests with dccp_probe enabled, and show the results in a website,
-as soon as I have time.
-
-> Therefore, can you please clarify what you mean by "acceptable
-> transfer 
- rates": maybe the scenario is not supposed to
-> warrant any high transfer rates at all. Which would mean
-> expecting 
- something where not much can be expected - as said,
-> without more detailed knowledge about how p reacts, these figures
-> don't 
- tell us very much.
+> I think that the tool has more to offer and can help improve/extend DCCP testing.
+> Here is my list of points, hoping that the others will add theirs, too:
 > 
+>  * would be good to have a standardised set of scripts, for comparison/benchmarking
 
-By acceptable transfer rates I was referring to the rates achieved
-by 2.6.20final_dccp. But you are right, we cannot be sure of
-the goodness of the results by comparing two DCCP stacks,
-so I am giving TCP-Reno streaming results below under same 
-conditions, which should be a solid benchmark:
+I can provide you the necessary support to verify the scripts and also 
+to start to
+set up them. However, I need to know what you would like to generate.
 
-Bottleneck00Kbps:    0.0-60.6 sec    6.91 MBytes   958
- Kbits/sec
-Bottleneck 00Kbps:    0.0-60.1 sec    13.7 MBytes  1.91 Mbits/sec
+I have seen on the web page reported above the kind of tests you are 
+performing
+with iperf, and I would like to provide you some some pieces of useful 
+information
+regarding D-ITG. This tool allows to set two random variables that control
+the characteristics of traffic you generate. One of these variables 
+models the Inter
+Departure Time (IDT) and the other one models the Size (PS) of the 
+Packets. As of now,
+we support 6 random variables that are exponential, gamma, normal, 
+pareto, cauchy,
+and poisson. Clearly also constant IDT and PS can be set.
 
-BottleneckP00Kbps:    0.0-60.1 sec    33.6 MBytes  4.69 Mbits/sec
+ From the web page reported above I have seen that with iperf you 
+generate CBR
+traffic but I could not find the rate.
 
-Bottleneck000Kbps,limitP000bytes:    0.0-60.1 sec    65.4 MBytes   9.13 Mbits/sec
+Moreover, in order to standardize the tests I need to know how you 
+measure the
+obtained bit-rate. D-ITG can log at both sender and receiver sides 
+different information
+for each sent and received packet respectively. Therefore after the 
+tests you can
+obtain different information by analyzing the log files (with ITGDec). 
+Regarding the
+bit-rate, you can have an average value related to the complete 
+generation period as
+well as related to smaller time intervals.
 
-The average transfer rates in the rightmost column show that
-the configured bottleneck rates are achievable, hence I think
-the transfer rates that 2.6.20final_dccp reaches seem acceptable,
-whereas the rates of other trees are not.
-
-
-
-> Didn't you have a web page with further information?
-
-I will have soon, hopefully.
-
->
-> Yes, please: the cleanest comparison would be to take a 2.6.24
-> tree, 
- and compare the patch sets on the same basis. I almost expected that the
-> results are not as good as the 2.6.20final_dccp -- it is an almost
-> sure 
- indication that the difference is not due to the patches, and that
-> there are other factors at work. By carefully looking at
-> these 
- differences, we will be able to see clearer what is happening in the above.
 > 
+>  * the built-in VoIP module only works for UDP -- is it possible to port this to DCCP?
 
-I agree with you. 2 or 3 weeks ago I applied Ian's patches to
+The VoIP traffic is produced by setting an appropriate IDT and PS which 
+are basically
+constant and printed out on standard output when a VoIP traffic flows is 
+about to be
+generated. Therefore, you can already perform VoIP tests with DCCP.
+For more information you can have a look at D-ITG manual:
+http://www.grid.unina.it/software/ITG/codice/D-ITG2.6-manual.pdf
 
-more recent trees (2.6.22 and 2.6.24) and the results were
+If you can not find all the necessary information, just ask me.
 
-not as good as 2.6.20.
+>  
+>  * as per previous email, more complex traffic scenarios would be good, in particular
+>    - switching on/off background traffic at times to observe TCP/flow-friendliness
 
+D-ITG supports multi-flow operation mode. In this case it reads the 
+input information
+from a script file instead of the standard input. It uses a thread for 
+each requested flow
+therefore the flows can have completely different characteristics in 
+terms of kind of
+traffic (IDT and PS models), duration, start time, and transport protocols.
 
-> Again thanks a lot for posting results, hope you will be back with
-> further information soon,
+>    - running multiple DCCP flows in parallel and at overlapping times 
+
+This is already possible thanks to the script mode.
+
 > 
-> Gerrit
 > 
+> Gerrit   
 
-I am planning to repeat the tests focusing on 2.6.24 and
-post the results - with dccp_probe figures in my website.
-
-Burak
-
+Alessio
