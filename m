@@ -1,35 +1,171 @@
-From: Leandro <leandroal@gmail.com>
-Date: Thu, 20 Dec 2007 16:59:21 +0000
-Subject: [PATCH 8/8] Remove inline modifier from tfrc_ccids.c functions
-Message-Id: <200712201359.22024.leandroal@gmail.com>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Wed, 12 Dec 2007 16:36:47 +0000
+Subject: [PATCH 1/7] [TFRC]: Put RX/TX initialisation into tfrc.c
+Message-Id: <1197477413-1456-2-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[TFRC_CCIDS] Remove inline modifier from tfrc_ccids.c functions and let the compile decide it, as commented by Gerrit in the mailing list.
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+This separates RX/TX initialisation and puts all packet history / loss intervals
+initialisation into tfrc.c.
+The organisation is uniform: slab declaration -> {rx,tx}_init() -> {rx,tx}_exit()
 
-Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.c
-+++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-@@ -20,7 +20,7 @@
-  * (rev-02) clarifies the use of RFC 3390 with regard to the above formula.
-  * For consistency with other parts of the code, X_init is scaled by 2^6.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/ccids/lib/packet_history.c |   68 ++++++++++++++++------------------
+ net/dccp/ccids/lib/tfrc.c           |   31 ++++++++++++----
+ 2 files changed, 55 insertions(+), 44 deletions(-)
+
+diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
+index af44082..727b17d 100644
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -57,6 +57,22 @@ struct tfrc_tx_hist_entry {
   */
--inline u64 rfc3390_initial_rate(struct sock *sk)
-+u64 rfc3390_initial_rate(struct sock *sk)
+ static struct kmem_cache *tfrc_tx_hist_slab;
+ 
++int __init tfrc_tx_packet_history_init(void)
++{
++	tfrc_tx_hist_slab = kmem_cache_create("tfrc_tx_hist",
++					      sizeof(struct tfrc_tx_hist_entry),
++					      0, SLAB_HWCACHE_ALIGN, NULL);
++	return tfrc_tx_hist_slab = NULL ? -ENOBUFS : 0;
++}
++
++void tfrc_tx_packet_history_exit(void)
++{
++	if (tfrc_tx_hist_slab != NULL) {
++		kmem_cache_destroy(tfrc_tx_hist_slab);
++		tfrc_tx_hist_slab = NULL;
++	}
++}
++
+ static struct tfrc_tx_hist_entry *
+ 	tfrc_tx_hist_find_entry(struct tfrc_tx_hist_entry *head, u64 seqno)
  {
- 	const struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
- 	const __u32 w_init = min_t(__u32, 4 * hctx->ttx_s,
-@@ -44,7 +44,7 @@ EXPORT_SYMBOL_GPL(tfrc_hc_tx_idle_rtt);
-  *	Update Window Counter using the algorithm from [RFC 4342, 8.1].
-  *	The algorithm is not applicable if RTT < 4 microseconds.
+@@ -119,6 +135,22 @@ EXPORT_SYMBOL_GPL(tfrc_tx_hist_rtt);
   */
--inline void tfrc_hc_tx_update_win_count(struct tfrc_hc_tx_sock *hctx,
-+void tfrc_hc_tx_update_win_count(struct tfrc_hc_tx_sock *hctx,
- 				          ktime_t now)
+ static struct kmem_cache *tfrc_rx_hist_slab;
+ 
++int __init tfrc_rx_packet_history_init(void)
++{
++	tfrc_rx_hist_slab = kmem_cache_create("tfrc_rxh_cache",
++					      sizeof(struct tfrc_rx_hist_entry),
++					      0, SLAB_HWCACHE_ALIGN, NULL);
++	return tfrc_rx_hist_slab = NULL ? -ENOBUFS : 0;
++}
++
++void tfrc_rx_packet_history_exit(void)
++{
++	if (tfrc_rx_hist_slab != NULL) {
++		kmem_cache_destroy(tfrc_rx_hist_slab);
++		tfrc_rx_hist_slab = NULL;
++	}
++}
++
+ /**
+  * tfrc_rx_hist_index - index to reach n-th entry after loss_start
+  */
+@@ -316,39 +348,3 @@ keep_ref_for_next_time:
+ 	return sample;
+ }
+ EXPORT_SYMBOL_GPL(tfrc_rx_hist_sample_rtt);
+-
+-__init int packet_history_init(void)
+-{
+-	tfrc_tx_hist_slab = kmem_cache_create("tfrc_tx_hist",
+-					      sizeof(struct tfrc_tx_hist_entry), 0,
+-					      SLAB_HWCACHE_ALIGN, NULL);
+-	if (tfrc_tx_hist_slab = NULL)
+-		goto out_err;
+-
+-	tfrc_rx_hist_slab = kmem_cache_create("tfrc_rx_hist",
+-					      sizeof(struct tfrc_rx_hist_entry), 0,
+-					      SLAB_HWCACHE_ALIGN, NULL);
+-	if (tfrc_rx_hist_slab = NULL)
+-		goto out_free_tx;
+-
+-	return 0;
+-
+-out_free_tx:
+-	kmem_cache_destroy(tfrc_tx_hist_slab);
+-	tfrc_tx_hist_slab = NULL;
+-out_err:
+-	return -ENOBUFS;
+-}
+-
+-void packet_history_exit(void)
+-{
+-	if (tfrc_tx_hist_slab != NULL) {
+-		kmem_cache_destroy(tfrc_tx_hist_slab);
+-		tfrc_tx_hist_slab = NULL;
+-	}
+-
+-	if (tfrc_rx_hist_slab != NULL) {
+-		kmem_cache_destroy(tfrc_rx_hist_slab);
+-		tfrc_rx_hist_slab = NULL;
+-	}
+-}
+diff --git a/net/dccp/ccids/lib/tfrc.c b/net/dccp/ccids/lib/tfrc.c
+index 3a7a183..20763fa 100644
+--- a/net/dccp/ccids/lib/tfrc.c
++++ b/net/dccp/ccids/lib/tfrc.c
+@@ -14,27 +14,42 @@ module_param(tfrc_debug, bool, 0444);
+ MODULE_PARM_DESC(tfrc_debug, "Enable debug messages");
+ #endif
+ 
++extern int  tfrc_tx_packet_history_init(void);
++extern void tfrc_tx_packet_history_exit(void);
++extern int  tfrc_rx_packet_history_init(void);
++extern void tfrc_rx_packet_history_exit(void);
++
+ extern int  dccp_li_init(void);
+ extern void dccp_li_exit(void);
+-extern int packet_history_init(void);
+-extern void packet_history_exit(void);
+ 
+ static int __init tfrc_module_init(void)
  {
- 	u32 quarter_rtts;
+ 	int rc = dccp_li_init();
+ 
+-	if (rc = 0) {
+-		rc = packet_history_init();
+-		if (rc != 0)
+-			dccp_li_exit();
+-	}
++	if (rc)
++		goto out;
++
++	rc = tfrc_tx_packet_history_init();
++	if (rc)
++		goto out_free_loss_intervals;
+ 
++	rc = tfrc_rx_packet_history_init();
++	if (rc)
++		goto out_free_tx_history;
++	return 0;
++
++out_free_tx_history:
++	tfrc_tx_packet_history_exit();
++out_free_loss_intervals:
++	dccp_li_exit();
++out:
+ 	return rc;
+ }
+ 
+ static void __exit tfrc_module_exit(void)
+ {
+-	packet_history_exit();
++	tfrc_rx_packet_history_exit();
++	tfrc_tx_packet_history_exit();
+ 	dccp_li_exit();
+ }
+ 
+-- 
+1.5.3.4
+
