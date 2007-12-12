@@ -1,168 +1,115 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 10 Dec 2007 13:11:55 +0000
-Subject: [PATCH 1/4] [PATCH v2] [TFRC]: Put RX/TX initialisation into tfrc.c
-Message-Id: <1197292318-29659-2-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Wed, 12 Dec 2007 16:36:51 +0000
+Subject: [PATCH 5/7] [TFRC]: CCID3 (and CCID4) needs to access these inlines
+Message-Id: <1197477413-1456-6-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This separates RX/TX initialisation and puts all packet history / loss intervals
-initialisation into tfrc.c.
-The organisation is uniform: slab declaration -> {rx,tx}_init() -> {rx,tx}_exit()
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+
+This moves two inlines back to packet_history.h: these are not private
+to packet_history.c, but are needed by CCID3/4 to detect whether a new
+loss is indicated, or whether a loss is already pending.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/lib/packet_history.c |   68 ++++++++++++++++------------------
- net/dccp/ccids/lib/tfrc.c           |   31 ++++++++++++----
- 2 files changed, 55 insertions(+), 44 deletions(-)
+ net/dccp/ccids/lib/packet_history.c |   26 --------------------------
+ net/dccp/ccids/lib/packet_history.h |   35 +++++++++++++++++++++++++++++++----
+ 2 files changed, 31 insertions(+), 30 deletions(-)
 
 diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
-index af44082..727b17d 100644
+index 5b10a1e..20af1a6 100644
 --- a/net/dccp/ccids/lib/packet_history.c
 +++ b/net/dccp/ccids/lib/packet_history.c
-@@ -57,6 +57,22 @@ struct tfrc_tx_hist_entry {
-  */
- static struct kmem_cache *tfrc_tx_hist_slab;
- 
-+int __init tfrc_tx_packet_history_init(void)
-+{
-+	tfrc_tx_hist_slab = kmem_cache_create("tfrc_tx_hist",
-+					      sizeof(struct tfrc_tx_hist_entry),
-+					      0, SLAB_HWCACHE_ALIGN, NULL);
-+	return tfrc_tx_hist_slab = NULL ? -ENOBUFS : 0;
-+}
-+
-+void tfrc_tx_packet_history_exit(void)
-+{
-+	if (tfrc_tx_hist_slab != NULL) {
-+		kmem_cache_destroy(tfrc_tx_hist_slab);
-+		tfrc_tx_hist_slab = NULL;
-+	}
-+}
-+
- static struct tfrc_tx_hist_entry *
- 	tfrc_tx_hist_find_entry(struct tfrc_tx_hist_entry *head, u64 seqno)
- {
-@@ -119,6 +135,22 @@ EXPORT_SYMBOL_GPL(tfrc_tx_hist_rtt);
-  */
- static struct kmem_cache *tfrc_rx_hist_slab;
- 
-+int __init tfrc_rx_packet_history_init(void)
-+{
-+	tfrc_rx_hist_slab = kmem_cache_create("tfrc_rxh_cache",
-+					      sizeof(struct tfrc_rx_hist_entry),
-+					      0, SLAB_HWCACHE_ALIGN, NULL);
-+	return tfrc_rx_hist_slab = NULL ? -ENOBUFS : 0;
-+}
-+
-+void tfrc_rx_packet_history_exit(void)
-+{
-+	if (tfrc_rx_hist_slab != NULL) {
-+		kmem_cache_destroy(tfrc_rx_hist_slab);
-+		tfrc_rx_hist_slab = NULL;
-+	}
-+}
-+
- /**
-  * tfrc_rx_hist_index - index to reach n-th entry after loss_start
-  */
-@@ -316,39 +348,3 @@ keep_ref_for_next_time:
- 	return sample;
+@@ -191,32 +191,6 @@ int tfrc_rx_hist_duplicate(struct tfrc_rx_hist *h, struct sk_buff *skb)
  }
- EXPORT_SYMBOL_GPL(tfrc_rx_hist_sample_rtt);
--
--__init int packet_history_init(void)
+ EXPORT_SYMBOL_GPL(tfrc_rx_hist_duplicate);
+ 
+-/* initialise loss detection and disable RTT sampling */
+-static inline void tfrc_rx_hist_loss_indicated(struct tfrc_rx_hist *h)
 -{
--	tfrc_tx_hist_slab = kmem_cache_create("tfrc_tx_hist",
--					      sizeof(struct tfrc_tx_hist_entry), 0,
--					      SLAB_HWCACHE_ALIGN, NULL);
--	if (tfrc_tx_hist_slab = NULL)
--		goto out_err;
--
--	tfrc_rx_hist_slab = kmem_cache_create("tfrc_rx_hist",
--					      sizeof(struct tfrc_rx_hist_entry), 0,
--					      SLAB_HWCACHE_ALIGN, NULL);
--	if (tfrc_rx_hist_slab = NULL)
--		goto out_free_tx;
--
--	return 0;
--
--out_free_tx:
--	kmem_cache_destroy(tfrc_tx_hist_slab);
--	tfrc_tx_hist_slab = NULL;
--out_err:
--	return -ENOBUFS;
+-	h->loss_count = 1;
 -}
 -
--void packet_history_exit(void)
+-/* indicate whether previously a packet was detected missing */
+-static inline int tfrc_rx_hist_loss_pending(const struct tfrc_rx_hist *h)
 -{
--	if (tfrc_tx_hist_slab != NULL) {
--		kmem_cache_destroy(tfrc_tx_hist_slab);
--		tfrc_tx_hist_slab = NULL;
--	}
--
--	if (tfrc_rx_hist_slab != NULL) {
--		kmem_cache_destroy(tfrc_rx_hist_slab);
--		tfrc_rx_hist_slab = NULL;
--	}
+-	return h->loss_count;
 -}
-diff --git a/net/dccp/ccids/lib/tfrc.c b/net/dccp/ccids/lib/tfrc.c
-index 3a7a183..20763fa 100644
---- a/net/dccp/ccids/lib/tfrc.c
-+++ b/net/dccp/ccids/lib/tfrc.c
-@@ -14,27 +14,42 @@ module_param(tfrc_debug, bool, 0444);
- MODULE_PARM_DESC(tfrc_debug, "Enable debug messages");
- #endif
- 
-+extern int  tfrc_tx_packet_history_init(void);
-+extern void tfrc_tx_packet_history_exit(void);
-+extern int  tfrc_rx_packet_history_init(void);
-+extern void tfrc_rx_packet_history_exit(void);
-+
- extern int  dccp_li_init(void);
- extern void dccp_li_exit(void);
--extern int packet_history_init(void);
--extern void packet_history_exit(void);
- 
- static int __init tfrc_module_init(void)
+-
+-/* any data packets missing between last reception and skb ? */
+-int tfrc_rx_hist_new_loss_indicated(struct tfrc_rx_hist *h,
+-				    const struct sk_buff *skb, u32 ndp)
+-{
+-	int delta = dccp_delta_seqno(tfrc_rx_hist_last_rcv(h)->tfrchrx_seqno,
+-				     DCCP_SKB_CB(skb)->dccpd_seq);
+-
+-	if (delta > 1 && ndp < delta)
+-		tfrc_rx_hist_loss_indicated(h);
+-
+-	return tfrc_rx_hist_loss_pending(h);
+-}
+-EXPORT_SYMBOL_GPL(tfrc_rx_hist_new_loss_indicated);
+-
+ static void tfrc_rx_hist_swap(struct tfrc_rx_hist *h, const u8 a, const u8 b)
  {
- 	int rc = dccp_li_init();
- 
--	if (rc = 0) {
--		rc = packet_history_init();
--		if (rc != 0)
--			dccp_li_exit();
--	}
-+	if (rc)
-+		goto out;
-+
-+	rc = tfrc_tx_packet_history_init();
-+	if (rc)
-+		goto out_free_loss_intervals;
- 
-+	rc = tfrc_rx_packet_history_init();
-+	if (rc)
-+		goto out_free_tx_history;
-+	return 0;
-+
-+out_free_tx_history:
-+	tfrc_tx_packet_history_exit();
-+out_free_loss_intervals:
-+	dccp_li_exit();
-+out:
- 	return rc;
+ 	const u8 idx_a = tfrc_rx_hist_index(h, a),
+diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
+index 24edd8d..c7eeda4 100644
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -118,16 +118,43 @@ static inline struct tfrc_rx_hist_entry *
+ 	return h->ring[h->loss_start];
  }
  
- static void __exit tfrc_module_exit(void)
- {
--	packet_history_exit();
-+	tfrc_rx_packet_history_exit();
-+	tfrc_tx_packet_history_exit();
- 	dccp_li_exit();
- }
++/* initialise loss detection and disable RTT sampling */
++static inline void tfrc_rx_hist_loss_indicated(struct tfrc_rx_hist *h)
++{
++	h->loss_count = 1;
++}
++
++/* indicate whether previously a packet was detected missing */
++static inline int tfrc_rx_hist_loss_pending(const struct tfrc_rx_hist *h)
++{
++	return h->loss_count;
++}
++
++/* any data packets missing between last reception and skb ? */
++static inline int tfrc_rx_hist_new_loss_indicated(struct tfrc_rx_hist *h,
++						  const struct sk_buff *skb,
++						  u32 ndp)
++{
++	int delta = dccp_delta_seqno(tfrc_rx_hist_last_rcv(h)->tfrchrx_seqno,
++				     DCCP_SKB_CB(skb)->dccpd_seq);
++
++	if (delta > 1 && ndp < delta)
++		tfrc_rx_hist_loss_indicated(h);
++
++	return tfrc_rx_hist_loss_pending(h);
++}
++
+ extern void tfrc_rx_hist_add_packet(struct tfrc_rx_hist *h,
+ 				    const struct sk_buff *skb, const u32 ndp);
  
+ extern int tfrc_rx_hist_duplicate(struct tfrc_rx_hist *h, struct sk_buff *skb);
+-extern int tfrc_rx_hist_new_loss_indicated(struct tfrc_rx_hist *h,
+-					   const struct sk_buff *skb, u32 ndp);
++
+ struct tfrc_loss_hist;
+-extern int  tfrc_rx_handle_loss(struct tfrc_rx_hist *, struct tfrc_loss_hist *,
++extern int  tfrc_rx_handle_loss(struct tfrc_rx_hist *h,
++				struct tfrc_loss_hist *lh,
+ 				struct sk_buff *skb, u32 ndp,
+-				u32 (*first_li)(struct sock *), struct sock *);
++				u32 (*first_li)(struct sock *sk),
++				struct sock *sk);
+ extern u32 tfrc_rx_hist_sample_rtt(struct tfrc_rx_hist *h,
+ 				   const struct sk_buff *skb);
+ extern int tfrc_rx_hist_alloc(struct tfrc_rx_hist *h);
 -- 
-1.5.3.GIT
+1.5.3.4
 
