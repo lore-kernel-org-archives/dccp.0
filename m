@@ -1,162 +1,82 @@
-From: Leandro <leandroal@gmail.com>
-Date: Fri, 21 Dec 2007 04:27:23 +0000
-Subject: [PATCH 1/2] Share ccid{3/4}_hc_tx_set_state function via tfrc_ccids
-Message-Id: <200712210127.23302.leandroal@gmail.com>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Thu, 13 Dec 2007 15:05:54 +0000
+Subject: [PATCH 01/12] [DCCP]: Perform SHUT_RD and SHUT_WR on receiving close
+Message-Id: <1197558365-31134-2-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[TFRC_CCIDS] Share ccid{3/4}_hc_tx_set_state function via tfrc_ccids
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+This patch performs two changes:
 
-Index: ccid4.latest/net/dccp/ccids/ccid3.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/ccid3.c
-+++ ccid4.latest/net/dccp/ccids/ccid3.c
-@@ -44,19 +44,6 @@ static int ccid3_debug;
- #define ccid3_pr_debug(format, a...)
- #endif
+1) Close the write-end in addition to the read-end when a fin-like segment
+  (Close or CloseReq) is received by DCCP. This accounts for the fact that DCCP,
+  in contrast to TCP, does not have a half-close. RFC 4340 says in this respect
+  that when a fin-like segment has been sent there is no guarantee at all that
+  any   further data will be processed.
+  Thus this patch performs SHUT_WR in addition to the SHUT_RD when a fin-like
+  segment is encountered.
+
+2) Minor change: I noted that code appears twice in different places and think it
+   makes sense to put this into a self-contained function (dccp_enqueue()).
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/input.c |   22 +++++++++++++++-------
+ 1 files changed, 15 insertions(+), 7 deletions(-)
+
+diff --git a/net/dccp/input.c b/net/dccp/input.c
+index decf2f2..dacd4fd 100644
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -22,16 +22,27 @@
+ /* rate-limit for syncs in reply to sequence-invalid packets; RFC 4340, 7.5.4 */
+ int sysctl_dccp_sync_ratelimit	__read_mostly = HZ / 8;
  
--static void ccid3_hc_tx_set_state(struct sock *sk,
--				  enum tfrc_hc_tx_states state)
--{
--	struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
--	enum tfrc_hc_tx_states oldstate = hctx->ttx_state;
--
--	ccid3_pr_debug("%s(%p) %-8.8s -> %s\n",
--		       dccp_role(sk), sk, tfrc_tx_state_name(oldstate),
--		       tfrc_tx_state_name(state));
--	WARN_ON(state = oldstate);
--	hctx->ttx_state = state;
--}
--
- /*
-  * Recalculate t_ipi and delta (should be called whenever X changes)
-  */
-@@ -159,7 +146,7 @@ static void ccid3_hc_tx_no_feedback_time
- 		       tfrc_tx_state_name(hctx->ttx_state));
- 
- 	if (hctx->ttx_state = TTX_STATE_FBACK)
--		ccid3_hc_tx_set_state(sk, TTX_STATE_NO_FBACK);
-+		tfrc_tx_set_state(sk, TTX_STATE_NO_FBACK);
- 	else if (hctx->ttx_state != TTX_STATE_NO_FBACK)
- 		goto out;
- 
-@@ -268,7 +255,7 @@ static int ccid3_hc_tx_send_packet(struc
- 		}
- 		ccid3_update_send_interval(hctx);
- 
--		ccid3_hc_tx_set_state(sk, TTX_STATE_NO_FBACK);
-+		tfrc_tx_set_state(sk, TTX_STATE_NO_FBACK);
- 		break;
- 	case TTX_STATE_NO_FBACK:
- 	case TTX_STATE_FBACK:
-@@ -361,7 +348,7 @@ static void ccid3_hc_tx_packet_recv(stru
- 	 * Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
- 	 */
- 	if (hctx->ttx_state = TTX_STATE_NO_FBACK) {
--		ccid3_hc_tx_set_state(sk, TTX_STATE_FBACK);
-+		tfrc_tx_set_state(sk, TTX_STATE_FBACK);
- 
- 		if (hctx->ttx_t_rto = 0) {
- 			/*
-@@ -446,7 +433,7 @@ static void ccid3_hc_tx_exit(struct sock
+-static void dccp_fin(struct sock *sk, struct sk_buff *skb)
++static void dccp_enqueue_skb(struct sock *sk, struct sk_buff *skb)
  {
- 	struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
- 
--	ccid3_hc_tx_set_state(sk, TTX_STATE_TERM);
-+	tfrc_tx_set_state(sk, TTX_STATE_TERM);
- 	sk_stop_timer(sk, &hctx->ttx_no_feedback_timer);
- 
- 	tfrc_tx_hist_purge(&hctx->ttx_hist);
-Index: ccid4.latest/net/dccp/ccids/ccid4.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/ccid4.c
-+++ ccid4.latest/net/dccp/ccids/ccid4.c
-@@ -54,19 +54,6 @@ static int ccid4_debug;
- #define ccid4_pr_debug(format, a...)
- #endif
- 
--static void ccid4_hc_tx_set_state(struct sock *sk,
--				  enum tfrc_hc_tx_states state)
--{
--	struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
--	enum tfrc_hc_tx_states oldstate = hctx->ttx_state;
--
--	ccid4_pr_debug("%s(%p) %-8.8s -> %s\n",
--		       dccp_role(sk), sk, tfrc_tx_state_name(oldstate),
--		       tfrc_tx_state_name(state));
--	WARN_ON(state = oldstate);
--	hctx->ttx_state = state;
--}
--
- /*
-  * Recalculate t_ipi and delta (should be called whenever X changes)
-  */
-@@ -192,7 +179,7 @@ static void ccid4_hc_tx_no_feedback_time
- 		       tfrc_tx_state_name(hctx->ttx_state));
- 
- 	if (hctx->ttx_state = TTX_STATE_FBACK)
--		ccid4_hc_tx_set_state(sk, TTX_STATE_NO_FBACK);
-+		tfrc_tx_set_state(sk, TTX_STATE_NO_FBACK);
- 	else if (hctx->ttx_state != TTX_STATE_NO_FBACK)
- 		goto out;
- 
-@@ -302,7 +289,7 @@ static int ccid4_hc_tx_send_packet(struc
- 		}
- 		ccid4_update_send_interval(hctx);
- 
--		ccid4_hc_tx_set_state(sk, TTX_STATE_NO_FBACK);
-+		tfrc_tx_set_state(sk, TTX_STATE_NO_FBACK);
- 		break;
- 	case TTX_STATE_NO_FBACK:
- 	case TTX_STATE_FBACK:
-@@ -396,7 +383,7 @@ static void ccid4_hc_tx_packet_recv(stru
- 	 * Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
- 	 */
- 	if (hctx->ttx_state = TTX_STATE_NO_FBACK) {
--		ccid4_hc_tx_set_state(sk, TTX_STATE_FBACK);
-+		tfrc_tx_set_state(sk, TTX_STATE_FBACK);
- 
- 		if (hctx->ttx_t_rto = 0) {
- 			/*
-@@ -483,7 +470,7 @@ static void ccid4_hc_tx_exit(struct sock
- {
- 	struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
- 
--	ccid4_hc_tx_set_state(sk, TTX_STATE_TERM);
-+	tfrc_tx_set_state(sk, TTX_STATE_TERM);
- 	sk_stop_timer(sk, &hctx->ttx_no_feedback_timer);
- 
- 	tfrc_tx_hist_purge(&hctx->ttx_hist);
-Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.c
-+++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-@@ -162,3 +162,17 @@ int tfrc_rx_insert_options(struct sock *
+-	sk->sk_shutdown |= RCV_SHUTDOWN;
+-	sock_set_flag(sk, SOCK_DONE);
+ 	__skb_pull(skb, dccp_hdr(skb)->dccph_doff * 4);
+ 	__skb_queue_tail(&sk->sk_receive_queue, skb);
+ 	skb_set_owner_r(skb, sk);
+ 	sk->sk_data_ready(sk, 0);
  }
  
- EXPORT_SYMBOL_GPL(tfrc_rx_insert_options);
-+
-+void tfrc_tx_set_state(struct sock *sk, enum tfrc_hc_tx_states state)
++static void dccp_fin(struct sock *sk, struct sk_buff *skb)
 +{
-+	struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
-+	enum tfrc_hc_tx_states oldstate = hctx->ttx_state;
-+
-+	tfrc_pr_debug("%s(%p) %-8.8s -> %s\n", dccp_role(sk), sk,
-+			tfrc_tx_state_name(oldstate),
-+			tfrc_tx_state_name(state));
-+	WARN_ON(state = oldstate);
-+	hctx->ttx_state = state;
++	/*
++	 * On receiving Close/CloseReq, both RD/WR shutdown are performed.
++	 * RFC 4340, 8.3 says that we MAY send further Data/DataAcks after
++	 * receiving the closing segment, but there is no guarantee that such
++	 * data will be processed at all.
++	 */
++	sk->sk_shutdown = SHUTDOWN_MASK;
++	sock_set_flag(sk, SOCK_DONE);
++	dccp_enqueue_skb(sk, skb);
 +}
 +
-+EXPORT_SYMBOL_GPL(tfrc_tx_set_state);
-Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.h
-+++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-@@ -198,3 +198,5 @@ extern int tfrc_tx_parse_options(struct 
- 			unsigned char len, u16 idx, unsigned char *value);
- 
- extern int tfrc_rx_insert_options(struct sock *sk, struct sk_buff *skb);
-+
-+extern void tfrc_tx_set_state(struct sock *sk, enum tfrc_hc_tx_states state);
+ static int dccp_rcv_close(struct sock *sk, struct sk_buff *skb)
+ {
+ 	int queued = 0;
+@@ -282,10 +293,7 @@ static int __dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
+ 		 * - sk_shutdown = RCV_SHUTDOWN, use Code 1, "Not Listening"
+ 		 * - sk_receive_queue is full, use Code 2, "Receive Buffer"
+ 		 */
+-		__skb_pull(skb, dh->dccph_doff * 4);
+-		__skb_queue_tail(&sk->sk_receive_queue, skb);
+-		skb_set_owner_r(skb, sk);
+-		sk->sk_data_ready(sk, 0);
++		dccp_enqueue_skb(sk, skb);
+ 		return 0;
+ 	case DCCP_PKT_ACK:
+ 		goto discard;
+-- 
+1.5.3.4
+
