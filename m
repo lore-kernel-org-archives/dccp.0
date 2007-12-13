@@ -1,7 +1,7 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Sat, 08 Dec 2007 18:52:11 +0000
-Subject: [PATCH 1/3] [TFRC]: Whitespace cleanups
-Message-Id: <1197139933-11609-2-git-send-email-acme@redhat.com>
+Date: Thu, 13 Dec 2007 15:06:00 +0000
+Subject: [PATCH 07/12] [DCCP]: Add (missing) option parsing to request_sock processing
+Message-Id: <1197558365-31134-8-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -10,116 +10,76 @@ To: dccp@vger.kernel.org
 
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-Just some tidy-ups to keep git/quilt happy. Also moved up the
-comment "Receiver routines" above the first occurrence of RX
-history routines.
+This adds option-parsing code to processing of Acks in the listening state
+on request_socks on the server, serving two purposes
+ (i)  resolves a FIXME (removed);
+ (ii) paves the way for feature-negotiation during connection-setup.
+
+There is an intended subtlety here with regard to dccp_check_req:
+
+ Parsing options happens only after testing whether the received packet is
+ a retransmitted Request.  Otherwise, if the Request contained (a possibly
+ large number of) feature-negotiation options, recomputing state would have to
+ happen each time a retransmitted Request arrives, which opens the door to an
+ easy DoS attack.  Since in a genuine retransmission the options should not be
+ different from the original, reusing the already computed state seems better.
+
+ The other point is - if there are timestamp options on the Request, they will
+ not be answered; which means that in the presence of retransmission (likely
+ due to loss and/or other problems), the use of Request/Response RTT sampling
+ is suspended, so that startup problems here do not propagate.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/ccid3.c              |   16 ++++++++--------
- net/dccp/ccids/lib/loss_interval.c  |    2 +-
- net/dccp/ccids/lib/packet_history.c |   12 ++++++------
- 3 files changed, 15 insertions(+), 15 deletions(-)
+ net/dccp/minisocks.c |   12 ++++++------
+ 1 files changed, 6 insertions(+), 6 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index faacffa..a5246f7 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -780,7 +780,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 			 */
- 		}
- 		goto update_records;
-- 	}
-+	}
+diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
+index 831b76e..b1d5da6 100644
+--- a/net/dccp/minisocks.c
++++ b/net/dccp/minisocks.c
+@@ -200,10 +200,10 @@ struct sock *dccp_check_req(struct sock *sk, struct sk_buff *skb,
+ 			    struct request_sock **prev)
+ {
+ 	struct sock *child = NULL;
++	struct dccp_request_sock *dreq = dccp_rsk(req);
  
- 	if (tfrc_rx_hist_duplicate(&hcrx->ccid3hcrx_hist, skb))
- 		return; /* done receiving */
-@@ -792,7 +792,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		 */
- 		hcrx->ccid3hcrx_s = tfrc_ewma(hcrx->ccid3hcrx_s, payload, 9);
- 		hcrx->ccid3hcrx_bytes_recv += payload;
-- 	}
-+	}
+ 	/* Check for retransmitted REQUEST */
+ 	if (dccp_hdr(skb)->dccph_type = DCCP_PKT_REQUEST) {
+-		struct dccp_request_sock *dreq = dccp_rsk(req);
  
- 	/*
- 	 * Handle pending losses and otherwise check for new loss
-@@ -808,11 +808,11 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 		if (after48(DCCP_SKB_CB(skb)->dccpd_seq, dreq->dreq_isr)) {
+ 			dccp_pr_debug("Retransmitted REQUEST\n");
+@@ -227,22 +227,22 @@ struct sock *dccp_check_req(struct sock *sk, struct sk_buff *skb,
+ 		goto drop;
  
- 	if (list_empty(&hcrx->ccid3hcrx_li_hist)) {  /* no loss so far: p = 0 */
- 		const u32 sample = tfrc_rx_hist_sample_rtt(&hcrx->ccid3hcrx_hist, skb);
-- 		/*
-- 		 * Empty loss history: no loss so far, hence p stays 0.
-- 		 * Sample RTT values, since an RTT estimate is required for the
-- 		 * computation of p when the first loss occurs; RFC 3448, 6.3.1.
-- 		 */
-+		/*
-+		 * Empty loss history: no loss so far, hence p stays 0.
-+		 * Sample RTT values, since an RTT estimate is required for the
-+		 * computation of p when the first loss occurs; RFC 3448, 6.3.1.
-+		 */
- 		if (sample != 0)
- 			hcrx->ccid3hcrx_rtt = tfrc_ewma(hcrx->ccid3hcrx_rtt, sample, 9);
+ 	/* Invalid ACK */
+-	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != dccp_rsk(req)->dreq_iss) {
++	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != dreq->dreq_iss) {
+ 		dccp_pr_debug("Invalid ACK number: ack_seq=%llu, "
+ 			      "dreq_iss=%llu\n",
+ 			      (unsigned long long)
+ 			      DCCP_SKB_CB(skb)->dccpd_ack_seq,
+-			      (unsigned long long)
+-			      dccp_rsk(req)->dreq_iss);
++			      (unsigned long long) dreq->dreq_iss);
+ 		goto drop;
  	}
-@@ -823,7 +823,7 @@ static void ccid3_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	if (SUB16(dccp_hdr(skb)->dccph_ccval, hcrx->ccid3hcrx_last_counter) > 3)
- 		do_feedback = CCID3_FBACK_PERIODIC;
  
--update_records:	
-+update_records:
- 	tfrc_rx_hist_add_packet(&hcrx->ccid3hcrx_hist, skb, ndp);
- 
- 	if (do_feedback)
-diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
-index 7e0714a..c0a933a 100644
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -131,7 +131,7 @@ static u32 dccp_li_calc_first_li(struct sock *sk,
- {
- /*
-  * FIXME:
-- * Will be rewritten in the upcoming new loss intervals code. 
-+ * Will be rewritten in the upcoming new loss intervals code.
-  * Has to be commented ou because it relies on the old rx history
-  * data structures
-  */
-diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
-index e197389..54cd23e 100644
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -114,6 +114,11 @@ u32 tfrc_tx_hist_rtt(struct tfrc_tx_hist_entry *head, const u64 seqno,
- EXPORT_SYMBOL_GPL(tfrc_tx_hist_rtt);
- 
- 
-+/*
-+ * 	Receiver History Routines
-+ */
-+static struct kmem_cache *tfrc_rx_hist_slab;
++	if (dccp_parse_options(sk, dreq, skb))
++		 goto drop;
 +
- /**
-  * tfrc_rx_hist_index - index to reach n-th entry after loss_start
-  */
-@@ -131,11 +136,6 @@ static inline struct tfrc_rx_hist_entry *
- 	return h->ring[tfrc_rx_hist_index(h, h->loss_count)];
- }
+ 	child = inet_csk(sk)->icsk_af_ops->syn_recv_sock(sk, skb, req, NULL);
+ 	if (child = NULL)
+ 		goto listen_overflow;
  
--/*
-- * 	Receiver History Routines
-- */
--static struct kmem_cache *tfrc_rx_hist_slab;
+-	/* FIXME: deal with options */
 -
- void tfrc_rx_hist_add_packet(struct tfrc_rx_hist *h,
- 			     const struct sk_buff *skb,
- 			     const u32 ndp)
-@@ -278,7 +278,7 @@ u32 tfrc_rx_hist_sample_rtt(struct tfrc_rx_hist *h, const struct sk_buff *skb)
- {
- 	u32 sample = 0,
- 	    delta_v = SUB16(dccp_hdr(skb)->dccph_ccval,
--	    		    tfrc_rx_hist_rtt_last_s(h)->tfrchrx_ccval);
-+			    tfrc_rx_hist_rtt_last_s(h)->tfrchrx_ccval);
- 
- 	if (delta_v < 1 || delta_v > 4) {	/* unsuitable CCVal delta */
- 		if (h->rtt_sample_prev = 2) {	/* previous candidate stored */
+ 	inet_csk_reqsk_queue_unlink(sk, req, prev);
+ 	inet_csk_reqsk_queue_removed(sk, req);
+ 	inet_csk_reqsk_queue_add(sk, req, child);
 -- 
 1.5.3.4
 
