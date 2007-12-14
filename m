@@ -1,130 +1,86 @@
-From: Leandro <leandroal@gmail.com>
-Date: Fri, 21 Dec 2007 04:45:11 +0000
-Subject: [PATCHv2 2/2] Share ccid{3/4}_hc_rx_set_state function via tfrc_ccids
-Message-Id: <200712210145.11049.leandroal@gmail.com>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Fri, 14 Dec 2007 01:42:01 +0000
+Subject: [PATCH 2/3] [CCID]: More informative registration
+Message-Id: <1197596522-14600-3-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[TFRC_CCIDS] Share ccid{3/4}_hc_rx_set_state function via tfrc_ccids
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+The patch makes the registration messages of CCID 2/3 a bit more
+informative: instead of repeating the CCID number as currently done,
 
----------------------> Patch v2 <---------------------
+        "CCID: Registered CCID 2 (ccid2)"  or
+        "CCID: Registered CCID 3 (ccid3)",
 
-The version one of this patch was broking the code.
+the descriptive names of the CCID's (from RFCs) are now used:
 
-Index: ccid4.latest/net/dccp/ccids/ccid3.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/ccid3.c
-+++ ccid4.latest/net/dccp/ccids/ccid3.c
-@@ -468,19 +468,6 @@ static int ccid3_hc_tx_getsockopt(struct
- 	return 0;
- }
+	"CCID: Registered CCID 2 (TCP-like)" and
+	"CCID: Registered CCID 3 (TCP-Friendly Rate Control)".
+
+To allow spaces in the name, the slab name string has been changed to
+refer to the numeric CCID identifier, using the same format as before.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/ccid.c        |    8 ++++----
+ net/dccp/ccids/ccid2.c |    2 +-
+ net/dccp/ccids/ccid3.c |    2 +-
+ 3 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/net/dccp/ccid.c b/net/dccp/ccid.c
+index c45088b..4809753 100644
+--- a/net/dccp/ccid.c
++++ b/net/dccp/ccid.c
+@@ -92,15 +92,15 @@ int ccid_register(struct ccid_operations *ccid_ops)
  
--static void ccid3_hc_rx_set_state(struct sock *sk,
--				  enum tfrc_hc_rx_states state)
--{
--	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
--	enum tfrc_hc_rx_states oldstate = hcrx->trx_state;
--
--	ccid3_pr_debug("%s(%p) %-8.8s -> %s\n",
--		       dccp_role(sk), sk, tfrc_rx_state_name(oldstate),
--		       tfrc_rx_state_name(state));
--	WARN_ON(state = oldstate);
--	hcrx->trx_state = state;
--}
--
- static void ccid3_hc_rx_send_feedback(struct sock *sk,
- 				      const struct sk_buff *skb,
- 				      enum tfrc_fback_type fbtype)
-@@ -588,7 +575,7 @@ static void ccid3_hc_rx_packet_recv(stru
- 		if (is_data_packet) {
- 			const u32 payload = skb->len - dccp_hdr(skb)->dccph_doff * 4;
- 			do_feedback = TFRC_FBACK_INITIAL;
--			ccid3_hc_rx_set_state(sk, TRX_STATE_DATA);
-+			tfrc_rx_set_state(sk, TRX_STATE_DATA);
- 			hcrx->trx_s = payload;
- 			/*
- 			 * Not necessary to update trx_bytes_recv here,
-@@ -675,7 +662,7 @@ static void ccid3_hc_rx_exit(struct sock
- {
- 	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
+ 	ccid_ops->ccid_hc_rx_slab  			ccid_kmem_cache_create(ccid_ops->ccid_hc_rx_obj_size,
+-					       "%s_hc_rx_sock",
+-					       ccid_ops->ccid_name);
++					       "ccid%u_hc_rx_sock",
++					       ccid_ops->ccid_id);
+ 	if (ccid_ops->ccid_hc_rx_slab = NULL)
+ 		goto out;
  
--	ccid3_hc_rx_set_state(sk, TRX_STATE_TERM);
-+	tfrc_rx_set_state(sk, TRX_STATE_TERM);
+ 	ccid_ops->ccid_hc_tx_slab  			ccid_kmem_cache_create(ccid_ops->ccid_hc_tx_obj_size,
+-					       "%s_hc_tx_sock",
+-					       ccid_ops->ccid_name);
++					       "ccid%u_hc_tx_sock",
++					       ccid_ops->ccid_id);
+ 	if (ccid_ops->ccid_hc_tx_slab = NULL)
+ 		goto out_free_rx_slab;
  
- 	tfrc_rx_hist_purge(&hcrx->trx_hist);
- 	tfrc_lh_cleanup(&hcrx->trx_li_hist);
-Index: ccid4.latest/net/dccp/ccids/ccid4.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/ccid4.c
-+++ ccid4.latest/net/dccp/ccids/ccid4.c
-@@ -505,19 +505,6 @@ static int ccid4_hc_tx_getsockopt(struct
- 	return 0;
- }
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 48eeb44..b5b52eb 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -770,7 +770,7 @@ static void ccid2_hc_rx_packet_recv(struct sock *sk, struct sk_buff *skb)
  
--static void ccid4_hc_rx_set_state(struct sock *sk,
--				  enum tfrc_hc_rx_states state)
--{
--	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
--	enum tfrc_hc_rx_states oldstate = hcrx->trx_state;
--
--	ccid4_pr_debug("%s(%p) %-8.8s -> %s\n",
--		       dccp_role(sk), sk, tfrc_rx_state_name(oldstate),
--		       tfrc_rx_state_name(state));
--	WARN_ON(state = oldstate);
--	hcrx->trx_state = state;
--}
--
- static void ccid4_hc_rx_send_feedback(struct sock *sk,
- 				      const struct sk_buff *skb,
- 				      enum tfrc_fback_type fbtype)
-@@ -622,7 +609,7 @@ static void ccid4_hc_rx_packet_recv(stru
- 		if (is_data_packet) {
- 			const u32 payload = skb->len - dccp_hdr(skb)->dccph_doff * 4;
- 			do_feedback = TFRC_FBACK_INITIAL;
--			ccid4_hc_rx_set_state(sk, TRX_STATE_DATA);
-+			tfrc_rx_set_state(sk, TRX_STATE_DATA);
- 			hcrx->trx_s = payload;
-                        /*
-                         * Not necessary to update trx_bytes_recv here,
-@@ -709,7 +696,7 @@ static void ccid4_hc_rx_exit(struct sock
- {
- 	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
+ static struct ccid_operations ccid2 = {
+ 	.ccid_id		= DCCPC_CCID2,
+-	.ccid_name		= "ccid2",
++	.ccid_name		= "TCP-like",
+ 	.ccid_owner		= THIS_MODULE,
+ 	.ccid_hc_tx_obj_size	= sizeof(struct ccid2_hc_tx_sock),
+ 	.ccid_hc_tx_init	= ccid2_hc_tx_init,
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index a818a1e..876c747 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -943,7 +943,7 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
  
--	ccid4_hc_rx_set_state(sk, TRX_STATE_TERM);
-+	tfrc_rx_set_state(sk, TRX_STATE_TERM);
- 
- 	tfrc_rx_hist_purge(&hcrx->trx_hist);
- 	tfrc_lh_cleanup(&hcrx->trx_li_hist);
-Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.c
-+++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-@@ -176,3 +176,17 @@ void tfrc_tx_set_state(struct sock *sk, 
- }
- 
- EXPORT_SYMBOL_GPL(tfrc_tx_set_state);
-+
-+void tfrc_rx_set_state(struct sock *sk, enum tfrc_hc_rx_states state)
-+{
-+	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
-+	enum tfrc_hc_rx_states oldstate = hcrx->trx_state;
-+
-+	tfrc_pr_debug("%s(%p) %-8.8s -> %s\n", dccp_role(sk), sk,
-+			tfrc_rx_state_name(oldstate),
-+			tfrc_rx_state_name(state));
-+	WARN_ON(state = oldstate);
-+	hcrx->trx_state = state;
-+}
-+
-+EXPORT_SYMBOL_GPL(tfrc_rx_set_state);
-Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.h
-+++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-@@ -200,3 +200,5 @@ extern int tfrc_tx_parse_options(struct 
- extern int tfrc_rx_insert_options(struct sock *sk, struct sk_buff *skb);
- 
- extern void tfrc_tx_set_state(struct sock *sk, enum tfrc_hc_tx_states state);
-+
-+extern void tfrc_rx_set_state(struct sock *sk, enum tfrc_hc_rx_states state);
+ static struct ccid_operations ccid3 = {
+ 	.ccid_id		   = DCCPC_CCID3,
+-	.ccid_name		   = "ccid3",
++	.ccid_name		   = "TCP-Friendly Rate Control",
+ 	.ccid_owner		   = THIS_MODULE,
+ 	.ccid_hc_tx_obj_size	   = sizeof(struct ccid3_hc_tx_sock),
+ 	.ccid_hc_tx_init	   = ccid3_hc_tx_init,
+-- 
+1.5.3.4
+
