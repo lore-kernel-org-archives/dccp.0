@@ -1,26 +1,71 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 10 Dec 2007 13:11:54 +0000
-Subject: [PATCH 0/4] [TFRC]: Revised Loss Intervals Patches (macro-less, new swap function)
-Message-Id: <1197292318-29659-1-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Fri, 14 Dec 2007 01:42:00 +0000
+Subject: [PATCH 1/3] [DCCP]: Documentation for CCID operations
+Message-Id: <1197596522-14600-2-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This revision updates earlier patches, following discussion,
-and adds one additional cleanup patch at the end.
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
+This adds documentation for the ccid_operations structure.
 
-Patch #1: Revision of initialisation patch; fixed calling __exit function 
-          from __init function - identified by Arnaldo.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/ccid.h |   35 ++++++++++++++++++++++++++++-------
+ 1 files changed, 28 insertions(+), 7 deletions(-)
 
-Patch #2: Revision - re-converted tfrc_rx_hist_entry() back to inline,
-          following discussion with Arnaldo.
+diff --git a/net/dccp/ccid.h b/net/dccp/ccid.h
+index c65cb24..e3cdd8a 100644
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -23,14 +23,35 @@
+ 
+ struct tcp_info;
+ 
++/**
++ *  struct ccid_operations  -  Interface to Congestion-Control Infrastructure
++ *
++ *  @ccid_id: numerical CCID ID (up to %CCID_MAX, cf. table 5 in RFC 4340, 10.)
++ *  @ccid_name: alphabetical identifier string for @ccid_id
++ *  @ccid_owner: module which implements/owns this CCID
++ *  @ccid_hc_{r,t}x_slab: memory pool for the receiver/sender half-connection
++ *  @ccid_hc_{r,t}x_obj_size: size of the receiver/sender half-connection socket
++ *
++ *  @ccid_hc_{r,t}x_init: CCID-specific initialisation routine (before startup)
++ *  @ccid_hc_{r,t}x_exit: CCID-specific cleanup routine (before destruction)
++ *  @ccid_hc_rx_packet_recv: implements the HC-receiver side
++ *  @ccid_hc_{r,t}x_parse_options: parsing routine for CCID/HC-specific options
++ *  @ccid_hc_{r,t}x_insert_options: insert routine for CCID/HC-specific options
++ *  @ccid_hc_tx_packet_recv: implements feedback processing for the HC-sender
++ *  @ccid_hc_tx_send_packet: implements the sending part of the HC-sender
++ *  @ccid_hc_tx_packet_sent: does accounting for packets in flight by HC-sender
++ *  @ccid_hc_{r,t}x_get_info: INET_DIAG information for HC-receiver/sender
++ *  @ccid_hc_{r,t}x_getsockopt: socket options specific to HC-receiver/sender
++ */
+ struct ccid_operations {
+-	unsigned char	ccid_id;
+-	const char	*ccid_name;
+-	struct module	*ccid_owner;
+-	struct kmem_cache	*ccid_hc_rx_slab;
+-	__u32		ccid_hc_rx_obj_size;
+-	struct kmem_cache	*ccid_hc_tx_slab;
+-	__u32		ccid_hc_tx_obj_size;
++	unsigned char		ccid_id;
++	const char		*ccid_name;
++	struct module		*ccid_owner;
++	struct kmem_cache	*ccid_hc_rx_slab,
++				*ccid_hc_tx_slab;
++	__u32			ccid_hc_rx_obj_size,
++				ccid_hc_tx_obj_size;
++	/* Interface Routines */
+ 	int		(*ccid_hc_rx_init)(struct ccid *ccid, struct sock *sk);
+ 	int		(*ccid_hc_tx_init)(struct ccid *ccid, struct sock *sk);
+ 	void		(*ccid_hc_rx_exit)(struct sock *sk);
+-- 
+1.5.3.4
 
-Patch #3: Reworked - loss intervals database.  Individual changes:
-     	  - replaced tfrc_rx_hist_swap() with routine suggested by Arnaldo;
-	  - replaced all access macros with inlines or in-place(s);
-	  - replaced LIH_INDEX also with inline instead of macro.
-          
-Patch #4: Removes redundant debugging output from syslog.
