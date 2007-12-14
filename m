@@ -1,7 +1,7 @@
-From: David Miller <davem@davemloft.net>
-Date: Sun, 09 Dec 2007 08:32:52 +0000
-Subject: Re: [PATCHES 0/3]: DCCP patches for 2.6.25
-Message-Id: <20071209.003252.18641100.davem@davemloft.net>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Fri, 14 Dec 2007 01:41:59 +0000
+Subject: [PATCHES 0/3]: DCCP patches for 2.6.25
+Message-Id: <1197596522-14600-1-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 References: <1197139933-11609-1-git-send-email-acme@redhat.com>
 In-Reply-To: <1197139933-11609-1-git-send-email-acme@redhat.com>
@@ -10,13 +10,19 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Sat,  8 Dec 2007 16:52:10 -0200
+Hi David,
 
-> Hi David,
-> 
-> 	Please consider pulling from:
-> 
-> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.25
+	Please consider pulling from:
 
-Pulled, thanks a lot.
+master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6.25
+
+Best Regards,
+
+- Arnaldo
+
+ net/dccp/ccid.c        |    8 ++++----
+ net/dccp/ccid.h        |   37 ++++++++++++++++++++++++++++++-------
+ net/dccp/ccids/ccid2.c |    2 +-
+ net/dccp/ccids/ccid3.c |    2 +-
+ net/dccp/output.c      |   30 +++++++++++++++++++++++-------
+ 5 files changed, 59 insertions(+), 20 deletions(-)
