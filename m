@@ -1,7 +1,7 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Thu, 13 Dec 2007 15:06:03 +0000
-Subject: [PATCH 10/12] [DCCP]: Remove unused and redundant validation functions
-Message-Id: <1197558365-31134-11-git-send-email-acme@redhat.com>
+Date: Fri, 14 Dec 2007 01:42:02 +0000
+Subject: [PATCH 3/3] [DCCP]: Introducing CCMPS
+Message-Id: <1197596522-14600-4-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -10,98 +10,106 @@ To: dccp@vger.kernel.org
 
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-This removes two inlines which were both called in a single function only:
+This introduces a CCMPS field for setting a CCID-specific upper bound on the application payload
+size, as is defined in RFC 4340, section 14.
 
- 1) dccp_feat_change() is always called with either DCCPO_CHANGE_L or DCCPO_CHANGE_R as argument
-    * from dccp_set_socktopt_change() via do_dccp_setsockopt() with DCCP_SOCKOPT_CHANGE_R/L
-    * from __dccp_feat_init() via dccp_feat_init() also with DCCP_SOCKOPT_CHANGE_R/L.
+Only the TX CCID is considered in setting this limit, since the RX CCID generates comparatively
+small (DCCP-Ack) feedback packets. The CCMPS field includes network and transport layer header
+lengths. The only current CCMPS customer is CCID4 (via RFC 4828).
 
-    Hence the dccp_feat_is_valid_type() is completely unnecessary and always returns true.
+A wrapper is used to allow querying the CCMPS even at times where the CCID modules may not have
+been fully negotiated yet.
 
- 2) Due to (1), the length test reduces to 'len >= 4', which in turn makes
-    dccp_feat_is_valid_length() unnecessary.
-
-Furthermore, the inline function dccp_feat_is_reserved() was unfolded,
-since only called in a single place.
+In dccp_sync_mss() the variable `mss_now' has been renamed into `cur_mps', to reflect that we are
+dealing with an MPS, but not an MSS.
+Since the DCCP code closely follows the TCP code, the identifiers `dccp_sync_mss' and
+`dccps_mss_cache' have been kept, as they have direct TCP counterparts.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/feat.c |   12 ++++--------
- net/dccp/feat.h |   26 --------------------------
- 2 files changed, 4 insertions(+), 34 deletions(-)
+ net/dccp/ccid.h   |    2 ++
+ net/dccp/output.c |   30 +++++++++++++++++++++++-------
+ 2 files changed, 25 insertions(+), 7 deletions(-)
 
-diff --git a/net/dccp/feat.c b/net/dccp/feat.c
-index 5ebdd86..084744e 100644
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -24,11 +24,7 @@ int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
- 
- 	dccp_feat_debug(type, feature, *val);
- 
--	if (!dccp_feat_is_valid_type(type)) {
--		DCCP_WARN("option type %d invalid in negotiation\n", type);
--		return 1;
--	}
--	if (!dccp_feat_is_valid_length(type, feature, len)) {
-+	if (len > 3) {
- 		DCCP_WARN("invalid length %d\n", len);
- 		return 1;
- 	}
-@@ -637,12 +633,12 @@ const char *dccp_feat_name(const u8 feat)
- 		[DCCPF_MIN_CSUM_COVER]	= "Min. Csum Coverage",
- 		[DCCPF_DATA_CHECKSUM]	= "Send Data Checksum",
- 	};
-+	if (feat > DCCPF_DATA_CHECKSUM && feat < DCCPF_MIN_CCID_SPECIFIC)
-+		return feature_names[DCCPF_RESERVED];
-+
- 	if (feat >= DCCPF_MIN_CCID_SPECIFIC)
- 		return "CCID-specific";
- 
--	if (dccp_feat_is_reserved(feat))
--		return feature_names[DCCPF_RESERVED];
--
- 	return feature_names[feat];
+diff --git a/net/dccp/ccid.h b/net/dccp/ccid.h
+index e3cdd8a..fdeae7b 100644
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -27,6 +27,7 @@ struct tcp_info;
+  *  struct ccid_operations  -  Interface to Congestion-Control Infrastructure
+  *
+  *  @ccid_id: numerical CCID ID (up to %CCID_MAX, cf. table 5 in RFC 4340, 10.)
++ *  @ccid_ccmps: the CCMPS including network/transport headers (0 when disabled)
+  *  @ccid_name: alphabetical identifier string for @ccid_id
+  *  @ccid_owner: module which implements/owns this CCID
+  *  @ccid_hc_{r,t}x_slab: memory pool for the receiver/sender half-connection
+@@ -45,6 +46,7 @@ struct tcp_info;
+  */
+ struct ccid_operations {
+ 	unsigned char		ccid_id;
++	__u32			ccid_ccmps;
+ 	const char		*ccid_name;
+ 	struct module		*ccid_owner;
+ 	struct kmem_cache	*ccid_hc_rx_slab,
+diff --git a/net/dccp/output.c b/net/dccp/output.c
+index 5589a5e..3b763db 100644
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -133,15 +133,31 @@ static int dccp_transmit_skb(struct sock *sk, struct sk_buff *skb)
+ 	return -ENOBUFS;
  }
  
-diff --git a/net/dccp/feat.h b/net/dccp/feat.h
-index 177f7de..e272222 100644
---- a/net/dccp/feat.h
-+++ b/net/dccp/feat.h
-@@ -14,32 +14,6 @@
- #include <linux/types.h>
- #include "dccp.h"
++/**
++ * dccp_determine_ccmps  -  Find out about CCID-specfic packet-size limits
++ * We only consider the HC-sender CCID for setting the CCMPS (RFC 4340, 14.),
++ * since the RX CCID is restricted to feedback packets (Acks), which are small
++ * in comparison with the data traffic. A value of 0 means "no current CCMPS".
++ */
++static u32 dccp_determine_ccmps(const struct dccp_sock *dp)
++{
++	const struct ccid *tx_ccid = dp->dccps_hc_tx_ccid;
++
++	if (tx_ccid = NULL || tx_ccid->ccid_ops = NULL)
++		return 0;
++	return tx_ccid->ccid_ops->ccid_ccmps;
++}
++
+ unsigned int dccp_sync_mss(struct sock *sk, u32 pmtu)
+ {
+ 	struct inet_connection_sock *icsk = inet_csk(sk);
+ 	struct dccp_sock *dp = dccp_sk(sk);
+-	int mss_now = (pmtu - icsk->icsk_af_ops->net_header_len -
+-		       sizeof(struct dccp_hdr) - sizeof(struct dccp_hdr_ext));
++	u32 ccmps = dccp_determine_ccmps(dp);
++	int cur_mps = ccmps ? min(pmtu, ccmps) : pmtu;
  
--static inline int dccp_feat_is_valid_length(u8 type, u8 feature, u8 len)
--{
--	/* sec. 6.1: Confirm has at least length 3,
--	 * sec. 6.2: Change  has at least length 4 */
--	if (len < 3)
--		return 1;
--	if (len < 4  && (type = DCCPO_CHANGE_L || type = DCCPO_CHANGE_R))
--		return 1;
--	/* XXX: add per-feature length validation (sec. 6.6.8) */
--	return 0;
--}
--
--static inline int dccp_feat_is_reserved(const u8 feat)
--{
--	return (feat > DCCPF_DATA_CHECKSUM &&
--		feat < DCCPF_MIN_CCID_SPECIFIC) ||
--		feat = DCCPF_RESERVED;
--}
--
--/* feature negotiation knows only these four option types (RFC 4340, sec. 6) */
--static inline int dccp_feat_is_valid_type(const u8 optnum)
--{
--	return optnum >= DCCPO_CHANGE_L && optnum <= DCCPO_CONFIRM_R;
--
--}
--
- #ifdef CONFIG_IP_DCCP_DEBUG
- extern const char *dccp_feat_typename(const u8 type);
- extern const char *dccp_feat_name(const u8 feat);
+-	/* Now subtract optional transport overhead */
+-	mss_now -= icsk->icsk_ext_hdr_len;
++	/* Account for header lengths and IPv4/v6 option overhead */
++	cur_mps -= (icsk->icsk_af_ops->net_header_len + icsk->icsk_ext_hdr_len +
++		    sizeof(struct dccp_hdr) + sizeof(struct dccp_hdr_ext));
+ 
+ 	/*
+ 	 * FIXME: this should come from the CCID infrastructure, where, say,
+@@ -151,13 +167,13 @@ unsigned int dccp_sync_mss(struct sock *sk, u32 pmtu)
+ 	 * make it a multiple of 4
+ 	 */
+ 
+-	mss_now -= ((5 + 6 + 10 + 6 + 6 + 6 + 3) / 4) * 4;
++	cur_mps -= ((5 + 6 + 10 + 6 + 6 + 6 + 3) / 4) * 4;
+ 
+ 	/* And store cached results */
+ 	icsk->icsk_pmtu_cookie = pmtu;
+-	dp->dccps_mss_cache = mss_now;
++	dp->dccps_mss_cache = cur_mps;
+ 
+-	return mss_now;
++	return cur_mps;
+ }
+ 
+ EXPORT_SYMBOL_GPL(dccp_sync_mss);
 -- 
 1.5.3.4
 
