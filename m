@@ -1,127 +1,87 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 19 Dec 2007 14:25:52 +0000
-Subject: [PATCH 11/14] [ACKVEC]: Implement algorithm to update buffer state
-Message-Id: <1198074355-18842-12-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Mon, 17 Dec 2007 15:00:15 +0000
+Subject: [PATCH 1/5] [CCID3]: Use a function to update p_inv, and p is never used
+Message-Id: <1197903619-12301-2-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This implements an algorithm to consistently update the buffer state when
-the peer acknowledges receipt of Ack Vectors; updating state in the list of
-Ack Vectors as well as in the circular buffer.
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-The algorithm
- * deals with HC-sender acknowledging to HC-receiver and vice versa,
- * keeps track of the last unacknowledged but received seqno in tail_ackno,
- * has special cases to reset the overflow condition when appropriate,
- * is protected against receiving older information (would mess up buffer state).
+This patch
+ 1) concentrates previously scattered computation of p_inv into one function;
+ 2) removes the `p' element of the CCID3 RX sock (it is redundant);
+ 3) makes the tfrc_rx_info structure standalone, only used on demand.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ackvec.c |   82 ++++++++++++++++++++++++++++++++++++++++-------------
- 1 files changed, 62 insertions(+), 20 deletions(-)
+ net/dccp/ccids/ccid3.c |   11 ++++++++---
+ net/dccp/ccids/ccid3.h |    8 ++++----
+ 2 files changed, 12 insertions(+), 7 deletions(-)
 
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -262,34 +262,76 @@ out_duplicate:
- 	return -EILSEQ;
- }
- 
--static void dccp_ackvec_throw_record(struct dccp_ackvec *av,
--				     struct dccp_ackvec_record *avr)
--{
--	struct dccp_ackvec_record *next;
-+/**
-+ * dccp_ackvec_clear_state  -  Perform house-keeping / garbage-collection
-+ * This routine is called when the peer acknowledges the receipt of Ack Vectors
-+ * up to and including @ackno. While based on on section A.3 of RFC 4340, here
-+ * are additional precautions to prevent corrupted buffer state. In particular,
-+ * we use tail_ackno to identify outdated records; it always marks the earliest
-+ * packet of group (2) in 11.4.2.
-+ */
-+void dccp_ackvec_clear_state(struct dccp_ackvec *av, const u64 ackno)
-+ {
-+	struct dccp_ackvec_record *avr, *next;
-+	u8 runlen_now, eff_runlen;
-+	s64 delta;
- 
--	/* sort out vector length */
--	if (av->av_buf_head <= avr->avr_ack_ptr)
--		av->av_vec_len = avr->avr_ack_ptr - av->av_buf_head;
--	else
--		av->av_vec_len = DCCPAV_MAX_ACKVEC_LEN - 1 -
--				 av->av_buf_head + avr->avr_ack_ptr;
-+	avr = dccp_ackvec_lookup(&av->av_records, ackno);
-+	if (avr = NULL)
-+		return;
-+	/*
-+	 * Deal with outdated acknowledgments: this arises when e.g. there are
-+	 * several old records and the acks from the peer come in slowly. In
-+	 * that case we may still have records that pre-date tail_ackno.
-+	 */
-+	delta = dccp_delta_seqno(av->av_tail_ackno, avr->avr_ack_ackno);
-+	if (delta < 0)
-+		goto free_records;
-+	/*
-+	 * Deal with overlapping Ack Vectors: don't subtract more than the
-+	 * number of packets between tail_ackno and ack_ackno.
-+	 */
-+	eff_runlen = delta < avr->avr_ack_runlen ? delta : avr->avr_ack_runlen;
- 
--	/* free records */
-+	runlen_now = dccp_ackvec_runlen(av->av_buf + avr->avr_ack_ptr);
-+	/*
-+	 * The run length of Ack Vector cells does not decrease over time. If
-+	 * the run length is the same as at the time the Ack Vector was sent, we
-+	 * free the ack_ptr cell. That cell can however not be freed if the run
-+	 * length has increased: in this case we need to move the tail pointer
-+	 * backwards (towards higher indices), to its next-oldest neighbour.
-+	 */
-+	if (runlen_now > eff_runlen) {
-+
-+		av->av_buf[avr->avr_ack_ptr] -= eff_runlen + 1;
-+		av->av_buf_tail = dccp_ackvec_idx_add(avr->avr_ack_ptr, 1);
-+
-+		/* This move may not have cleared the overflow flag. */
-+		if (av->av_overflow)
-+			av->av_overflow = (av->av_buf_head = av->av_buf_tail);
-+	} else {
-+		av->av_buf_tail	= avr->avr_ack_ptr;
-+		/*
-+		 * We have made sure that avr points to a valid cell within the
-+		 * buffer. This cell is either older than head, or equals head
-+		 * (empty buffer): in both cases we no longer have any overflow.
-+		 */
-+		av->av_overflow	= 0;
-+	}
-+
-+	/*
-+	 * The peer has acknowledged up to and including ack_ackno. Hence the
-+	 * first packet in group (2) of 11.4.2 is the successor of ack_ackno.
-+	 */
-+	av->av_tail_ackno = ADD48(avr->avr_ack_ackno, 1);
-+
-+free_records:
- 	list_for_each_entry_safe_from(avr, next, &av->av_records, avr_node) {
- 		list_del(&avr->avr_node);
- 		kmem_cache_free(dccp_ackvec_record_slab, avr);
- 	}
- }
- 
--void dccp_ackvec_clear_state(struct dccp_ackvec *av, const u64 ackno)
--{
--	struct dccp_ackvec_record *avr;
--
--	avr = dccp_ackvec_lookup(&av->av_records, ackno);
--	if (avr != NULL)
--		dccp_ackvec_throw_record(av, avr);
--}
--
- int __init dccp_ackvec_init(void)
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 876c747..90e0454 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -917,6 +917,7 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
+ 				  u32 __user *optval, int __user *optlen)
  {
- 	dccp_ackvec_slab = kmem_cache_create("dccp_ackvec",
+ 	const struct ccid3_hc_rx_sock *hcrx;
++	struct tfrc_rx_info rx_info;
+ 	const void *val;
+ 
+ 	/* Listen socks doesn't have a private CCID block */
+@@ -926,10 +927,14 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
+ 	hcrx = ccid3_hc_rx_sk(sk);
+ 	switch (optname) {
+ 	case DCCP_SOCKOPT_CCID_RX_INFO:
+-		if (len < sizeof(hcrx->ccid3hcrx_tfrc))
++		if (len < sizeof(rx_info))
+ 			return -EINVAL;
+-		len = sizeof(hcrx->ccid3hcrx_tfrc);
+-		val = &hcrx->ccid3hcrx_tfrc;
++		rx_info.tfrcrx_x_recv = hcrx->ccid3hcrx_x_recv;
++		rx_info.tfrcrx_rtt    = hcrx->ccid3hcrx_rtt;
++		rx_info.tfrcrx_p      = hcrx->ccid3hcrx_pinv = 0 ? ~0U :
++					   scaled_div(1, hcrx->ccid3hcrx_pinv);
++		len = sizeof(rx_info);
++		val = &rx_info;
+ 		break;
+ 	default:
+ 		return -ENOPROTOOPT;
+diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
+index e9f6ff4..49ca32b 100644
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -139,6 +139,8 @@ enum ccid3_hc_rx_states {
+  *  @ccid3hcrx_last_counter  -  Tracks window counter (RFC 4342, 8.1)
+  *  @ccid3hcrx_state  -  Receiver state, one of %ccid3_hc_rx_states
+  *  @ccid3hcrx_bytes_recv  -  Total sum of DCCP payload bytes
++ *  @ccid3hcrx_x_recv  -  Receiver estimate of send rate (RFC 3448, sec. 4.3)
++ *  @ccid3hcrx_rtt  -  Receiver estimate of RTT
+  *  @ccid3hcrx_tstamp_last_feedback  -  Time at which last feedback was sent
+  *  @ccid3hcrx_tstamp_last_ack  -  Time at which last feedback was sent
+  *  @ccid3hcrx_hist  -  Packet history (loss detection + RTT sampling)
+@@ -147,13 +149,11 @@ enum ccid3_hc_rx_states {
+  *  @ccid3hcrx_pinv  -  Inverse of Loss Event Rate (RFC 4342, sec. 8.5)
+  */
+ struct ccid3_hc_rx_sock {
+-	struct tfrc_rx_info		ccid3hcrx_tfrc;
+-#define ccid3hcrx_x_recv		ccid3hcrx_tfrc.tfrcrx_x_recv
+-#define ccid3hcrx_rtt			ccid3hcrx_tfrc.tfrcrx_rtt
+-#define ccid3hcrx_p			ccid3hcrx_tfrc.tfrcrx_p
+ 	u8				ccid3hcrx_last_counter:4;
+ 	enum ccid3_hc_rx_states		ccid3hcrx_state:8;
+ 	u32				ccid3hcrx_bytes_recv;
++	u32				ccid3hcrx_x_recv;
++	u32				ccid3hcrx_rtt;
+ 	ktime_t				ccid3hcrx_tstamp_last_feedback;
+ 	struct tfrc_rx_hist		ccid3hcrx_hist;
+ 	struct tfrc_loss_hist		ccid3hcrx_li_hist;
 -- 
-1.5.3.GIT
+1.5.3.6
 
