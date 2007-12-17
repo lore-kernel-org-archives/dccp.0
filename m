@@ -1,7 +1,7 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Thu, 13 Dec 2007 15:05:57 +0000
-Subject: [PATCH 04/12] [DCCP]: Support for server holding timewait state
-Message-Id: <1197558365-31134-5-git-send-email-acme@redhat.com>
+Date: Mon, 17 Dec 2007 15:00:17 +0000
+Subject: [PATCH 3/5] [CCID3]: Implement rfc3448bis changes to feedback reception
+Message-Id: <1197903619-12301-4-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -10,125 +10,93 @@ To: dccp@vger.kernel.org
 
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-This adds a socket option and signalling support for the case where the server
-holds timewait state on closing the connection, as described in RFC 4340, 8.3.
-
-Since holding timewait state at the server is the non-usual case, it is enabled
-via a socket option. Documentation for this socket option has been added.
-
-The setsockopt statement has been made resilient against different possible cases
-of expressing boolean `true' values using a suggestion by Ian McDonald.
+This implements the algorithm to update the allowed sending rate X upon
+receiving feedback packets, as described in draft rfc3448bis, 4.2/4.3.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- Documentation/networking/dccp.txt |    6 ++++++
- include/linux/dccp.h              |    3 +++
- net/dccp/output.c                 |    6 ++++--
- net/dccp/proto.c                  |   13 ++++++++++++-
- 4 files changed, 25 insertions(+), 3 deletions(-)
+ net/dccp/ccids/ccid3.c |   47 ++++++++++++++++++++++++++---------------------
+ 1 files changed, 26 insertions(+), 21 deletions(-)
 
-diff --git a/Documentation/networking/dccp.txt b/Documentation/networking/dccp.txt
-index d76905a..39131a3 100644
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -57,6 +57,12 @@ can be set before calling bind().
- DCCP_SOCKOPT_GET_CUR_MPS is read-only and retrieves the current maximum packet
- size (application payload size) in bytes, see RFC 4340, section 14.
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 1b1cb74..7c8e9ad 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -429,40 +429,46 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
+ 		hctx->ccid3hctx_p = 0;
+ 	else				       /* can not exceed 100% */
+-		hctx->ccid3hctx_p = 1000000 / pinv;
++		hctx->ccid3hctx_p = scaled_div(1, pinv);
+ 	/*
+ 	 * Validate new RTT sample and update moving average
+ 	 */
+ 	r_sample = dccp_sample_rtt(sk, r_sample);
+ 	hctx->ccid3hctx_rtt = tfrc_ewma(hctx->ccid3hctx_rtt, r_sample, 9);
+-
++	/*
++	 * Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
++	 */
+ 	if (hctx->ccid3hctx_state = TFRC_SSTATE_NO_FBACK) {
+-		/*
+-		 * Larger Initial Windows [RFC 4342, sec. 5]
+-		 */
+-		hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
+-		hctx->ccid3hctx_t_ld = now;
++		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
  
-+DCCP_SOCKOPT_SERVER_TIMEWAIT enables the server (listening socket) to hold
-+timewait state when closing the connection (RFC 4340, 8.3). The usual case is
-+that the closing server sends a CloseReq, whereupon the client holds timewait
-+state. When this boolean socket option is on, the server sends a Close instead
-+and will enter TIMEWAIT. This option must be set after accept() returns.
-+
- DCCP_SOCKOPT_SEND_CSCOV and DCCP_SOCKOPT_RECV_CSCOV are used for setting the
- partial checksum coverage (RFC 4340, sec. 9.2). The default is that checksums
- always cover the entire packet and that only fully covered application data is
-diff --git a/include/linux/dccp.h b/include/linux/dccp.h
-index 312b989..c676021 100644
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -205,6 +205,7 @@ struct dccp_so_feat {
- #define DCCP_SOCKOPT_CHANGE_L		3
- #define DCCP_SOCKOPT_CHANGE_R		4
- #define DCCP_SOCKOPT_GET_CUR_MPS	5
-+#define DCCP_SOCKOPT_SERVER_TIMEWAIT	6
- #define DCCP_SOCKOPT_SEND_CSCOV		10
- #define DCCP_SOCKOPT_RECV_CSCOV		11
- #define DCCP_SOCKOPT_CCID_RX_INFO	128
-@@ -492,6 +493,7 @@ struct dccp_ackvec;
-  * @dccps_role - role of this sock, one of %dccp_role
-  * @dccps_hc_rx_insert_options - receiver wants to add options when acking
-  * @dccps_hc_tx_insert_options - sender wants to add options when sending
-+ * @dccps_server_timewait - server holds timewait state on close (RFC 4340, 8.3)
-  * @dccps_xmit_timer - timer for when CCID is not ready to send
-  * @dccps_syn_rtt - RTT sample from Request/Response exchange (in usecs)
-  */
-@@ -528,6 +530,7 @@ struct dccp_sock {
- 	enum dccp_role			dccps_role:2;
- 	__u8				dccps_hc_rx_insert_options:1;
- 	__u8				dccps_hc_tx_insert_options:1;
-+	__u8				dccps_server_timewait:1;
- 	struct timer_list		dccps_xmit_timer;
- };
+-		ccid3_update_send_interval(hctx);
++		if (hctx->ccid3hctx_t_rto = 0) {
++ 			/*
++			 * Initial feedback packet: Larger Initial Windows (4.2)
++ 			 */
++			hctx->ccid3hctx_x    = rfc3390_initial_rate(sk);
++			hctx->ccid3hctx_t_ld = now;
  
-diff --git a/net/dccp/output.c b/net/dccp/output.c
-index e97584a..b2e1791 100644
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -567,8 +567,10 @@ void dccp_send_close(struct sock *sk, const int active)
+-		ccid3_pr_debug("%s(%p), s=%u, MSS=%u, "
+-			       "R_sample=%uus, X=%u\n", dccp_role(sk),
+-			       sk, hctx->ccid3hctx_s,
+-			       dccp_sk(sk)->dccps_mss_cache, r_sample,
+-			       (unsigned)(hctx->ccid3hctx_x >> 6));
++			ccid3_update_send_interval(hctx);
  
- 	/* Reserve space for headers and prepare control bits. */
- 	skb_reserve(skb, sk->sk_prot->max_header);
--	DCCP_SKB_CB(skb)->dccpd_type = dp->dccps_role = DCCP_ROLE_CLIENT ?
--					DCCP_PKT_CLOSE : DCCP_PKT_CLOSEREQ;
-+	if (dp->dccps_role = DCCP_ROLE_SERVER && !dp->dccps_server_timewait)
-+		DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_CLOSEREQ;
-+	else
-+		DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_CLOSE;
+-		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
+-	} else {
++			goto done_computing_x;
++		} else if (hctx->ccid3hctx_p = 0) {
++			/*
++			 * First feedback after nofeedback timer expiry (4.3)
++			 */
++			goto done_computing_x;
++ 		}
++	}
  
- 	if (active) {
- 		dccp_write_xmit(sk, 1);
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 8a73c8f..cc87c50 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -551,6 +551,12 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
- 						     (struct dccp_so_feat __user *)
- 						     optval);
- 		break;
-+	case DCCP_SOCKOPT_SERVER_TIMEWAIT:
-+		if (dp->dccps_role != DCCP_ROLE_SERVER)
-+			err = -EOPNOTSUPP;
-+		else
-+			dp->dccps_server_timewait = (val != 0);
-+		break;
- 	case DCCP_SOCKOPT_SEND_CSCOV:	/* sender side, RFC 4340, sec. 9.2 */
- 		if (val < 0 || val > 15)
- 			err = -EINVAL;
-@@ -653,6 +659,10 @@ static int do_dccp_getsockopt(struct sock *sk, int level, int optname,
- 		val = dp->dccps_mss_cache;
- 		len = sizeof(val);
- 		break;
-+	case DCCP_SOCKOPT_SERVER_TIMEWAIT:
-+		val = dp->dccps_server_timewait;
-+		len = sizeof(val);
-+		break;
- 	case DCCP_SOCKOPT_SEND_CSCOV:
- 		val = dp->dccps_pcslen;
- 		len = sizeof(val);
-@@ -918,7 +928,8 @@ static void dccp_terminate_connection(struct sock *sk)
- 	case DCCP_OPEN:
- 		dccp_send_close(sk, 1);
+-		/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
+-		if (hctx->ccid3hctx_p > 0)
+-			hctx->ccid3hctx_x_calc +	/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
++	if (hctx->ccid3hctx_p > 0)
++		hctx->ccid3hctx_x_calc  				tfrc_calc_x(hctx->ccid3hctx_s,
+ 					    hctx->ccid3hctx_rtt,
+ 					    hctx->ccid3hctx_p);
+-		ccid3_hc_tx_update_x(sk, &now);
++	ccid3_hc_tx_update_x(sk, &now);
  
--		if (dccp_sk(sk)->dccps_role = DCCP_ROLE_SERVER)
-+		if (dccp_sk(sk)->dccps_role = DCCP_ROLE_SERVER &&
-+		    !dccp_sk(sk)->dccps_server_timewait)
- 			next_state = DCCP_ACTIVE_CLOSEREQ;
- 		else
- 			next_state = DCCP_CLOSING;
+-		ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, "
++done_computing_x:
++	ccid3_pr_debug("%s(%p), RTT=%uus (sample=%uus), s=%u, "
+ 			       "p=%u, X_calc=%u, X_recv=%u, X=%u\n",
+ 			       dccp_role(sk),
+ 			       sk, hctx->ccid3hctx_rtt, r_sample,
+@@ -470,7 +476,6 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 			       hctx->ccid3hctx_x_calc,
+ 			       (unsigned)(hctx->ccid3hctx_x_recv >> 6),
+ 			       (unsigned)(hctx->ccid3hctx_x >> 6));
+-	}
+ 
+ 	/* unschedule no feedback timer */
+ 	sk_stop_timer(sk, &hctx->ccid3hctx_no_feedback_timer);
 -- 
-1.5.3.4
+1.5.3.6
 
