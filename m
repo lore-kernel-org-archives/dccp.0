@@ -1,102 +1,137 @@
-From: "Leandro Sales" <leandroal@gmail.com>
-Date: Wed, 19 Dec 2007 19:06:35 +0000
-Subject: [Announce] Release of the first version of DCCP Plugin for GStreamer
-Message-Id: <5bc4c4570712191106u32c49d41hb340eae35b6347bc@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Mon, 17 Dec 2007 15:00:18 +0000
+Subject: [PATCH 4/5] [CCID3]: Nofeedback timer according to rfc3448bis
+Message-Id: <1197903619-12301-5-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-SGVsbG8gbGlzdCEKCkknbSBwbGVhc2VkIHRvIGFubm91bmNlIHRoZSBmaXJzdCB2ZXJzaW9uIG9m
-IHRoZSBEQ0NQIEdTdHJlYW1lcgpQbHVnaW4uIFBsZWFzZSwgbGV0IG1lIGtub3cgaWYgeW91IGhh
-dmUgYW55IHByb2JsZW0gb24gcnVubmluZyB0aGUKcGx1Z2luLCBzdWdnZXN0aW9ucyBhbmQgaW1w
-cm92ZW1lbnRzIHRoYXQgeW91IHByb3ZpZGVkIGZvciB0aGUgcGx1Z2luLgoKV2hhdCBpcyBHU3Ry
-ZWFtZXI/Cj09PT09PT0KR1N0cmVhbWVyIFsxXSBpcyBhIGxpYnJhcnkgdGhhdCBhbGxvd3MgdGhl
-IGNvbnN0cnVjdGlvbiBvZiBncmFwaHMgb2YKbWVkaWEtaGFuZGxpbmcgY29tcG9uZW50cywgcmFu
-Z2luZyBmcm9tIHNpbXBsZSBPZ2cvVm9yYmlzIHBsYXliYWNrIHRvCmNvbXBsZXggYXVkaW8gKG1p
-eGluZykgYW5kIHZpZGVvIChub24tbGluZWFyIGVkaXRpbmcpIHByb2Nlc3NpbmcuCkFwcGxpY2F0
-aW9ucyBjYW4gdGFrZSBhZHZhbnRhZ2Ugb2YgYWR2YW5jZXMgaW4gY29kZWMgYW5kIGZpbHRlcgp0
-ZWNobm9sb2d5IHRyYW5zcGFyZW50bHkuIERldmVsb3BlcnMgY2FuIGFkZCBuZXcgY29kZWNzIGFu
-ZCBmaWx0ZXJzIGJ5CndyaXRpbmcgYSBzaW1wbGUgcGx1Z2luIHdpdGggYSBjbGVhbiwgZ2VuZXJp
-YyBpbnRlcmZhY2UuCkdTdHJlYW1lciBpcyByZWxlYXNlZCB1bmRlciB0aGUgTEdQTC4KCldoYXQg
-aXMgRENDUD8KPT09PT09CgpUaGUgRGF0YWdyYW0gQ29uZ2VzdGlvbiBDb250cm9sIFByb3RvY29s
-IChEQ0NQKSBbMl0gaXMgYSB0cmFuc3BvcnQKcHJvdG9jb2wgdGhhdCBwcm92aWRlcyBiaWRpcmVj
-dGlvbmFsIHVuaWNhc3QgY29ubmVjdGlvbnMgb2YKY29uZ2VzdGlvbi1jb250cm9sbGVkIHVucmVs
-aWFibGUgZGF0YWdyYW1zLiBEQ0NQIGlzIHN1aXRhYmxlIGZvcgphcHBsaWNhdGlvbnMgdGhhdCB0
-cmFuc2ZlciBmYWlybHkgbGFyZ2UgYW1vdW50cyBvZiBkYXRhIGFuZCB0aGF0IGNhbgpiZW5lZml0
-IGZyb20gY29udHJvbCBvdmVyIHRoZSB0cmFkZW9mZiBiZXR3ZWVuIHRpbWVsaW5lc3MgYW5kCnJl
-bGlhYmlsaXR5LgoKSXQgaXMgYSBtZXNzYWdlLW9yaWVudGVkIHRyYW5zcG9ydCBsYXllciBwcm90
-b2NvbCB0aGF0IGltcGxlbWVudHMKcmVsaWFibGUgY29ubmVjdGlvbiBzZXR1cCwgdGVhcmRvd24s
-IEVDTiwgY29uZ2VzdGlvbiBjb250cm9sLCBhbmQKZmVhdHVyZSBuZWdvdGlhdGlvbi4gRENDUCB3
-YXMgcHVibGlzaGVkIGFzIFJGQyA0MzQwLCBhIHByb3Bvc2VkCnN0YW5kYXJkLCBieSB0aGUgSUVU
-RiBpbiBNYXJjaCwgMjAwNi4gTGludXggaGFkIGFuIGltcGxlbWVudGF0aW9uIG9mCkRDQ1AgZmly
-c3QgcmVsZWFzZWQgaW4gTGludXgga2VybmVsIHZlcnNpb24gMi42LjE0IGFuZCB0aGlzIGNvbnRp
-bnVlcwp0byBpbXByb3ZlIHdpdGggZWFjaCByZWxlYXNlLiBUaGUgbGF0ZXN0IG9mZmljaWFsIHZl
-cnNpb24gb2YgdGhlIERDQ1AKY29kZSBjYW4gYmUgZm91bmQgYXQgWzNdIGFuZCBhdCBbNF0uCgpX
-aGF0IGlzIERDQ1AgUGx1Z2luIGZvciBHU3RyZWFtZXI/Cj09PT09PT09PT09PT0KSXQgaXMgYSBw
-bHVnaW4gdGhhdCBhbGxvd3MgdHJhbnNmZXIgZGF0YSBvdmVyIHRoZSBuZXR3b3JrIHZpYSBEQ0NQ
-IGZvcgpHU3RyZWFtZXIuIEFjY29yZGluZyB0byBhbGwgdGhlIHRlc3RzIHRoYXQgd2UgcHJvY2Vl
-ZGVkLCB0aGUgcGx1Z2luIGlzCmFibGUgdG8gc3RyZWFtIGF1ZGlvIGZpbGVzLCBzdWNoIGFzIG1w
-MywgYXVkaW8gY2FwdHVyZWQgZnJvbSB0aGUKbWljcm9waG9uZSBhbmQgcmF3IGRhdGEgZmlsZXMu
-CgpPdXRwdXQgb2YgZ3N0LWluc3BlY3QgZm9yIHRoZSBkY2NwIHBsdWdpbgo9PT09PT09PT09PT09
-PQojIGdzdC1pbnNwZWN0IGRjY3AKUGx1Z2luIERldGFpbHM6CiAgTmFtZTogICAgICAgICAgICAg
-ICAgIGRjY3AKICBEZXNjcmlwdGlvbjogICAgICAgICAgdHJhbnNmZXIgZGF0YSBvdmVyIHRoZSBu
-ZXR3b3JrIHZpYSBEQ0NQLgogIEZpbGVuYW1lOiAgICAgICAgICAgICAvdXNyL2xpYi9nc3RyZWFt
-ZXItMC4xMC9saWJnc3RkY2NwLnNvCiAgVmVyc2lvbjogICAgICAgICAgICAgIDAuMTAuMTQKICBM
-aWNlbnNlOiAgICAgICAgICAgICAgTEdQTAogIFNvdXJjZSBtb2R1bGU6ICAgICAgICBnc3QtcGx1
-Z2lucy1iYXNlCiAgQmluYXJ5IHBhY2thZ2U6ICAgICAgIEdTdHJlYW1lciBCYXNlIFBsdWctaW5z
-IHNvdXJjZSByZWxlYXNlCiAgT3JpZ2luIFVSTDogICAgICAgICAgIFVua25vd24gcGFja2FnZSBv
-cmlnaW4KCiAgZGNjcHNlcnZlcnNyYzogRENDUCBzZXJ2ZXIgc291cmNlCiAgZGNjcGNsaWVudHNp
-bms6IERDQ1AgY2xpZW50IHNvdXJjZQogIGRjY3BzZXJ2ZXJzaW5rOiBEQ0NQIHNlcnZlciBzb3Vy
-Y2UKICBkY2NwY2xpZW50c3JjOiBEQ0NQIGNsaWVudCBzb3VyY2UKCiAgNCBmZWF0dXJlczoKICAr
-LS0gNCBlbGVtZW50cwoKClRPRE8gTGlzdAo9PT09CgotIE1ha2UgRENDUCBwbHVnaW4gd29ya3Mg
-d2l0aCBTcGVleCBhbmQgUlRQIHRvIHRyYW5zcG9ydCBhdWRpbwpjYXB0dXJlZCBmcm9tIG1pY3Jv
-cGhvbmUgdXNpbmcgQUxTQSBHU3RyZWFtZXIgUGx1Z2luCi0gSW1wcm92ZSB0aGUgaW1wbGVtZW50
-YXRpb24gb2YgdGhlIHNlbmQgbWVjaGFuaXNtIGFkZGluZyB0aGUKUGFyYXNsYXNoIHNvbHV0aW9u
-IGJhc2VkIG9uIHF1ZXVlCi0gTWFrZSBpbnRlcm5hbCBlbGVtZW50cyBzaGFyZSB0aGUgc29ja2V0
-IGZkIGJldHdlZW4gdHdvIGVsZW1lbnRzCi0gSW1wbGVtZW50IG11bHRpZGNjcCwgYSBtdWx0aXRo
-cmVhZCB3YXkgdG8gc3RyZWFtIG1lZGlhIGZvciBhIHNldCBvZiBob3N0cwotIENyZWF0ZSBhIHBy
-b3BlciBhdXRvZ2VuLnNoLCBNYWtlZmlsZXMsIGV0Yy4gZm9yIHRoZSBwbHVnaW4uIFRoZQpjdXJy
-ZW50IHZlcnNpb24gd2FzIGJhc2VkIG9uIHRoZSBnc3QtcGx1Z2luLWJhc2Ugc2V0dXAgZmlsZXMu
-CgpIb3cgdG8gY29udHJpYnV0ZT8KPT09PT09PQoKUGxlYXNlLCBjb250YWN0IG1lIGF0IGxlYW5k
-cm9hbCBbYXRdIGdtYWlsIFtkb3RdIGNvbQoKV2hlcmUgaXMgRENDUCBQbHVnaW4/Cj09PT09PT09
-ClRoZSBEQ0NQIHBsdWdpbiBmb3IgR1N0cmVhbWVyIGlzIHVuZGVyIHZlcnNpb24gY29udHJvbCBv
-ZiB0aGUgRS1QaG9uZS4KVGhlIEUtUGhvbmUgKEVtYmVkZGVkLVBob25lKSBwcm9qZWN0IGFpbXMg
-dG8gZGV2ZWxvcCBhIFZvSVAgY2xpZW50IGZvcgpNYWVtbyBwbGF0Zm9ybSBiYXNlZCBvbiBEQ0NQ
-IHRyYW5zcG9ydCBwcm90b2NvbC4gSW4gdGhpcyBwcm9qZWN0IHdlCmFyZSBhbHNvIGltcGxlbWVu
-dGluZyB0aGUgQ0NJRC00IFs1XSBJRVRGIGRyYWZ0cyBvbiB0aGUgbGludXgga2VybmVsLgoKRGV2
-ZWxvcG1lbnQ6Cmh0dHA6Ly9nYXJhZ2UubWFlbW8ub3JnL3Byb2plY3RzL2VwaG9uZQoKTWFpbGlu
-ZyBsaXN0OgpodHRwOi8vZ2FyYWdlLm1hZW1vLm9yZy9waXBlcm1haWwvZXBob25lLWRpc2N1c3Mv
-CgpEb3dubG9hZDoKaHR0cHM6Ly9nYXJhZ2UubWFlbW8ub3JnL2Zycy8/Z3JvdXBfaWQpNwpvciBk
-aXJlY3RseSBmcm9tIGh0dHBzOi8vZ2FyYWdlLm1hZW1vLm9yZy9mcnMvZG93bmxvYWQucGhwLzI4
-NzcvZ3N0LWRjY3AudGFyLmJ6MgoKSG93IHRvIHVzZSBpdCB3aXRoIGdzdC1sYXVuY2ggY29tbWFu
-ZCBsaW5lPwo9PT09PT09PT09PT09PT09CkEgYmFzaWMgZXhhbXBsZSB0byBzdHJlYW0gYSBtdWx0
-aW1lZGlhIGZpbGUgdXNpbmcgY2NpZC0zOgoKKiBTZXJ2ZXI6CmdzdC1sYXVuY2ggLXYgZmlsZXNy
-YyBsb2NhdGlvbj1tdXNpYy5tcDMgISBtYWQgISBkY2Nwc2VydmVyc2luayBwb3J0kDExIGNjaWQ9
-MgoKKiBDbGllbnQ6CmdzdC1sYXVuY2ggLXYgZGNjcGNsaWVudHNyYyBob3N0PTxJUF9BRERSRVNT
-PiBwb3J0kDExIGNjaWQ9MwpjYXBzPSJhdWRpby94LXJhdy1pbnQsIGVuZGlhbm5lc3M9KGludCkx
-MjM0LCBzaWduZWQ9KGJvb2xlYW4pdHJ1ZSwKd2lkdGg9KGludCkzMiwgZGVwdGg9KGludCkzMiwg
-cmF0ZT0oaW50KTQ0MTAwLCBjaGFubmVscz0oaW50KTIiICEKYWxzYXNpbmsKClBsZWFzZSwgcmVm
-ZXIgdG8gdGhlIGV4YW1wbGVzX2FwcC9SRUFETUUgZmlsZSBmb3IgbW9yZSBleGFtcGxlcy4KCklz
-IHRoZXJlIGFueSBhcHBsaWNhdGlvbiBleGFtcGxlcz8KPT09PT09PT09PT09ClllcywgcmVmZXIg
-dG8gdGhlIGV4YW1wbGVzX2FwcCBkaXJlY3Rvcnkgb2YgdGhlIHNvdXJjZSBmaWxlLgoKUmVxdWly
-ZW1lbnRzCj09PT09CgotIExpbnV4IEtlcm5lbCB3aXRoIERDQ1AgZW5hYmxlZAotIEdTdHJlYW1l
-cgotIEFkZGl0aW9uYWwgR1N0cmVhbWVyIFBsdWdpbnMgdG8gbWFrZSB0aGUgZXhhbXBsZSBhcHAg
-d29ya3MKCgpGaW5hbGx5LCB0aGFuayB5b3UgZm9yIGFsbCB0aGUgcGVvcGxlIGVudm9sdmVkIGlu
-IHRoaXMgZmlyc3QgdmVyc2lvbiwKRmVsaXBlIENvdXRpbmhvIGFuZCBUaGlhZ28gU2FudG9zLiBU
-aGFua3MgYWxzbyB0byBBcm5hbGRvIENhcnZhbGhvIGRlCk1lbG8sIEdlcnJpdCBSZW5rZXIgYW5k
-IElhbiBNY0RvbmFsZCB0byBwcm92aWRlIHRvIG1lIG1hbnkgaWRlYXMgYW5kCmRpc2N1c3Npb25z
-IHJlZ2FyZGluZyB0byBEQ0NQLgoKQmVzdCByZWdhcmRzLApMZWFuZHJvLgoKClJlZmVyZW5jZXM6
-ClsxXSBodHRwOi8vZ3N0cmVhbWVyLmZyZWVkZXNrdG9wLm9yZy8KWzJdIGh0dHA6Ly93d3cucmVh
-ZC5jcy51Y2xhLmVkdS9kY2NwLwpbM10gZ2l0Oi8vZ2l0Lmtlcm5lbC5vcmcvcHViL3NjbS9saW51
-eC9rZXJuZWwvZ2l0L2FjbWUvbmV0LTIuNi4yNS5naXQKWzRdIGdpdDovL2VkZW4tZmVlZC5lcmcu
-YWJkbi5hYy51ay9kY2NwX2V4cApbNV0gaHR0cDovL3Rvb2xzLmlldGYub3JnL2h0bWwvZHJhZnQt
-aWV0Zi1kY2NwLWNjaWQ0LTAxCgotLSAKTGVhbmRybyBNZWxvIGRlIFNhbGVzLgpQZXJ2YXNpdmUg
-YW5kIEVtYmVkZGVkIENvbXB1dGluZyBMYWJvcmF0b3J5CkJSaXNhIGFuZCBFLVBob25lIFByb2pl
-Y3RzIE1hbmFnZXIKTmV0d29yayBBZG1pbiBAIGh0dHA6Ly9lbWJlZGRlZC51ZmNnLmVkdS5ici9p
-bmRleGVuLmh0bWwKKzU1IDgzIDMzMTAtMTQwNCAoZXh0ZW5zaW9uIDIwOCkKLQpUbyB1bnN1YnNj
-cmliZSBmcm9tIHRoaXMgbGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4K
-dGhlIGJvZHkgb2YgYSBtZXNzYWdlIHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBt
-YWpvcmRvbW8gaW5mbyBhdCAgaHR0cDovL3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5o
-dG1s
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+
+This implements the changes to the nofeedback timer handling suggested
+in draft rfc3448bis00, section 4.4. In particular, these changes mean:
+
+ * better handling of the lossless case (p = 0)
+ * the timestamp for computing t_ld becomes obsolete
+ * much more recent document (RFC 3448 is almost 5 years old)
+ * concepts in rfc3448bis arose from a real, working implementation
+   (cf. sec. 12)
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/ccids/ccid3.c |   63 ++++++++++++++++++++++--------------------------
+ 1 files changed, 29 insertions(+), 34 deletions(-)
+
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index 7c8e9ad..00b5f11 100644
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -131,12 +131,11 @@ static u32 ccid3_hc_tx_idle_rtt(struct ccid3_hc_tx_sock *hctx, ktime_t now)
+  *
+  */
+ static void ccid3_hc_tx_update_x(struct sock *sk, ktime_t *stamp)
+-
+ {
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 	__u64 min_rate = 2 * hctx->ccid3hctx_x_recv;
+ 	const  __u64 old_x = hctx->ccid3hctx_x;
+-	ktime_t now = stamp? *stamp : ktime_get_real();
++	ktime_t now = stamp ? *stamp : ktime_get_real();
+ 
+ 	/*
+ 	 * Handle IDLE periods: do not reduce below RFC3390 initial sending rate
+@@ -230,27 +229,27 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+ 	ccid3_pr_debug("%s(%p, state=%s) - entry \n", dccp_role(sk), sk,
+ 		       ccid3_tx_state_name(hctx->ccid3hctx_state));
+ 
+-	switch (hctx->ccid3hctx_state) {
+-	case TFRC_SSTATE_NO_FBACK:
+-		/* RFC 3448, 4.4: Halve send rate directly */
++	if (hctx->ccid3hctx_state = TFRC_SSTATE_FBACK)
++		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_NO_FBACK);
++	else if (hctx->ccid3hctx_state != TFRC_SSTATE_NO_FBACK)
++		goto out;
++
++	/*
++	 * Determine new allowed sending rate X as per draft rfc3448bis-00, 4.4
++	 */
++	if (hctx->ccid3hctx_t_rto = 0 ||	/* no feedback received yet */
++	    hctx->ccid3hctx_p = 0) {
++
++		/* halve send rate directly */
+ 		hctx->ccid3hctx_x = max(hctx->ccid3hctx_x / 2,
+ 					(((__u64)hctx->ccid3hctx_s) << 6) /
+ 								    TFRC_T_MBI);
+-
+-		ccid3_pr_debug("%s(%p, state=%s), updated tx rate to %u "
+-			       "bytes/s\n", dccp_role(sk), sk,
+-			       ccid3_tx_state_name(hctx->ccid3hctx_state),
+-			       (unsigned)(hctx->ccid3hctx_x >> 6));
+-		/* The value of R is still undefined and so we can not recompute
+-		 * the timout value. Keep initial value as per [RFC 4342, 5]. */
+-		t_nfb = TFRC_INITIAL_TIMEOUT;
+ 		ccid3_update_send_interval(hctx);
+-		break;
+-	case TFRC_SSTATE_FBACK:
++	} else {
+ 		/*
+-		 *  Modify the cached value of X_recv [RFC 3448, 4.4]
++		 *  Modify the cached value of X_recv
+ 		 *
+-		 *  If (p = 0 || X_calc > 2 * X_recv)
++		 *  If (X_calc > 2 * X_recv)
+ 		 *    X_recv = max(X_recv / 2, s / (2 * t_mbi));
+ 		 *  Else
+ 		 *    X_recv = X_calc / 4;
+@@ -259,32 +258,28 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long data)
+ 		 */
+ 		BUG_ON(hctx->ccid3hctx_p && !hctx->ccid3hctx_x_calc);
+ 
+-		if (hctx->ccid3hctx_p = 0 ||
+-		    (hctx->ccid3hctx_x_calc > (hctx->ccid3hctx_x_recv >> 5))) {
+-
++		if (hctx->ccid3hctx_x_calc > (hctx->ccid3hctx_x_recv >> 5))
+ 			hctx->ccid3hctx_x_recv  				max(hctx->ccid3hctx_x_recv / 2,
+ 				    (((__u64)hctx->ccid3hctx_s) << 6) /
+ 							      (2 * TFRC_T_MBI));
+-		} else {
++		else {
+ 			hctx->ccid3hctx_x_recv = hctx->ccid3hctx_x_calc;
+ 			hctx->ccid3hctx_x_recv <<= 4;
+ 		}
+-		/* Now recalculate X [RFC 3448, 4.3, step (4)] */
+ 		ccid3_hc_tx_update_x(sk, NULL);
+-		/*
+-		 * Schedule no feedback timer to expire in
+-		 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
+-		 * See comments in packet_recv() regarding the value of t_RTO.
+-		 */
+-		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
+-		break;
+-	case TFRC_SSTATE_NO_SENT:
+-		DCCP_BUG("%s(%p) - Illegal state NO_SENT", dccp_role(sk), sk);
+-		/* fall through */
+-	case TFRC_SSTATE_TERM:
+-		goto out;
+ 	}
++	ccid3_pr_debug("Reduced X to %llu/64 bytes/sec\n",
++			(unsigned long long)hctx->ccid3hctx_x);
++
++	/*
++	 * Set new timeout for the nofeedback timer.
++	 * See comments in packet_recv() regarding the value of t_RTO.
++	 */
++	if (unlikely(hctx->ccid3hctx_t_rto = 0))	/* no feedback yet */
++		t_nfb = TFRC_INITIAL_TIMEOUT;
++	else
++		t_nfb = max(hctx->ccid3hctx_t_rto, 2 * hctx->ccid3hctx_t_ipi);
+ 
+ restart_timer:
+ 	sk_reset_timer(sk, &hctx->ccid3hctx_no_feedback_timer,
+-- 
+1.5.3.6
+
