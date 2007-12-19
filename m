@@ -1,324 +1,247 @@
-From: Leandro <leandroal@gmail.com>
-Date: Fri, 21 Dec 2007 04:33:12 +0000
-Subject: [PATCHv2 5/8] Share ccid3_hc_tx_parse_options function and rename it to the new naming schema
-Message-Id: <200712210133.12907.leandroal@gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 19 Dec 2007 14:25:47 +0000
+Subject: [PATCH 06/14] [ACKVEC]: Simplify adding Ack Vector records, split option-specific code
+Message-Id: <1198074355-18842-7-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[TFRC_CCIDS] Share ccid3_hc_tx_parse_options function and rename it to the new naming schema
+This patch
+ * simplifies the dccp_ackvec_insert_avr() routine: the BUG_ON was redundant,
+   since the list is automatically arranged in descending order of ack_no;
+ * separates Ack Vector housekeeping code from option-specific code;
+ * shifts option-specific code into options.c.
 
-Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ackvec.c  |  107 +++++++++-------------------------------------------
+ net/dccp/ackvec.h  |    5 +-
+ net/dccp/options.c |   65 +++++++++++++++++++++++++++++++
+ 3 files changed, 85 insertions(+), 92 deletions(-)
 
---------------------> Patch v2 <-------------------------
-
-The first version of this patch doest apply properly in the current ccid4 branch. This new version it is ok.
-
-Index: ccid4.latest/net/dccp/ccids/ccid3.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/ccid3.c
-+++ ccid4.latest/net/dccp/ccids/ccid3.c
-@@ -430,68 +430,6 @@ done_computing_x:
- 			   jiffies + usecs_to_jiffies(t_nfb));
+--- a/net/dccp/ackvec.h
++++ b/net/dccp/ackvec.h
+@@ -108,7 +108,7 @@ extern int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
+ 			     u64 *ackno, const u8 opt,
+ 			     const u8 *value, const u8 len);
+ 
+-extern int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb);
++extern int  dccp_ackvec_update_records(struct dccp_ackvec *av, u64 seq, u8 sum);
+ 
+ static inline int dccp_ackvec_pending(const struct dccp_ackvec *av)
+ {
+@@ -151,8 +151,7 @@ static inline int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
+ 	return -1;
  }
  
--static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
--				     unsigned char len, u16 idx,
--				     unsigned char *value)
--{
--	int rc = 0;
--	const struct dccp_sock *dp = dccp_sk(sk);
--	struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
--	struct tfrc_options_received *opt_recv;
--	__be32 opt_val;
--
--	opt_recv = &hctx->ttx_options_received;
--
--	if (opt_recv->tfrcor_seqno != dp->dccps_gsr) {
--		opt_recv->tfrcor_seqno	      = dp->dccps_gsr;
--		opt_recv->tfrcor_loss_event_rate    = ~0;
--		opt_recv->tfrcor_loss_intervals_idx = 0;
--		opt_recv->tfrcor_loss_intervals_len = 0;
--		opt_recv->tfrcor_receive_rate	      = 0;
--	}
--
--	switch (option) {
--	case TFRC_OPT_LOSS_EVENT_RATE:
--		if (unlikely(len != 4)) {
--			DCCP_WARN("%s(%p), invalid len %d "
--				  "for TFRC_OPT_LOSS_EVENT_RATE\n",
--				  dccp_role(sk), sk, len);
--			rc = -EINVAL;
--		} else {
--			opt_val = get_unaligned((__be32 *)value);
--			opt_recv->tfrcor_loss_event_rate = ntohl(opt_val);
--			ccid3_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
--				       dccp_role(sk), sk,
--				       opt_recv->tfrcor_loss_event_rate);
--		}
--		break;
--	case TFRC_OPT_LOSS_INTERVALS:
--		opt_recv->tfrcor_loss_intervals_idx = idx;
--		opt_recv->tfrcor_loss_intervals_len = len;
--		ccid3_pr_debug("%s(%p), LOSS_INTERVALS=(%u, %u)\n",
--			       dccp_role(sk), sk,
--			       opt_recv->tfrcor_loss_intervals_idx,
--			       opt_recv->tfrcor_loss_intervals_len);
--		break;
--	case TFRC_OPT_RECEIVE_RATE:
--		if (unlikely(len != 4)) {
--			DCCP_WARN("%s(%p), invalid len %d "
--				  "for TFRC_OPT_RECEIVE_RATE\n",
--				  dccp_role(sk), sk, len);
--			rc = -EINVAL;
--		} else {
--			opt_val = get_unaligned((__be32 *)value);
--			opt_recv->tfrcor_receive_rate = ntohl(opt_val);
--			ccid3_pr_debug("%s(%p), RECEIVE_RATE=%u\n",
--				       dccp_role(sk), sk,
--				       opt_recv->tfrcor_receive_rate);
--		}
--		break;
--	}
--
--	return rc;
--}
--
- static int ccid3_hc_tx_init(struct ccid *ccid, struct sock *sk)
+-static inline int dccp_insert_option_ackvec(const struct sock *sk,
+-					    const struct sk_buff *skb)
++static inline int dccp_ackvec_update_records(struct dccp_ackvec *av, u64 seq, u8 nonce)
  {
- 	struct tfrc_hc_tx_sock *hctx = ccid_priv(ccid);
-@@ -797,9 +735,9 @@ static int ccid3_hc_rx_getsockopt(struct
- 	case DCCP_SOCKOPT_CCID_RX_INFO:
- 		if (len < sizeof(rx_info))
- 			return -EINVAL;
--		rx_info.tfrcrx_x_recv = hcrx->trx_x_recv;
--		rx_info.tfrcrx_rtt    = hcrx->trx_rtt;
--		rx_info.tfrcrx_p      = hcrx->trx_pinv = 0 ? ~0U :
-+		rx_info.x_recv = hcrx->trx_x_recv;
-+		rx_info.rtt    = hcrx->trx_rtt;
-+		rx_info.p      = hcrx->trx_pinv = 0 ? ~0U :
- 					   scaled_div(1, hcrx->trx_pinv);
- 		len = sizeof(rx_info);
- 		val = &rx_info;
-@@ -824,7 +762,7 @@ static struct ccid_operations ccid3 = {
- 	.ccid_hc_tx_send_packet	   = ccid3_hc_tx_send_packet,
- 	.ccid_hc_tx_packet_sent	   = ccid3_hc_tx_packet_sent,
- 	.ccid_hc_tx_packet_recv	   = ccid3_hc_tx_packet_recv,
--	.ccid_hc_tx_parse_options  = ccid3_hc_tx_parse_options,
-+	.ccid_hc_tx_parse_options  = tfrc_tx_parse_options,
- 	.ccid_hc_rx_obj_size	   = sizeof(struct tfrc_hc_rx_sock),
- 	.ccid_hc_rx_init	   = ccid3_hc_rx_init,
- 	.ccid_hc_rx_exit	   = ccid3_hc_rx_exit,
-Index: ccid4.latest/net/dccp/ccids/ccid4.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/ccid4.c
-+++ ccid4.latest/net/dccp/ccids/ccid4.c
-@@ -467,71 +467,6 @@ done_computing_x:
- 			   jiffies + usecs_to_jiffies(t_nfb));
+ 	return -1;
+ }
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -54,106 +54,35 @@ void dccp_ackvec_free(struct dccp_ackvec *av)
+ 	}
  }
  
--static int ccid4_hc_tx_parse_options(struct sock *sk, unsigned char option,
--				     unsigned char len, u16 idx,
--				     unsigned char *value)
+-static void dccp_ackvec_insert_avr(struct dccp_ackvec *av,
+-				   struct dccp_ackvec_record *avr)
 -{
--	int rc = 0;
--	const struct dccp_sock *dp = dccp_sk(sk);
--	struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
--	struct tfrc_options_received *opt_recv;
--	u32 opt_val;
--
--	opt_recv = &hctx->ttx_options_received;
--
--	if (opt_recv->tfrcor_seqno != dp->dccps_gsr) {
--		opt_recv->tfrcor_seqno		    = dp->dccps_gsr;
--		opt_recv->tfrcor_loss_event_rate    = ~0;
--		opt_recv->tfrcor_loss_intervals_idx = 0;
--		opt_recv->tfrcor_loss_intervals_len = 0;
--		opt_recv->tfrcor_receive_rate	    = 0;
+-	/*
+-	 * AVRs are sorted by seqno. Since we are sending them in order, we
+-	 * just add the AVR at the head of the list.
+-	 * -sorbo.
+-	 */
+-	if (!list_empty(&av->av_records)) {
+-		const struct dccp_ackvec_record *head -					list_entry(av->av_records.next,
+-						   struct dccp_ackvec_record,
+-						   avr_node);
+-		BUG_ON(before48(avr->avr_ack_seqno, head->avr_ack_seqno));
 -	}
 -
--	switch (option) {
--	case TFRC_OPT_LOSS_EVENT_RATE:
--		if (unlikely(len != 4)) {
--			DCCP_WARN("%s(%p), invalid len %d "
--				  "for TFRC_OPT_LOSS_EVENT_RATE\n",
--				  dccp_role(sk), sk, len);
--			rc = -EINVAL;
--		} else {
--			opt_val = get_unaligned((u32 *)value);
--			opt_recv->tfrcor_loss_event_rate = ntohl(opt_val);
--			ccid4_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
--				       dccp_role(sk), sk,
--				       opt_recv->tfrcor_loss_event_rate);
--		}
--		break;
--	case TFRC_OPT_LOSS_INTERVALS:
--		opt_recv->tfrcor_loss_intervals_idx = idx;
--		opt_recv->tfrcor_loss_intervals_len = len;
--		ccid4_pr_debug("%s(%p), LOSS_INTERVALS=(%u, %u)\n",
--			       dccp_role(sk), sk,
--			       opt_recv->tfrcor_loss_intervals_idx,
--			       opt_recv->tfrcor_loss_intervals_len);
--		break;
--	case TFRC_OPT_RECEIVE_RATE:
--		if (unlikely(len != 4)) {
--			DCCP_WARN("%s(%p), invalid len %d "
--				  "for TFRC_OPT_RECEIVE_RATE\n",
--				  dccp_role(sk), sk, len);
--			rc = -EINVAL;
--		} else {
--			opt_val = get_unaligned((u32 *)value);
--			opt_recv->tfrcor_receive_rate = ntohl(opt_val);
--			ccid4_pr_debug("%s(%p), RECEIVE_RATE=%u\n",
--				       dccp_role(sk), sk,
--				       opt_recv->tfrcor_receive_rate);
--		}
--		break;
--		case TFRC_OPT_DROPPED_PACKETS:
--		/* FIXME: Implement this sock option according to ccid-4 draft */
--		break;
--	}
--
--	return rc;
+-	list_add(&avr->avr_node, &av->av_records);
 -}
 -
- static int ccid4_hc_tx_init(struct ccid *ccid, struct sock *sk)
+-int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
++/**
++ * dccp_ackvec_update_records  -  Record information about sent Ack Vectors
++ * @av:		Ack Vector records to update
++ * @seqno:	Sequence number of the packet carrying the Ack Vector just sent
++ * @nonce_sum:	The sum of all buffer nonces contained in the Ack Vector
++ */
++int dccp_ackvec_update_records(struct dccp_ackvec *av, u64 seqno, u8 nonce_sum)
  {
- 	struct tfrc_hc_tx_sock *hctx = ccid_priv(ccid);
-@@ -834,9 +769,9 @@ static int ccid4_hc_rx_getsockopt(struct
- 	case DCCP_SOCKOPT_CCID_RX_INFO:
- 		if (len < sizeof(rx_info))
- 			return -EINVAL;
--		rx_info.tfrcrx_x_recv = hcrx->trx_x_recv;
--		rx_info.tfrcrx_rtt    = hcrx->trx_rtt;
--		rx_info.tfrcrx_p      = hcrx->trx_pinv = 0 ? ~0U :
-+		rx_info.x_recv = hcrx->trx_x_recv;
-+		rx_info.rtt    = hcrx->trx_rtt;
-+		rx_info.p      = hcrx->trx_pinv = 0 ? ~0U :
- 					   scaled_div(1, hcrx->trx_pinv);
- 		len = sizeof(rx_info);
- 		val = &rx_info;
-@@ -861,7 +796,7 @@ static struct ccid_operations ccid4 = {
- 	.ccid_hc_tx_send_packet	   = ccid4_hc_tx_send_packet,
- 	.ccid_hc_tx_packet_sent	   = ccid4_hc_tx_packet_sent,
- 	.ccid_hc_tx_packet_recv	   = ccid4_hc_tx_packet_recv,
--	.ccid_hc_tx_parse_options  = ccid4_hc_tx_parse_options,
-+	.ccid_hc_tx_parse_options  = tfrc_tx_parse_options,
- 	.ccid_hc_rx_obj_size	   = sizeof(struct tfrc_hc_rx_sock),
- 	.ccid_hc_rx_init	   = ccid4_hc_rx_init,
- 	.ccid_hc_rx_exit	   = ccid4_hc_rx_exit,
-Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.c
-+++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-@@ -11,6 +11,13 @@
-  */
- #include "tfrc_ccids.h"
+-	struct dccp_sock *dp = dccp_sk(sk);
+-	struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
+-	/* Figure out how many options do we need to represent the ackvec */
+-	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
+-	u16 len = av->av_vec_len + 2 * nr_opts;
+-	u8 i, nonce = 0;
+-	const unsigned char *tail, *from;
+-	unsigned char *to;
+ 	struct dccp_ackvec_record *avr;
  
-+#ifdef CONFIG_IP_DCCP_TFRC_DEBUG
-+extern int tfrc_debug;
-+#define tfrc_pr_debug(format, a...)	DCCP_PR_DEBUG(tfrc_debug, format, ##a)
-+#else
-+#define tfrc_pr_debug(format, a...)
-+#endif
-+
- /*
-  * Compute the initial sending rate X_init in the manner of RFC 3390:
-  *
-@@ -64,3 +71,69 @@ inline void tfrc_hc_tx_update_win_count(
+-	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN) {
+-		/*
+-		 * FIXME: when running out of option space while piggybacking on
+-		 * DataAck, return 0 here and schedule a separate Ack instead.
+-		 */
+-		DCCP_WARN("Lacking space for %u bytes on %s packet\n", len,
+-			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type));
+-		return -1;
+-	}
+-
+ 	avr = kmem_cache_alloc(dccp_ackvec_record_slab, GFP_ATOMIC);
+ 	if (avr = NULL)
+-		return -1;
+-
+-	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
+-
+-	to   = skb_push(skb, len);
+-	len  = av->av_vec_len;
+-	from = av->av_buf + av->av_buf_head;
+-	tail = av->av_buf + DCCPAV_MAX_ACKVEC_LEN;
+-
+-	for (i = 0; i < nr_opts; ++i) {
+-		int copylen = len;
+-
+-		if (len > DCCP_SINGLE_OPT_MAXLEN)
+-			copylen = DCCP_SINGLE_OPT_MAXLEN;
+-
+-		/*
+-		 * RFC 4340, 12.2: Encode the Nonce Echo for this Ack Vector via
+-		 * its type; ack_nonce is the sum of all individual buf_nonce's.
+-		 */
+-		nonce ^= av->av_buf_nonce[i];
+-
+-		*to++ = DCCPO_ACK_VECTOR_0 + av->av_buf_nonce[i];
+-		*to++ = copylen + 2;
+-
+-		/* Check if buf_head wraps */
+-		if (from + copylen > tail) {
+-			const u16 tailsize = tail - from;
+-
+-			memcpy(to, from, tailsize);
+-			to	+= tailsize;
+-			len	-= tailsize;
+-			copylen	-= tailsize;
+-			from	= av->av_buf;
+-		}
+-
+-		memcpy(to, from, copylen);
+-		from += copylen;
+-		to   += copylen;
+-		len  -= copylen;
+-	}
++		return -ENOBUFS;
  
- EXPORT_SYMBOL_GPL(tfrc_hc_tx_update_win_count);
+-	/*
+-	 * Each sent Ack Vector is recorded in the list, as per A.2 of RFC 4340.
+-	 */
+-	avr->avr_ack_seqno  = DCCP_SKB_CB(skb)->dccpd_seq;
++	avr->avr_ack_seqno  = seqno;
+ 	avr->avr_ack_ptr    = av->av_buf_head;
+ 	avr->avr_ack_ackno  = av->av_buf_ackno;
+-	avr->avr_ack_nonce  = nonce;
++	avr->avr_ack_nonce  = nonce_sum;
+ 	avr->avr_ack_runlen = dccp_ackvec_runlen(av->av_buf + av->av_buf_head);
++	/*
++	 * Since GSS is incremented for each packet, the list is automatically
++	 * arranged in descending order of @ack_seqno.
++	 */
++	list_add(&avr->avr_node, &av->av_records);
  
-+int tfrc_tx_parse_options(struct sock *sk, unsigned char option,
-+				     unsigned char len, u16 idx,
-+				     unsigned char *value)
+-	dccp_ackvec_insert_avr(av, avr);
+-
+-	dccp_pr_debug("%s ACK Vector 0, len=%d, ack_seqno=%llu, "
+-		      "ack_ackno=%llu\n",
+-		      dccp_role(sk), avr->avr_ack_runlen,
++	dccp_pr_debug("Added Vector, ack_seqno=%llu, ack_ackno=%llu (rl=%u)\n",
+ 		      (unsigned long long)avr->avr_ack_seqno,
+-		      (unsigned long long)avr->avr_ack_ackno);
++		      (unsigned long long)avr->avr_ack_ackno,
++		      avr->avr_ack_runlen);
+ 	return 0;
+ }
+ 
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -433,6 +433,71 @@ static int dccp_insert_option_timestamp_echo(struct dccp_sock *dp,
+ 	return 0;
+ }
+ 
++int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
 +{
-+	int rc = 0;
-+	const struct dccp_sock *dp = dccp_sk(sk);
-+	struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
-+	struct tfrc_options_received *opt_recv;
-+	u32 opt_val;
++	struct dccp_ackvec *av = dccp_sk(sk)->dccps_hc_rx_ackvec;
++	/* Figure out how many options do we need to represent the ackvec */
++	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
++	u16 len = av->av_vec_len + 2 * nr_opts;
++	u8 i, nonce = 0;
++	const unsigned char *tail, *from;
++	unsigned char *to;
 +
-+	opt_recv = &hctx->ttx_options_received;
-+
-+	if (opt_recv->tfrcor_seqno != dp->dccps_gsr) {
-+		opt_recv->tfrcor_seqno		    = dp->dccps_gsr;
-+		opt_recv->tfrcor_loss_event_rate    = ~0;
-+		opt_recv->tfrcor_loss_intervals_idx = 0;
-+		opt_recv->tfrcor_loss_intervals_len = 0;
-+		opt_recv->tfrcor_receive_rate	    = 0;
++	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN) {
++		/*
++		 * FIXME: when running out of option space while piggybacking on
++		 * DataAck, return 0 here and schedule a separate Ack instead.
++		 */
++		DCCP_WARN("Lacking space for %u bytes on %s packet\n", len,
++			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type));
++		return -1;
 +	}
++	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
 +
-+	switch (option) {
-+	case TFRC_OPT_LOSS_EVENT_RATE:
-+		if (unlikely(len != 4)) {
-+			DCCP_WARN("%s(%p), invalid len %d "
-+				  "for TFRC_OPT_LOSS_EVENT_RATE\n",
-+				  dccp_role(sk), sk, len);
-+			rc = -EINVAL;
-+		} else {
-+			opt_val = get_unaligned((u32 *)value);
-+			opt_recv->tfrcor_loss_event_rate = ntohl(opt_val);
-+			tfrc_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
-+				       dccp_role(sk), sk,
-+				       opt_recv->tfrcor_loss_event_rate);
++	to   = skb_push(skb, len);
++	len  = av->av_vec_len;
++	from = av->av_buf + av->av_buf_head;
++	tail = av->av_buf + DCCPAV_MAX_ACKVEC_LEN;
++
++	for (i = 0; i < nr_opts; ++i) {
++		int copylen = len;
++
++		if (len > DCCP_SINGLE_OPT_MAXLEN)
++			copylen = DCCP_SINGLE_OPT_MAXLEN;
++
++		/*
++		 * RFC 4340, 12.2: Encode the Nonce Echo for this Ack Vector via
++		 * its type; ack_nonce is the sum of all individual buf_nonce's.
++		 */
++		nonce ^= av->av_buf_nonce[i];
++
++		*to++ = DCCPO_ACK_VECTOR_0 + av->av_buf_nonce[i];
++		*to++ = copylen + 2;
++
++		/* Check if buf_head wraps */
++		if (from + copylen > tail) {
++			const u16 tailsize = tail - from;
++
++			memcpy(to, from, tailsize);
++			to	+= tailsize;
++			len	-= tailsize;
++			copylen	-= tailsize;
++			from	= av->av_buf;
 +		}
-+		break;
-+	case TFRC_OPT_LOSS_INTERVALS:
-+		opt_recv->tfrcor_loss_intervals_idx = idx;
-+		opt_recv->tfrcor_loss_intervals_len = len;
-+		tfrc_pr_debug("%s(%p), LOSS_INTERVALS=(%u, %u)\n",
-+			       dccp_role(sk), sk,
-+			       opt_recv->tfrcor_loss_intervals_idx,
-+			       opt_recv->tfrcor_loss_intervals_len);
-+		break;
-+	case TFRC_OPT_RECEIVE_RATE:
-+		if (unlikely(len != 4)) {
-+			DCCP_WARN("%s(%p), invalid len %d "
-+				  "for TFRC_OPT_RECEIVE_RATE\n",
-+				  dccp_role(sk), sk, len);
-+			rc = -EINVAL;
-+		} else {
-+			opt_val = get_unaligned((u32 *)value);
-+			opt_recv->tfrcor_receive_rate = ntohl(opt_val);
-+			tfrc_pr_debug("%s(%p), RECEIVE_RATE=%u\n",
-+				       dccp_role(sk), sk,
-+				       opt_recv->tfrcor_receive_rate);
-+		}
-+		break;
-+		case TFRC_OPT_DROPPED_PACKETS:
-+		/* FIXME: Implement this sock option according to ccid-4 draft */
-+		break;
++
++		memcpy(to, from, copylen);
++		from += copylen;
++		to   += copylen;
++		len  -= copylen;
 +	}
-+
-+	return rc;
++	/*
++	 * Each sent Ack Vector is recorded in the list, as per A.2 of RFC 4340.
++	 */
++	if (dccp_ackvec_update_records(av, DCCP_SKB_CB(skb)->dccpd_seq, nonce))
++		return -ENOBUFS;
++	return 0;
 +}
 +
-+EXPORT_SYMBOL_GPL(tfrc_tx_parse_options);
-Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.h
-+++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-@@ -193,3 +193,6 @@ extern u32 tfrc_hc_tx_idle_rtt(struct tf
- 
- extern void tfrc_hc_tx_update_win_count(struct tfrc_hc_tx_sock *hctx,
- 				          ktime_t now);
-+
-+extern int tfrc_tx_parse_options(struct sock *sk, unsigned char option,
-+			unsigned char len, u16 idx, unsigned char *value);
-Index: ccid4.latest/net/dccp/probe.c
-=================================--- ccid4.latest.orig/net/dccp/probe.c
-+++ ccid4.latest/net/dccp/probe.c
-@@ -97,10 +97,10 @@ static int jdccp_sendmsg(struct kiocb *i
- 			       "%llu %llu %d\n",
- 			       NIPQUAD(inet->saddr), ntohs(inet->sport),
- 			       NIPQUAD(inet->daddr), ntohs(inet->dport), size,
--			       hctx->tfrchctx_s, hctx->tfrchctx_rtt,
--			       hctx->tfrchctx_p, hctx->tfrchctx_x_calc,
--			       hctx->tfrchctx_x_recv >> 6,
--			       hctx->tfrchctx_x >> 6, hctx->tfrchctx_t_ipi);
-+			       hctx->ttx_s, hctx->ttx_rtt,
-+			       hctx->ttx_p, hctx->ttx_x_calc,
-+			       hctx->ttx_x_recv >> 6,
-+			       hctx->ttx_x >> 6, hctx->ttx_t_ipi);
- 		else
- 			printl("%d.%d.%d.%d:%u %d.%d.%d.%d:%u %d\n",
- 			       NIPQUAD(inet->saddr), ntohs(inet->sport),
+ /**
+  * dccp_insert_option_mandatory  -  Mandatory option (5.8.2)
+  * Note that since we are using skb_push, this function needs to be called
+-- 
+1.5.3.GIT
+
