@@ -1,41 +1,157 @@
-From: Leandro <leandroal@gmail.com>
-Date: Thu, 20 Dec 2007 16:58:44 +0000
-Subject: [PATCH 2/8] Improve the declaration of tfrc_option_receive struct
-Message-Id: <200712201358.44916.leandroal@gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 19 Dec 2007 14:25:46 +0000
+Subject: [PATCH 05/14] [ACKVEC]: Smaller allocation/deallocation routines
+Message-Id: <1198074355-18842-6-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[TFRC_CCIDS] Improve the declaration of tfrc_option_receive struct.
+This patch removes redundant bits, implementing the same functionality with less code.
 
-It makes tfrcor_dropped_packets_idx a plain u16. tfrcor_loss_intervals_idx was part of a bitfield together with tfrcor_seqno because it is 48 bits and we wanted to use what is left in a 64. Adding the new DROPPED PACKET field this setup changed. Thus, making tfrcor_dropped_packets_idx a 16 bits entry in a 16 bits bitfield doesn't helps us here and likely produces bad code. Now we have just a 2 bytes hole.
+The details are:
+  * The INIT_LIST_HEAD in dccp_ackvec_record_new was redundant, since the list pointers
+    were later overwritten when the node was added via list_add().
 
-Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+  * dccp_ackvec_record_new() was called only in one instance in the entire ackvec code.
 
-Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.h
-+++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-@@ -39,13 +39,13 @@ enum tfrc_options {
- };
+  * The calls to list_del_init() before calling dccp_ackvec_record_delete() were redundant,
+    since subsequently the entire element was freed anyway.
+
+  * Similarly, since all calls to dccp_ackvec_record_delete() were preceded to a call to
+    list_del_init(), the WARN_ON test would never evaluate to true.
+
+  * Also, since all calls to dccp_ackvec_record_delete() were made from within list_for
+    each_entry_safe(), the test for avr = NULL was redundant.
+
+  * The list_empty() test in ackvec_free was redundant, since the same condition is
+    embedded in the loop condition of the subsequent list_for_each_entry_safe().
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ackvec.c |   78 +++++++++++++++++++----------------------------------
+ 1 files changed, 28 insertions(+), 50 deletions(-)
+
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -24,24 +24,34 @@
+ static struct kmem_cache *dccp_ackvec_slab;
+ static struct kmem_cache *dccp_ackvec_record_slab;
  
- struct tfrc_options_received {
--	u64 tfrcor_seqno:48,
--	    tfrcor_loss_intervals_idx:16,
--	    tfrcor_dropped_packets_idx:16;
--	u16 tfrcor_loss_intervals_len,
--	    tfrcor_dropped_packets_len;
--	u32 tfrcor_loss_event_rate;
--	u32 tfrcor_receive_rate;
-+	u64  tfrcor_seqno:48;
-+	u64  tfrcor_loss_intervals_idx:16;
-+	u16  tfrcor_dropped_packets_idx;
-+	u16  tfrcor_loss_intervals_len;
-+	u16  tfrcor_dropped_packets_len;
-+	u32  tfrcor_loss_event_rate;
-+	u32  tfrcor_receive_rate;
- };
+-static struct dccp_ackvec_record *dccp_ackvec_record_new(void)
++struct dccp_ackvec *dccp_ackvec_alloc(const gfp_t priority)
+ {
+-	struct dccp_ackvec_record *avr -			kmem_cache_alloc(dccp_ackvec_record_slab, GFP_ATOMIC);
++	struct dccp_ackvec *av = kmem_cache_alloc(dccp_ackvec_slab, priority);
++
++	if (av != NULL) {
++		av->av_buf_head	 = DCCPAV_MAX_ACKVEC_LEN - 1;
++		av->av_vec_len	 = 0;
++		memset(av->av_buf_nonce, 0, sizeof(av->av_buf_nonce));
++		INIT_LIST_HEAD(&av->av_records);
++	}
++	return av;
++}
  
- /* TFRC sender states */
+-	if (avr != NULL)
+-		INIT_LIST_HEAD(&avr->avr_node);
++static void dccp_ackvec_purge_records(struct dccp_ackvec *av)
++{
++	struct dccp_ackvec_record *cur, *next;
+ 
+-	return avr;
++	list_for_each_entry_safe(cur, next, &av->av_records, avr_node)
++		kmem_cache_free(dccp_ackvec_record_slab, cur);
++	INIT_LIST_HEAD(&av->av_records);
+ }
+ 
+-static void dccp_ackvec_record_delete(struct dccp_ackvec_record *avr)
++void dccp_ackvec_free(struct dccp_ackvec *av)
+ {
+-	if (unlikely(avr = NULL))
+-		return;
+-	/* Check if deleting a linked record */
+-	WARN_ON(!list_empty(&avr->avr_node));
+-	kmem_cache_free(dccp_ackvec_record_slab, avr);
++	if (likely(av != NULL)) {
++		dccp_ackvec_purge_records(av);
++		kmem_cache_free(dccp_ackvec_slab, av);
++	}
+ }
+ 
+ static void dccp_ackvec_insert_avr(struct dccp_ackvec *av,
+@@ -85,7 +95,7 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
+ 		return -1;
+ 	}
+ 
+-	avr = dccp_ackvec_record_new();
++	avr = kmem_cache_alloc(dccp_ackvec_record_slab, GFP_ATOMIC);
+ 	if (avr = NULL)
+ 		return -1;
+ 
+@@ -147,37 +157,6 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
+ 	return 0;
+ }
+ 
+-struct dccp_ackvec *dccp_ackvec_alloc(const gfp_t priority)
+-{
+-	struct dccp_ackvec *av = kmem_cache_alloc(dccp_ackvec_slab, priority);
+-
+-	if (av != NULL) {
+-		av->av_buf_head	 = DCCPAV_MAX_ACKVEC_LEN - 1;
+-		av->av_vec_len	 = 0;
+-		memset(av->av_buf_nonce, 0, sizeof(av->av_buf_nonce));
+-		INIT_LIST_HEAD(&av->av_records);
+-	}
+-
+-	return av;
+-}
+-
+-void dccp_ackvec_free(struct dccp_ackvec *av)
+-{
+-	if (unlikely(av = NULL))
+-		return;
+-
+-	if (!list_empty(&av->av_records)) {
+-		struct dccp_ackvec_record *avr, *next;
+-
+-		list_for_each_entry_safe(avr, next, &av->av_records, avr_node) {
+-			list_del_init(&avr->avr_node);
+-			dccp_ackvec_record_delete(avr);
+-		}
+-	}
+-
+-	kmem_cache_free(dccp_ackvec_slab, av);
+-}
+-
+ /*
+  * If several packets are missing, the HC-Receiver may prefer to enter multiple
+  * bytes with run length 0, rather than a single byte with a larger run length;
+@@ -321,8 +300,8 @@ static void dccp_ackvec_throw_record(struct dccp_ackvec *av,
+ 
+ 	/* free records */
+ 	list_for_each_entry_safe_from(avr, next, &av->av_records, avr_node) {
+-		list_del_init(&avr->avr_node);
+-		dccp_ackvec_record_delete(avr);
++		list_del(&avr->avr_node);
++		kmem_cache_free(dccp_ackvec_record_slab, avr);
+ 	}
+ }
+ 
+@@ -431,10 +410,9 @@ int __init dccp_ackvec_init(void)
+ 	if (dccp_ackvec_slab = NULL)
+ 		goto out_err;
+ 
+-	dccp_ackvec_record_slab -			kmem_cache_create("dccp_ackvec_record",
+-					  sizeof(struct dccp_ackvec_record),
+-					  0, SLAB_HWCACHE_ALIGN, NULL);
++	dccp_ackvec_record_slab = kmem_cache_create("dccp_ackvec_record",
++					     sizeof(struct dccp_ackvec_record),
++					     0, SLAB_HWCACHE_ALIGN, NULL);
+ 	if (dccp_ackvec_record_slab = NULL)
+ 		goto out_destroy_slab;
+ 
+-- 
+1.5.3.GIT
+
