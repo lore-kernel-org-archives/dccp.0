@@ -1,87 +1,49 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Mon, 17 Dec 2007 15:00:15 +0000
-Subject: [PATCH 1/5] [CCID3]: Use a function to update p_inv, and p is never used
-Message-Id: <1197903619-12301-2-git-send-email-acme@redhat.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 19 Dec 2007 14:25:42 +0000
+Subject: [PATCH 01/14] [CCID2]: Ack Vectors can happen on most packets
+Message-Id: <1198074355-18842-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+CCID2 feedback only considers Ack/DataAck packets, but Ack Vectors can appear
+on other packets, too. In RFC 4340, 11.4 the only restriction is that they must
+not appear on Data or Request packets.
 
-This patch
- 1) concentrates previously scattered computation of p_inv into one function;
- 2) removes the `p' element of the CCID3 RX sock (it is redundant);
- 3) makes the tfrc_rx_info structure standalone, only used on demand.
+A possible case is for instance a Sync packet used for feature-negotiation
+(as used e.g in  section 6.6.1 of RFC 4340). In this case the host must answer
+with a SyncAck (7.5.4). Now, if the Sync packet carried an Ack Vector then
+the SyncAck acknowledges the receipt of that Ack Vector (thus changing the
+Acknowledgment Window, cf. 11.4.2); but the current code would not allow to
+parse the received Ack Vector.
+
+The fix is in parsing Ack Vectors on all packet types which are allowed to
+carry an Ack Vector.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/ccids/ccid3.c |   11 ++++++++---
- net/dccp/ccids/ccid3.h |    8 ++++----
- 2 files changed, 12 insertions(+), 7 deletions(-)
+ net/dccp/ccids/ccid2.c |    7 +------
+ 1 files changed, 1 insertions(+), 6 deletions(-)
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 876c747..90e0454 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -917,6 +917,7 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
- 				  u32 __user *optval, int __user *optlen)
- {
- 	const struct ccid3_hc_rx_sock *hcrx;
-+	struct tfrc_rx_info rx_info;
- 	const void *val;
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -549,13 +549,8 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	if (hctx->ccid2hctx_seqh = hctx->ccid2hctx_seqt)
+ 		return;
  
- 	/* Listen socks doesn't have a private CCID block */
-@@ -926,10 +927,14 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
- 	hcrx = ccid3_hc_rx_sk(sk);
- 	switch (optname) {
- 	case DCCP_SOCKOPT_CCID_RX_INFO:
--		if (len < sizeof(hcrx->ccid3hcrx_tfrc))
-+		if (len < sizeof(rx_info))
- 			return -EINVAL;
--		len = sizeof(hcrx->ccid3hcrx_tfrc);
--		val = &hcrx->ccid3hcrx_tfrc;
-+		rx_info.tfrcrx_x_recv = hcrx->ccid3hcrx_x_recv;
-+		rx_info.tfrcrx_rtt    = hcrx->ccid3hcrx_rtt;
-+		rx_info.tfrcrx_p      = hcrx->ccid3hcrx_pinv = 0 ? ~0U :
-+					   scaled_div(1, hcrx->ccid3hcrx_pinv);
-+		len = sizeof(rx_info);
-+		val = &rx_info;
- 		break;
- 	default:
- 		return -ENOPROTOOPT;
-diff --git a/net/dccp/ccids/ccid3.h b/net/dccp/ccids/ccid3.h
-index e9f6ff4..49ca32b 100644
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -139,6 +139,8 @@ enum ccid3_hc_rx_states {
-  *  @ccid3hcrx_last_counter  -  Tracks window counter (RFC 4342, 8.1)
-  *  @ccid3hcrx_state  -  Receiver state, one of %ccid3_hc_rx_states
-  *  @ccid3hcrx_bytes_recv  -  Total sum of DCCP payload bytes
-+ *  @ccid3hcrx_x_recv  -  Receiver estimate of send rate (RFC 3448, sec. 4.3)
-+ *  @ccid3hcrx_rtt  -  Receiver estimate of RTT
-  *  @ccid3hcrx_tstamp_last_feedback  -  Time at which last feedback was sent
-  *  @ccid3hcrx_tstamp_last_ack  -  Time at which last feedback was sent
-  *  @ccid3hcrx_hist  -  Packet history (loss detection + RTT sampling)
-@@ -147,13 +149,11 @@ enum ccid3_hc_rx_states {
-  *  @ccid3hcrx_pinv  -  Inverse of Loss Event Rate (RFC 4342, sec. 8.5)
-  */
- struct ccid3_hc_rx_sock {
--	struct tfrc_rx_info		ccid3hcrx_tfrc;
--#define ccid3hcrx_x_recv		ccid3hcrx_tfrc.tfrcrx_x_recv
--#define ccid3hcrx_rtt			ccid3hcrx_tfrc.tfrcrx_rtt
--#define ccid3hcrx_p			ccid3hcrx_tfrc.tfrcrx_p
- 	u8				ccid3hcrx_last_counter:4;
- 	enum ccid3_hc_rx_states		ccid3hcrx_state:8;
- 	u32				ccid3hcrx_bytes_recv;
-+	u32				ccid3hcrx_x_recv;
-+	u32				ccid3hcrx_rtt;
- 	ktime_t				ccid3hcrx_tstamp_last_feedback;
- 	struct tfrc_rx_hist		ccid3hcrx_hist;
- 	struct tfrc_loss_hist		ccid3hcrx_li_hist;
+-	switch (DCCP_SKB_CB(skb)->dccpd_type) {
+-	case DCCP_PKT_ACK:
+-	case DCCP_PKT_DATAACK:
+-		break;
+-	default:
++	if (dccp_packet_without_ack(skb))
+ 		return;
+-	}
+ 
+ 	ackno = DCCP_SKB_CB(skb)->dccpd_ack_seq;
+ 	if (after48(ackno, hctx->ccid2hctx_high_ack))
 -- 
-1.5.3.6
+1.5.3.GIT
 
