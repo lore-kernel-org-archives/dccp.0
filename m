@@ -1,85 +1,53 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Thu, 13 Dec 2007 15:06:00 +0000
-Subject: [PATCH 07/12] [DCCP]: Add (missing) option parsing to request_sock processing
-Message-Id: <1197558365-31134-8-git-send-email-acme@redhat.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 19 Dec 2007 14:25:41 +0000
+Subject: [DCCP] [RFC] [Patch 0/14]: Ack Vector implementation + fixes
+Message-Id: <1198074355-18842-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+This set of patches adds functionality to the existing DCCP Ack Vector
+implementation, extends it to a full circular buffer, and fixes two
+previously undiscovered problems which otherwise result in a corrupted
+buffer state. 
+It is important that Ack Vectors run reliably since otherwise problems in
+other parts (in particular CCID2) can not be fixed.
 
-This adds option-parsing code to processing of Acks in the listening state
-on request_socks on the server, serving two purposes
- (i)  resolves a FIXME (removed);
- (ii) paves the way for feature-negotiation during connection-setup.
+Quite some testing has been performed so that I am almost convinced it is
+bug free. To make 100% sure that it contains no further hidden issues
+as before, I would like to post this as RFC, to be eventually submitted
+next year.
 
-There is an intended subtlety here with regard to dccp_check_req:
 
- Parsing options happens only after testing whether the received packet is
- a retransmitted Request.  Otherwise, if the Request contained (a possibly
- large number of) feature-negotiation options, recomputing state would have to
- happen each time a retransmitted Request arrives, which opens the door to an
- easy DoS attack.  Since in a genuine retransmission the options should not be
- different from the original, reusing the already computed state seems better.
+Patch  #1: Fixes the problem that CCID2 ignores Ack Vectors on some packets.
+Patch  #2: Adds a tail pointer to the buffer and makes the size configurable.
+Patch  #3: Decouples the use of Elapsed Time from the use of Ack Vectors. 
+Patch  #4: Provides inlines for Ack Vector state and run length.
+Patch  #5: Removes redundancies from the allocation / de-allocation routines.
+Patch  #6: Splits Ack Vector specific code from option-specific code.
+Patch  #7: Avoids doing unnecessary work when clearing state: the sender of
+           Ack Vectors is only interested in the highest-received Ack Number
+	   when clearing state. Hence parsing any Ack Vectors for this purpose
+	   (which only contain lower Ack Numbers) is entirely unnecessary.
+Patch  #8: Replaces #defines for Ack Vector states with enum.
+Patch  #9: Provides two extensions required for robustness: overflow handling
+           (indicated by a flag) and tracking the lowest-unacknowledged sequence
+	   number (tail_ackno)
+Patch #10: Inlines for buffer index manipulation, dynamic buffer length calculation.
+Patch #11: Implements algorithm to clear buffer state (non-trivial).
+Patch #12: Updates the code which registers incoming packets in the buffer.
+Patch #13: Aggregates Ack-Vector specific code into one function, thus making it
+           easier/simpler for the main DCCP module to use Ack Vectors.
+Patch #14: Cleans up old and now unused bits.
 
- The other point is - if there are timestamp options on the Request, they will
- not be answered; which means that in the presence of retransmission (likely
- due to loss and/or other problems), the use of Request/Response RTT sampling
- is suspended, so that startup problems here do not propagate.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
----
- net/dccp/minisocks.c |   12 ++++++------
- 1 files changed, 6 insertions(+), 6 deletions(-)
+The above patches have been uploaded to 
 
-diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
-index 831b76e..b1d5da6 100644
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -200,10 +200,10 @@ struct sock *dccp_check_req(struct sock *sk, struct sk_buff *skb,
- 			    struct request_sock **prev)
- {
- 	struct sock *child = NULL;
-+	struct dccp_request_sock *dreq = dccp_rsk(req);
- 
- 	/* Check for retransmitted REQUEST */
- 	if (dccp_hdr(skb)->dccph_type = DCCP_PKT_REQUEST) {
--		struct dccp_request_sock *dreq = dccp_rsk(req);
- 
- 		if (after48(DCCP_SKB_CB(skb)->dccpd_seq, dreq->dreq_isr)) {
- 			dccp_pr_debug("Retransmitted REQUEST\n");
-@@ -227,22 +227,22 @@ struct sock *dccp_check_req(struct sock *sk, struct sk_buff *skb,
- 		goto drop;
- 
- 	/* Invalid ACK */
--	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != dccp_rsk(req)->dreq_iss) {
-+	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != dreq->dreq_iss) {
- 		dccp_pr_debug("Invalid ACK number: ack_seq=%llu, "
- 			      "dreq_iss=%llu\n",
- 			      (unsigned long long)
- 			      DCCP_SKB_CB(skb)->dccpd_ack_seq,
--			      (unsigned long long)
--			      dccp_rsk(req)->dreq_iss);
-+			      (unsigned long long) dreq->dreq_iss);
- 		goto drop;
- 	}
- 
-+	if (dccp_parse_options(sk, dreq, skb))
-+		 goto drop;
-+
- 	child = inet_csk(sk)->icsk_af_ops->syn_recv_sock(sk, skb, req, NULL);
- 	if (child = NULL)
- 		goto listen_overflow;
- 
--	/* FIXME: deal with options */
--
- 	inet_csk_reqsk_queue_unlink(sk, req, prev);
- 	inet_csk_reqsk_queue_removed(sk, req);
- 	inet_csk_reqsk_queue_add(sk, req, child);
--- 
-1.5.3.4
+	git://eden-feed.erg.abdn.ac.uk/dccp_exp		[dccp]
 
+but please note that the server will be switched off from 21/12 ... 01/08.
+
+Detailed information and documentation can be found on 
+	http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ack_vectors/
