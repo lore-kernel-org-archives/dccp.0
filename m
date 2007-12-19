@@ -1,237 +1,101 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 03 Dec 2007 11:28:35 +0000
-Subject: [PATCH 1/6] [TFRC]: Provide central source file and debug facility
-Message-Id: <1196681320315-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Wed, 19 Dec 2007 14:25:44 +0000
+Subject: [PATCH 03/14] [ACKVEC]: Use Elapsed Time separately
+Message-Id: <1198074355-18842-4-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch changes the tfrc_lib module in the following manner:
+This decouples the use of Elapsed Time options from the use of Ack Vectors, so
+that Elapsed Time options are no longer added automatically to each Ack Vector.
 
- (1) a dedicated tfrc_module source file  (this is later populated
-     with TX/RX hist and LI Database routines);
- (2) a dedicated tfrc_pr_debug macro with toggle switch `tfrc_debug'.
+There are three reasons for this:
+ 1. The Elapsed Time information is nowhere used in the code.
+
+ 2. DCCP does not implement rate-based pacing of acknowledgments. The only
+    recommendation for always including Elapsed Time is in section 11.3 of
+    RFC 4340: "Receivers that rate-pace acknowledgements SHOULD [...]
+    include Elapsed Time options". But such is not the case here.
+
+ 3. It does not really improve estimation accuracy. The Elapsed Time field only
+    records the time between the arrival of the last acknowledgeable packet and
+    the time the Ack Vector is sent out. Since Linux does not (yet) implement
+    delayed Acks, the time difference will typically be small, since often the
+    arrival of a data packet triggers sending feedback at the HC-receiver.
+    If the Ack Vector has a wide coverage (up to 16192) then the Elapsed Time is
+    not very meaningful for older packets.
+    If indeed elapsed time is required by the endpoint or CCID, then using
+    Timestamp options can provide the same information (elapsed time field
+    in the Timestamp Echo option).
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/ccids/Kconfig              |   12 ++++++---
- net/dccp/ccids/lib/Makefile         |    3 +-
- net/dccp/ccids/lib/loss_interval.c  |    2 +-
- net/dccp/ccids/lib/packet_history.c |   28 ++-------------------
- net/dccp/ccids/lib/packet_history.h |    3 +-
- net/dccp/ccids/lib/tfrc.h           |   17 ++++++++++---
- net/dccp/ccids/lib/tfrc_module.c    |   45 +++++++++++++++++++++++++++++++++++
- 7 files changed, 73 insertions(+), 37 deletions(-)
- create mode 100644 net/dccp/ccids/lib/tfrc_module.c
+ net/dccp/ackvec.c |   11 -----------
+ net/dccp/ackvec.h |    3 ---
+ 2 files changed, 0 insertions(+), 14 deletions(-)
 
-diff --git a/net/dccp/ccids/Kconfig b/net/dccp/ccids/Kconfig
-index 3d7d867..a0c42d7 100644
---- a/net/dccp/ccids/Kconfig
-+++ b/net/dccp/ccids/Kconfig
-@@ -63,10 +63,6 @@ config IP_DCCP_CCID3
- 
- 	  If in doubt, say M.
- 
--config IP_DCCP_TFRC_LIB
--	depends on IP_DCCP_CCID3
--	def_tristate IP_DCCP_CCID3
--
- config IP_DCCP_CCID3_DEBUG
- 	  bool "CCID3 debugging messages"
- 	  depends on IP_DCCP_CCID3
-@@ -110,5 +106,13 @@ config IP_DCCP_CCID3_RTO
- 	    is serious network congestion: experimenting with larger values should
- 	    therefore not be performed on WANs.
- 
-+# The TFRC Library: currently only has CCID 3 as customer
-+config IP_DCCP_TFRC_LIB
-+	depends on IP_DCCP_CCID3
-+	def_tristate IP_DCCP_CCID3
-+
-+config IP_DCCP_TFRC_DEBUG
-+	bool
-+	default y if IP_DCCP_CCID3_DEBUG
- 
- endmenu
-diff --git a/net/dccp/ccids/lib/Makefile b/net/dccp/ccids/lib/Makefile
-index 5f940a6..1295635 100644
---- a/net/dccp/ccids/lib/Makefile
-+++ b/net/dccp/ccids/lib/Makefile
-@@ -1,3 +1,4 @@
- obj-$(CONFIG_IP_DCCP_TFRC_LIB) += dccp_tfrc_lib.o
- 
--dccp_tfrc_lib-y := loss_interval.o packet_history.o tfrc_equation.o
-+dccp_tfrc_lib-y := tfrc_module.o    tfrc_equation.o \
-+                   packet_history.o loss_interval.o
-diff --git a/net/dccp/ccids/lib/loss_interval.c b/net/dccp/ccids/lib/loss_interval.c
-index f2ca4eb..4fe3c1c 100644
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -285,7 +285,7 @@ int __init dccp_li_init(void)
- 	return dccp_li_cachep = NULL ? -ENOBUFS : 0;
- }
- 
--void dccp_li_exit(void)
-+void __exit dccp_li_exit(void)
- {
- 	if (dccp_li_cachep != NULL) {
- 		kmem_cache_destroy(dccp_li_cachep);
-diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
-index 4805de9..ebcb6c0 100644
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -35,7 +35,6 @@
-  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+--- a/net/dccp/ackvec.h
++++ b/net/dccp/ackvec.h
+@@ -12,7 +12,6 @@
   */
  
--#include <linux/module.h>
- #include <linux/string.h>
- #include "packet_history.h"
- 
-@@ -277,39 +276,18 @@ void dccp_rx_hist_purge(struct dccp_rx_hist *hist, struct list_head *list)
- 
- EXPORT_SYMBOL_GPL(dccp_rx_hist_purge);
- 
--extern int __init dccp_li_init(void);
--extern void dccp_li_exit(void);
--
--static __init int packet_history_init(void)
-+int __init packet_history_init(void)
- {
--	if (dccp_li_init() != 0)
--		goto out;
--
- 	tfrc_tx_hist = kmem_cache_create("tfrc_tx_hist",
- 					 sizeof(struct tfrc_tx_hist_entry), 0,
- 					 SLAB_HWCACHE_ALIGN, NULL);
--	if (tfrc_tx_hist = NULL)
--		goto out_li_exit;
--
--	return 0;
--out_li_exit:
--	dccp_li_exit();
--out:
--	return -ENOBUFS;
-+	return tfrc_tx_hist = NULL ? -ENOBUFS : 0;
- }
--module_init(packet_history_init);
- 
--static __exit void packet_history_exit(void)
-+void __exit packet_history_exit(void)
- {
- 	if (tfrc_tx_hist != NULL) {
- 		kmem_cache_destroy(tfrc_tx_hist);
- 		tfrc_tx_hist = NULL;
- 	}
--	dccp_li_exit();
- }
--module_exit(packet_history_exit);
--
--MODULE_AUTHOR("Ian McDonald <ian.mcdonald@jandi.co.nz>, "
--	      "Arnaldo Carvalho de Melo <acme@ghostprotocols.net>");
--MODULE_DESCRIPTION("DCCP TFRC library");
--MODULE_LICENSE("GPL");
-diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
-index 0670f46..9a2642e 100644
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -39,8 +39,7 @@
- #include <linux/ktime.h>
+ #include <linux/compiler.h>
+-#include <linux/ktime.h>
  #include <linux/list.h>
- #include <linux/slab.h>
--
--#include "../../dccp.h"
-+#include "tfrc.h"
- 
- /* Number of later packets received before one is considered lost */
- #define TFRC_RECV_NUM_LATE_LOSS	 3
-diff --git a/net/dccp/ccids/lib/tfrc.h b/net/dccp/ccids/lib/tfrc.h
-index 5a0ba86..ab8848c 100644
---- a/net/dccp/ccids/lib/tfrc.h
-+++ b/net/dccp/ccids/lib/tfrc.h
-@@ -3,10 +3,11 @@
- /*
-  *  net/dccp/ccids/lib/tfrc.h
-  *
-- *  Copyright (c) 2005 The University of Waikato, Hamilton, New Zealand.
-- *  Copyright (c) 2005 Ian McDonald <ian.mcdonald@jandi.co.nz>
-- *  Copyright (c) 2005 Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-- *  Copyright (c) 2003 Nils-Erik Mattsson, Joacim Haggmark, Magnus Erixzon
-+ *  Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ *  Copyright (c) 2005-6 The University of Waikato, Hamilton, New Zealand.
-+ *  Copyright (c) 2005-6 Ian McDonald <ian.mcdonald@jandi.co.nz>
-+ *  Copyright (c) 2005   Arnaldo Carvalho de Melo <acme@conectiva.com.br>
-+ *  Copyright (c) 2003   Nils-Erik Mattsson, Joacim Haggmark, Magnus Erixzon
-  *
-  *  This program is free software; you can redistribute it and/or modify
-  *  it under the terms of the GNU General Public License as published by
-@@ -15,6 +16,14 @@
-  */
  #include <linux/types.h>
- #include <asm/div64.h>
-+#include "../../dccp.h"
-+
-+#ifdef CONFIG_IP_DCCP_TFRC_DEBUG
-+extern int tfrc_debug;
-+#define tfrc_pr_debug(format, a...)	DCCP_PR_DEBUG(tfrc_debug, format, ##a)
-+#else
-+#define tfrc_pr_debug(format, a...)
-+#endif
  
- /* integer-arithmetic divisions of type (a * 1000000)/b */
- static inline u64 scaled_div(u64 a, u32 b)
-diff --git a/net/dccp/ccids/lib/tfrc_module.c b/net/dccp/ccids/lib/tfrc_module.c
-new file mode 100644
-index 0000000..7e0dfa0
---- /dev/null
-+++ b/net/dccp/ccids/lib/tfrc_module.c
-@@ -0,0 +1,45 @@
-+/*
-+ * TFRC: main module holding the pieces of the TFRC library together
-+ *
-+ * Copyright (c) 2007   The University of Aberdeen, Scotland, UK
-+ */
-+#include <linux/module.h>
-+#include <linux/moduleparam.h>
-+#include "tfrc.h"
-+
-+/* Initialisation / Clean-up routines */
-+extern int  packet_history_init(void);
-+extern void packet_history_exit(void);
-+
-+extern int  dccp_li_init(void);
-+extern void dccp_li_exit(void);
-+
-+#ifdef CONFIG_IP_DCCP_TFRC_DEBUG
-+int tfrc_debug;
-+module_param(tfrc_debug, bool, 0444);
-+MODULE_PARM_DESC(tfrc_debug, "Enable debug messages");
-+#endif
-+
-+static int __init tfrc_module_init(void)
-+{
-+	int rc = dccp_li_init();
-+
-+	if (rc = 0)
-+		rc = packet_history_init();
-+
-+	return rc;
-+}
-+module_init(tfrc_module_init);
-+
-+static void __exit tfrc_module_exit(void)
-+{
-+	packet_history_exit();
-+	dccp_li_exit();
-+}
-+module_exit(tfrc_module_exit);
-+
-+MODULE_AUTHOR("Gerrit Renker <gerrit@erg.abdn.ac.uk>, "
-+	      "Ian McDonald <ian.mcdonald@jandi.co.nz>, "
-+	      "Arnaldo Carvalho de Melo <acme@ghostprotocols.net>");
-+MODULE_DESCRIPTION("DCCP TFRC library");
-+MODULE_LICENSE("GPL");
--- 
+@@ -46,7 +45,6 @@
+  * @av_buf_nonce:  ECN nonce sums, each covering subsequent segments of up to
+  *		   %DCCP_SINGLE_OPT_MAXLEN cells in the live portion of @av_buf
+  * @av_records:	   list of %dccp_ackvec_record (Ack Vectors sent previously)
+- * @av_time:	   the time in usecs
+  * @av_veclen:	   length of the live portion of @av_buf
+  */
+ struct dccp_ackvec {
+@@ -56,7 +54,6 @@ struct dccp_ackvec {
+ 	u64			av_buf_ackno:48;
+ 	bool			av_buf_nonce[DCCPAV_NUM_ACKVECS];
+ 	struct list_head	av_records;
+-	ktime_t			av_time;
+ 	u16			av_vec_len;
+ };
+ 
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -71,18 +71,9 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
+ 	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
+ 	u16 len = av->av_vec_len + 2 * nr_opts;
+ 	u8 i, nonce = 0;
+-	u32 elapsed_time;
+ 	const unsigned char *tail, *from;
+ 	unsigned char *to;
+ 	struct dccp_ackvec_record *avr;
+-	suseconds_t delta;
+-
+-	delta = ktime_us_delta(ktime_get_real(), av->av_time);
+-	elapsed_time = delta / 10;
+-
+-	if (elapsed_time != 0 &&
+-	    dccp_insert_option_elapsed_time(sk, skb, elapsed_time))
+-		return -1;
+ 
+ 	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN) {
+ 		/*
+@@ -162,7 +153,6 @@ struct dccp_ackvec *dccp_ackvec_alloc(const gfp_t priority)
+ 
+ 	if (av != NULL) {
+ 		av->av_buf_head	 = DCCPAV_MAX_ACKVEC_LEN - 1;
+-		av->av_time	 = ktime_set(0, 0);
+ 		av->av_vec_len	 = 0;
+ 		memset(av->av_buf_nonce, 0, sizeof(av->av_buf_nonce));
+ 		INIT_LIST_HEAD(&av->av_records);
+@@ -321,7 +311,6 @@ int dccp_ackvec_add(struct dccp_ackvec *av, const struct sock *sk,
+ 	}
+ 
+ 	av->av_buf_ackno = ackno;
+-	av->av_time = ktime_get_real();
+ out:
+ 	return 0;
+ 
