@@ -1,111 +1,125 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Thu, 13 Dec 2007 15:06:02 +0000
-Subject: [PATCH 09/12] [DCCP]: Support inserting options during the 3-way handshake
-Message-Id: <1197558365-31134-10-git-send-email-acme@redhat.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 19 Dec 2007 14:25:49 +0000
+Subject: [PATCH 08/14] [ACKVEC]: Use enum to enumerate Ack Vector states
+Message-Id: <1198074355-18842-9-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-
-This provides a separate routine to insert options during the initial handshake.
-The main purpose is to conduct feature negotiation, for the moment the only user
-is the timestamp echo needed for the (CCID3) handshake RTT sample.
-
-Padding of options has been put into a small separate routine, to be shared among
-the two functions. This could also be used as a generic routine to finish inserting
-options.
-
-Also removed an `XXX' comment since its content was obvious.
+This replaces 3 #defines with an enum containing all possible
+Ack Vector states as per RFC 4340, 11.4. This helps to reduce
+the length of several expressions.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/dccp.h    |    1 +
- net/dccp/options.c |   32 ++++++++++++++++++++++----------
- net/dccp/output.c  |    2 +-
- 3 files changed, 24 insertions(+), 11 deletions(-)
+ net/dccp/ackvec.c      |    7 +++----
+ net/dccp/ackvec.h      |   10 ++++++----
+ net/dccp/ccids/ccid2.c |    7 +++----
+ net/dccp/input.c       |    9 +++------
+ 4 files changed, 15 insertions(+), 18 deletions(-)
 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 3af3320..b138e20 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -428,6 +428,7 @@ static inline int dccp_ack_pending(const struct sock *sk)
- }
+--- a/net/dccp/ackvec.h
++++ b/net/dccp/ackvec.h
+@@ -26,10 +26,12 @@
+ #define DCCPAV_NUM_ACKVECS	2
+ #define DCCPAV_MAX_ACKVEC_LEN	(DCCP_SINGLE_OPT_MAXLEN * DCCPAV_NUM_ACKVECS)
  
- extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
-+extern int dccp_insert_options_rsk(struct dccp_request_sock*, struct sk_buff*);
- extern int dccp_insert_option_elapsed_time(struct sock *sk,
- 					    struct sk_buff *skb,
- 					    u32 elapsed_time);
-diff --git a/net/dccp/options.c b/net/dccp/options.c
-index 0c996d8..bedb5da 100644
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -537,6 +537,18 @@ static int dccp_insert_options_feat(struct sock *sk, struct sk_buff *skb)
- 	return 0;
- }
+-#define DCCP_ACKVEC_STATE_RECEIVED	0
+-#define DCCP_ACKVEC_STATE_ECN_MARKED	(1 << 6)
+-#define DCCP_ACKVEC_STATE_NOT_RECEIVED	(3 << 6)
+-
++enum dccp_ackvec_states {
++	DCCPAV_RECEIVED =	0x00,
++	DCCPAV_ECN_MARKED =	0x40,
++	DCCPAV_RESERVED =	0x80,
++	DCCPAV_NOT_RECEIVED =	0xC0
++};
+ #define DCCPAV_MAX_RUNLEN	0x3F
  
-+/* The length of all options needs to be a multiple of 4 (5.8) */
-+static void dccp_insert_option_padding(struct sk_buff *skb)
-+{
-+	int padding = DCCP_SKB_CB(skb)->dccpd_opt_len % 4;
-+
-+	if (padding != 0) {
-+		padding = 4 - padding;
-+		memset(skb_push(skb, padding), 0, padding);
-+		DCCP_SKB_CB(skb)->dccpd_opt_len += padding;
-+	}
-+}
-+
- int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
-@@ -580,18 +592,18 @@ int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
- 	    dccp_insert_option_timestamp_echo(dp, NULL, skb))
- 		return -1;
+ static inline u8 dccp_ackvec_runlen(const u8 *cell)
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -124,7 +124,7 @@ static inline int dccp_ackvec_set_buf_head_state(struct dccp_ackvec *av,
  
--	/* XXX: insert other options when appropriate */
-+	dccp_insert_option_padding(skb);
-+	return 0;
-+}
+ 	if (new_head < 0) {
+ 		if (gap > 0) {
+-			memset(av->av_buf, DCCP_ACKVEC_STATE_NOT_RECEIVED,
++			memset(av->av_buf, DCCPAV_NOT_RECEIVED,
+ 			       gap + new_head + 1);
+ 			gap = -new_head;
+ 		}
+@@ -135,7 +135,7 @@ static inline int dccp_ackvec_set_buf_head_state(struct dccp_ackvec *av,
  
--	if (DCCP_SKB_CB(skb)->dccpd_opt_len != 0) {
--		/* The length of all options has to be a multiple of 4 */
--		int padding = DCCP_SKB_CB(skb)->dccpd_opt_len % 4;
-+int dccp_insert_options_rsk(struct dccp_request_sock *dreq, struct sk_buff *skb)
-+{
-+	DCCP_SKB_CB(skb)->dccpd_opt_len = 0;
+ 	if (gap > 0)
+ 		memset(av->av_buf + av->av_buf_head + 1,
+-		       DCCP_ACKVEC_STATE_NOT_RECEIVED, gap);
++		       DCCPAV_NOT_RECEIVED, gap);
  
--		if (padding != 0) {
--			padding = 4 - padding;
--			memset(skb_push(skb, padding), 0, padding);
--			DCCP_SKB_CB(skb)->dccpd_opt_len += padding;
--		}
--	}
-+	if (dreq->dreq_timestamp_echo != 0 &&
-+	    dccp_insert_option_timestamp_echo(NULL, dreq, skb))
-+		return -1;
+ 	av->av_buf[av->av_buf_head] = state;
+ 	av->av_vec_len += packets;
+@@ -205,8 +205,7 @@ int dccp_ackvec_add(struct dccp_ackvec *av, const struct sock *sk,
+ 			 * valid packets not yet in av_buf have a reserved
+ 			 * entry, with a len equal to 0.
+ 			 */
+-			if (*cur_head = DCCP_ACKVEC_STATE_NOT_RECEIVED &&
+-			    delta = 0) {
++			if (*cur_head = DCCPAV_NOT_RECEIVED && delta = 0) {
+ 				dccp_pr_debug("Found %llu reserved seat!\n",
+ 					      (unsigned long long)ackno);
+ 				*cur_head = state;
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -605,13 +605,12 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 				const u8 state = dccp_ackvec_state(vector);
  
-+	dccp_insert_option_padding(skb);
- 	return 0;
- }
-diff --git a/net/dccp/output.c b/net/dccp/output.c
-index b2e1791..5589a5e 100644
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -303,7 +303,7 @@ struct sk_buff *dccp_make_response(struct sock *sk, struct dst_entry *dst,
- 	DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_RESPONSE;
- 	DCCP_SKB_CB(skb)->dccpd_seq  = dreq->dreq_iss;
+ 				/* new packet received or marked */
+-				if (state != DCCP_ACKVEC_STATE_NOT_RECEIVED &&
++				if (state != DCCPAV_NOT_RECEIVED &&
+ 				    !seqp->ccid2s_acked) {
+-					if (state =
+-					    DCCP_ACKVEC_STATE_ECN_MARKED) {
++					if (state = DCCPAV_ECN_MARKED)
+ 						ccid2_congestion_event(sk,
+ 								       seqp);
+-					} else
++					else
+ 						ccid2_new_ack(sk, seqp,
+ 							      &maxincr);
  
--	if (dccp_insert_options(sk, skb)) {
-+	if (dccp_insert_options_rsk(dreq, skb)) {
- 		kfree_skb(skb);
- 		return NULL;
- 	}
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -377,8 +377,7 @@ int dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
+ 
+ 	if (dp->dccps_hc_rx_ackvec != NULL &&
+ 	    dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
+-			    DCCP_SKB_CB(skb)->dccpd_seq,
+-			    DCCP_ACKVEC_STATE_RECEIVED))
++			    DCCP_SKB_CB(skb)->dccpd_seq, DCCPAV_RECEIVED))
+ 		goto discard;
+ 	dccp_deliver_input_to_ccids(sk, skb);
+ 
+@@ -511,8 +510,7 @@ static int dccp_rcv_request_sent_state_process(struct sock *sk,
+ 
+ 		if (dp->dccps_hc_rx_ackvec != NULL &&
+ 		    dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
+-				    DCCP_SKB_CB(skb)->dccpd_seq,
+-				    DCCP_ACKVEC_STATE_RECEIVED))
++				    DCCP_SKB_CB(skb)->dccpd_seq, DCCPAV_RECEIVED))
+ 			goto unable_to_proceed;
+ 
+ 		dccp_send_ack(sk);
+@@ -639,8 +637,7 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+ 
+ 		if (dp->dccps_hc_rx_ackvec != NULL &&
+ 		    dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
+-				    DCCP_SKB_CB(skb)->dccpd_seq,
+-				    DCCP_ACKVEC_STATE_RECEIVED))
++				    DCCP_SKB_CB(skb)->dccpd_seq, DCCPAV_RECEIVED))
+ 			goto discard;
+ 
+ 		dccp_deliver_input_to_ccids(sk, skb);
 -- 
-1.5.3.4
+1.5.3.GIT
 
