@@ -1,157 +1,332 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 19 Dec 2007 14:25:46 +0000
-Subject: [PATCH 05/14] [ACKVEC]: Smaller allocation/deallocation routines
-Message-Id: <1198074355-18842-6-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Leandro <leandroal@gmail.com>
+Date: Thu, 20 Dec 2007 16:58:46 +0000
+Subject: [PATCH 3/8] Apply new naming schema for TFRC TX/RX states
+Message-Id: <200712201358.46891.leandroal@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch removes redundant bits, implementing the same functionality with less code.
+[CCID-3][CCID-4][TFRC_CCIDS] Apply new naming schema for TFRC TX/RX states.
 
-The details are:
-  * The INIT_LIST_HEAD in dccp_ackvec_record_new was redundant, since the list pointers
-    were later overwritten when the node was added via list_add().
+As discussed with Gerrit and Arnaldo, this patches rename the name schema agreed in discussion the the DCCP mailing list.
 
-  * dccp_ackvec_record_new() was called only in one instance in the entire ackvec code.
+Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
 
-  * The calls to list_del_init() before calling dccp_ackvec_record_delete() were redundant,
-    since subsequently the entire element was freed anyway.
-
-  * Similarly, since all calls to dccp_ackvec_record_delete() were preceded to a call to
-    list_del_init(), the WARN_ON test would never evaluate to true.
-
-  * Also, since all calls to dccp_ackvec_record_delete() were made from within list_for
-    each_entry_safe(), the test for avr = NULL was redundant.
-
-  * The list_empty() test in ackvec_free was redundant, since the same condition is
-    embedded in the loop condition of the subsequent list_for_each_entry_safe().
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ackvec.c |   78 +++++++++++++++++++----------------------------------
- 1 files changed, 28 insertions(+), 50 deletions(-)
-
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -24,24 +24,34 @@
- static struct kmem_cache *dccp_ackvec_slab;
- static struct kmem_cache *dccp_ackvec_record_slab;
+Index: ccid4.latest/net/dccp/ccids/ccid3.c
+=================================--- ccid4.latest.orig/net/dccp/ccids/ccid3.c
++++ ccid4.latest/net/dccp/ccids/ccid3.c
+@@ -163,9 +163,9 @@ static void ccid3_hc_tx_no_feedback_time
+ 	ccid3_pr_debug("%s(%p, state=%s) - entry \n", dccp_role(sk), sk,
+ 		       tfrc_tx_state_name(hctx->tfrchctx_state));
  
--static struct dccp_ackvec_record *dccp_ackvec_record_new(void)
-+struct dccp_ackvec *dccp_ackvec_alloc(const gfp_t priority)
- {
--	struct dccp_ackvec_record *avr -			kmem_cache_alloc(dccp_ackvec_record_slab, GFP_ATOMIC);
-+	struct dccp_ackvec *av = kmem_cache_alloc(dccp_ackvec_slab, priority);
-+
-+	if (av != NULL) {
-+		av->av_buf_head	 = DCCPAV_MAX_ACKVEC_LEN - 1;
-+		av->av_vec_len	 = 0;
-+		memset(av->av_buf_nonce, 0, sizeof(av->av_buf_nonce));
-+		INIT_LIST_HEAD(&av->av_records);
-+	}
-+	return av;
-+}
+-	if (hctx->tfrchctx_state = TFRC_SSTATE_FBACK)
+-		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_NO_FBACK);
+-	else if (hctx->tfrchctx_state != TFRC_SSTATE_NO_FBACK)
++	if (hctx->tfrchctx_state = TTX_STATE_FBACK)
++		ccid3_hc_tx_set_state(sk, TTX_STATE_NO_FBACK);
++	else if (hctx->tfrchctx_state != TTX_STATE_NO_FBACK)
+ 		goto out;
  
--	if (avr != NULL)
--		INIT_LIST_HEAD(&avr->avr_node);
-+static void dccp_ackvec_purge_records(struct dccp_ackvec *av)
-+{
-+	struct dccp_ackvec_record *cur, *next;
+ 	/*
+@@ -245,7 +245,7 @@ static int ccid3_hc_tx_send_packet(struc
+ 		return -EBADMSG;
  
--	return avr;
-+	list_for_each_entry_safe(cur, next, &av->av_records, avr_node)
-+		kmem_cache_free(dccp_ackvec_record_slab, cur);
-+	INIT_LIST_HEAD(&av->av_records);
- }
+ 	switch (hctx->tfrchctx_state) {
+-	case TFRC_SSTATE_NO_SENT:
++	case TTX_STATE_NO_SENT:
+ 		sk_reset_timer(sk, &hctx->tfrchctx_no_feedback_timer,
+ 			       (jiffies +
+ 				usecs_to_jiffies(TFRC_INITIAL_TIMEOUT)));
+@@ -274,10 +274,10 @@ static int ccid3_hc_tx_send_packet(struc
+ 		}
+ 		ccid3_update_send_interval(hctx);
  
--static void dccp_ackvec_record_delete(struct dccp_ackvec_record *avr)
-+void dccp_ackvec_free(struct dccp_ackvec *av)
- {
--	if (unlikely(avr = NULL))
--		return;
--	/* Check if deleting a linked record */
--	WARN_ON(!list_empty(&avr->avr_node));
--	kmem_cache_free(dccp_ackvec_record_slab, avr);
-+	if (likely(av != NULL)) {
-+		dccp_ackvec_purge_records(av);
-+		kmem_cache_free(dccp_ackvec_slab, av);
-+	}
- }
+-		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_NO_FBACK);
++		ccid3_hc_tx_set_state(sk, TTX_STATE_NO_FBACK);
+ 		break;
+-	case TFRC_SSTATE_NO_FBACK:
+-	case TFRC_SSTATE_FBACK:
++	case TTX_STATE_NO_FBACK:
++	case TTX_STATE_FBACK:
+ 		delay = ktime_us_delta(hctx->tfrchctx_t_nom, now);
+ 		ccid3_pr_debug("delay=%ld\n", (long)delay);
+ 		/*
+@@ -293,7 +293,7 @@ static int ccid3_hc_tx_send_packet(struc
  
- static void dccp_ackvec_insert_avr(struct dccp_ackvec *av,
-@@ -85,7 +95,7 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
- 		return -1;
+ 		tfrc_hc_tx_update_win_count(hctx, now);
+ 		break;
+-	case TFRC_SSTATE_TERM:
++	case TTX_STATE_TERM:
+ 		DCCP_BUG("%s(%p) - Illegal state TERM", dccp_role(sk), sk);
+ 		return -EINVAL;
  	}
+@@ -332,8 +332,8 @@ static void ccid3_hc_tx_packet_recv(stru
+ 	      DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_DATAACK))
+ 		return;
+ 	/* ... and only in the established state */
+-	if (hctx->tfrchctx_state != TFRC_SSTATE_FBACK &&
+-	    hctx->tfrchctx_state != TFRC_SSTATE_NO_FBACK)
++	if (hctx->tfrchctx_state != TTX_STATE_FBACK &&
++	    hctx->tfrchctx_state != TTX_STATE_NO_FBACK)
+ 		return;
  
--	avr = dccp_ackvec_record_new();
-+	avr = kmem_cache_alloc(dccp_ackvec_record_slab, GFP_ATOMIC);
- 	if (avr = NULL)
- 		return -1;
+ 	opt_recv = &hctx->tfrchctx_options_received;
+@@ -366,9 +366,9 @@ static void ccid3_hc_tx_packet_recv(stru
+ 	/*
+ 	 *	Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
+ 	 */
+-	if (hctx->tfrchctx_state = TFRC_SSTATE_NO_FBACK) {
++	if (hctx->tfrchctx_state = TTX_STATE_NO_FBACK) {
  
-@@ -147,37 +157,6 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
- 	return 0;
+-		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
++		ccid3_hc_tx_set_state(sk, TTX_STATE_FBACK);
+ 
+ 		if (hctx->tfrchctx_t_rto = 0) {
+ 			/*
+@@ -500,7 +500,7 @@ static int ccid3_hc_tx_init(struct ccid 
+ {
+ 	struct tfrc_hc_tx_sock *hctx = ccid_priv(ccid);
+ 
+-	hctx->tfrchctx_state = TFRC_SSTATE_NO_SENT;
++	hctx->tfrchctx_state = TTX_STATE_NO_SENT;
+ 	hctx->tfrchctx_hist = NULL;
+ 	setup_timer(&hctx->tfrchctx_no_feedback_timer,
+ 			ccid3_hc_tx_no_feedback_timer, (unsigned long)sk);
+@@ -512,7 +512,7 @@ static void ccid3_hc_tx_exit(struct sock
+ {
+ 	struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
+ 
+-	ccid3_hc_tx_set_state(sk, TFRC_SSTATE_TERM);
++	ccid3_hc_tx_set_state(sk, TTX_STATE_TERM);
+ 	sk_stop_timer(sk, &hctx->tfrchctx_no_feedback_timer);
+ 
+ 	tfrc_tx_hist_purge(&hctx->tfrchctx_hist);
+@@ -569,7 +569,7 @@ static void ccid3_hc_rx_send_feedback(st
+ 	ktime_t now;
+ 	s64 delta = 0;
+ 
+-	if (unlikely(hcrx->tfrchcrx_state = TFRC_RSTATE_TERM))
++	if (unlikely(hcrx->tfrchcrx_state = TRX_STATE_TERM))
+ 		return;
+ 
+ 	now = ktime_get_real();
+@@ -686,11 +686,11 @@ static void ccid3_hc_rx_packet_recv(stru
+ 	const u64 ndp = dccp_sk(sk)->dccps_options_received.dccpor_ndp;
+ 	const bool is_data_packet = dccp_data_packet(skb);
+ 
+-	if (unlikely(hcrx->tfrchcrx_state = TFRC_RSTATE_NO_DATA)) {
++	if (unlikely(hcrx->tfrchcrx_state = TRX_STATE_NO_DATA)) {
+ 		if (is_data_packet) {
+ 			const u32 payload = skb->len - dccp_hdr(skb)->dccph_doff * 4;
+ 			do_feedback = TFRC_FBACK_INITIAL;
+-			ccid3_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
++			ccid3_hc_rx_set_state(sk, TRX_STATE_DATA);
+ 			hcrx->tfrchcrx_s = payload;
+ 			/*
+ 			 * Not necessary to update tfrchcrx_bytes_recv here,
+@@ -769,7 +769,7 @@ static int ccid3_hc_rx_init(struct ccid 
+ {
+ 	struct tfrc_hc_rx_sock *hcrx = ccid_priv(ccid);
+ 
+-	hcrx->tfrchcrx_state = TFRC_RSTATE_NO_DATA;
++	hcrx->tfrchcrx_state = TRX_STATE_NO_DATA;
+ 	tfrc_lh_init(&hcrx->tfrchcrx_li_hist);
+ 	return tfrc_rx_hist_alloc(&hcrx->tfrchcrx_hist);
  }
+@@ -778,7 +778,7 @@ static void ccid3_hc_rx_exit(struct sock
+ {
+ 	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
  
--struct dccp_ackvec *dccp_ackvec_alloc(const gfp_t priority)
--{
--	struct dccp_ackvec *av = kmem_cache_alloc(dccp_ackvec_slab, priority);
--
--	if (av != NULL) {
--		av->av_buf_head	 = DCCPAV_MAX_ACKVEC_LEN - 1;
--		av->av_vec_len	 = 0;
--		memset(av->av_buf_nonce, 0, sizeof(av->av_buf_nonce));
--		INIT_LIST_HEAD(&av->av_records);
--	}
--
--	return av;
--}
--
--void dccp_ackvec_free(struct dccp_ackvec *av)
--{
--	if (unlikely(av = NULL))
--		return;
--
--	if (!list_empty(&av->av_records)) {
--		struct dccp_ackvec_record *avr, *next;
--
--		list_for_each_entry_safe(avr, next, &av->av_records, avr_node) {
--			list_del_init(&avr->avr_node);
--			dccp_ackvec_record_delete(avr);
--		}
--	}
--
--	kmem_cache_free(dccp_ackvec_slab, av);
--}
--
- /*
-  * If several packets are missing, the HC-Receiver may prefer to enter multiple
-  * bytes with run length 0, rather than a single byte with a larger run length;
-@@ -321,8 +300,8 @@ static void dccp_ackvec_throw_record(struct dccp_ackvec *av,
+-	ccid3_hc_rx_set_state(sk, TFRC_RSTATE_TERM);
++	ccid3_hc_rx_set_state(sk, TRX_STATE_TERM);
  
- 	/* free records */
- 	list_for_each_entry_safe_from(avr, next, &av->av_records, avr_node) {
--		list_del_init(&avr->avr_node);
--		dccp_ackvec_record_delete(avr);
-+		list_del(&avr->avr_node);
-+		kmem_cache_free(dccp_ackvec_record_slab, avr);
+ 	tfrc_rx_hist_purge(&hcrx->tfrchcrx_hist);
+ 	tfrc_lh_cleanup(&hcrx->tfrchcrx_li_hist);
+Index: ccid4.latest/net/dccp/ccids/ccid4.c
+=================================--- ccid4.latest.orig/net/dccp/ccids/ccid4.c
++++ ccid4.latest/net/dccp/ccids/ccid4.c
+@@ -191,9 +191,9 @@ static void ccid4_hc_tx_no_feedback_time
+ 	ccid4_pr_debug("%s(%p, state=%s) - entry \n", dccp_role(sk), sk,
+ 		       tfrc_tx_state_name(hctx->tfrchctx_state));
+ 
+-	if (hctx->tfrchctx_state = TFRC_SSTATE_FBACK)
+-		ccid4_hc_tx_set_state(sk, TFRC_SSTATE_NO_FBACK);
+-	else if (hctx->tfrchctx_state != TFRC_SSTATE_NO_FBACK)
++	if (hctx->tfrchctx_state = TTX_STATE_FBACK)
++		ccid4_hc_tx_set_state(sk, TTX_STATE_NO_FBACK);
++	else if (hctx->tfrchctx_state != TTX_STATE_NO_FBACK)
+ 		goto out;
+ 
+ 	/*
+@@ -273,7 +273,7 @@ static int ccid4_hc_tx_send_packet(struc
+ 		return -EBADMSG;
+ 
+ 	switch (hctx->tfrchctx_state) {
+-	case TFRC_SSTATE_NO_SENT:
++	case TTX_STATE_NO_SENT:
+ 		sk_reset_timer(sk, &hctx->tfrchctx_no_feedback_timer,
+ 			       (jiffies +
+ 				usecs_to_jiffies(TFRC_INITIAL_TIMEOUT)));
+@@ -302,10 +302,10 @@ static int ccid4_hc_tx_send_packet(struc
+ 		}
+ 		ccid4_update_send_interval(hctx);
+ 
+-		ccid4_hc_tx_set_state(sk, TFRC_SSTATE_NO_FBACK);
++		ccid4_hc_tx_set_state(sk, TTX_STATE_NO_FBACK);
+ 		break;
+-	case TFRC_SSTATE_NO_FBACK:
+-	case TFRC_SSTATE_FBACK:
++	case TTX_STATE_NO_FBACK:
++	case TTX_STATE_FBACK:
+ 		delay = ktime_us_delta(hctx->tfrchctx_t_nom, now);
+ 		ccid4_pr_debug("delay=%ld\n", (long)delay);
+ 		/*
+@@ -321,7 +321,7 @@ static int ccid4_hc_tx_send_packet(struc
+ 
+ 		tfrc_hc_tx_update_win_count(hctx, now);
+ 		break;
+-	case TFRC_SSTATE_TERM:
++	case TTX_STATE_TERM:
+ 		DCCP_BUG("%s(%p) - Illegal state TERM", dccp_role(sk), sk);
+ 		return -EINVAL;
  	}
+@@ -360,8 +360,8 @@ static void ccid4_hc_tx_packet_recv(stru
+ 	      DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_DATAACK))
+ 		return;
+ 	/* ... and only in the established state */
+-	if (hctx->tfrchctx_state != TFRC_SSTATE_FBACK &&
+-	    hctx->tfrchctx_state != TFRC_SSTATE_NO_FBACK)
++	if (hctx->tfrchctx_state != TTX_STATE_FBACK &&
++	    hctx->tfrchctx_state != TTX_STATE_NO_FBACK)
+ 		return;
+ 
+ 	opt_recv = &hctx->tfrchctx_options_received;
+@@ -394,9 +394,9 @@ static void ccid4_hc_tx_packet_recv(stru
+ 	/*
+ 	 *	Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
+ 	 */
+-	if (hctx->tfrchctx_state = TFRC_SSTATE_NO_FBACK) {
++	if (hctx->tfrchctx_state = TTX_STATE_NO_FBACK) {
+ 
+-		ccid4_hc_tx_set_state(sk, TFRC_SSTATE_FBACK);
++		ccid4_hc_tx_set_state(sk, TTX_STATE_FBACK);
+ 
+ 		if (hctx->tfrchctx_t_rto = 0) {
+ 			/*
+@@ -531,7 +531,7 @@ static int ccid4_hc_tx_init(struct ccid 
+ {
+ 	struct tfrc_hc_tx_sock *hctx = ccid_priv(ccid);
+ 
+-	hctx->tfrchctx_state = TFRC_SSTATE_NO_SENT;
++	hctx->tfrchctx_state = TTX_STATE_NO_SENT;
+ 	hctx->tfrchctx_hist = NULL;
+ 	setup_timer(&hctx->tfrchctx_no_feedback_timer,
+ 			ccid4_hc_tx_no_feedback_timer, (unsigned long)sk);
+@@ -543,7 +543,7 @@ static void ccid4_hc_tx_exit(struct sock
+ {
+ 	struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
+ 
+-	ccid4_hc_tx_set_state(sk, TFRC_SSTATE_TERM);
++	ccid4_hc_tx_set_state(sk, TTX_STATE_TERM);
+ 	sk_stop_timer(sk, &hctx->tfrchctx_no_feedback_timer);
+ 
+ 	tfrc_tx_hist_purge(&hctx->tfrchctx_hist);
+@@ -600,7 +600,7 @@ static void ccid4_hc_rx_send_feedback(st
+ 	ktime_t now = ktime_get_real();
+ 	s64 delta = 0;
+ 
+-	if (unlikely(hcrx->tfrchcrx_state = TFRC_RSTATE_TERM))
++	if (unlikely(hcrx->tfrchcrx_state = TRX_STATE_TERM))
+ 		return;
+ 
+ 	switch (fbtype) {
+@@ -714,11 +714,11 @@ static void ccid4_hc_rx_packet_recv(stru
+ 	const u64 ndp = dccp_sk(sk)->dccps_options_received.dccpor_ndp;
+ 	const bool  is_data_packet = dccp_data_packet(skb);
+ 
+-	if (unlikely(hcrx->tfrchcrx_state = TFRC_RSTATE_NO_DATA)) {
++	if (unlikely(hcrx->tfrchcrx_state = TRX_STATE_NO_DATA)) {
+ 		if (is_data_packet) {
+ 			const u32 payload = skb->len - dccp_hdr(skb)->dccph_doff * 4;
+ 			do_feedback = TFRC_FBACK_INITIAL;
+-			ccid4_hc_rx_set_state(sk, TFRC_RSTATE_DATA);
++			ccid4_hc_rx_set_state(sk, TRX_STATE_DATA);
+ 			hcrx->tfrchcrx_s = payload;
+                        /*
+                         * Not necessary to update tfrchcrx_bytes_recv here,
+@@ -797,7 +797,7 @@ static int ccid4_hc_rx_init(struct ccid 
+ {
+ 	struct tfrc_hc_rx_sock *hcrx = ccid_priv(ccid);
+ 
+-	hcrx->tfrchcrx_state = TFRC_RSTATE_NO_DATA;
++	hcrx->tfrchcrx_state = TRX_STATE_NO_DATA;
+ 	tfrc_lh_init(&hcrx->tfrchcrx_li_hist);
+ 	return tfrc_rx_hist_alloc(&hcrx->tfrchcrx_hist);
  }
+@@ -806,7 +806,7 @@ static void ccid4_hc_rx_exit(struct sock
+ {
+ 	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
  
-@@ -431,10 +410,9 @@ int __init dccp_ackvec_init(void)
- 	if (dccp_ackvec_slab = NULL)
- 		goto out_err;
+-	ccid4_hc_rx_set_state(sk, TFRC_RSTATE_TERM);
++	ccid4_hc_rx_set_state(sk, TRX_STATE_TERM);
  
--	dccp_ackvec_record_slab -			kmem_cache_create("dccp_ackvec_record",
--					  sizeof(struct dccp_ackvec_record),
--					  0, SLAB_HWCACHE_ALIGN, NULL);
-+	dccp_ackvec_record_slab = kmem_cache_create("dccp_ackvec_record",
-+					     sizeof(struct dccp_ackvec_record),
-+					     0, SLAB_HWCACHE_ALIGN, NULL);
- 	if (dccp_ackvec_record_slab = NULL)
- 		goto out_destroy_slab;
+ 	tfrc_rx_hist_purge(&hcrx->tfrchcrx_hist);
+ 	tfrc_lh_cleanup(&hcrx->tfrchcrx_li_hist);
+Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
+=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.h
++++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
+@@ -50,17 +50,17 @@ struct tfrc_options_received {
  
--- 
-1.5.3.GIT
-
+ /* TFRC sender states */
+ enum tfrc_hc_tx_states {
+-	TFRC_SSTATE_NO_SENT = 1,
+-	TFRC_SSTATE_NO_FBACK,
+-	TFRC_SSTATE_FBACK,
+-	TFRC_SSTATE_TERM,
++	TTX_STATE_NO_SENT = 1,
++	TTX_STATE_NO_FBACK,
++	TTX_STATE_FBACK,
++	TTX_STATE_TERM,
+ };
+ 
+ /* TFRC receiver states */
+ enum tfrc_hc_rx_states {
+-	TFRC_RSTATE_NO_DATA = 1,
+-	TFRC_RSTATE_DATA,
+-	TFRC_RSTATE_TERM    = 127,
++	TRX_STATE_NO_DATA = 1,
++	TRX_STATE_DATA,
++	TRX_STATE_TERM    = 127,
+ };
+ 
+ /* CCID3/4 feedback types */
+@@ -160,10 +160,10 @@ static inline struct tfrc_hc_rx_sock *tf
+ static const char *tfrc_tx_state_name(enum tfrc_hc_tx_states state)
+ {
+ 	static char *tfrc_state_names[] = {
+-	[TFRC_SSTATE_NO_SENT]  = "NO_SENT",
+-	[TFRC_SSTATE_NO_FBACK] = "NO_FBACK",
+-	[TFRC_SSTATE_FBACK]    = "FBACK",
+-	[TFRC_SSTATE_TERM]     = "TERM",
++	[TTX_STATE_NO_SENT]  = "NO_SENT",
++	[TTX_STATE_NO_FBACK] = "NO_FBACK",
++	[TTX_STATE_FBACK]    = "FBACK",
++	[TTX_STATE_TERM]     = "TERM",
+ 	};
+ 
+ 	return tfrc_state_names[state];
+@@ -177,9 +177,9 @@ static const char *tfrc_tx_state_name(en
+ static const char *tfrc_rx_state_name(enum tfrc_hc_rx_states state)
+ {
+ 	static char *tfrc_rx_state_names[] = {
+-	[TFRC_RSTATE_NO_DATA] = "NO_DATA",
+-	[TFRC_RSTATE_DATA]    = "DATA",
+-	[TFRC_RSTATE_TERM]    = "TERM",
++	[TRX_STATE_NO_DATA] = "NO_DATA",
++	[TRX_STATE_DATA]    = "DATA",
++	[TRX_STATE_TERM]    = "TERM",
+ 	};
+ 
+ 	return tfrc_rx_state_names[state];
