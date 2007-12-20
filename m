@@ -1,247 +1,41 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 19 Dec 2007 14:25:47 +0000
-Subject: [PATCH 06/14] [ACKVEC]: Simplify adding Ack Vector records, split option-specific code
-Message-Id: <1198074355-18842-7-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Leandro <leandroal@gmail.com>
+Date: Thu, 20 Dec 2007 16:58:44 +0000
+Subject: [PATCH 2/8] Improve the declaration of tfrc_option_receive struct
+Message-Id: <200712201358.44916.leandroal@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch
- * simplifies the dccp_ackvec_insert_avr() routine: the BUG_ON was redundant,
-   since the list is automatically arranged in descending order of ack_no;
- * separates Ack Vector housekeeping code from option-specific code;
- * shifts option-specific code into options.c.
+[TFRC_CCIDS] Improve the declaration of tfrc_option_receive struct.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ackvec.c  |  107 +++++++++-------------------------------------------
- net/dccp/ackvec.h  |    5 +-
- net/dccp/options.c |   65 +++++++++++++++++++++++++++++++
- 3 files changed, 85 insertions(+), 92 deletions(-)
+It makes tfrcor_dropped_packets_idx a plain u16. tfrcor_loss_intervals_idx was part of a bitfield together with tfrcor_seqno because it is 48 bits and we wanted to use what is left in a 64. Adding the new DROPPED PACKET field this setup changed. Thus, making tfrcor_dropped_packets_idx a 16 bits entry in a 16 bits bitfield doesn't helps us here and likely produces bad code. Now we have just a 2 bytes hole.
 
---- a/net/dccp/ackvec.h
-+++ b/net/dccp/ackvec.h
-@@ -108,7 +108,7 @@ extern int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
- 			     u64 *ackno, const u8 opt,
- 			     const u8 *value, const u8 len);
- 
--extern int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb);
-+extern int  dccp_ackvec_update_records(struct dccp_ackvec *av, u64 seq, u8 sum);
- 
- static inline int dccp_ackvec_pending(const struct dccp_ackvec *av)
- {
-@@ -151,8 +151,7 @@ static inline int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
- 	return -1;
- }
- 
--static inline int dccp_insert_option_ackvec(const struct sock *sk,
--					    const struct sk_buff *skb)
-+static inline int dccp_ackvec_update_records(struct dccp_ackvec *av, u64 seq, u8 nonce)
- {
- 	return -1;
- }
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -54,106 +54,35 @@ void dccp_ackvec_free(struct dccp_ackvec *av)
- 	}
- }
- 
--static void dccp_ackvec_insert_avr(struct dccp_ackvec *av,
--				   struct dccp_ackvec_record *avr)
--{
--	/*
--	 * AVRs are sorted by seqno. Since we are sending them in order, we
--	 * just add the AVR at the head of the list.
--	 * -sorbo.
--	 */
--	if (!list_empty(&av->av_records)) {
--		const struct dccp_ackvec_record *head -					list_entry(av->av_records.next,
--						   struct dccp_ackvec_record,
--						   avr_node);
--		BUG_ON(before48(avr->avr_ack_seqno, head->avr_ack_seqno));
--	}
--
--	list_add(&avr->avr_node, &av->av_records);
--}
--
--int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
-+/**
-+ * dccp_ackvec_update_records  -  Record information about sent Ack Vectors
-+ * @av:		Ack Vector records to update
-+ * @seqno:	Sequence number of the packet carrying the Ack Vector just sent
-+ * @nonce_sum:	The sum of all buffer nonces contained in the Ack Vector
-+ */
-+int dccp_ackvec_update_records(struct dccp_ackvec *av, u64 seqno, u8 nonce_sum)
- {
--	struct dccp_sock *dp = dccp_sk(sk);
--	struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
--	/* Figure out how many options do we need to represent the ackvec */
--	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
--	u16 len = av->av_vec_len + 2 * nr_opts;
--	u8 i, nonce = 0;
--	const unsigned char *tail, *from;
--	unsigned char *to;
- 	struct dccp_ackvec_record *avr;
- 
--	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN) {
--		/*
--		 * FIXME: when running out of option space while piggybacking on
--		 * DataAck, return 0 here and schedule a separate Ack instead.
--		 */
--		DCCP_WARN("Lacking space for %u bytes on %s packet\n", len,
--			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type));
--		return -1;
--	}
--
- 	avr = kmem_cache_alloc(dccp_ackvec_record_slab, GFP_ATOMIC);
- 	if (avr = NULL)
--		return -1;
--
--	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
--
--	to   = skb_push(skb, len);
--	len  = av->av_vec_len;
--	from = av->av_buf + av->av_buf_head;
--	tail = av->av_buf + DCCPAV_MAX_ACKVEC_LEN;
--
--	for (i = 0; i < nr_opts; ++i) {
--		int copylen = len;
--
--		if (len > DCCP_SINGLE_OPT_MAXLEN)
--			copylen = DCCP_SINGLE_OPT_MAXLEN;
--
--		/*
--		 * RFC 4340, 12.2: Encode the Nonce Echo for this Ack Vector via
--		 * its type; ack_nonce is the sum of all individual buf_nonce's.
--		 */
--		nonce ^= av->av_buf_nonce[i];
--
--		*to++ = DCCPO_ACK_VECTOR_0 + av->av_buf_nonce[i];
--		*to++ = copylen + 2;
--
--		/* Check if buf_head wraps */
--		if (from + copylen > tail) {
--			const u16 tailsize = tail - from;
--
--			memcpy(to, from, tailsize);
--			to	+= tailsize;
--			len	-= tailsize;
--			copylen	-= tailsize;
--			from	= av->av_buf;
--		}
--
--		memcpy(to, from, copylen);
--		from += copylen;
--		to   += copylen;
--		len  -= copylen;
--	}
-+		return -ENOBUFS;
- 
--	/*
--	 * Each sent Ack Vector is recorded in the list, as per A.2 of RFC 4340.
--	 */
--	avr->avr_ack_seqno  = DCCP_SKB_CB(skb)->dccpd_seq;
-+	avr->avr_ack_seqno  = seqno;
- 	avr->avr_ack_ptr    = av->av_buf_head;
- 	avr->avr_ack_ackno  = av->av_buf_ackno;
--	avr->avr_ack_nonce  = nonce;
-+	avr->avr_ack_nonce  = nonce_sum;
- 	avr->avr_ack_runlen = dccp_ackvec_runlen(av->av_buf + av->av_buf_head);
-+	/*
-+	 * Since GSS is incremented for each packet, the list is automatically
-+	 * arranged in descending order of @ack_seqno.
-+	 */
-+	list_add(&avr->avr_node, &av->av_records);
- 
--	dccp_ackvec_insert_avr(av, avr);
--
--	dccp_pr_debug("%s ACK Vector 0, len=%d, ack_seqno=%llu, "
--		      "ack_ackno=%llu\n",
--		      dccp_role(sk), avr->avr_ack_runlen,
-+	dccp_pr_debug("Added Vector, ack_seqno=%llu, ack_ackno=%llu (rl=%u)\n",
- 		      (unsigned long long)avr->avr_ack_seqno,
--		      (unsigned long long)avr->avr_ack_ackno);
-+		      (unsigned long long)avr->avr_ack_ackno,
-+		      avr->avr_ack_runlen);
- 	return 0;
- }
- 
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -433,6 +433,71 @@ static int dccp_insert_option_timestamp_echo(struct dccp_sock *dp,
- 	return 0;
- }
- 
-+int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
-+{
-+	struct dccp_ackvec *av = dccp_sk(sk)->dccps_hc_rx_ackvec;
-+	/* Figure out how many options do we need to represent the ackvec */
-+	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
-+	u16 len = av->av_vec_len + 2 * nr_opts;
-+	u8 i, nonce = 0;
-+	const unsigned char *tail, *from;
-+	unsigned char *to;
-+
-+	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN) {
-+		/*
-+		 * FIXME: when running out of option space while piggybacking on
-+		 * DataAck, return 0 here and schedule a separate Ack instead.
-+		 */
-+		DCCP_WARN("Lacking space for %u bytes on %s packet\n", len,
-+			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type));
-+		return -1;
-+	}
-+	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
-+
-+	to   = skb_push(skb, len);
-+	len  = av->av_vec_len;
-+	from = av->av_buf + av->av_buf_head;
-+	tail = av->av_buf + DCCPAV_MAX_ACKVEC_LEN;
-+
-+	for (i = 0; i < nr_opts; ++i) {
-+		int copylen = len;
-+
-+		if (len > DCCP_SINGLE_OPT_MAXLEN)
-+			copylen = DCCP_SINGLE_OPT_MAXLEN;
-+
-+		/*
-+		 * RFC 4340, 12.2: Encode the Nonce Echo for this Ack Vector via
-+		 * its type; ack_nonce is the sum of all individual buf_nonce's.
-+		 */
-+		nonce ^= av->av_buf_nonce[i];
-+
-+		*to++ = DCCPO_ACK_VECTOR_0 + av->av_buf_nonce[i];
-+		*to++ = copylen + 2;
-+
-+		/* Check if buf_head wraps */
-+		if (from + copylen > tail) {
-+			const u16 tailsize = tail - from;
-+
-+			memcpy(to, from, tailsize);
-+			to	+= tailsize;
-+			len	-= tailsize;
-+			copylen	-= tailsize;
-+			from	= av->av_buf;
-+		}
-+
-+		memcpy(to, from, copylen);
-+		from += copylen;
-+		to   += copylen;
-+		len  -= copylen;
-+	}
-+	/*
-+	 * Each sent Ack Vector is recorded in the list, as per A.2 of RFC 4340.
-+	 */
-+	if (dccp_ackvec_update_records(av, DCCP_SKB_CB(skb)->dccpd_seq, nonce))
-+		return -ENOBUFS;
-+	return 0;
-+}
-+
- /**
-  * dccp_insert_option_mandatory  -  Mandatory option (5.8.2)
-  * Note that since we are using skb_push, this function needs to be called
--- 
-1.5.3.GIT
+Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 
+Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
+=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.h
++++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
+@@ -39,13 +39,13 @@ enum tfrc_options {
+ };
+ 
+ struct tfrc_options_received {
+-	u64 tfrcor_seqno:48,
+-	    tfrcor_loss_intervals_idx:16,
+-	    tfrcor_dropped_packets_idx:16;
+-	u16 tfrcor_loss_intervals_len,
+-	    tfrcor_dropped_packets_len;
+-	u32 tfrcor_loss_event_rate;
+-	u32 tfrcor_receive_rate;
++	u64  tfrcor_seqno:48;
++	u64  tfrcor_loss_intervals_idx:16;
++	u16  tfrcor_dropped_packets_idx;
++	u16  tfrcor_loss_intervals_len;
++	u16  tfrcor_dropped_packets_len;
++	u32  tfrcor_loss_event_rate;
++	u32  tfrcor_receive_rate;
+ };
+ 
+ /* TFRC sender states */
