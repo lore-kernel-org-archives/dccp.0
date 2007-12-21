@@ -1,126 +1,137 @@
 From: Leandro <leandroal@gmail.com>
-Date: Fri, 21 Dec 2007 04:29:00 +0000
-Subject: [PATCH 2/2] Share ccid{3/4}_hc_rx_set_state function via tfrc_ccids
-Message-Id: <200712210129.00434.leandroal@gmail.com>
+Date: Fri, 21 Dec 2007 04:34:49 +0000
+Subject: [PATCHv2 7/8] Fix name schema for option received struct
+Message-Id: <200712210134.49358.leandroal@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[TFRC_CCIDS] Share ccid{3/4}_hc_rx_set_state function via tfrc_ccids
+[TFRC_CCIDS] Fix name schema for option received struct.
 
 Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+
+--------------------> Patch v2 <-------------------------
+
+The first version of this patch doest apply properly in the current ccid4 branch. This new version it is ok.
 
 Index: ccid4.latest/net/dccp/ccids/ccid3.c
 =================================--- ccid4.latest.orig/net/dccp/ccids/ccid3.c
 +++ ccid4.latest/net/dccp/ccids/ccid3.c
-@@ -468,19 +468,6 @@ static int ccid3_hc_tx_getsockopt(struct
- 	return 0;
- }
+@@ -343,11 +343,11 @@ static void ccid3_hc_tx_packet_recv(stru
+ 	}
  
--static void ccid3_hc_rx_set_state(struct sock *sk,
--				  enum tfrc_hc_rx_states state)
--{
--	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
--	enum tfrc_hc_rx_states oldstate = hcrx->trx_state;
--
--	ccid3_pr_debug("%s(%p) %-8.8s -> %s\n",
--		       dccp_role(sk), sk, tfrc_rx_state_name(oldstate),
--		       tfrc_rx_state_name(state));
--	WARN_ON(state = oldstate);
--	hcrx->trx_state = state;
--}
--
- static void ccid3_hc_rx_send_feedback(struct sock *sk,
- 				      const struct sk_buff *skb,
- 				      enum tfrc_fback_type fbtype)
-@@ -588,7 +575,7 @@ static void ccid3_hc_rx_packet_recv(stru
- 		if (is_data_packet) {
- 			const u32 payload = skb->len - dccp_hdr(skb)->dccph_doff * 4;
- 			do_feedback = TFRC_FBACK_INITIAL;
--			ccid3_hc_rx_set_state(sk, TRX_STATE_DATA);
-+			tfrc_rx_set_state(sk, TRX_STATE_DATA);
- 			hcrx->trx_s = payload;
- 			/*
- 			 * Not necessary to update trx_bytes_recv here,
-@@ -675,7 +662,7 @@ static void ccid3_hc_rx_exit(struct sock
- {
- 	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
+ 	/* Update receive rate in units of 64 * bytes/second */
+-	hctx->ttx_x_recv = opt_recv->tfrcor_receive_rate;
++	hctx->ttx_x_recv = opt_recv->trx_receive_rate;
+ 	hctx->ttx_x_recv <<= 6;
  
--	ccid3_hc_rx_set_state(sk, TRX_STATE_TERM);
-+	tfrc_rx_set_state(sk, TRX_STATE_TERM);
- 
- 	tfrc_rx_hist_purge(&hcrx->trx_hist);
- 	tfrc_lh_cleanup(&hcrx->trx_li_hist);
+ 	/* Update loss event rate (which is scaled by 1e6) */
+-	pinv = opt_recv->tfrcor_loss_event_rate;
++	pinv = opt_recv->trx_loss_event_rate;
+ 	if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
+ 		hctx->ttx_p = 0;
+ 	else				       /* can not exceed 100% */
 Index: ccid4.latest/net/dccp/ccids/ccid4.c
 =================================--- ccid4.latest.orig/net/dccp/ccids/ccid4.c
 +++ ccid4.latest/net/dccp/ccids/ccid4.c
-@@ -505,19 +505,6 @@ static int ccid4_hc_tx_getsockopt(struct
- 	return 0;
- }
+@@ -378,11 +378,11 @@ static void ccid4_hc_tx_packet_recv(stru
+ 	}
  
--static void ccid4_hc_rx_set_state(struct sock *sk,
--				  enum tfrc_hc_rx_states state)
--{
--	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
--	enum tfrc_hc_rx_states oldstate = hcrx->trx_state;
--
--	ccid4_pr_debug("%s(%p) %-8.8s -> %s\n",
--		       dccp_role(sk), sk, tfrc_rx_state_name(oldstate),
--		       tfrc_rx_state_name(state));
--	WARN_ON(state = oldstate);
--	hcrx->trx_state = state;
--}
--
- static void ccid4_hc_rx_send_feedback(struct sock *sk,
- 				      const struct sk_buff *skb,
- 				      enum tfrc_fback_type fbtype)
-@@ -622,7 +609,7 @@ static void ccid4_hc_rx_packet_recv(stru
- 		if (is_data_packet) {
- 			const u32 payload = skb->len - dccp_hdr(skb)->dccph_doff * 4;
- 			do_feedback = TFRC_FBACK_INITIAL;
--			ccid4_hc_rx_set_state(sk, TRX_STATE_DATA);
-+			tfrc_rx_set_state(sk, TRX_STATE_DATA);
- 			hcrx->trx_s = payload;
-                        /*
-                         * Not necessary to update trx_bytes_recv here,
-@@ -709,7 +696,7 @@ static void ccid4_hc_rx_exit(struct sock
- {
- 	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
+ 	/* Update receive rate in units of 64 * bytes/second */
+-	hctx->ttx_x_recv = opt_recv->tfrcor_receive_rate;
++	hctx->ttx_x_recv = opt_recv->trx_receive_rate;
+ 	hctx->ttx_x_recv <<= 6;
  
--	ccid4_hc_rx_set_state(sk, TRX_STATE_TERM);
-+	tfrc_rx_set_state(sk, TRX_STATE_TERM);
- 
- 	tfrc_rx_hist_purge(&hcrx->trx_hist);
- 	tfrc_lh_cleanup(&hcrx->trx_li_hist);
+ 	/* Update loss event rate (which is scaled by 1e6) */
+-	pinv = opt_recv->tfrcor_loss_event_rate;
++	pinv = opt_recv->trx_loss_event_rate;
+ 	if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
+ 		hctx->ttx_p = 0;
+ 	else				       /* can not exceed 100% */
 Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
 =================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.c
 +++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-@@ -176,3 +176,17 @@ void tfrc_tx_set_state(struct sock *sk, 
- }
+@@ -83,12 +83,12 @@ int tfrc_tx_parse_options(struct sock *s
  
- EXPORT_SYMBOL_GPL(tfrc_tx_set_state);
-+
-+void tfrc_rx_set_state(struct sock *sk,
-+				  enum tfrc_hc_rx_states state)
-+{
-+	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
-+	enum tfrc_hc_rx_states oldstate = hcrx->trx_state;
-+
-+	tfrc_pr_debug("%s(%p) %-8.8s -> %s\n", dccp_role(sk), sk,
-+			tfrc_rx_state_name(oldstate),
-+			tfrc_rx_state_name(state));
-+	WARN_ON(state = oldstate);
-+	hcrx->trx_state = state;
-+}
-+
+ 	opt_recv = &hctx->ttx_options_received;
+ 
+-	if (opt_recv->tfrcor_seqno != dp->dccps_gsr) {
+-		opt_recv->tfrcor_seqno		    = dp->dccps_gsr;
+-		opt_recv->tfrcor_loss_event_rate    = ~0;
+-		opt_recv->tfrcor_loss_intervals_idx = 0;
+-		opt_recv->tfrcor_loss_intervals_len = 0;
+-		opt_recv->tfrcor_receive_rate	    = 0;
++	if (opt_recv->trx_seqno != dp->dccps_gsr) {
++		opt_recv->trx_seqno		    = dp->dccps_gsr;
++		opt_recv->trx_loss_event_rate    = ~0;
++		opt_recv->trx_loss_intervals_idx = 0;
++		opt_recv->trx_loss_intervals_len = 0;
++		opt_recv->trx_receive_rate	    = 0;
+ 	}
+ 
+ 	switch (option) {
+@@ -100,19 +100,19 @@ int tfrc_tx_parse_options(struct sock *s
+ 			rc = -EINVAL;
+ 		} else {
+ 			opt_val = get_unaligned((u32 *)value);
+-			opt_recv->tfrcor_loss_event_rate = ntohl(opt_val);
++			opt_recv->trx_loss_event_rate = ntohl(opt_val);
+ 			tfrc_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
+ 				       dccp_role(sk), sk,
+-				       opt_recv->tfrcor_loss_event_rate);
++				       opt_recv->trx_loss_event_rate);
+ 		}
+ 		break;
+ 	case TFRC_OPT_LOSS_INTERVALS:
+-		opt_recv->tfrcor_loss_intervals_idx = idx;
+-		opt_recv->tfrcor_loss_intervals_len = len;
++		opt_recv->trx_loss_intervals_idx = idx;
++		opt_recv->trx_loss_intervals_len = len;
+ 		tfrc_pr_debug("%s(%p), LOSS_INTERVALS=(%u, %u)\n",
+ 			       dccp_role(sk), sk,
+-			       opt_recv->tfrcor_loss_intervals_idx,
+-			       opt_recv->tfrcor_loss_intervals_len);
++			       opt_recv->trx_loss_intervals_idx,
++			       opt_recv->trx_loss_intervals_len);
+ 		break;
+ 	case TFRC_OPT_RECEIVE_RATE:
+ 		if (unlikely(len != 4)) {
+@@ -122,10 +122,10 @@ int tfrc_tx_parse_options(struct sock *s
+ 			rc = -EINVAL;
+ 		} else {
+ 			opt_val = get_unaligned((u32 *)value);
+-			opt_recv->tfrcor_receive_rate = ntohl(opt_val);
++			opt_recv->trx_receive_rate = ntohl(opt_val);
+ 			tfrc_pr_debug("%s(%p), RECEIVE_RATE=%u\n",
+ 				       dccp_role(sk), sk,
+-				       opt_recv->tfrcor_receive_rate);
++				       opt_recv->trx_receive_rate);
+ 		}
+ 		break;
+ 		case TFRC_OPT_DROPPED_PACKETS:
 Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
 =================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.h
 +++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-@@ -200,3 +200,5 @@ extern int tfrc_tx_parse_options(struct 
- extern int tfrc_rx_insert_options(struct sock *sk, struct sk_buff *skb);
+@@ -39,13 +39,13 @@ enum tfrc_options {
+ };
  
- extern void tfrc_tx_set_state(struct sock *sk, enum tfrc_hc_tx_states state);
-+
-+extern void tfrc_rx_set_state(struct sock *sk, enum tfrc_hc_tx_states state);
+ struct tfrc_options_received {
+-	u64  tfrcor_seqno:48;
+-	u64  tfrcor_loss_intervals_idx:16;
+-	u16  tfrcor_dropped_packets_idx;
+-	u16  tfrcor_loss_intervals_len;
+-	u16  tfrcor_dropped_packets_len;
+-	u32  tfrcor_loss_event_rate;
+-	u32  tfrcor_receive_rate;
++	u64  trx_seqno:48;
++	u64  trx_loss_intervals_idx:16;
++	u16  trx_dropped_packets_idx;
++	u16  trx_loss_intervals_len;
++	u16  trx_dropped_packets_len;
++	u32  trx_loss_event_rate;
++	u32  trx_receive_rate;
+ };
+ 
+ /* TFRC sender states */
