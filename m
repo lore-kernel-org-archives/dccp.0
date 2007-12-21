@@ -1,35 +1,37 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 08 Dec 2007 10:06:20 +0000
-Subject: [PATCH 0/8] [DCCP]: Updates and fixes to ensure code works with recent changes
-Message-Id: <11971083882331-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Leandro <leandroal@gmail.com>
+Date: Fri, 21 Dec 2007 04:34:36 +0000
+Subject: [PATCHv2 8/8] Remove inline modifier from tfrc_ccids.c functions
+Message-Id: <200712210134.36159.leandroal@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Some of the recent changes in 2.6.25 cause problems with the existing implementation (i.e. break
-the code). This patch set therefore provides fixes and resubmits one subsequent patch which
-has not been considered so far, but which is part of the tfrc_lib package.
+[TFRC_CCIDS] Remove inline modifier from tfrc_ccids.c functions and let the compile decide it, as commented by Gerrit in the mailing list.
 
-  Patch #1: Performs whitespace cleanups.
-  Patch #2: Migrates all loss interval / packet history initialisation code into tfrc.c.
-  Patch #3: Removes two unused functions/function calls that have become obsolete now.
-  Patch #4: Splits rx_hist_add_packet() into its original constituents -- they are needed.
-  Patch #5: Restores the parts of the macro/inline conversion that broke the algorithm.
-  Patch #6: Is a v2 patch - the Loss Intervals code, now updated to work with the recent changes.
-  Patch #7: Reverts hiding inlines which are needed by the calling CCID module.
-  Patch #8: Also a patch v2 - shows how all the new stuff is integrated to work with CCID3.
+Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
 
-The code compiles cleanly, all patches have been uploaded to the test tree (backported from 2.6.25),
-  git://eden-feed.erg.abdn.ac.uk/dccp_exp 	[dccp]
+-------------------> Patch v2 <------------------------
 
-So far only a few quick bandwidth tests have been performed. These merely confirm that the stack
-does not crash. Since most of this patch set deals with loss detection and re-ordering, some more
-detailed tests are needed to ensure that the code, as before, deals well with loss, reordering,
-and duplication (this requires at least one NetEm box).
-
-Updates to the CCID4 subtree need to be suspended for a few days. There are too many fiddly changes
-all over the place; until we understand exactly what is going on and if there has been a
-regression, it is not a good idea to track everything.
-
+Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
+=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.c
++++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
+@@ -27,7 +27,7 @@ extern int tfrc_debug;
+  * (rev-02) clarifies the use of RFC 3390 with regard to the above formula.
+  * For consistency with other parts of the code, X_init is scaled by 2^6.
+  */
+-inline u64 rfc3390_initial_rate(struct sock *sk)
++u64 rfc3390_initial_rate(struct sock *sk)
+ {
+ 	const struct tfrc_hc_tx_sock *hctx = tfrc_hc_tx_sk(sk);
+ 	const __u32 w_init = min_t(__u32, 4 * hctx->ttx_s,
+@@ -51,7 +51,7 @@ EXPORT_SYMBOL_GPL(tfrc_hc_tx_idle_rtt);
+  *	Update Window Counter using the algorithm from [RFC 4342, 8.1].
+  *	The algorithm is not applicable if RTT < 4 microseconds.
+  */
+-inline void tfrc_hc_tx_update_win_count(struct tfrc_hc_tx_sock *hctx,
++void tfrc_hc_tx_update_win_count(struct tfrc_hc_tx_sock *hctx,
+ 				          ktime_t now)
+ {
+ 	u32 quarter_rtts;
