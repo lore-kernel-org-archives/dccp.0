@@ -1,143 +1,101 @@
-From: Leandro <leandroal@gmail.com>
-Date: Fri, 21 Dec 2007 04:31:38 +0000
-Subject: [PATCHv2 6/8] Share ccid3_hc_rx_insert_options function via tfrc_ccids
-Message-Id: <200712210131.38218.leandroal@gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 21 Dec 2007 10:22:28 +0000
+Subject: [DCCP] [Patch 1/1] [Bug-Fix]: Need to ignore Ack Vectors on request sockets
+Message-Id: <20071221102228.GB17653@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[CCID-3][CCID-4][TFRC_CCIDS] Share ccid3_hc_rx_insert_options function via tfrc_ccids
+[ACKVEC]: Need to ignore Ack Vectors on request sockets
 
-Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
+This fixes an oversight (mine) from an earlier patch and is in principle a 
+bug-fix, although the bug will with the current code not become visible.
 
---------------------> Patch v2 <-------------------------
+The issue is that Ack Vectors must not be parsed on request sockets, since
+the Ack Vector feature depends on the selection of the (TX) CCID. During the
+initial handshake the CCIDs are undefined, and so RFC 4340, 10.3 applies:
 
-The first version of this patch doest apply properly in the current ccid4 branch. This new version it is ok.
+ "Using CCID-specific options and feature options during a negotiation
+  for the corresponding CCID feature is NOT RECOMMENDED [...]"
 
-Index: ccid4.latest/net/dccp/ccids/ccid3.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/ccid3.c
-+++ ccid4.latest/net/dccp/ccids/ccid3.c
-@@ -550,29 +550,6 @@ static void ccid3_hc_rx_send_feedback(st
- 	dccp_send_ack(sk);
- }
+Worse, it is not even possible: when the server receives the Request from the 
+client, the CCID and Ack vector features are undefined; when the Ack finalising
+the 3-way hanshake arrives, the request socket has not been cloned yet into a
+new (full) socket. This order is necessary, since otherwise the newly created
+socket would have to be destroyed whenever an option error occurred (a malicious
+hacker could simply send garbage options and exploit this).
+As a result, it is not feasible to parse Ack Vectors on request sockets, since
+their destination (the CCIDs interested in using Ack Vector information) is
+undefined. Hence disabled by this patch.
+
+Two more changes suggested itself:
+ * replaced magic numbers for CCID-specific options with symbolic constants;
+ * replaced local variables `idx' with computation in argument list.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ include/linux/dccp.h |    6 ++++--
+ net/dccp/options.c   |   19 +++++++------------
+ 2 files changed, 11 insertions(+), 14 deletions(-)
+
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -104,9 +104,10 @@ int dccp_parse_options(struct sock *sk, 
+ 		 *
+ 		 * CCID-specific options are ignored during connection setup, as
+ 		 * negotiation may still be in progress (see RFC 4340, 10.3).
+-		 *
++		 * The same applies to Ack Vectors, as these depend on the CCID.
+ 		 */
+-		if (dreq != NULL && opt >= 128)
++		if (dreq != NULL && (opt >= DCCPO_MIN_RX_CCID_SPECIFIC ||
++		    opt = DCCPO_ACK_VECTOR_0 || opt = DCCPO_ACK_VECTOR_1))
+ 			goto ignore_option;
  
--static int ccid3_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
--{
--	const struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
--	__be32 x_recv, pinv;
+ 		switch (opt) {
+@@ -222,23 +223,17 @@ int dccp_parse_options(struct sock *sk, 
+ 			dccp_pr_debug("%s rx opt: ELAPSED_TIME=%d\n",
+ 				      dccp_role(sk), elapsed_time);
+ 			break;
+-		case 128 ... 191: {
+-			const u16 idx = value - options;
 -
--	if (!(sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN))
--		return 0;
++		case DCCPO_MIN_RX_CCID_SPECIFIC ... DCCPO_MAX_RX_CCID_SPECIFIC:
+ 			if (ccid_hc_rx_parse_options(dp->dccps_hc_rx_ccid, sk,
+-						     opt, len, idx,
++						     opt, len, value - options,
+ 						     value) != 0)
+ 				goto out_invalid_option;
+-		}
+ 			break;
+-		case 192 ... 255: {
+-			const u16 idx = value - options;
 -
--	if (dccp_packet_without_ack(skb))
--		return 0;
--
--	x_recv = htonl(hcrx->trx_x_recv);
--	pinv   = htonl(hcrx->trx_pinv);
--
--	if (dccp_insert_option(sk, skb, TFRC_OPT_LOSS_EVENT_RATE,
--			       &pinv, sizeof(pinv)) ||
--	    dccp_insert_option(sk, skb, TFRC_OPT_RECEIVE_RATE,
--			       &x_recv, sizeof(x_recv)))
--		return -1;
--
--	return 0;
--}
--
- /** ccid3_first_li  -  Implements [RFC 3448, 6.3.1]
-  *
-  * Determine the length of the first loss interval via inverse lookup.
-@@ -766,7 +743,7 @@ static struct ccid_operations ccid3 = {
- 	.ccid_hc_rx_obj_size	   = sizeof(struct tfrc_hc_rx_sock),
- 	.ccid_hc_rx_init	   = ccid3_hc_rx_init,
- 	.ccid_hc_rx_exit	   = ccid3_hc_rx_exit,
--	.ccid_hc_rx_insert_options = ccid3_hc_rx_insert_options,
-+	.ccid_hc_rx_insert_options = tfrc_rx_insert_options,
- 	.ccid_hc_rx_packet_recv	   = ccid3_hc_rx_packet_recv,
- 	.ccid_hc_rx_get_info	   = ccid3_hc_rx_get_info,
- 	.ccid_hc_tx_get_info	   = ccid3_hc_tx_get_info,
-Index: ccid4.latest/net/dccp/ccids/ccid4.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/ccid4.c
-+++ ccid4.latest/net/dccp/ccids/ccid4.c
-@@ -584,29 +584,6 @@ static void ccid4_hc_rx_send_feedback(st
- 	dccp_send_ack(sk);
- }
++		case DCCPO_MIN_TX_CCID_SPECIFIC ... DCCPO_MAX_TX_CCID_SPECIFIC:
+ 			if (ccid_hc_tx_parse_options(dp->dccps_hc_tx_ccid, sk,
+-						     opt, len, idx,
++						     opt, len, value - options,
+ 						     value) != 0)
+ 				goto out_invalid_option;
+-		}
+ 			break;
+ 		default:
+ 			DCCP_CRIT("DCCP(%p): option %d(len=%d) not "
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -165,8 +165,10 @@ enum {
+ 	DCCPO_TIMESTAMP_ECHO = 42,
+ 	DCCPO_ELAPSED_TIME = 43,
+ 	DCCPO_MAX = 45,
+-	DCCPO_MIN_CCID_SPECIFIC = 128,
+-	DCCPO_MAX_CCID_SPECIFIC = 255,
++	DCCPO_MIN_RX_CCID_SPECIFIC = 128,	/* from sender to receiver */
++	DCCPO_MAX_RX_CCID_SPECIFIC = 191,
++	DCCPO_MIN_TX_CCID_SPECIFIC = 192,	/* from receiver to sender */
++	DCCPO_MAX_TX_CCID_SPECIFIC = 255,
+ };
  
--static int ccid4_hc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
--{
--	const struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
--	__be32 x_recv, pinv;
--
--	if (!(sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN))
--		return 0;
--
--	if (dccp_packet_without_ack(skb))
--		return 0;
--
--	x_recv = htonl(hcrx->trx_x_recv);
--	pinv   = htonl(hcrx->trx_pinv);
--
--	if (dccp_insert_option(sk, skb, TFRC_OPT_LOSS_EVENT_RATE,
--			       &pinv, sizeof(pinv)) ||
--	    dccp_insert_option(sk, skb, TFRC_OPT_RECEIVE_RATE,
--			       &x_recv, sizeof(x_recv)))
--		return -1;
--
--	return 0;
--}
--
- /** ccid4_first_li  -  Implements [RFC 3448, 6.3.1]
-  *
-  * Determine the length of the first loss interval via inverse lookup.
-@@ -800,7 +777,7 @@ static struct ccid_operations ccid4 = {
- 	.ccid_hc_rx_obj_size	   = sizeof(struct tfrc_hc_rx_sock),
- 	.ccid_hc_rx_init	   = ccid4_hc_rx_init,
- 	.ccid_hc_rx_exit	   = ccid4_hc_rx_exit,
--	.ccid_hc_rx_insert_options = ccid4_hc_rx_insert_options,
-+	.ccid_hc_rx_insert_options = tfrc_rx_insert_options,
- 	.ccid_hc_rx_packet_recv	   = ccid4_hc_rx_packet_recv,
- 	.ccid_hc_rx_get_info	   = ccid4_hc_rx_get_info,
- 	.ccid_hc_tx_get_info	   = ccid4_hc_tx_get_info,
-Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.c
-+++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
-@@ -137,3 +137,28 @@ int tfrc_tx_parse_options(struct sock *s
- }
- 
- EXPORT_SYMBOL_GPL(tfrc_tx_parse_options);
-+
-+int tfrc_rx_insert_options(struct sock *sk, struct sk_buff *skb)
-+{
-+	const struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
-+	__be32 x_recv, pinv;
-+
-+	if (!(sk->sk_state = DCCP_OPEN || sk->sk_state = DCCP_PARTOPEN))
-+		return 0;
-+
-+	if (dccp_packet_without_ack(skb))
-+		return 0;
-+
-+	x_recv = htonl(hcrx->trx_x_recv);
-+	pinv   = htonl(hcrx->trx_pinv);
-+
-+	if (dccp_insert_option(sk, skb, TFRC_OPT_LOSS_EVENT_RATE,
-+			       &pinv, sizeof(pinv)) ||
-+	    dccp_insert_option(sk, skb, TFRC_OPT_RECEIVE_RATE,
-+			       &x_recv, sizeof(x_recv)))
-+		return -1;
-+
-+	return 0;
-+}
-+
-+EXPORT_SYMBOL_GPL(tfrc_rx_insert_options);
-Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.h
-+++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
-@@ -196,3 +196,5 @@ extern void tfrc_hc_tx_update_win_count(
- 
- extern int tfrc_tx_parse_options(struct sock *sk, unsigned char option,
- 			unsigned char len, u16 idx, unsigned char *value);
-+
-+extern int tfrc_rx_insert_options(struct sock *sk, struct sk_buff *skb);
+ /* DCCP CCIDS */
+-- 
