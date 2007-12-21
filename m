@@ -1,78 +1,126 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 08 Dec 2007 10:06:24 +0000
-Subject: [PATCH 4/8] [TFRC]: Need separate entry_from_skb routine
-Message-Id: <1197108388630-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Leandro <leandroal@gmail.com>
+Date: Fri, 21 Dec 2007 04:29:00 +0000
+Subject: [PATCH 2/2] Share ccid{3/4}_hc_rx_set_state function via tfrc_ccids
+Message-Id: <200712210129.00434.leandroal@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This again separates tfrc_rx_hist_packet() from tfrc_rx_hist_entry_from_skb(), which
-was the format used in the original patch submission. The reason for this is the
-requirement -- used by the subsequent patches -- to be able to insert a newly arrived
-skb in arbitrary places within the ringbuffer history.
+[TFRC_CCIDS] Share ccid{3/4}_hc_rx_set_state function via tfrc_ccids
 
-The add_packet() function is only a special case of this usage: it inserts always
-at the front, and thus updates the highest-received sequence number. That has been
-the main reason why it was originally called tfrc_rx_hist_update() --  the old name
-reflected better what the function did.
+Signed-off-by: Leandro Melo de Sales <leandro@embedded.ufcg.edu.br>
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/lib/packet_history.c |   35 ++++++++++++++++++++---------------
- 1 files changed, 20 insertions(+), 15 deletions(-)
-
-diff --git a/net/dccp/ccids/lib/packet_history.c b/net/dccp/ccids/lib/packet_history.c
-index 4d37396..6256bec 100644
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -168,21 +168,6 @@ static inline struct tfrc_rx_hist_entry *
- 	return h->ring[tfrc_rx_hist_index(h, h->loss_count)];
+Index: ccid4.latest/net/dccp/ccids/ccid3.c
+=================================--- ccid4.latest.orig/net/dccp/ccids/ccid3.c
++++ ccid4.latest/net/dccp/ccids/ccid3.c
+@@ -468,19 +468,6 @@ static int ccid3_hc_tx_getsockopt(struct
+ 	return 0;
  }
  
--void tfrc_rx_hist_add_packet(struct tfrc_rx_hist *h,
--			     const struct sk_buff *skb,
--			     const u32 ndp)
+-static void ccid3_hc_rx_set_state(struct sock *sk,
+-				  enum tfrc_hc_rx_states state)
 -{
--	struct tfrc_rx_hist_entry *entry = tfrc_rx_hist_last_rcv(h);
--	const struct dccp_hdr *dh = dccp_hdr(skb);
+-	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
+-	enum tfrc_hc_rx_states oldstate = hcrx->trx_state;
 -
--	entry->tfrchrx_seqno = DCCP_SKB_CB(skb)->dccpd_seq;
--	entry->tfrchrx_ccval = dh->dccph_ccval;
--	entry->tfrchrx_type  = dh->dccph_type;
--	entry->tfrchrx_ndp   = ndp;
--	entry->tfrchrx_tstamp = ktime_get_real();
+-	ccid3_pr_debug("%s(%p) %-8.8s -> %s\n",
+-		       dccp_role(sk), sk, tfrc_rx_state_name(oldstate),
+-		       tfrc_rx_state_name(state));
+-	WARN_ON(state = oldstate);
+-	hcrx->trx_state = state;
 -}
--EXPORT_SYMBOL_GPL(tfrc_rx_hist_add_packet);
 -
- /**
-  * tfrc_rx_hist_entry - return the n-th history entry after loss_start
-  */
-@@ -218,6 +203,26 @@ int tfrc_rx_hist_duplicate(struct tfrc_rx_hist *h, struct sk_buff *skb)
- }
- EXPORT_SYMBOL_GPL(tfrc_rx_hist_duplicate);
- 
-+static void tfrc_rx_hist_entry_from_skb(struct tfrc_rx_hist_entry *entry,
-+					const struct sk_buff *skb, u32 ndp)
-+{
-+	const struct dccp_hdr *dh = dccp_hdr(skb);
-+
-+	entry->tfrchrx_seqno  = DCCP_SKB_CB(skb)->dccpd_seq;
-+	entry->tfrchrx_ccval  = dh->dccph_ccval;
-+	entry->tfrchrx_type   = dh->dccph_type;
-+	entry->tfrchrx_ndp    = ndp;
-+	entry->tfrchrx_tstamp = ktime_get_real();
-+}
-+
-+/* commit packet details of skb to history (record highest received seqno) */
-+void tfrc_rx_hist_add_packet(struct tfrc_rx_hist *h,
-+			     const struct sk_buff *skb, u32 ndp)
-+{
-+	tfrc_rx_hist_entry_from_skb(tfrc_rx_hist_last_rcv(h), skb, ndp);
-+}
-+EXPORT_SYMBOL_GPL(tfrc_rx_hist_add_packet);
-+
- /* initialise loss detection and disable RTT sampling */
- static inline void tfrc_rx_hist_loss_indicated(struct tfrc_rx_hist *h)
+ static void ccid3_hc_rx_send_feedback(struct sock *sk,
+ 				      const struct sk_buff *skb,
+ 				      enum tfrc_fback_type fbtype)
+@@ -588,7 +575,7 @@ static void ccid3_hc_rx_packet_recv(stru
+ 		if (is_data_packet) {
+ 			const u32 payload = skb->len - dccp_hdr(skb)->dccph_doff * 4;
+ 			do_feedback = TFRC_FBACK_INITIAL;
+-			ccid3_hc_rx_set_state(sk, TRX_STATE_DATA);
++			tfrc_rx_set_state(sk, TRX_STATE_DATA);
+ 			hcrx->trx_s = payload;
+ 			/*
+ 			 * Not necessary to update trx_bytes_recv here,
+@@ -675,7 +662,7 @@ static void ccid3_hc_rx_exit(struct sock
  {
+ 	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
+ 
+-	ccid3_hc_rx_set_state(sk, TRX_STATE_TERM);
++	tfrc_rx_set_state(sk, TRX_STATE_TERM);
+ 
+ 	tfrc_rx_hist_purge(&hcrx->trx_hist);
+ 	tfrc_lh_cleanup(&hcrx->trx_li_hist);
+Index: ccid4.latest/net/dccp/ccids/ccid4.c
+=================================--- ccid4.latest.orig/net/dccp/ccids/ccid4.c
++++ ccid4.latest/net/dccp/ccids/ccid4.c
+@@ -505,19 +505,6 @@ static int ccid4_hc_tx_getsockopt(struct
+ 	return 0;
+ }
+ 
+-static void ccid4_hc_rx_set_state(struct sock *sk,
+-				  enum tfrc_hc_rx_states state)
+-{
+-	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
+-	enum tfrc_hc_rx_states oldstate = hcrx->trx_state;
+-
+-	ccid4_pr_debug("%s(%p) %-8.8s -> %s\n",
+-		       dccp_role(sk), sk, tfrc_rx_state_name(oldstate),
+-		       tfrc_rx_state_name(state));
+-	WARN_ON(state = oldstate);
+-	hcrx->trx_state = state;
+-}
+-
+ static void ccid4_hc_rx_send_feedback(struct sock *sk,
+ 				      const struct sk_buff *skb,
+ 				      enum tfrc_fback_type fbtype)
+@@ -622,7 +609,7 @@ static void ccid4_hc_rx_packet_recv(stru
+ 		if (is_data_packet) {
+ 			const u32 payload = skb->len - dccp_hdr(skb)->dccph_doff * 4;
+ 			do_feedback = TFRC_FBACK_INITIAL;
+-			ccid4_hc_rx_set_state(sk, TRX_STATE_DATA);
++			tfrc_rx_set_state(sk, TRX_STATE_DATA);
+ 			hcrx->trx_s = payload;
+                        /*
+                         * Not necessary to update trx_bytes_recv here,
+@@ -709,7 +696,7 @@ static void ccid4_hc_rx_exit(struct sock
+ {
+ 	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
+ 
+-	ccid4_hc_rx_set_state(sk, TRX_STATE_TERM);
++	tfrc_rx_set_state(sk, TRX_STATE_TERM);
+ 
+ 	tfrc_rx_hist_purge(&hcrx->trx_hist);
+ 	tfrc_lh_cleanup(&hcrx->trx_li_hist);
+Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
+=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.c
++++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.c
+@@ -176,3 +176,17 @@ void tfrc_tx_set_state(struct sock *sk, 
+ }
+ 
+ EXPORT_SYMBOL_GPL(tfrc_tx_set_state);
++
++void tfrc_rx_set_state(struct sock *sk,
++				  enum tfrc_hc_rx_states state)
++{
++	struct tfrc_hc_rx_sock *hcrx = tfrc_hc_rx_sk(sk);
++	enum tfrc_hc_rx_states oldstate = hcrx->trx_state;
++
++	tfrc_pr_debug("%s(%p) %-8.8s -> %s\n", dccp_role(sk), sk,
++			tfrc_rx_state_name(oldstate),
++			tfrc_rx_state_name(state));
++	WARN_ON(state = oldstate);
++	hcrx->trx_state = state;
++}
++
+Index: ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
+=================================--- ccid4.latest.orig/net/dccp/ccids/lib/tfrc_ccids.h
++++ ccid4.latest/net/dccp/ccids/lib/tfrc_ccids.h
+@@ -200,3 +200,5 @@ extern int tfrc_tx_parse_options(struct 
+ extern int tfrc_rx_insert_options(struct sock *sk, struct sk_buff *skb);
+ 
+ extern void tfrc_tx_set_state(struct sock *sk, enum tfrc_hc_tx_states state);
++
++extern void tfrc_rx_set_state(struct sock *sk, enum tfrc_hc_tx_states state);
