@@ -1,217 +1,196 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 28 Jan 2008 10:16:14 +0000
-Subject: [PATCH 4/6] [DCCP]: Fix the adjustments to AWL and SWL
-Message-Id: <1201515376-8280-5-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 07 Jan 2008 16:47:58 +0000
+Subject: [DCCP] [Announce]: Test tree updates
+Message-Id: <20080107164758.GA19512@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This fixes a problem and a potential loophole with regard to seqno/ackno
-validity: the problem is that the initial adjustments to AWL/SWL were
-only performed at the begin of the connection, during the handshake.
+This is an edited list of recent changes in the test tree
 
-Since the Sequence Window feature is always greater than Wmin2 (7.5.2),
-it is however necessary to perform these adjustments at least for the first
-W/W' (variables as per 7.5.1) packets in the lifetime of a connection.
+	git://eden-feed.erg.abdn.ac.uk/dccp_exp
 
-This requirement is complicated by the fact that W/W' can change at any time
-during the lifetime of a connection.
+At the top of each block is the name of the patch, followed by a short 
+description of the change, and the actual (or abridged if obvious) inter-diff.
 
-Therefore the consequence is to perform this safety check each time SWL/AWL
-are updated.
+Some of these changes refer to improved patches/bug-fixes, which are to be
+submitted soon.
 
-A second problem solved by this patch is that the remote/local Sequence Window
-feature values (which set the bounds for AWL/SWL/SWH) are undefined until the
-feature negotiation has completed.
+Gerrit
 
-During the initial handshake we have more stringent sequence number protection,
-the changes added by this patch effect that {A,S}W{L,H} are within the correct
-bounds at the instant that feature negotiation completes (since the SeqWin
-feature activation handlers call dccp_update_gsr/gss()).
-
-A detailed rationale is below -- can be removed from the commit message.
+========================================
+[DCCP]: Registration routines for changing feature values
 
 
-1. Server sequence number checks during initial handshake
----------------------------------------------------------
-The server can not use the fields of the listening socket for seqno/ackno checks
-and thus needs to store all relevant information on a per-connection basis on
-the dccp_request socket. This is a size-constrained structure and has currently
-only ISS (dreq_iss) and ISR (dreq_isr) defined.
-Adding further fields (SW{L,H}, AW{L,H}) would increase the size of the struct
-and it is questionable whether this will have any practical gain. The currently
-implemented solution is as follows.
- * receiving first Request: dccp_v{4,6}_conn_request sets
-                            ISR := P.seqno, ISS := dccp_v{4,6}_init_sequence()
+=> Added symbolic constants for the Sequence Window / Ack Ratio limits
+=> Added these constants to feat.c / ccid2.c (not shown)
 
- * sending first Response:  dccp_v{4,6}_send_response via dccp_make_response()
-                            sets P.seqno := ISS, sets P.ackno := ISR
-
- * receiving retransmitted Request: dccp_check_req() overrides ISR := P.seqno
-
- * answering retransmitted Request: dccp_make_response() sets ISS += 1,
-                                    otherwise as per first Response
-
- * completing the handshake: succeeds in dccp_check_req() for the first Ack
-                             where P.ackno = ISS (P.seqno is not tested)
-
- * creating child socket: ISS, ISR are copied from the request_sock
-
-This solution will succeed whenever the server can receive the Request and the
-subsequent Ack in succession, without retransmissions. If there is packet loss,
-the client needs to retransmit until this condition succeeds; it will otherwise
-eventually give up. Adding further fields to the request_sock could increase
-the robustness a bit, in that it would make possible to let a reordered Ack
-(from a retransmitted Response) pass. The argument against such a solution is
-that if the packet loss is not persistent and an Ack gets through, why not
-wait for the one answering the original response: if the loss is persistent, it
-is probably better to not start the connection in the first place.
-
-Long story short: the present design (by Arnaldo) is simple and will likely work
-just as well as a more complicated solution. As a consequence, {A,S}W{L,H} are
-not needed until the moment the request_sock is cloned into the accept queue.
-
-At that stage feature negotiation has completed, so that the values for the local
-and remote Sequence Window feature (7.5.2) are known, i.e. we are now in a better
-position to compute {A,S}W{L,H}.
-
-
-2. Client sequence number checks during initial handshake
----------------------------------------------------------
-Until entering PARTOPEN the client does not need the adjustments, since it
-constrains the Ack window to the packet it sent.
-
- * sending first Request: dccp_v{4,6}_connect() choose ISS,
-                          dccp_connect() then sets GAR := ISS (as per 8.5),
-			  dccp_transmit_skb() (with the previous bug fix) sets
-			         GSS := ISS, AWL := ISS, AWH := GSS
- * n-th retransmitted Request (with previous patch):
-	                  dccp_retransmit_skb() via timer calls
-			  dccp_transmit_skb(), which sets GSS := ISS+n
-                          and then AWL := ISS, AWH := ISS+n
-
- * receiving any Response: dccp_rcv_request_sent_state_process()
-	                   -- accepts packet if AWL <= P.ackno <= AWH;
-			   -- sets GSR = ISR = P.seqno
-
- * sending the Ack completing the handshake: dccp_send_ack() calls
-                           dccp_transmit_skb(), which sets GSS += 1
-			   and AWL := ISS, AWH := GSS
-
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/dccp.h      |   20 ++++++++++++++++++++
- net/dccp/input.c     |   18 ++++++------------
- net/dccp/minisocks.c |   30 +++++++++---------------------
- 3 files changed, 35 insertions(+), 33 deletions(-)
-
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -392,6 +392,23 @@ static inline void dccp_update_gsr(struct sock *sk, u64 seq)
- 	dp->dccps_gsr = seq;
- 	/* Sequence validity window depends on remote Sequence Window (7.5.1) */
- 	dp->dccps_swl = SUB48(ADD48(dp->dccps_gsr, 1), dp->dccps_r_seq_win / 4);
-+	/*
-+	 * Adjust SWL so that it is not below ISR. In contrast to RFC 4340,
-+	 * 7.5.1 we perform this check beyond the initial handshake: W/W' are
-+	 * always > 32, so for the first W/W' packets in the lifetime of a
-+	 * connection we always have to adjust SWL.
-+	 * A second reason why we are doing this is that the window depends on
-+	 * the feature-remote value of Sequence Window: nothing stops the peer
-+	 * from updating this value while we are busy adjusting SWL for the
-+	 * first W packets (we would have to count from scratch again then).
-+	 * Therefore it is safer to always make sure that the Sequence Window
-+	 * is not artificially extended by a peer who grows SWL downwards by
-+	 * continually updating the feature-remote Sequence-Window.
-+	 * If sequence numbers wrap it is bad luck. But that will take a while
-+	 * (48 bit), and this measure prevents Sequence-number attacks.
-+	 */
-+	if (before48(dp->dccps_swl, dp->dccps_isr))
-+		dp->dccps_swl = dp->dccps_isr;
- 	dp->dccps_swh = ADD48(dp->dccps_gsr, (3 * dp->dccps_r_seq_win) / 4);
- }
+--- a/net/dccp/feat.h
++++ b/net/dccp/feat.h
+@@ -14,6 +14,15 @@
+ #include <linux/types.h>
+ #include "dccp.h"
  
-@@ -402,6 +419,9 @@ static inline void dccp_update_gss(struct sock *sk, u64 seq)
- 	dp->dccps_gss = seq;
- 	/* Ack validity window depends on local Sequence Window value (7.5.1) */
- 	dp->dccps_awl = SUB48(ADD48(dp->dccps_gss, 1), dp->dccps_l_seq_win);
-+	/* Adjust AWL so that it is not below ISS - see comment above for SWL */
-+	if (before48(dp->dccps_awl, dp->dccps_iss))
-+		dp->dccps_awl = dp->dccps_iss;
- 	dp->dccps_awh = dp->dccps_gss;
- }
++/*
++ * Known limits of feature values.
++ */
++/* Ack Ratio takes 2-byte integer values (11.3) */
++#define DCCPF_ACK_RATIO_MAX	0xFFFF
++/* Wmin2 and Wmax=2^46-1 from 7.5.2 */
++#define DCCPF_SEQ_WMIN		32
++#define DCCPF_SEQ_WMAX		0x3FFFFFFFFFFFull
++
+ enum dccp_feat_type {
+ 	FEAT_AT_RX   = 1,	/* located at RX side of half-connection  */
+ 	FEAT_AT_TX   = 2,	/* located at TX side of half-connection  */
+
+========================================
+[DCCP]: Implement both feature-local and feature-remote Sequence Window feature
+
+=> Removed the default initialisation of the Sequence Window feature value.
+    This is redundant, a better solution is implemented in subsequent patch set.
+=> Also calls the Sequence Window handlers immediately, so that the sequence
+    and acknowledgment validity windows are updated.
+
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -1086,19 +1086,6 @@ int dccp_feat_init(struct sock *sk)
+ 		rc = dccp_feat_register_sp(fn, sp[i].feat_num, sp[i].is_local,
+ 					sp[i].mandatory, sp[i].val, sp[i].len);
  
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -440,20 +440,14 @@ static int dccp_rcv_request_sent_state_process(struct sock *sk,
- 			dp->dccps_syn_rtt = dccp_sample_rtt(sk, 10 * (tstamp -
- 			    dp->dccps_options_received.dccpor_timestamp_echo));
- 
--		dp->dccps_isr = DCCP_SKB_CB(skb)->dccpd_seq;
--		dccp_update_gsr(sk, dp->dccps_isr);
- 		/*
--		 * SWL and AWL are initially adjusted so that they are not less than
--		 * the initial Sequence Numbers received and sent, respectively:
--		 *	SWL := max(GSR + 1 - floor(W/4), ISR),
--		 *	AWL := max(GSS - W' + 1, ISS).
--		 * These adjustments MUST be applied only at the beginning of the
--		 * connection.
--		 *
--		 * AWL was adjusted in dccp_v4_connect -acme
-+		 * Set ISR, GSR from packet. ISS was set in dccp_v{4,6}_connect
-+		 * and GSS in dccp_transmit_skb(). Setting AWL/AWH and SWL/SWH
-+		 * is done as part of activating the feature values below, since
-+		 * these settings depend on the local/remote Sequence Window
-+		 * features, which were undefined or not confirmed until now.
- 		 */
--		dccp_set_seqno(&dp->dccps_swl,
--			       max48(dp->dccps_swl, dp->dccps_isr));
-+		dp->dccps_gsr = dp->dccps_isr = DCCP_SKB_CB(skb)->dccpd_seq;
- 
- 		dccp_sync_mss(sk, icsk->icsk_pmtu_cookie);
- 
+-	/*
+-	 * Initial values for the remote and local Sequence Window feature. This
+-	 * is only for the client startup phase, to seed AWL/SWL. Until then,
+-	 *  - the default of 100 is enough for 75 Request-retransmissions,
+-	 *  - sequence window checks are not performed in state LISTEN/REQUEST,
+-	 *  - the only Ack window check is for the Ack completing the handshake.
+-	 * After the handshake, local/remote Sequence Window will be updated
+-	 * with the negotiated values (or the defaults again if not different).
+-	 * The server's AWL/SWL derive directly from the negotiated values.
+-	 */
+-	for (i = 0; rc = 0 && i <= 1; i++)
+-		rc = dccp_feat_activate(sk, DCCPF_SEQUENCE_WINDOW, i, NULL);
+-
+ 	kfree(sp[0].val);
+ 	kfree(sp[1].val);
+ 	return rc;
 --- a/net/dccp/minisocks.c
 +++ b/net/dccp/minisocks.c
-@@ -120,30 +120,18 @@ struct sock *dccp_create_openreq_child(struct sock *sk,
- 		 *
- 		 *    Choose S.ISS (initial seqno) or set from Init Cookies
- 		 *    Initialize S.GAR := S.ISS
--		 *    Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
--		 */
--		newdp->dccps_gar = newdp->dccps_iss = dreq->dreq_iss;
--		dccp_update_gss(newsk, dreq->dreq_iss);
--
--		newdp->dccps_isr = dreq->dreq_isr;
--		dccp_update_gsr(newsk, dreq->dreq_isr);
--
--		/*
--		 * SWL and AWL are initially adjusted so that they are not less than
--		 * the initial Sequence Numbers received and sent, respectively:
--		 *	SWL := max(GSR + 1 - floor(W/4), ISR),
--		 *	AWL := max(GSS - W' + 1, ISS).
--		 * These adjustments MUST be applied only at the beginning of the
--		 * connection.
-+		 *    Set S.ISR, S.GSR from packet (or Init Cookies)
-+		 *
-+		 *    Setting AWL/AWH and SWL/SWH happens as part of the feature
-+		 *    activation below, as these windows all depend on the local
-+		 *    and remote Sequence Window feature values (7.5.2).
- 		 */
--		dccp_set_seqno(&newdp->dccps_swl,
--			       max48(newdp->dccps_swl, newdp->dccps_isr));
--		dccp_set_seqno(&newdp->dccps_awl,
--			       max48(newdp->dccps_awl, newdp->dccps_iss));
-+		newdp->dccps_gss = newdp->dccps_iss = dreq->dreq_iss;
-+		newdp->dccps_gar = newdp->dccps_iss;
-+		newdp->dccps_gsr = newdp->dccps_isr = dreq->dreq_isr;
+@@ -319,10 +319,17 @@ int dccp_hdlr_ccid(struct sock *sk, u64 
  
- 		/*
--		 * Activate features after initialising the sequence numbers since
--		 * CCID initialisation may depend on GSS, ISR, ISS etc.
-+		 * Activate features: initialise CCIDs, sequence windows etc.
- 		 */
- 		if (dccp_feat_activate_values(newsk, &dreq->dreq_featneg)) {
- 			/* It is still raw copy of parent, so invalidate
+ int dccp_hdlr_seq_win(struct sock *sk, u64 seq_win, bool rx)
+ {
+-	if (rx)
+-		dccp_sk(sk)->dccps_r_seq_win = seq_win;
+-	else
+-		dccp_sk(sk)->dccps_l_seq_win = seq_win;
++	struct dccp_sock *dp = dccp_sk(sk);
++	
++	if (rx) {
++		dp->dccps_r_seq_win = seq_win;
++		/* propagate changes to update SWL/SWH */
++		dccp_update_gsr(sk, dp->dccps_gsr);
++	} else {
++		dp->dccps_l_seq_win = seq_win;
++		/* propagate changes to update AWL */
++		dccp_update_gss(sk, dp->dccps_gss);
++	}
+ 	return 0;
+ }
+ 
+========================================
+[DCCP]: Support exchange of NN options in (PART)OPEN state
+
+=> Lifted the restriction to exchanging only Ack Ratio options, since Sequence
+    Window values also need to be updated in established state.
+    Patches to actually do this for CCID2 are work in progress.
+
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -1176,12 +1177,7 @@ static u8 dccp_feat_handle_nn_establishe
+ 	} else if (type != FEAT_NN) {
+ 		return 0;
+ 	}
+-	/*
+-	 * The restriction to Ack Ratio is here for safety: it may be possible
+-	 * to lift this and also update Sequence Window dynamically.
+-	 */
+-	 if (feat != DCCPF_ACK_RATIO)
+-		return 0;
++
+ 	/*
+ 	 * We don't accept empty Confirms, since in fast-path feature
+ 	 * negotiation the values are enabled immediately after sending
+========================================
+[ACKVEC]: Update Ack Vector input routine
+
+=> Added a "cope with large bursts" recovery hook as follows:
+
+  When a packet is missing, the Ack Vector code normally reserves one entry. This
+  causes problems with larger losses, since the space requirements are O(burst_length).
+  
+  This patch defines a threshold for bursty loss, when exceeding this threshold,
+  Ack Vector cells are populated up to their limit, without the expensive space
+  reservation. 
+  
+  The advantage of this strategy is to reduce Ack Vector length under heavier loss
+  conditions.
+
+--- b/net/dccp/ackvec.h
++++ b/net/dccp/ackvec.h
+@@ -27,6 +27,9 @@
+ #define DCCPAV_NUM_ACKVECS	2
+ #define DCCPAV_MAX_ACKVEC_LEN	(DCCP_SINGLE_OPT_MAXLEN * DCCPAV_NUM_ACKVECS)
+ 
++/* Threshold for coping with large bursts of losses */
++#define DCCPAV_BURST_THRESH	(DCCPAV_MAX_ACKVEC_LEN / 8)
++
+ enum dccp_ackvec_states {
+ 	DCCPAV_RECEIVED =	0x00,
+ 	DCCPAV_ECN_MARKED =	0x40,
+--- b/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -206,10 +206,38 @@
+  * @seqno:	 sequence number of the first packet in @num_packets
+  * @state:	 state in which packet carrying @seqno was received
+  */
+-static void dccp_ackvec_add_new(struct dccp_ackvec *av, u16 num_packets,
++static void dccp_ackvec_add_new(struct dccp_ackvec *av, u32 num_packets,
+ 				u64 seqno, enum dccp_ackvec_states state)
+ {
+-	if ((num_packets + dccp_ackvec_buflen(av)) >= DCCPAV_MAX_ACKVEC_LEN) {
++	u32 num_cells = num_packets;
++
++	if (num_packets > DCCPAV_BURST_THRESH) {
++		u32 lost_packets = num_packets - 1;
++
++		DCCP_WARN("Warning: large burst loss (%u)\n", lost_packets);
++		/*
++		 * We received 1 packet and have a loss of size "num_packets-1"
++		 * which we squeeze into num_cells-1 rather than reserving an
++		 * entire byte for each lost packet.
++		 * The reason is that the vector grows in O(burst_length); when
++		 * it grows too large there will no room left for the payload.
++		 * This is a trade-off: if a few packets out of the burst show
++		 * up later, their state will not be changed; it is simply too
++		 * costly to reshuffle/reallocate/copy the buffer each time.
++		 * Should such problems persist, we will need to switch to a
++		 * different underlying data structure.
++		 */
++		for (num_packets = num_cells = 1; lost_packets; ++num_cells) {
++			u8 len = min(lost_packets, (u32)DCCPAV_MAX_RUNLEN);
++
++			av->av_buf_head = dccp_ackvec_idx_sub(av->av_buf_head, 1);
++			av->av_buf[av->av_buf_head] = DCCPAV_NOT_RECEIVED | len;
++
++			lost_packets -= len;
++		}
++	}
++
++	if (num_cells + dccp_ackvec_buflen(av) >= DCCPAV_MAX_ACKVEC_LEN) {
+ 		DCCP_CRIT("Ack Vector buffer overflow: dropping old entries\n");
+ 		av->av_overflow = true;
+ 	}
+-- 
