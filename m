@@ -1,27 +1,27 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Fri, 04 Jan 2008 18:56:52 +0000
-Subject: Re: dccp send
-Message-Id: <5640c7e00801041056x6a417efew7d5b62cc63e9bbc4@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 07 Jan 2008 12:36:09 +0000
+Subject: Re: mirror?
+Message-Id: <20080107123609.GC6976@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <200801020141.16432.tomasz@grobelny.oswiecenia.net>
-In-Reply-To: <200801020141.16432.tomasz@grobelny.oswiecenia.net>
+References: <200712241443.33716.tomasz@grobelny.oswiecenia.net>
+In-Reply-To: <200712241443.33716.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Jan 5, 2008 5:28 AM, Tomasz Grobelny <tomasz@grobelny.oswiecenia.net> wrote:
-> Thanks. But while we are at your patch I have one more question: why
-> did you choose to implement the algorithm it in ccid3? Shouldn't
-> packet priorities and expiration times be processed indepentent of
-> ccids? Until now it seemed for me that ccids only control _when_ you
-> send data, _what_ you send should be determined by other means. Am I
-> missing something here?
+Quoting Tomasz Grobelny:
+| As http://www.erg.abdn.ac.uk/ seems to be down at least since yesterday I'd 
+| like to ask whether any mirror of dccp git tree and/or dccp patches to 
+| mainline kernel is available. TIA,
+| -- 
+Sorry about the outage, our building was renovated over the holidays. I
+am just revising the patches,
 
-This is just for my own private research. If I was proposing this to
-be included with the kernel I would agree with you totally.
+   	git://eden-feed.erg.abdn.ac.uk/dccp_exp		{dccp,ccid4}
 
-Ian
--- 
-Web1: http://wand.net.nz/~iam4/
-Web2: http://www.jandi.co.nz
+should be online in an hour or so. The web server on 	
+
+	http://www.erg.abdn.ac.uk/users/gerrit/dccp/
+
+is already back online.	
