@@ -1,65 +1,47 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 28 Jan 2008 10:16:15 +0000
-Subject: [PATCH 5/6] [DCCP]: Merge now-reduced connect_init() function
-Message-Id: <1201515376-8280-6-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Thu, 31 Jan 2008 18:31:43 +0000
+Subject: [PATCH 5/6] [INET_TIMEWAIT_SOCK]: Reorganize struct inet_timewait_sock to save some bytes
+Message-Id: <1201804304-28777-6-git-send-email-acme@redhat.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-After moving the assignment of GAR/ISS from dccp_connect_init() to
-dccp_transmit_skb(), the former function becomes very small, so that
-a merger with dccp_connect() suggested itself.
+/home/acme/git/net-2.6/net/ipv6/tcp_ipv6.c:
+  struct inet_timewait_sock |   -8
+  struct tcp_timewait_sock  |   -8
+ 2 structs changed
+  tcp_v6_rcv                |   -6
+ 1 function changed, 6 bytes removed, diff: -6
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- net/dccp/output.c |   18 +++++-------------
- 1 files changed, 5 insertions(+), 13 deletions(-)
+ include/net/inet_timewait_sock.h |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
 
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -444,8 +444,9 @@ int dccp_send_reset(struct sock *sk, enum dccp_reset_codes code)
- /*
-  * Do all connect socket setups that can be done AF independent.
-  */
--static inline void dccp_connect_init(struct sock *sk)
-+int dccp_connect(struct sock *sk)
- {
-+	struct sk_buff *skb;
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	struct dst_entry *dst = __sk_dst_get(sk);
- 	struct inet_connection_sock *icsk = inet_csk(sk);
-@@ -455,22 +456,12 @@ static inline void dccp_connect_init(struct sock *sk)
- 
- 	dccp_sync_mss(sk, dst_mtu(dst));
- 
--	/* Initialise GAR as per 8.5; AWL/AWH are set in dccp_transmit_skb() */
--	dp->dccps_gar = dp->dccps_iss;
--
--	icsk->icsk_retransmits = 0;
--}
--
--int dccp_connect(struct sock *sk)
--{
--	struct sk_buff *skb;
--	struct inet_connection_sock *icsk = inet_csk(sk);
--
- 	/* do not connect if feature negotiation setup fails */
- 	if (dccp_feat_finalise_settings(dccp_sk(sk)))
- 		return -EPROTO;
- 
--	dccp_connect_init(sk);
-+	/* Initialise GAR as per 8.5; AWL/AWH are set in dccp_transmit_skb() */
-+	dp->dccps_gar = dp->dccps_iss;
- 
- 	skb = alloc_skb(sk->sk_prot->max_header, sk->sk_allocation);
- 	if (unlikely(skb = NULL))
-@@ -486,6 +477,7 @@ int dccp_connect(struct sock *sk)
- 	DCCP_INC_STATS(DCCP_MIB_ACTIVEOPENS);
- 
- 	/* Timer for repeating the REQUEST until an answer. */
-+	icsk->icsk_retransmits = 0;
- 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
- 				  icsk->icsk_rto, DCCP_RTO_MAX);
- 	return 0;
+diff --git a/include/net/inet_timewait_sock.h b/include/net/inet_timewait_sock.h
+index 67e9250..faead52 100644
+--- a/include/net/inet_timewait_sock.h
++++ b/include/net/inet_timewait_sock.h
+@@ -116,8 +116,8 @@ struct inet_timewait_sock {
+ #define tw_hash			__tw_common.skc_hash
+ #define tw_prot			__tw_common.skc_prot
+ #define tw_net			__tw_common.skc_net
++	int			tw_timeout;
+ 	volatile unsigned char	tw_substate;
+-	/* 3 bits hole, try to pack */
+ 	unsigned char		tw_rcv_wscale;
+ 	/* Socket demultiplex comparisons on incoming packets. */
+ 	/* these five are in inet_sock */
+@@ -130,7 +130,6 @@ struct inet_timewait_sock {
+ 	__u8			tw_ipv6only:1;
+ 	/* 15 bits hole, try to pack */
+ 	__u16			tw_ipv6_offset;
+-	int			tw_timeout;
+ 	unsigned long		tw_ttd;
+ 	struct inet_bind_bucket	*tw_tb;
+ 	struct hlist_node	tw_death_node;
+-- 
+1.5.3.8
+
