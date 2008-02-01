@@ -1,22 +1,24 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 14 Feb 2008 13:48:21 +0000
-Subject: [DCCP] [PATCH 0/5]: Extend CCID interface so that CCID-2 stops polling
-Message-Id: <1202996906-29652-1-git-send-email-gerrit@erg.abdn.ac.uk>
+From: David Miller <davem@davemloft.net>
+Date: Fri, 01 Feb 2008 02:40:48 +0000
+Subject: Re: [PATCHES 0/6]: Move hashinfo to sk_prot and struct reorgs
+Message-Id: <20080131.184048.89507795.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This set of patches extends the packet sending/dequeuing interface, which is 
-currently restricted to using time intervals only. This forces CCID-2 into
-a constant polling mode, which is removed in patch #4.
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Thu, 31 Jan 2008 16:31:38 -0200
 
-Patch #1: Extends the CCID packet dequeuing interface to allow CCIDs to
-          autonomously schedule sending. Previously it was timer-only,
-	  so that CCID-2 polls uninterruptedly.
-Patch #2: Adds a similar extension to the routine which drains the packet queue
-          at the end of a connection (still under congestion control).
-Patch #3: Please clean up your queue when disconnecting.
-Patch #4: With the previous changes, CCID-2 is taken out of its polling mode.
-Patch #5: Removes the `more' argument from tx_packet_sent.
+> Hi David,
+> 
+> 	Please consider pulling from:
+> 
+> master.kernel.org:/pub/scm/linux/kernel/git/acme/net-2.6
+
+I've had to rebase my tree a few times and there are
+conflicts in this merge as well.
+
+Sit tight for a day or so, I'd like to merge the current
+tree to Linus and then maybe look at a few more things.
