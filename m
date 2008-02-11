@@ -1,50 +1,67 @@
-From: "Leandro Sales" <leandroal@gmail.com>
-Date: Wed, 27 Feb 2008 13:32:16 +0000
-Subject: Re: [Announce] Release of the DCCP Plugin 0.2 for GStreamer
-Message-Id: <5bc4c4570802270532m510d4716mba55aa1c9c782fba@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 11 Feb 2008 11:30:44 +0000
+Subject: [iperf]: Bug fixes in DCCP support
+Message-Id: <20080211113044.GA1609@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <5bc4c4570802270510r563ad586qa74eaf6ef59b68e0@mail.gmail.com>
-In-Reply-To: <5bc4c4570802270510r563ad586qa74eaf6ef59b68e0@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, Feb 27, 2008 at 10:20 AM, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Oh good that it is out. While testing with the previous version
->  yesterday, I found out the following:
->
->   Streaming works with VLC as client, using the following configuration:
->
->   serverhost$ gst-launch -v filesrc location=music.mp3  ! dccpclientsink host2.168.1.99 port34
->
->   (VLC uses port 1234 by default).
->
->   On the receiver, one just needs to type dccp://@ to use the default port.
->   Here again the problem came up that the pipe feeds directly into the transmitter, so that soon all
->   data is streamed out. I tried this on localhost and this condition later caused all memory to be
->   exhausted. But between two separate hosts it worked.
->   The addition of mp3parse looks good.
->
->  Gerrit
->
->
+I found that iperf still had several bugs, some of these involving the
+DCCP support. 
 
-Hello Gerrit,
-   I was just writing an e-mail to you when I received one from you.
-Yes, besides many fixes of the plugin (please refer to ChangeLog file
-to the complete list) we provided a new example to solve you problem
-in two ways, one using gst-launch and the other an c code example that
-it is in the src/examples_app/mp3Stream directory. And yes, the
-addition of mp3parse together with many improvements solved the
-problem of using the plugin to stream to other applications. I think
-that now we can also use the plugin to stream from here, to there,
-where you are. I need just more time to setup the environment here.
-After this will contact you. By the way, have you read that I added
-the support of IPv6 in the TODO list? I talked to the gstreamer guys
-and I already have all the requirements from them to submit the plugin
-to them. The only one thing missing is the unittest that they required
-and I'm now working on this issue and finally submit the plugin.
-   That's a good news the plugin also worked with VLC. Thank you for the news.
+The bugs have been fixed and the updated version of iperf has been uploaded to
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/#iperf
 
-Leandro.
+A tarball with all changes is on  
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/iperf/zip/iperf-2.0.2_DCCP-patched-CBR-continuous.tar.bz2
+
+(NB - test tree also updated today).
+
+Details of changes:
+-------------------
+ * fixed counting bugs when DCCP was used in packet-oriented mode
+   (now the packet count is correct and works across UDP/DCCP);
+
+ * enabled UDP-like reporting of statistics also for DCCP;
+
+ * rewrote the algorithm to compute the inter-packet-gap in CBR mode:
+   - in DCCP it tried to stuff the pipe without accounting for the time
+     it spent, thus producing more packets than specified;
+   - in tests this was observed to cause overflow;
+   - the algorithm now measures the actual inter-packet gap of each packet
+     and compares it to the target; adjusting for each send time;
+   - it is more accurate than the previous implementation, in particular
+     so for DCCP.
+ * replaced the delay_loop(), which was using a spin-loop of constantly
+   calling gettimeofday(), with nanosleep(). While the spinloop worked
+   reasonably in many cases, it sometimes caused unwanted delays of
+   50milliseconds or more (process preempted?); it does not block signals
+   like nanosleep; and nanosleep uses the hrtimers interface internally
+   (/usr/src/davem-2.6/Documentation/hrtimers/hrtimers.txt)
+
+ * separated setting TCP window size and SO_{RCV,SND}BUF settings;
+
+ * completely overhauled the IPv6 support, it is in the order of 359 insertions
+   versus 759 deletions; the -V flag is no longer necessary - iperf can now take
+   any v4/v6 hostname, v4/v6 literal address. This required a minor change for
+   the dual test and the tradeoff test (options -2 and -r): they no longer do a
+   check for the reverse-lookup when the reverse connection comes in, instead
+   the peer address is copied from the connection, which will do in almost any
+   conceivable case (doing a reverse lookup leads to complications since it
+   requires complex case distinctions of v4/v6-mapped-v6/v6 addresses).
+
+* IPv4 multicast support did not work well when the server-bind argument (-B)
+  was used on a host with multiple interfaces. This has now been fixed for both
+  IPv4 and IPv6 multicast using the `-j' `-J' arguments (for join-interface).
+  For example:
+  	iperf -s -u -B 224.1.2.3	  # works if there is only one interface
+	iperf -s -u -B 224.1.2.3 -j eth1  # wanted to join on that one
+	iperf -s -u -B FF00::c0de -J eth2 # IPv6 multicast, same semantics
+
+Hence if anyone is using iperf for DCCP, using the new version is much encouraged,
+as it will produce more reliable and accurate results.
+
+Still - when encountering any problems with this version of iperf, please do report
+these.
