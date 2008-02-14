@@ -1,86 +1,98 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 21 Feb 2008 09:09:25 +0000
-Subject: [PATCH 07/10] [ACKVEC]: Consolidate Ack-Vector processing within main DCCP module
-Message-Id: <1203584968-8957-8-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 14 Feb 2008 13:48:25 +0000
+Subject: [PATCH 4/5] [CCID2]: Stop polling
+Message-Id: <1202996906-29652-5-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This aggregates Ack Vector processing (handling input and clearing old state)
-into one function, for the following reasons and benefits:
- * all Ack Vector-specific processing is now in one place;
- * duplicated code is removed;
- * ensuring sanity: from an Ack Vector point of view, it is better to clear the
-                    old state first before entering new state;
- * Ack Event handling happens mostly within the CCIDs, not the main DCCP module.
+This updates CCID2 to use the CCID dequeuing mechanism, converting from
+previous constant-polling to a now event-driven mechanism.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/input.c |   32 ++++++++++----------------------
- 1 files changed, 10 insertions(+), 22 deletions(-)
+ net/dccp/ccids/ccid2.c |   21 +++++++++++++--------
+ net/dccp/ccids/ccid2.h |    5 +++++
+ 2 files changed, 18 insertions(+), 8 deletions(-)
 
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -159,13 +159,16 @@ static void dccp_rcv_reset(struct sock *sk, struct sk_buff *skb)
- 	dccp_time_wait(sk, DCCP_TIME_WAIT, 0);
+--- a/net/dccp/ccids/ccid2.h
++++ b/net/dccp/ccids/ccid2.h
+@@ -70,6 +70,11 @@ struct ccid2_hc_tx_sock {
+ 	struct list_head	ccid2hctx_parsed_ackvecs;
+ };
+ 
++static inline bool ccid2_cwnd_network_limited(struct ccid2_hc_tx_sock *hctx)
++{
++	return (hctx->ccid2hctx_pipe >= hctx->ccid2hctx_cwnd);
++}
++
+ struct ccid2_hc_rx_sock {
+ 	int	ccid2hcrx_data;
+ };
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -124,12 +124,9 @@ static int ccid2_hc_tx_alloc_seq(struct ccid2_hc_tx_sock *hctx)
+ 
+ static int ccid2_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ {
+-	struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
+-
+-	if (hctx->ccid2hctx_pipe < hctx->ccid2hctx_cwnd)
+-		return 0;
+-
+-	return 1; /* XXX CCID should dequeue when ready instead of polling */
++	if (ccid2_cwnd_network_limited(ccid2_hc_tx_sk(sk)))
++		return CCID_PACKET_WILL_DEQUEUE_LATER;
++	return CCID_PACKET_SEND_AT_ONCE;
  }
  
--static void dccp_event_ack_recv(struct sock *sk, struct sk_buff *skb)
-+static void dccp_handle_ackvec_processing(struct sock *sk, struct sk_buff *skb)
+ static void ccid2_change_l_ack_ratio(struct sock *sk, u32 val)
+@@ -169,6 +166,7 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
  {
--	struct dccp_sock *dp = dccp_sk(sk);
-+	struct dccp_ackvec *av = dccp_sk(sk)->dccps_hc_rx_ackvec;
-+	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
+ 	struct sock *sk = (struct sock *)data;
+ 	struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
++	const bool sender_was_blocked = ccid2_cwnd_network_limited(hctx);
+ 	long s;
  
--	if (dp->dccps_hc_rx_ackvec != NULL)
--		dccp_ackvec_clear_state(dp->dccps_hc_rx_ackvec,
--					DCCP_SKB_CB(skb)->dccpd_ack_seq);
-+	if (av != NULL) {
-+		if (dcb->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
-+			dccp_ackvec_clear_state(av, dcb->dccpd_ack_seq);
-+		dccp_ackvec_input(av, dcb->dccpd_seq, DCCPAV_RECEIVED);
-+	}
+ 	bh_lock_sock(sk);
+@@ -189,8 +187,6 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
+ 	if (s > 60)
+ 		hctx->ccid2hctx_rto = 60 * HZ;
+ 
+-	ccid2_start_rto_timer(sk);
+-
+ 	/* adjust pipe, cwnd etc */
+ 	hctx->ccid2hctx_ssthresh = hctx->ccid2hctx_cwnd / 2;
+ 	if (hctx->ccid2hctx_ssthresh < 2)
+@@ -207,6 +203,11 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
+ 	hctx->ccid2hctx_rpdupack = -1;
+ 	ccid2_change_l_ack_ratio(sk, 1);
+ 	ccid2_hc_tx_check_sanity(hctx);
++
++	/* if we were blocked before, we may now send cwnd=1 packet */
++	if (sender_was_blocked)
++		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
++	ccid2_start_rto_timer(sk);
+ out:
+ 	bh_unlock_sock(sk);
+ 	sock_put(sk);
+@@ -461,6 +462,7 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
++	const bool sender_was_blocked = ccid2_cwnd_network_limited(hctx);
+ 	struct dccp_ackvec_parsed *avp;
+ 	u64 ackno, seqno;
+ 	struct ccid2_seq *seqp;
+@@ -646,6 +648,9 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 
+ 	ccid2_hc_tx_check_sanity(hctx);
+ done:
++	/* check if incoming Acks allow pending packets to be sent */
++	if (sender_was_blocked && !ccid2_cwnd_network_limited(hctx))
++		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
+ 	dccp_ackvec_parsed_cleanup(&hctx->ccid2hctx_parsed_ackvecs);
  }
- 
- static void dccp_deliver_input_to_ccids(struct sock *sk, struct sk_buff *skb)
-@@ -364,21 +367,13 @@ discard:
- int dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
- 			 const struct dccp_hdr *dh, const unsigned len)
- {
--	struct dccp_sock *dp = dccp_sk(sk);
--
- 	if (dccp_check_seqno(sk, skb))
- 		goto discard;
- 
- 	if (dccp_parse_options(sk, NULL, skb))
- 		goto discard;
- 
--	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
--		dccp_event_ack_recv(sk, skb);
--
--	if (dp->dccps_hc_rx_ackvec != NULL &&
--	    dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
--			    DCCP_SKB_CB(skb)->dccpd_seq, DCCPAV_RECEIVED))
--		goto discard;
-+	dccp_handle_ackvec_processing(sk, skb);
- 	dccp_deliver_input_to_ccids(sk, skb);
- 
- 	return __dccp_rcv_established(sk, skb, dh, len);
-@@ -621,14 +616,7 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
- 		if (dccp_parse_options(sk, NULL, skb))
- 			goto discard;
- 
--		if (dcb->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
--			dccp_event_ack_recv(sk, skb);
--
--		if (dp->dccps_hc_rx_ackvec != NULL &&
--		    dccp_ackvec_add(dp->dccps_hc_rx_ackvec, sk,
--				    DCCP_SKB_CB(skb)->dccpd_seq, DCCPAV_RECEIVED))
--			goto discard;
--
-+		dccp_handle_ackvec_processing(sk, skb);
- 		dccp_deliver_input_to_ccids(sk, skb);
- 	}
  
