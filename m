@@ -1,98 +1,54 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 27 Feb 2008 14:23:06 +0000
-Subject: [PATCH 2/4] [CCID2]: Simplify dec_pipe and rearming of RTO timer
-Message-Id: <1204122188-9984-3-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 21 Feb 2008 09:09:18 +0000
+Subject: [DCCP] [Patch 0/10]: Finish and repair existing Ack Vector implementation
+Message-Id: <1203584968-8957-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This removes the dec_pipe function and improves the way the RTO timer is rearmed
-when a new acknowledgment comes in.
+This is a re-packaged resubmission (reduction from about 20 small patches) of the
+Ack Vector patch set, which accomplishes two main things.
 
-Details and justification for removal:
---------------------------------------
- 1) The BUG_ON in dec_pipe is never triggered: pipe is only decremented for TX
-    history entries between tail and head, for which it had previously been
-    incremented in tx_packet_sent; and it is not decremented twice for the same
-    entry, since it is
-    - either decremented when a corresponding Ack Vector cell in state 0 or 1
-      was received (and then ccid2s_acked=1),
-    - or it is decremented when ccid2s_acked=0, as part of the loss detection
-      in tx_packet_recv (and hence it can not have been decremented earlier).
+ First, it completes the implementation of a circular Ack Vector buffer. So far
+ the buffer was implemented as a linear array which dropped packets on overflow.
 
- 2) Restarting the RTO timer happens for every single entry in each Ack Vector
-    parsed by tx_packet_recv (according to RFC 4340, 11.4 this can happen up to
-    16192 times per Ack Vector).
-
- 3) The RTO timer should not be restarted when all outstanding data has been
-    acknowledged. This is currently done similar to (2), in dec_pipe, when
-    pipe has reached 0.
-
-The patch onsolidates the code which rearms the RTO timer, combining the
-segments from new_ack and dec_pipe. As a result, the code becomes clearer
-(compare with tcp_rearm_rto()).
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/ccid2.c |   27 ++++++++-------------------
- 1 files changed, 8 insertions(+), 19 deletions(-)
-
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -356,23 +356,6 @@ static inline void ccid2_new_ack(struct sock *sk,
- 			       hctx->ccid2hctx_srtt, hctx->ccid2hctx_rttvar,
- 			       hctx->ccid2hctx_rto, HZ, r);
- 	}
--
--	/* we got a new ack, so re-start RTO timer */
--	ccid2_hc_tx_kill_rto_timer(sk);
--	ccid2_start_rto_timer(sk);
--}
--
--static void ccid2_hc_tx_dec_pipe(struct sock *sk)
--{
--	struct ccid2_hc_tx_sock *hctx = ccid2_hc_tx_sk(sk);
--
--	if (hctx->ccid2hctx_pipe = 0)
--		DCCP_BUG("pipe = 0");
--	else
--		hctx->ccid2hctx_pipe--;
--
--	if (hctx->ccid2hctx_pipe = 0)
--		ccid2_hc_tx_kill_rto_timer(sk);
- }
+ Second, it makes the Ack Vector implementation workable for Ack Ratios greater
+ than 1. The code does not currently work when Ack Ratio is greater than 1.
  
- static void ccid2_congestion_event(struct sock *sk, struct ccid2_seq *seqp)
-@@ -522,7 +505,7 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 					seqp->ccid2s_acked = 1;
- 					ccid2_pr_debug("Got ack for %llu\n",
- 						       (unsigned long long)seqp->ccid2s_seq);
--					ccid2_hc_tx_dec_pipe(sk);
-+					hctx->ccid2hctx_pipe--;
- 				}
- 				if (seqp = hctx->ccid2hctx_seqt) {
- 					done = 1;
-@@ -578,7 +561,7 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 				 * one ack vector.
- 				 */
- 				ccid2_congestion_event(sk, seqp);
--				ccid2_hc_tx_dec_pipe(sk);
-+				hctx->ccid2hctx_pipe--;
- 			}
- 			if (seqp = hctx->ccid2hctx_seqt)
- 				break;
-@@ -596,6 +579,12 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		hctx->ccid2hctx_seqt = hctx->ccid2hctx_seqt->ccid2s_next;
- 	}
+ The reason that existing problems were not observed is that the main module 
+ sets Ack Ratio to 1, which in effect bypasses Ack Vectors entirely.
  
-+	/* restart RTO timer if not all outstanding data has been acked */
-+	if (hctx->ccid2hctx_pipe = 0)
-+		sk_stop_timer(sk, &hctx->ccid2hctx_rtotimer);
-+	else
-+		sk_reset_timer(sk, &hctx->ccid2hctx_rtotimer,
-+			       jiffies + hctx->ccid2hctx_rto);
- done:
- 	/* check if incoming Acks allow pending packets to be sent */
- 	if (sender_was_blocked && !ccid2_cwnd_network_limited(hctx))
+ Several bugs with regard to a basic implementation of RFC 4340 Ack Vectors
+ were fixed and protections against corrupting buffer state added:
+ * successive overlapping Ack Vectors were corrupting buffer state;
+ * a protection against outdated entries was missing;
+ * a modification was necessary to compute ECN nonces over multiple vectors;
+ * reserving entries (one per packet) didn't work well with large burst losses;
+ 
+A summary of the problems that were fixed and full code documentation is on
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ack_vectors/
+
+The code has been tested extensively and has been part of the test tree for over
+two months.
+
+Ack Vectors are a necessary requirement of CCID-2, so it expected that CCID-2
+can subsequently also be improved.
+ 
+ Short summary
+ -------------
+ Patch # 1: Fixes an oversight: Ack Vectors need to be ignored as long as
+            feature-negotiation is processing.
+ Patch # 2: Ack Vector interface clean-up -- preparation for subsequent patches.
+ Patch # 3: Separates Ack Vector - specific code from option-inserting code.
+ Patch # 4: Completes the implementation of a fully circular Ack Vector buffer. 
+ Patch # 5: Adds a tested algorithm to update Ack Vector buffer state.
+ Patch # 6: Updates and revises the way new Ack Vector information is registered.
+ Patch # 7: Consolidates Ack Vector processing within DCCP main module.
+ Patch # 8: Adds a fallback solution - scheduling a Sync when out-of-space.
+ Patch # 9: Removes older and now unused parts of the Ack Vector infrastructure.
+ Patch #10: Separates the task of parsing Ack Vectors from the CCID(-2) code.
+
+The revised patch set has been uploaded to
+	git://eden-feed.erg.abdn.ac.uk/dccp_exp 	[dccp]
