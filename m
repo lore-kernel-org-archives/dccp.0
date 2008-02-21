@@ -1,23 +1,233 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Feb 2008 14:00:09 +0000
-Subject: [Announce] -- Server Outage for Test Tree
-Message-Id: <20080228140009.GB10238@gerrit.erg.abdn.ac.uk>
+Date: Thu, 21 Feb 2008 09:09:21 +0000
+Subject: [PATCH 03/10] [ACKVEC]: Separate internals of Ack Vectors from option-parsing code
+Message-Id: <1203584968-8957-4-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This affects the test tree on
+This patch
+ * separates Ack Vector housekeeping code from option-insertion code;
+ * shifts option-specific code from ackvec.c into options.c;
+ * introduces a dedicated routine to take care of the Ack Vector records;
+ * simplifies the dccp_ackvec_insert_avr() routine: the BUG_ON was redundant,
+   since the list is automatically arranged in descending order of ack_seqno.
 
-	git://eden-feed.erg.abdn.ac.uk/dccp_exp		{dccp,ccid4}
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ackvec.c  |  100 +++++++++------------------------------------------
+ net/dccp/ackvec.h  |    5 +--
+ net/dccp/options.c |   60 +++++++++++++++++++++++++++++++
+ 3 files changed, 80 insertions(+), 85 deletions(-)
 
-The server will be down from 	
-
-        Friday 29th  Feb,   12:00 UTC until
-        Monday 3rd   Mar, > 12:00 UTC
-
-due to building work in the department. Related web pages will also
-be unavailable.
-
-Apologies for any inconveniences caused.
+--- a/net/dccp/ackvec.h
++++ b/net/dccp/ackvec.h
+@@ -110,7 +110,7 @@ extern int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
+ 			     u64 *ackno, const u8 opt,
+ 			     const u8 *value, const u8 len);
+ 
+-extern int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb);
++extern int  dccp_ackvec_update_records(struct dccp_ackvec *av, u64 seq, u8 sum);
+ 
+ static inline int dccp_ackvec_pending(const struct dccp_ackvec *av)
+ {
+@@ -153,8 +153,7 @@ static inline int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
+ 	return -1;
+ }
+ 
+-static inline int dccp_insert_option_ackvec(const struct sock *sk,
+-					    const struct sk_buff *skb)
++static inline int dccp_ackvec_update_records(struct dccp_ackvec *av, u64 seq, u8 nonce)
+ {
+ 	return -1;
+ }
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -428,6 +428,66 @@ static int dccp_insert_option_timestamp_echo(struct dccp_sock *dp,
+ 	return 0;
+ }
+ 
++int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
++{
++	struct dccp_sock *dp = dccp_sk(sk);
++	struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
++	/* Figure out how many options do we need to represent the ackvec */
++	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
++	u16 len = av->av_vec_len + 2 * nr_opts;
++	u8 i, nonce = 0;
++	const unsigned char *tail, *from;
++	unsigned char *to;
++
++	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
++		return -1;
++
++	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
++
++	to   = skb_push(skb, len);
++	len  = av->av_vec_len;
++	from = av->av_buf + av->av_buf_head;
++	tail = av->av_buf + DCCPAV_MAX_ACKVEC_LEN;
++
++	for (i = 0; i < nr_opts; ++i) {
++		int copylen = len;
++
++		if (len > DCCP_SINGLE_OPT_MAXLEN)
++			copylen = DCCP_SINGLE_OPT_MAXLEN;
++
++		/*
++		 * RFC 4340, 12.2: Encode the Nonce Echo for this Ack Vector via
++		 * its type; ack_nonce is the sum of all individual buf_nonce's.
++		 */
++		nonce ^= av->av_buf_nonce[i];
++
++		*to++ = DCCPO_ACK_VECTOR_0 + av->av_buf_nonce[i];
++		*to++ = copylen + 2;
++
++		/* Check if buf_head wraps */
++		if (from + copylen > tail) {
++			const u16 tailsize = tail - from;
++
++			memcpy(to, from, tailsize);
++			to	+= tailsize;
++			len	-= tailsize;
++			copylen	-= tailsize;
++			from	= av->av_buf;
++		}
++
++		memcpy(to, from, copylen);
++		from += copylen;
++		to   += copylen;
++		len  -= copylen;
++	}
++	/*
++	 * Each sent Ack Vector is recorded in the list, as per A.2 of RFC 4340.
++	 */
++	if (dccp_ackvec_update_records(av, DCCP_SKB_CB(skb)->dccpd_seq, nonce))
++		return -ENOBUFS;
++	return 0;
++}
++
+ /**
+  * dccp_insert_option_mandatory  -  Mandatory option (5.8.2)
+  * Note that since we are using skb_push, this function needs to be called
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -55,99 +55,35 @@ void dccp_ackvec_free(struct dccp_ackvec *av)
+ 	}
+ }
+ 
+-static void dccp_ackvec_insert_avr(struct dccp_ackvec *av,
+-				   struct dccp_ackvec_record *avr)
+-{
+-	/*
+-	 * AVRs are sorted by seqno. Since we are sending them in order, we
+-	 * just add the AVR at the head of the list.
+-	 * -sorbo.
+-	 */
+-	if (!list_empty(&av->av_records)) {
+-		const struct dccp_ackvec_record *head -					list_entry(av->av_records.next,
+-						   struct dccp_ackvec_record,
+-						   avr_node);
+-		BUG_ON(before48(avr->avr_ack_seqno, head->avr_ack_seqno));
+-	}
+-
+-	list_add(&avr->avr_node, &av->av_records);
+-}
+-
+-int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
++/**
++ * dccp_ackvec_update_records  -  Record information about sent Ack Vectors
++ * @av:		Ack Vector records to update
++ * @seqno:	Sequence number of the packet carrying the Ack Vector just sent
++ * @nonce_sum:	The sum of all buffer nonces contained in the Ack Vector
++ */
++int dccp_ackvec_update_records(struct dccp_ackvec *av, u64 seqno, u8 nonce_sum)
+ {
+-	struct dccp_sock *dp = dccp_sk(sk);
+-	struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
+-	/* Figure out how many options do we need to represent the ackvec */
+-	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
+-	u16 len = av->av_vec_len + 2 * nr_opts;
+-	u8 i, nonce = 0;
+-	const unsigned char *tail, *from;
+-	unsigned char *to;
+ 	struct dccp_ackvec_record *avr;
+ 
+-	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
+-		return -1;
+-
+ 	avr = kmem_cache_alloc(dccp_ackvec_record_slab, GFP_ATOMIC);
+ 	if (avr = NULL)
+-		return -1;
+-
+-	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
+-
+-	to   = skb_push(skb, len);
+-	len  = av->av_vec_len;
+-	from = av->av_buf + av->av_buf_head;
+-	tail = av->av_buf + DCCPAV_MAX_ACKVEC_LEN;
+-
+-	for (i = 0; i < nr_opts; ++i) {
+-		int copylen = len;
+-
+-		if (len > DCCP_SINGLE_OPT_MAXLEN)
+-			copylen = DCCP_SINGLE_OPT_MAXLEN;
+-
+-		/*
+-		 * RFC 4340, 12.2: Encode the Nonce Echo for this Ack Vector via
+-		 * its type; ack_nonce is the sum of all individual buf_nonce's.
+-		 */
+-		nonce ^= av->av_buf_nonce[i];
+-
+-		*to++ = DCCPO_ACK_VECTOR_0 + av->av_buf_nonce[i];
+-		*to++ = copylen + 2;
+-
+-		/* Check if buf_head wraps */
+-		if (from + copylen > tail) {
+-			const u16 tailsize = tail - from;
+-
+-			memcpy(to, from, tailsize);
+-			to	+= tailsize;
+-			len	-= tailsize;
+-			copylen	-= tailsize;
+-			from	= av->av_buf;
+-		}
+-
+-		memcpy(to, from, copylen);
+-		from += copylen;
+-		to   += copylen;
+-		len  -= copylen;
+-	}
++		return -ENOBUFS;
+ 
+-	/*
+-	 * Each sent Ack Vector is recorded in the list, as per A.2 of RFC 4340.
+-	 */
+-	avr->avr_ack_seqno  = DCCP_SKB_CB(skb)->dccpd_seq;
++	avr->avr_ack_seqno  = seqno;
+ 	avr->avr_ack_ptr    = av->av_buf_head;
+ 	avr->avr_ack_ackno  = av->av_buf_ackno;
+-	avr->avr_ack_nonce  = nonce;
++	avr->avr_ack_nonce  = nonce_sum;
+ 	avr->avr_ack_runlen = dccp_ackvec_runlen(av->av_buf + av->av_buf_head);
++	/*
++	 * Since GSS is incremented for each packet, the list is automatically
++	 * arranged in descending order of @ack_seqno.
++	 */
++	list_add(&avr->avr_node, &av->av_records);
+ 
+-	dccp_ackvec_insert_avr(av, avr);
+-
+-	dccp_pr_debug("%s ACK Vector 0, len=%d, ack_seqno=%llu, "
+-		      "ack_ackno=%llu\n",
+-		      dccp_role(sk), avr->avr_ack_runlen,
++	dccp_pr_debug("Added Vector, ack_seqno=%llu, ack_ackno=%llu (rl=%u)\n",
+ 		      (unsigned long long)avr->avr_ack_seqno,
+-		      (unsigned long long)avr->avr_ack_ackno);
++		      (unsigned long long)avr->avr_ack_ackno,
++		      avr->avr_ack_runlen);
+ 	return 0;
+ }
+ 
