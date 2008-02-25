@@ -1,61 +1,30 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Mon, 25 Feb 2008 19:43:08 +0000
-Subject: Fwd: [dccp] DCCP-TP Release 0.00 available
-Message-Id: <5640c7e00802251143q523aea80o81805be682c90060@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 25 Feb 2008 09:52:00 +0000
+Subject: [DCCP] [Patch v2 0/2] [Revision]: Fix Ack Vector MPS Minimum Value
+Message-Id: <1203933122-27140-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
----------- Forwarded message ----------
-From: Phelan, Tom <tphelan@sonusnet.com>
-Date: Tue, Feb 26, 2008 at 7:40 AM
-Subject: [dccp] DCCP-TP Release 0.00 available
-To: 'dccp' working group <dccp@ietf.org>
+This is a resubmission to fix a problem with accounting for Ack Vector
+length in the MPS.
 
+The present solution did not work well: the MPS did not account for Ack Vectors,
+so that applications which relied on the MPS value via getopt were disadvantaged 
+by having all their Ack Vectors put onto Syncs -- sorely degrading performance.
 
-Hi All,
+Found out by testing with gstreamer DCCP plugin.
 
-DCCP-TP is a fresh-start implementation of DCCP optimized for
-portability that I have been working on.  The code is at a very early
-beta stage of development, but I felt that it was best to get it out to
-other eyes before the next IETF meeting, so I'm making it available now.
-There is a wiki with source downloads, documentation and a discussion
-forum at http://www.phelan-4.com/dccp-tp/.  Please check it out :-).
+Hence the revision of these two patches implements a new strategy -- it now
+ * subtracts an estimated minimum from the MPS - 
+   currently set to 16 bytes (found via experimentation) and
+ * schedules a Sync only if the actual length is greater than
+   this minimum _and_ there is no space left on the skb.
 
-R0.00 implements the main DCCP spec plus CCID 2 with IPv4 DCCP-NAT
-encapsulation.  IPv6 and DCCP-RAW encapsulation can be added easily (and
-will be real soon now :-)), but debugging was easier with DCCP-NAT since
-it could be done in user space without root privileges.
+Patch #1: Is the revised version of the account-for-option-sizes-in-MPS patch.
+Patch #2: Is the revised "exception handler" for overly large Ack Vectors.
 
-DCCP-TP is meant to be portable, but at the current time there is only
-port.  This port supports running DCCP-TP and the applications that use
-it as a single Linux process with Pthreads.
-
-I hope that having a second, completely independent, implementation of
-DCCP will help us make progress in interoperability issues, and that an
-implementation optimized for portability will allow us to make use
-environments outside of Linux, especially embedded systems.
-
-The external, API, aspects of DCCP-TP are quite raw right now, but I
-have tried to pay close attention to the internal implementation of DCCP
-and believe that it is fairly feature-rich and conforms to the latest
-specs as best as I can interpret them.  Any feedback, either through
-this list, through the discussion forum at
-http://www.phelan-4.com/dccp-tp/ or directly to me will be greatly
-appreciated.
-
-Tom P.
-
-PS.     The CCID 2 code currently has some sort of memory corruption bug
-that I haven't been able to track down.  It normally doesn't make itself
-felt until the socket is destroyed, so there's quite a bit of DCCP that
-works and can be used.  Any help finding the problem will win a free
-beer next time we can get together :-).
-
-
-
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
+Both patches have been uploaded to the test tree on
+	git://eden-feed.erg.abnd.ac.uk/dccp_exp		[dccp]
