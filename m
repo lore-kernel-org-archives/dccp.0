@@ -1,32 +1,27 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 31 Mar 2008 06:41:43 +0000
-Subject: Re: dccp bugs
-Message-Id: <20080331064143.GB6089@gerrit.erg.abdn.ac.uk>
+From: Steven Brown <swbrown@variadic.org>
+Date: Wed, 05 Mar 2008 19:40:04 +0000
+Subject: Existing solutions for encapsulation?
+Message-Id: <47CEF714.708@variadic.org>
 List-Id: <dccp.vger.kernel.org>
-References: <200803232131.58407.tomasz@grobelny.oswiecenia.net>
-In-Reply-To: <200803232131.58407.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-| > If possible, can you please try the test tree patches and see if the
-| > problem persists. I am doing a lot of testing and have not observed any
-| > similar errors in the test tree -- the closest being the server-hand on
-| > retransmitting CloseReq, which may account for the earlier confusion.
-| >
-| Yes, it works ok now. I was already using the test tree before but the wrong 
-| branch.
-Thanks very much for testing. I have a suspicion that the fix is in one
-of the following patches:
+I'm running into a need for encapsulation due to various providers 
+mangling (mandatory NATs on local EVDO service) or dropping (AT&T Yahoo 
+DSL residential service (but business service works it seems)) DCCP 
+traffic.  I figure DCCP-NAT[1] support in the stack is exactly what I 
+need, but AFAIK it's not implemented yet (only in DCCP-TP I think).
 
- [CCID]: Refine the wait-for-ccid mechanism        
- [DCCP]: Empty the write queue when disconnecting 
-
-Both flush the write queue on exit. The first one limits the amount of
-time that close() will allow to drain the write queue, the second patch
-flushes the write queue when the connection is aborted.
+Is there an existing solution at the moment to add the encoding, or near 
+term plan to implement it?  If not, would it make sense to route the 
+traffic into a tun device that adds/removes the encoding?  Is there a 
+better way to get the DCCP packet before it's sent than having an extra 
+service/interface like that?  I'm not familiar enough with the kernel 
+layer to implement it there in reasonable time which is why I'm looking 
+at doing a quick hack in userland.
 
 
-The University of Aberdeen is a charity registered in Scotland, No SC013683.
+[1] http://www.phelan-4.com/dccp/draft-phelan-dccp-natencap-00.txt
 
