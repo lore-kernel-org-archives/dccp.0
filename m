@@ -1,141 +1,117 @@
-From: "Leandro Sales" <leandroal@gmail.com>
-Date: Thu, 06 Mar 2008 20:15:25 +0000
-Subject: Reporting possible bug in DCCP Feature negotiation
-Message-Id: <5bc4c4570803061215s36fac06ctc2015cc2d079ea9@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 07 Mar 2008 13:15:15 +0000
+Subject: Re: Reporting possible bug in DCCP Feature negotiation
+Message-Id: <20080307131515.GC9295@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
+References: <5bc4c4570803061215s36fac06ctc2015cc2d079ea9@mail.gmail.com>
+In-Reply-To: <5bc4c4570803061215s36fac06ctc2015cc2d079ea9@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Gerrit, during some experiments using iperf to transmit one TCP
-flow against 3 DCCP flows, one DCCP thread stopped and it was shown
-the following message:
+| Hi Gerrit, during some experiments using iperf to transmit one TCP
+| flow against 3 DCCP flows, one DCCP thread stopped and it was shown
+| the following message:
+| 
+| "[ 6286.864021] BUG: Failed negotiation in state 2 at
+| net/dccp/feat.c:1370/dccp_feat_activate_values()"
+| 
+Did it really stop? The trigger is only possible during the initial
+handshake, this is the only place where this activation-code is
+executed. So almost certainly it failed at the begin of the connection.
 
-"[ 6286.864021] BUG: Failed negotiation in state 2 at
-net/dccp/feat.c:1370/dccp_feat_activate_values()"
+I am assuming that both end hosts have identical kernels, if they are
+using different versions of DCCP, this would be a likely cause.
 
-Here it is the complete debug msgs including the dumped stack at the
-time the error occurred:
+The log is very interesting, but I can't say whether the error message
+is really a bug or if the action was correct under the given
+circumstances; below is explanation of the messages and further things
+to check.
 
-{...}
-[ 3128.785764] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 3128.785771] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 3128.923926] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 3128.923926] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 3289.686450] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 3289.686456] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 3289.687339] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 3289.687339] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 3290.431806] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 3290.431806] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 3360.243731] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 3360.243731] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 3360.409402] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 3360.409408] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 3360.532210] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 3360.532215] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 4086.271326] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 4086.271326] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 4086.286582] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 4086.286587] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 4086.663086] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 4086.663091] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 4496.981354] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 4496.981354] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 4497.049848] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 4497.049853] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 4497.259798] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 4497.259798] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 0
-[ 4510.339903] dccp_v4_rcv: dropped packet with invalid checksum
-[ 4510.345670] tfrc_calc_x_reverse_lookup: fvalue 6478 smaller than resolution
-[ 4833.172100] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 4833.172100] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 2
-[ 4833.240064] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 4833.240069] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 2
-[ 4833.382804] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 4833.382804] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 2
-[ 4852.431819] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 4853.013621] dccp_ackvec_add_new: Warning: large burst loss (583)
-[ 4853.015678] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 4855.087753] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 4855.124335] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 4863.988418] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 4869.698085] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 4882.272518] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 4906.408436] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5467.093407] e1000: eth0: e1000_watchdog: NIC Link is Down
-[ 5470.228254] e1000: eth0: e1000_watchdog: NIC Link is Up 100 Mbps
-Full Duplex, Flow Control: RX/TX
-[ 5678.233254] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 5678.233254] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 2
-[ 5678.253538] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 5678.253538] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 2
-[ 5678.269784] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 5678.269789] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 2
-[ 5690.125731] dccp_ackvec_add_new: Warning: large burst loss (943)
-[ 5694.298819] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5703.277199] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5712.424335] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5712.454539] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5713.401402] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5713.413144] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5725.191982] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5735.038682] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5739.712935] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5745.579295] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5747.246785] dccp_ackvec_add_new: Warning: large burst loss (76)
-[ 5747.398720] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5753.560438] printk: 2 messages suppressed.
-[ 5753.560438] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 5759.789116] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6270.335006] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 6270.335006] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 2
-[ 6270.506015] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
-[ 6270.506015] dccp_hdlr_ack_ratio: Not changing TX Ack Ratio from 1 to 2
-[ 6286.655846] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6286.864021] BUG: Failed negotiation in state 2 at
-net/dccp/feat.c:1370/dccp_feat_activate_values()
-[ 6286.864034] Pid: 0, comm: swapper Not tainted 2.6.25-rc3 #4
-[ 6286.864034]  [<c045c6bb>] dccp_feat_activate_values+0x7b/0x200
-[ 6286.864034]  [<c045f919>] dccp_create_openreq_child+0xb9/0x100
-[ 6286.864034]  [<c0465226>] dccp_v4_request_recv_sock+0x46/0x1b0
-[ 6286.864034]  [<c045f72e>] dccp_check_req+0x24e/0x380
-[ 6286.864034]  [<c04526b0>] ipt_hook+0x0/0x20
-[ 6286.864034]  [<c046543a>] dccp_v4_do_rcv+0xaa/0x160
-[ 6286.864034]  [<c03fb560>] sk_receive_skb+0xc0/0x110
-[ 6286.864034]  [<c04216c6>] ip_local_deliver_finish+0x66/0x120
-[ 6286.864034]  [<c0421660>] ip_local_deliver_finish+0x0/0x120
-[ 6286.864034]  [<c042144b>] ip_rcv_finish+0xfb/0x310
-[ 6286.864034]  [<c045b9b6>] packet_rcv_spkt+0x36/0x160
-[ 6286.864034]  [<c0421880>] ip_rcv+0x0/0x290
-[ 6286.864034]  [<c04028ed>] netif_receive_skb+0x19d/0x230
-[ 6286.864034]  [<c0405133>] process_backlog+0x63/0xd0
-[ 6286.864034]  [<c0404a99>] net_rx_action+0x89/0x180
-[ 6286.864034]  [<c01263e2>] __do_softirq+0x72/0xf0
-[ 6286.864034]  [<c0126497>] do_softirq+0x37/0x40
-[ 6286.864034]  [<c01065b0>] do_IRQ+0x40/0x70
-[ 6286.864034]  [<c0104b1f>] common_interrupt+0x23/0x28
-[ 6286.864034]  [<c01300d8>] sys_setdomainname+0x58/0xb0
-[ 6286.864034]  [<c0102d92>] default_idle+0x52/0x80
-[ 6286.864034]  [<c0102d40>] default_idle+0x0/0x80
-[ 6286.864034]  [<c0102bdd>] cpu_idle+0x4d/0xd0
-[ 6286.864034]  ===========[ 6288.714624] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6291.940610] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6296.571520] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6299.151136] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6299.538280] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6299.832571] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6301.420651] dccp_ackvec_add_new: Warning: large burst loss (77)
-[ 6301.615940] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6301.656874] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6305.733963] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6313.671300] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6321.234212] printk: 1 messages suppressed.
-[ 6321.234218] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6330.753268] printk: 5 messages suppressed.
-[ 6330.753268] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6349.155197] printk: 2 messages suppressed.
-[ 6349.155203] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6351.738799] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
-[ 6352.184486] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
+Firstly, regarding the `BUG' message: it is part of the initial feature
+negotiation (during 3-way handshake). The "state 2" means FEAT_CHANGING,
+a  Change option was sent but not confirmed. 
+The good thing of having a stack trace is that we know that this
+happened on the server, in dccp_create_openreq_child. It would be next
+to ideal to have a tcpdump of the scenario, but on paper this looks like:
+ * client is in PARTOPEN (has sent Ack, awaits packet from server);
+ * server is in RESPOND and about to move to OPEN;
+ * client has sent the Ack confirming the options requested by the
+   server;
+ * the server complains that one of the options it has asked for was
+   not confirmed.
+Can you confirm that both end hosts really had identical DCCP versions?
+
+In the log I see that there were several large burst losses plus one
+occurrence of `invalid' checksum. Is this a very lossy link - if the
+DCCP-Request/Response/Ack got retransmitted, the feature-negotiation
+options would in theory also be retransmitted, so that would not matter.
+
+Individual information to the messages is below.
+
+| [ 3128.785764] dccp_hdlr_ack_ratio: Not changing RX Ack Ratio from 1 to 2
+<snip>
+The "Not changing Ack Ratio" message are harmless, they are just a
+reminder that, due to still unresolved problems in CCID-2, dynamic
+switch of Ack Ratio is currently disabled: Ack Ratio is currently always
+1, no matter the messages (net/dccp/minisocks.c).
+
+| [ 4510.339903] dccp_v4_rcv: dropped packet with invalid checksum
+Checksum failure is extremely rare -- are you using a wireless link?
+
+
+| [ 4852.431819] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
+This message can also be ignored due to the earlier comment; when using
+dynamic Ack Ratios this would avoid persistent spurious RTO timeouts.
+
+
+
+| [ 5467.093407] e1000: eth0: e1000_watchdog: NIC Link is Down
+| [ 5470.228254] e1000: eth0: e1000_watchdog: NIC Link is Up 100 Mbps
+| Full Duplex, Flow Control: RX/TX
+Was traffic sent over eth0? If yes, then it may have relevance for the
+bug, for if the cable is disconnected in the middle of a connection,
+the situation changes.
+
+
+| [ 4853.013621] dccp_ackvec_add_new: Warning: large burst loss (583)
+| [ 5690.125731] dccp_ackvec_add_new: Warning: large burst loss (943)
+| [ 5747.246785] dccp_ackvec_add_new: Warning: large burst loss (76)
+| [ 6301.420651] dccp_ackvec_add_new: Warning: large burst loss (77)
+I have collated these messages - there is quite a lot of loss going on
+and I am wondering whether the Ack Vectors are properly dimensioned.
+This is independent of the bug report: in any case, the warning message
+says that multiple losses will now be compressed into cells of 63 lost
+packets each, instead of occupying one cell each (which would otherwise
+almost certainly lead to overflow).
+
+Back to the bug report:
+
+| [ 6286.655846] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
+| [ 6286.864021] BUG: Failed negotiation in state 2 at
+| net/dccp/feat.c:1370/dccp_feat_activate_values()
+| [ 6286.864034] Pid: 0, comm: swapper Not tainted 2.6.25-rc3 #4
+| [ 6286.864034]  [<c045c6bb>] dccp_feat_activate_values+0x7b/0x200
+| [ 6286.864034]  [<c045f919>] dccp_create_openreq_child+0xb9/0x100
+<snip>
+| [ 6288.714624] ccid2_change_l_ack_ratio: Limiting Ack Ratio (4) to 2
+The "Limiting Ack Ratio (4) to 2" must be from a different flow, since
+it was before the BUG message and continued afterwards.
+
+Now I see what you meant by `stopped': if feature negotiation fails,
+the thread indeed stops, since otherwise it would mean to operate
+with an undefined (unconfirmed) option value, which will otherwise
+cause havoc. The server ends the connection with a reset (can you
+remember what the client reported after that?).		
+
+It is a pity that you don't have the tcpdump, this would allow to find
+out which feature option could not be negotiated. 
+
+What I will do for the moment is to turn the dccp_pr_debug() under
+the `activation_failed' into a DCCP_CRIT, so that it outputs the type
+of the feature that has failed.
+
+Please check the above questions.
+
+Gerrit
