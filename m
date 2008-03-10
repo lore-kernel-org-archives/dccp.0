@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 10 Mar 2008 14:47:02 +0000
+Date: Mon, 10 Mar 2008 15:01:03 +0000
 Subject: Re: packet priorities
-Message-Id: <20080310144702.GD7984@gerrit.erg.abdn.ac.uk>
+Message-Id: <20080310150103.GE7984@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <200803071151.55379.tomasz@grobelny.oswiecenia.net>
 In-Reply-To: <200803071151.55379.tomasz@grobelny.oswiecenia.net>
@@ -10,28 +10,43 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-| > >  The deadline is not that easy to determine due to client side buffering.
-<snip>
-| >
-| > You can track the rtt and also mark the expiry time and do the maths.
-| > Again check my papers...
-| I think we don't understand each other well here. My point is that no matter 
-| what the kernel does it cannot always know whether packet will be late or 
-| not. That is because it would need feedback from client how much of the 
-| stream is buffered. Suppose that RTT is 10ms but the client code buffered 15 
-| seconds of transmission. If the packet was waiting in DCCP send queue for 5 
-| seconds should we send it or discard? Without feedback from the player we 
-| cannot tell.
-| In some applications it is possible to assume some sensible defaults or 
-| negotiate delay. But that is not a priority for me for now. But of course the 
-| design should allow specifying deadline.
-| -- 
-I find the same problem here, and it gets even worse when the client
-side uses different buffer sizes for pre-buffering. And the RTT can also
-change.
+Quoting Alessio:
+| 
+| > > Two ideas with regard to reproducing:
+| > >  1. The excellent little D-ITG traffic generator
+| > >     http://www.grid.unina.it/software/ITG/
+| > >     It has DCCP support and packet timing can be set as a random variable,
+| > >     which can be bound to a random seed (to reproduce test runs).
+| > > 
+| > That might be useful. I'll just have to check if it is possible to count which 
+| > packets arrived at the destination end so that mixed audio/video stream 
+| > simulation can be done.
+| 
+| 
+| For sure it is. Both D-ITG sender and receiver can log different
+| information (i.e. packet id, sending and receiving time, and size) 
+| for each sent and received packet.
+| Please, have a look at it and do not hesitate to contact me for any
+| question.
+| 
+I think that we can use your input in this matter. From the application
+perspective, what alternatives do you see in specifying an upper bound
+on the packet lifetime.
 
-Hence in my understanding only the simplest form of specifying a deadline
-makes sense -- giving an upper bound on the playout time. And this can be
-done by the application. Servers such as Darwin Streaming Server also take
-application-layer RTTs, so that the kernel need not spend extra cycles on
-doing timestamping.
+The problem is that with the current socket API and a non-constant
+inter-packet gap, all packets which are submitted "too early" will
+suffer EAGAIN and then be dropped.
+
+So the current dropping policy of the internal TX buffer is "tail drop".
+By specifying priorities this can be improved to "drop worst packet
+first".
+
+The question here is, when the interpacket gap value is, say `IPG',
+and IPG is distributed according to some distribution, is is possible to
+specify a timeout value `timeout', i.e. setting
+	      IPG' = IPG + timeout?
+
+One could set this up such that timeout/IPG < delta, where delta is
+the maximum error, say 5%?
+
+Does this make sense - are there other/better suggestions?
