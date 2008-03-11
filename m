@@ -1,51 +1,31 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Mon, 10 Mar 2008 20:28:16 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Tue, 11 Mar 2008 02:31:10 +0000
 Subject: Re: dccp bugs (Was: Re: panic on 2.6.24rc5)
-Message-Id: <200803102128.17019.tomasz@grobelny.oswiecenia.net>
+Message-Id: <5640c7e00803101931h3286bfa7k72c56cf340a2b854@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200803081629.09562.tomasz@grobelny.oswiecenia.net>
 In-Reply-To: <200803081629.09562.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Dnia Monday 10 of March 2008, Gerrit Renker napisa=B3:
-> Now I have a question: adding 1 ms delay at the interface avoided the
-> hang-up, but what do you mean by "long enough"? Is this 60 seconds?
->
-I tested it for something like 100 seconds and didn't encounter any problem=
-s.
+2008/3/11 Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>:
+> Maybe CCID-3 could somehow disable itself when it detects it is not necessary?
 
-> But since the average RTT is 48 microseconds in the `outfile', I am
-> assuming that the outfile was produced when the delay was not added to
-> the interface?
->
-Yes, that's what I thought you asked me for...
+That is an issue for the protocol designers, not the implementers...
 
-> There is a long-standing problem (at least 1 year) with regard to CCID-3
-> over high-speed networks (and lo interface is in fact a high-speed
-> interface): high link speeds are outside the control region of CCID-3.
->
-> The peak limit of controllable speed is about 12 Mbps. Everything higher
-> that will cause problems. I have not tested, but you may be able to
-> also silence this behaviour by using a netem token-bucket filter with
-> e.g. a maximum bitrate of <=3D 10 Mbps.
->
-I somehow doubt it because setting up tbf with limit greater than the actua=
-l=20
-traffic should have no influence at all. But let's check it...
-sudo tc qdisc add dev lo root handle 1:0 tbf rate 30kbit burst 30kbit laten=
-cy=20
-500ms
+I have had discussions around whether CCID3 is stable or not at high
+speeds. I tend to think that it is and that we have a couple of bugs
+lurking around. I got about 75% of the way through proving this but I
+ran out of time.... So feel free to dive into kernel code.
 
-Still the speed drops down to 1 packet per 64 seconds.
+Please note that I said 75% - my thoughts might be totally wrong as
+didn't quite get to the bottom of it. If you go back about six months
+to a year in the archives you might discover the discussion beteen
+Gerrit and myself.
 
-> So I think the least thing we need to do is put a warning into the DCCP
-> Wiki that people should add interface delay when using CCID-3 for
-> testing over loopback.
-Maybe CCID-3 could somehow disable itself when it detects it is not necessa=
-ry?
---=20
-Regards,
-Tomasz Grobelny
+Ian
+-- 
+Web: http://wand.net.nz/~iam4/
+Blog: http://iansblog.jandi.co.nz
