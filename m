@@ -1,45 +1,35 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Sat, 08 Mar 2008 04:59:55 +0000
-Subject: Re: Existing solutions for encapsulation?
-Message-Id: <5640c7e00803072059u34e3cc1foe86124da7c46fa27@mail.gmail.com>
+From: Steven Brown <swbrown@variadic.org>
+Date: Wed, 12 Mar 2008 22:19:26 +0000
+Subject: 'err=-113 after ccid_hc_tx_packet_sent'
+Message-Id: <47D856EE.2030102@variadic.org>
 List-Id: <dccp.vger.kernel.org>
-References: <47CEF714.708@variadic.org>
-In-Reply-To: <47CEF714.708@variadic.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Thu, Mar 6, 2008 at 8:40 AM, Steven Brown <swbrown@variadic.org> wrote:
-> I'm running into a need for encapsulation due to various providers
->  mangling (mandatory NATs on local EVDO service) or dropping (AT&T Yahoo
->  DSL residential service (but business service works it seems)) DCCP
->  traffic.  I figure DCCP-NAT[1] support in the stack is exactly what I
->  need, but AFAIK it's not implemented yet (only in DCCP-TP I think).
->
->  Is there an existing solution at the moment to add the encoding, or near
->  term plan to implement it?  If not, would it make sense to route the
->  traffic into a tun device that adds/removes the encoding?  Is there a
->  better way to get the DCCP packet before it's sent than having an extra
->  service/interface like that?  I'm not familiar enough with the kernel
->  layer to implement it there in reasonable time which is why I'm looking
->  at doing a quick hack in userland.
->
->
->  [1] http://www.phelan-4.com/dccp/draft-phelan-dccp-natencap-00.txt
->
-Steven,
+I've been seeing these errors fairly regularly in all the kernels I've
+tried it with for the past few months (the most recent being the test
+tree as of 2008-03-04) - I suspect that it's also the cause of close() 
+sometimes blocking (can be ^Ced).  Using the default settings (CCID2, 
+etc.) with an updated .config from Debian's 2.6.24.
 
-I'm not aware of anybody working on this in the kernel at present -
-this is relatively new though. I would love to, but don't have the
-time. Basically things get into the kernel by people having a go. A
-quick hack in userland would work, but I would say give it a go in
-kernel as well - no time to learn like the present!
+BUG: err=-113 after ccid_hc_tx_packet_sent at
+net/dccp/output.c:280/dccp_write_xmit()
+Pid: 14115, comm: test Not tainted 2.6.25-rc3-dccp-200803041 #3
+  [<d0141401>] ccid2_hc_tx_packet_sent+0x0/0xad [dccp_ccid2]
+  [<d01551f7>] dccp_write_xmit+0x21e/0x29a [dccp]
+  [<c024909d>] lock_sock_nested+0x75/0x7c
+  [<c024d611>] memcpy_fromiovec+0x28/0x4b
+  [<d01567a3>] dccp_sendmsg+0x127/0x14b [dccp]
+  [<c0288ce4>] inet_sendmsg+0x35/0x3f
+  [<c02475d0>] sock_sendmsg+0xc6/0xe0
+  [<c012784f>] autoremove_wake_function+0x0/0x2d
+  [<c016c999>] core_sys_select+0x1d0/0x2a4
+  [<c0172ee8>] mntput_no_expire+0x11/0x55
+  [<c0247e86>] sys_sendto+0xf9/0x124
+  [<c012784f>] autoremove_wake_function+0x0/0x2d
+  [<c0247eca>] sys_send+0x19/0x1d
+  [<c024874d>] sys_socketcall+0xed/0x19e
+  [<c0104792>] syscall_call+0x7/0xb
 
-The other option is seeing if you can port it from DCCP-TP to the
-kernel. It is meant to be a portable implementation....
-
-Ian
--- 
-Web: http://wand.net.nz/~iam4/
-Blog: http://iansblog.jandi.co.nz
