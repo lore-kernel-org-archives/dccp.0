@@ -1,48 +1,78 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 11 Mar 2008 15:08:48 +0000
-Subject: [DCCP-Apps] [Announce]: DCCP support for three audio clients
-Message-Id: <20080311150848.GA19614@gerrit.erg.abdn.ac.uk>
+Date: Sat, 15 Mar 2008 06:56:32 +0000
+Subject: [DCCP] [Patch 1/1] [BUG-FIX]: Fix problem with small RTTs in CCID-3
+Message-Id: <20080315065632.GA5323@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-The following URL gives access to several audio streamers patched for DCCP:
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/#audio_clients
+Arnaldo,
 
-These can be used as clients for servers such as paraslash or gstreamer, and
-work for IPv4 and IPv6.
+please consider the attached patch which fixes the reported problems with small
+RTTs in CCID-3. Clamping the RTT is not a good idea, since CCID-3 in many places
+computes its throughput in the form "xxx/RTT" - so that increasing the RTT by a
+factor of 10 will decrease the maximum achievable throughput by a factor of 10.
 
-There are two variants of mpg123 and one variant of vorbis-tools/ogg123 to
-support a pseudo-URI of the type `dccp://' with the following syntax:
+The patch is at the bottom of the test tree. The bug has also been fixed
+in the CCID-4 subtree (a note has been added to patch #19 there).
 
-	dccp://hostname		# DNS hostname and default port 8000
-	dccp://hostname:9011	# same but on non-default port
-	dccp://10.0.0.1		# native IPv4 address with default port 8000
-	dccp://10.0.0.2:8001	# same, but with non-default port
-	dccp://[beef::4]	# IPv6 address as per RFC 3986 with default port
-	dccp://[::]:1234	# connecting to IPv6 localhost on port 1234
+----------------------------> Patch / BUG-FIX <---------------------------------
+[CCID-3]: Fix "t_ipi explosion" bug
 
+The identification of this bug is thanks to Cheng Wei and Tomasz Grobelny.
 
-Individual notes:
------------------
-(1) mpg123
- * the mpg123-0.60 patch uses buffered stdio (fread()) to turn the stream of datagrams into
-   the bytestream expected by the decoder;
- * the mpg123-1.2.0 patch achieves the same purpose by fork()ing a separate process acting as
-   a producer filling a pipe(2), which presents the bytestream abstraction to the main process;
+To avoid divide-by-zero, the implementation previously ignored RTTs smaller
+than 4 microseconds when performing integer division RTT/4. 
 
-(2) ogg123
-    This requires several other packages to build: (pthreads, libcurl(-dev), libao(-dev)).
-    The patch performs the transformation from datagram stream into bytestream using a pthread,
-    which fills a circular buffer (also used by the http subsystem) - similar to buffered stdio.
+When the RTT reached a value less than 4 microseconds (as observed on loopback),
+this prevented the Window Counter CCVal value from advancing. As a result, the
+receiver stopped sending feedback. This in turn caused non-ending expiries of
+the nofeedback timer at the sender, so that the sending rate was progressively
+reduced until reaching the bottom of one packet per 64 seconds.
 
-(3) dccp_pipe
-    The dccp_pipe is a simple sink which reproduces its input - in combination with a named
-    pipe (mkfifo), a pipe (`|') to stdout etc. it can be used as input source for such audio 
-    (and possibly video) decoders that are able to read from stdin;
-    This application also resolves hostnames as well as IPv4/v6 addresses and can be used as
-    a simple "stream-ripper" as in the following example (uses also port 8000 as default):
+The patch fixes this bug by handling integer division more intelligently. Due to
+consistent use of dccp_sample_rtt(), divide-by-zero-RTT is avoided.
 
-   	dccp_pipe --connect 10.0.0.1 --stdout | tee stream_rip.mp3 | mpg123 -vb64 -
+The patch was tested to successfully eliminate the "t_ipi explosion" problem
+for loopback RTTs in the order of 1 microsecond - the sending behaviour now
+became stable and predictable.
+
+Since 1 microsecond is at the same time the minimum RTT resolution, the same
+stable behaviour can be expected for other (small) RTTs.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |   13 ++++---------
+ 1 file changed, 4 insertions(+), 9 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -193,22 +193,17 @@ static inline void ccid3_hc_tx_update_s(
+ 
+ /*
+  *	Update Window Counter using the algorithm from [RFC 4342, 8.1].
+- *	The algorithm is not applicable if RTT < 4 microseconds.
++ *	As elsewhere, RTT > 0 is assumed by using dccp_sample_rtt().
+  */
+ static inline void ccid3_hc_tx_update_win_count(struct ccid3_hc_tx_sock *hctx,
+ 						ktime_t now)
+ {
+-	u32 quarter_rtts;
+-
+-	if (unlikely(hctx->ccid3hctx_rtt < 4))	/* avoid divide-by-zero */
+-		return;
+-
+-	quarter_rtts = ktime_us_delta(now, hctx->ccid3hctx_t_last_win_count);
+-	quarter_rtts /= hctx->ccid3hctx_rtt / 4;
++	u32 delta = ktime_us_delta(now, hctx->ccid3hctx_t_last_win_count),
++	    quarter_rtts = (4 * delta) / hctx->ccid3hctx_rtt;
+ 
+ 	if (quarter_rtts > 0) {
+ 		hctx->ccid3hctx_t_last_win_count = now;
+-		hctx->ccid3hctx_last_win_count	+= min_t(u32, quarter_rtts, 5);
++		hctx->ccid3hctx_last_win_count	+= min(quarter_rtts, 5U);
+ 		hctx->ccid3hctx_last_win_count	&= 0xF;		/* mod 16 */
+ 	}
+ }
