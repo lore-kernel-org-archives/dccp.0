@@ -1,85 +1,94 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Mon, 24 Mar 2008 13:07:46 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 24 Mar 2008 14:04:15 +0000
 Subject: Re: dccp bugs
-Message-Id: <200803241407.46604.tomasz@grobelny.oswiecenia.net>
+Message-Id: <20080324140414.GA14493@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <200803232131.58407.tomasz@grobelny.oswiecenia.net>
 In-Reply-To: <200803232131.58407.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Dnia Monday 24 of March 2008, Gerrit Renker napisa=B3:
-> | One more thing I noticed when using dccp...
-> | I have a server which accepts connection, receives data and finishes
-> | execution and a client that sends 1000 data packets and finishes
-> | execution (see http://dccp.one.pl/svn/userspace/test/). When I run
-> | ./server then ./client packets are sent but client program finishes
-> | executions only after all packets from queue are sent. Which is I guess
-> | quite ok. The problem happens when I kill the server program while clie=
-nt
-> | is running and sending packets. The client detects that the connection =
-is
-> | broken and starts returning error 32 from sendmsg call.
->
-> Error 32 is EPIPEi ("broken pipe"), so this looks correct.
->
-> | But after it finishes sending packets it hangs on exit
-> | and even kill -9 doesn't work. It finishes after quite a long time (eg.
-> | 10 minutes). Am I doing something wrong or is it a bug in dccp? Tested =
-on
-> | loopback with rate limiting (sudo tc qdisc add dev lo root handle 1:0 t=
-bf
-> | rate 3kbit burst 3kbit latency 500ms). With rate limiting turned off I
-> | don't see any problems. Testing between two virtual machines with rate
-> | limiting on shows the same problem.
-> | --
->
-> Can you try the `ss' command from the iproute package when the problem
-> occurs, using `ss -nadep' to display the DCCP states?
->
-$ ss -nadep
-State       Recv-Q Send-Q                        Local Address:Port        =
-                 =20
-Peer Address:Port
-FIN-WAIT-1  0      0                                 127.0.0.1:2008        =
-                    =20
-127.0.0.1:29792  ino:0 sk:d301d3c0
+| > Can you try the `ss' command from the iproute package when the problem
+| > occurs, using `ss -nadep' to display the DCCP states?
+| >
+| $ ss -nadep
+| State       Recv-Q Send-Q                        Local Address:Port                          
+| Peer Address:Port
+| FIN-WAIT-1  0      0                                 127.0.0.1:2008                             
+| 127.0.0.1:29792  ino:0 sk:d301d3c0
+| 
+I almost expected that it would be this state. I have also encountered
+this when aborting applications in a non-expected way.
 
-> DCCP is connection-oriented, so killing a server/client is different
-> from UDP. When you try to kill a DCCP node, it will first try to finish
-> its connection. The `hang' effect is most likely due to an uncompleted
-> system call such as close(), and it is in a non-interruptible state.
->
-10 minutes for an uninterruptible call seems to be quite a long time. If I =
+The state FIN-WAIT-1 is mapped into ACTIVE_CLOSEREQ, i.e. the server seems
+to be the one running on port 2008; it has sent a CloseReq, asking the client
+to terminate the connection. The DCCP spec says that the CloseReq must be
+retransmitted (RFC 4340, 8.3.1).
 
-were a system administrator it would probably drive me mad.
+   Endpoints in the CLOSEREQ and CLOSING states MUST retransmit DCCP-
+   CloseReq and DCCP-Close packets, respectively, until leaving those
+   states.  The retransmission timer should initially be set to go off
+   in two round-trip times and should back off to not less than once
+   every 64 seconds if no relevant response is received.
 
-> What is far more important to know - are you using a standard kernel, a
-> netdev kernel, or the test tree? And from what you describe, I suspect
-> you are using CCID-3 - does the same problem happen with CCID-2?
->
-I'm using not that fresh DCCP experimental tree. Tested on CCID-2 but same =
+Hence the implementation is according to the spec - the server will
+retry until it gets the required DCCP-Close from the client, and only
+then leave the CLOSEREQ state.
 
-thing happens on CCID-3.
+| > DCCP is connection-oriented, so killing a server/client is different
+| > from UDP. When you try to kill a DCCP node, it will first try to finish
+| > its connection. The `hang' effect is most likely due to an uncompleted
+| > system call such as close(), and it is in a non-interruptible state.
+| >
+| 10 minutes for an uninterruptible call seems to be quite a long time. If I 
+| were a system administrator it would probably drive me mad.
+| 
+I think that there are cases in TCP where TCP is similarly pernicious.
+Not least because DCCP uses the same sysctls (request_retries,
+retries1, retries2).
 
-> I am aware that there is at least one patch which may remedy the problem
-> you encountered, which is the patch to clean up the write queue on
-> (forced) disconnect, also the wait-for-ccid cleanup routine which
-> flushes the write queue at the end of the connection.
->
-Is it in experimental tree?
+| > I am aware that there is at least one patch which may remedy the problem
+| > you encountered, which is the patch to clean up the write queue on
+| > (forced) disconnect, also the wait-for-ccid cleanup routine which
+| > flushes the write queue at the end of the connection.
+| >
+| Is it in experimental tree?
+| 
+Yes theses patches are all in the experimental tree. What they do is to
+purge the write queue on abnormal termination and they ensure that
+flushing the write queue at the end of a connection takes no longer than
+the SO_LINGER time. 
 
-> There are also sysctls to reduce the number of attempts to repeat a
-> (futile) close at the end, in Documentation/networking/dccp.txt
-You mean the *retries* entries? Setting all three to 1 doesn't make it any =
+But as you already said that the problem happens with both CCIDs, it may
+(or may not, am not entirely sure) be that this does not help with the
+long timeouts. It is definitively worth a try:
+http://www.linux-foundation.org/en/Net:DCCP_Testing#Experimental_DCCP_source_tree	
 
-better.
+| > There are also sysctls to reduce the number of attempts to repeat a
+| > (futile) close at the end, in Documentation/networking/dccp.txt
+| You mean the *retries* entries? Setting all three to 1 doesn't make it any 
+| better.
+How to quantify `better'? Changing valueswill not change the problem as such, but
+it will reduce the timeout until the server gives up. And from earlier
+tests (about 1+1/2 years ago when the sysctls were activated) I recall that
+this worked correctly.
 
-And one more thing: if I try to interrupt the client program before it reac=
-hes=20
-its end all is fine - the program finishes execution immediately.
---=20
-Regards,
-Tomasz Grobelny
+There are alternatives, the first relates to your comment below.
+| And one more thing: if I try to interrupt the client program before it reaches 
+| its end all is fine - the program finishes execution immediately.
+| -- 
+In this case the long timeout is avoided: the client either sends a Reset (when
+it still has unread data or SO_LINGER with linger=0 is used) or a Close
+if it terminates cleanly. In this case the server directly closes and
+does not enter into CLOSEREQ where it is required to retransmit the
+CloseReq.
+
+So to get around the annoyance, killing the client first avoids these
+long waiting times.
+
+(The other alternative is to enable the DCCP_SOCKOPT_SERVER_TIMEWAIT
+ option (documented also in Documentation/networking/dccp.txt), where the
+ server sends just a single close. But if here also the client dies
+ before the server, the server would have to retransmit the Close also.)
