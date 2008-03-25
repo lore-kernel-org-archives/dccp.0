@@ -1,7 +1,7 @@
 From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Tue, 25 Mar 2008 00:03:08 +0000
+Date: Tue, 25 Mar 2008 00:13:32 +0000
 Subject: Re: dccp bugs
-Message-Id: <200803250103.08124.tomasz@grobelny.oswiecenia.net>
+Message-Id: <200803250113.32575.tomasz@grobelny.oswiecenia.net>
 List-Id: <dccp.vger.kernel.org>
 References: <200803232131.58407.tomasz@grobelny.oswiecenia.net>
 In-Reply-To: <200803232131.58407.tomasz@grobelny.oswiecenia.net>
@@ -10,23 +10,26 @@ Content-Type: text/plain; charset="iso-8859-1"
 Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-Dnia Monday 24 of March 2008, Arnaldo Carvalho de Melo napisa=B3:
-> IIRC Thomas said that the server process terminates, its just the client
-> that hangs for a long time, lemme re-read the other messages...
-Yes, you are right.
-
-> Thomas, is it the client that hangs? Or is it the server?
+Dnia Monday 24 of March 2008, Gerrit Renker napisa=B3:
+> | > | > Can you try the `ss' command from the iproute package when the
+> | > | > problem occurs, using `ss -nadep' to display the DCCP states?
+> | > |
+> | > | $ ss -nadep
+> | > | State       Recv-Q Send-Q                        Local Address:Port
+> | > | Peer Address:Port
+> | > | FIN-WAIT-1  0      0                                 127.0.0.1:2008
+> | > | 127.0.0.1:29792  ino:0 sk:d301d3c0
 >
-It is the client (the program that does connect(...)) that hangs. The serve=
+> <snip>
+>
+> This is a good point, but now it gets confusing. The FIN-WAIT-1/active
+> CLOSEREQ state can only happen on the server, so maybe the above output
+> is not the right one.
+I checked it once again and it looks almost the same. But even if the serve=
 r=20
-(the one which does listen(...)) is already dead. Well, the server process =
+is dead its socket is not that dead. At least it cannot be reused by other =
 
-finished execution but the socket is somehow busy: when I try to run the=20
-server once again (on the same port) and try to connect to it with another =
-
-instance of the client program I always get this 32 return code from sendms=
-g=20
-call.
+instance of server.
 --=20
 Regards,
 Tomasz Grobelny
