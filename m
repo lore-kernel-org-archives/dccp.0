@@ -1,35 +1,42 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Tue, 25 Mar 2008 00:13:32 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 25 Mar 2008 10:48:32 +0000
 Subject: Re: dccp bugs
-Message-Id: <200803250113.32575.tomasz@grobelny.oswiecenia.net>
+Message-Id: <20080325104832.GC10458@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <200803232131.58407.tomasz@grobelny.oswiecenia.net>
 In-Reply-To: <200803232131.58407.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Dnia Monday 24 of March 2008, Gerrit Renker napisa=B3:
-> | > | > Can you try the `ss' command from the iproute package when the
-> | > | > problem occurs, using `ss -nadep' to display the DCCP states?
-> | > |
-> | > | $ ss -nadep
-> | > | State       Recv-Q Send-Q                        Local Address:Port
-> | > | Peer Address:Port
-> | > | FIN-WAIT-1  0      0                                 127.0.0.1:2008
-> | > | 127.0.0.1:29792  ino:0 sk:d301d3c0
->
-> <snip>
->
-> This is a good point, but now it gets confusing. The FIN-WAIT-1/active
-> CLOSEREQ state can only happen on the server, so maybe the above output
-> is not the right one.
-I checked it once again and it looks almost the same. But even if the serve=
-r=20
-is dead its socket is not that dead. At least it cannot be reused by other =
+Quoting Tomasz Grobelny:
+| Dnia Monday 24 of March 2008, Arnaldo Carvalho de Melo napisa?:
+| > IIRC Thomas said that the server process terminates, its just the client
+| > that hangs for a long time, lemme re-read the other messages...
+| Yes, you are right.
+| 
+| > Thomas, is it the client that hangs? Or is it the server?
+| >
+| It is the client (the program that does connect(...)) that hangs. The server 
+| (the one which does listen(...)) is already dead. Well, the server process 
+| finished execution but the socket is somehow busy: when I try to run the 
+| server once again (on the same port) and try to connect to it with another 
+| instance of the client program I always get this 32 return code from sendmsg 
+| call.
+Ok, it is clearer now: the "somehow busy" is related to the `ss' output,
+where the server tries to resend its CloseReq (as per other email).
 
-instance of server.
---=20
-Regards,
-Tomasz Grobelny
+Since it is the client that hangs and which sends packets, there is a
+very good chance that the recent patches in the test tree will fix that
+problem, in particular as it is related to 
+ * aborting a client with a full write queue,
+ * closing a client with a full write queue while the client can't send.
+
+If possible, can you please try the test tree patches and see if the
+problem persists. I am doing a lot of testing and have not observed any
+similar errors in the test tree -- the closest being the server-hand on
+retransmitting CloseReq, which may account for the earlier confusion.
+
+You need not pull git, patches are available for recent standard kernels on:
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/testing_dccp/test-tree/
