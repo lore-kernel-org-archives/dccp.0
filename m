@@ -1,100 +1,88 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 25 Mar 2008 16:20:08 +0000
-Subject: [PATCH 4/7] [CCID-2/3]: Fix sparse warnings
-Message-Id: <1206462011-24907-5-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Tue, 25 Mar 2008 16:20:05 +0000
+Subject: [PATCH 1/7] [BUG-FIX] [CCID-3]: Don't interpret feedback when nothing has been sent
+Message-Id: <1206462011-24907-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch fixes the following two sparse warnings:
+This is a BUG-Fix for CCID-3 which, on a server, lead to such messages:
 
- 1. Due to a nested min(max()) expression, sparse gave the following warnings:
+  ccid3_hc_tx_packet_recv: server(e7b7d518): DATAACK with bogus ACK-281971487
+  ccid3_hc_tx_packet_recv: server(e7b7d518): DATAACK with bogus ACK-2664160693
+  ccid3_hc_tx_packet_recv: server(e7b7d030): DATAACK with bogus ACK-2775299822
+  ccid3_hc_tx_packet_recv: server(e7b7d518): DATAACK with bogus ACK-3035830110
+  ccid3_hc_tx_packet_recv: server(e7b7d030): DATAACK with bogus ACK-3436194561
 
-    net/dccp/ccids/ccid3.c:91:21: warning: symbol '__x' shadows an earlier one
-    net/dccp/ccids/ccid3.c:91:21: warning: symbol '__y' shadows an earlier one
+The cause was that the (passive) server hadn't sent anything, i.e. its TX
+history was empty. This patch adds the missing test for an empty TX history,
+i.e. packets carrying Ack information are ignored if nothing has been sent.
 
-    In addition, in update_x(), the function call to scaled_div() appeared as
-    macro parameter and was thus evaluated multiple times. 
-    Fixed by disentangling the nested expression - code also clearer now.
-
- 2. Declaration of function prototypes was in .c instead of .h file.
-    This resulted in "should it be static" warnings. Corrected by moving the
-    declarations to the tfrc.h file instead of the tfrc.c file.
+I wanted to keep this generic, i.e. use a "hist_empty()" function instead of
+"hctx->hist = NULL". Also replaced multiple occurrences of DCCP_SKB_CB.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid3.c    |   11 +++++++----
- net/dccp/ccids/lib/tfrc.c |    8 --------
- net/dccp/ccids/lib/tfrc.h |   11 +++++++++--
- 3 files changed, 16 insertions(+), 14 deletions(-)
+ net/dccp/ccids/ccid3.c              |   16 +++++++++-------
+ net/dccp/ccids/lib/packet_history.h |    4 ++++
+ 2 files changed, 13 insertions(+), 7 deletions(-)
 
+diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
+index ec7424c..38273dc 100644
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -130,7 +130,8 @@ static u32 ccid3_hc_tx_idle_rtt(struct c
- static void ccid3_hc_tx_update_x(struct sock *sk, ktime_t *stamp)
+@@ -384,13 +384,15 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
  {
  	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
--	u64 min_rate = 2 * hctx->x_recv;
-+	u64 min_rate = 2 * hctx->x_recv,
-+	    low_thresh = ((u64)hctx->s) << 6;
- 	const u64 old_x = hctx->x;
- 	ktime_t now = stamp ? *stamp : ktime_get_real();
+ 	struct ccid3_options_received *opt_recv;
++	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
+ 	ktime_t now;
+ 	unsigned long t_nfb;
+ 	u32 pinv, r_sample;
  
-@@ -148,14 +149,16 @@ static void ccid3_hc_tx_update_x(struct 
- 	if (hctx->p > 0) {
+-	/* we are only interested in ACKs */
+-	if (!(DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK ||
+-	      DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_DATAACK))
++	/* Ignore if nothing has been sent; feedback is on Ack/DataAck only */
++	if (tfrc_tx_hist_is_empty(hctx->ccid3hctx_hist) ||
++	    !(dcb->dccpd_type = DCCP_PKT_ACK ||
++	      dcb->dccpd_type = DCCP_PKT_DATAACK))
+ 		return;
+ 	/* ... and only in the established state */
+ 	if (hctx->ccid3hctx_state != TFRC_SSTATE_FBACK &&
+@@ -402,11 +404,11 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
  
- 		hctx->x = min(((u64)hctx->x_calc) << 6, min_rate);
--		hctx->x = max(hctx->x, (((u64)hctx->s) << 6) / TFRC_T_MBI);
-+		low_thresh /= TFRC_T_MBI;
- 
- 	} else if (ktime_us_delta(now, hctx->t_ld) - (s64)hctx->rtt >= 0) {
- 
--		hctx->x = max(min(2 * hctx->x, min_rate),
--			      scaled_div(((u64)hctx->s) << 6, hctx->rtt));
-+		hctx->x = min(2 * old_x, min_rate);
-+		low_thresh = scaled_div(low_thresh, hctx->rtt);
- 		hctx->t_ld = now;
+ 	/* Estimate RTT from history if ACK number is valid */
+ 	r_sample = tfrc_tx_hist_rtt(hctx->ccid3hctx_hist,
+-				    DCCP_SKB_CB(skb)->dccpd_ack_seq, now);
++				    dcb->dccpd_ack_seq, now);
+ 	if (r_sample = 0) {
+-		DCCP_WARN("%s(%p): %s with bogus ACK-%llu\n", dccp_role(sk), sk,
+-			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type),
+-			  (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq);
++		DCCP_WARN("%s(%p): %s with bogus ACK #%llu\n",
++			  dccp_role(sk), sk, dccp_packet_name(dcb->dccpd_type),
++			  (unsigned long long)dcb->dccpd_ack_seq);
+ 		return;
  	}
-+	if (hctx->x < low_thresh)
-+		hctx->x = low_thresh;
  
- 	if (hctx->x != old_x) {
- 		ccid3_pr_debug("X_prev=%u, X_now=%u, X_calc=%u, "
---- a/net/dccp/ccids/lib/tfrc.h
-+++ b/net/dccp/ccids/lib/tfrc.h
-@@ -58,7 +58,14 @@ static inline u32 tfrc_ewma(const u32 av
- 	return avg ? (weight * avg + (10 - weight) * newval) / 10 : newval;
- }
+diff --git a/net/dccp/ccids/lib/packet_history.h b/net/dccp/ccids/lib/packet_history.h
+index c7eeda4..732b07e 100644
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -42,6 +42,10 @@
  
--extern u32 tfrc_calc_x(u16 s, u32 R, u32 p);
--extern u32 tfrc_calc_x_reverse_lookup(u32 fvalue);
-+extern u32  tfrc_calc_x(u16 s, u32 R, u32 p);
-+extern u32  tfrc_calc_x_reverse_lookup(u32 fvalue);
+ struct tfrc_tx_hist_entry;
  
-+extern int  tfrc_tx_packet_history_init(void);
-+extern void tfrc_tx_packet_history_exit(void);
-+extern int  tfrc_rx_packet_history_init(void);
-+extern void tfrc_rx_packet_history_exit(void);
-+
-+extern int  tfrc_li_init(void);
-+extern void tfrc_li_exit(void);
- #endif /* _TFRC_H_ */
---- a/net/dccp/ccids/lib/tfrc.c
-+++ b/net/dccp/ccids/lib/tfrc.c
-@@ -14,14 +14,6 @@ module_param(tfrc_debug, bool, 0444);
- MODULE_PARM_DESC(tfrc_debug, "Enable debug messages");
- #endif
- 
--extern int  tfrc_tx_packet_history_init(void);
--extern void tfrc_tx_packet_history_exit(void);
--extern int  tfrc_rx_packet_history_init(void);
--extern void tfrc_rx_packet_history_exit(void);
--
--extern int  tfrc_li_init(void);
--extern void tfrc_li_exit(void);
--
- static int __init tfrc_module_init(void)
- {
- 	int rc = tfrc_li_init();
++static inline bool tfrc_tx_hist_is_empty(const struct tfrc_tx_hist_entry *head)
++{
++	return head = NULL;
++}
+ extern int  tfrc_tx_hist_add(struct tfrc_tx_hist_entry **headp, u64 seqno);
+ extern void tfrc_tx_hist_purge(struct tfrc_tx_hist_entry **headp);
+ extern u32  tfrc_tx_hist_rtt(struct tfrc_tx_hist_entry *head,
+-- 
+1.5.3.GIT
+
