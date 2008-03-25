@@ -1,39 +1,60 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 24 Mar 2008 10:27:51 +0000
-Subject: Re: packet priorities
-Message-Id: <20080324102751.GB10112@gerrit.erg.abdn.ac.uk>
+Date: Tue, 25 Mar 2008 16:20:04 +0000
+Subject: [DCCP] [Patch 0/7]: Bug-Fixes and Clean-Ups
+Message-Id: <1206462011-24907-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <200803071151.55379.tomasz@grobelny.oswiecenia.net>
-In-Reply-To: <200803071151.55379.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-| > Agree now with the set/getsockopts, sorry it took me a bit longer to
-| > understand. But am still uneasy with the sysctls, since they will
-| > apply only to some specific policy.
-| >
-| Ok, I can remove the sysctls. The important question is: should we keep 
-| pregister function pointer? To keep the code simple for now we should 
-| probably remove it, right?
-| 
-Yes that would be good. If the the policy needs initialisation, there is
-the init() constructor also.
+This set contains bug-fixes and clean-ups.  The first two are already
+in the test tree:
+
+Patch #1: Fixes a bug where CCID-3 tries to sample the RTT while the
+          history is empty.
+	  Leandro - I have added the same bug fix in the CCID-4 tree,
+	  just after patch #24.
+
+Patch #2: Deprecates the Ack Ratio sysctl as per earlier discussion.
 
 
-| Then what should be the sequence to set up socket?
-| 1. create socket
-| 2. setsockopt policy_id -> does not call any policy specific code
-| 3. setsockopt tx_qlen -> calls policy specific setsockopt
-| 4. connect() or listen() -> calls policy specific init()
-| Am I right?
-| 
-This looks correct to me. There is one subtle case - policies created
-on the listening socket would be inherited by the child socket, due
-to the use of sock_copy() called via dccp_create_openreq_child(). If
-the policy manipulates private data, then each child socket would
-need its own, separate copy.
+The following are kept back for the moment, since the first patch is
+an RFC patch, and since a lot of the CCID-4 code depends on this:
 
-If it is of help - the same problem came up in the feature negotiation
-code, where dccp_feat_finalise_settings() acts in a similar way to init().
+Patch #3: Continues for consistency the earlier patch which removed the
+          long prefixes for CCID-3.
+	  Arnaldo - can you please check. Also Leandro, can you also
+	  check this - it has implications for CCID-4, too; which is
+	  why I have not put it into the test tree immediately.
+
+Patch #4: Fixes two sparse warnings.
+
+Patch #5: Found out that RFC3390 code is identically applied in three
+          places (TCP, CCID-2, and CCID-3): this consolidates the
+          duplicated code.
+          Note: there is a fourth place where this code is duplicated
+                (CCID-4), but this needs to be patched separately.
+
+Patch #6: Tidies up the slow-path input processing for DCCP (i.e. input
+	  for states other than OPEN). This addresses some reordering
+          quirks by putting steps in their RFC4340-like order, ensures
+	  that CCID/Ack Vector input is indeed confined to the fast-path,
+	  and contains one bug fix.
+
+Patch #7: Removes dead states, thanks to an observation by Leandro and
+          his colleagues.
+	  Note: This would also need to be ported to CCID-4, since it
+	        uses the same (dead) states.
+
+If no one shouts, I will put that into the tree approximately by the end of
+the week. In any case it would be good to know if the CCID-4 tree is still
+active, since porting these changes will take quite a bit of work.
+
+In particular - patch #5 may be ported to CCID-4 as well, but it depends
+on whether people find the code consolidation acceptable.
+
+The first two patches can be obtained in the sets from
+
+ (1) DCCP     git pull dccp://eden-feed.erg.abdn.ac.uk/dccp_exp +dccp:my_dccp
+ (2) CCID-4   git pull dccp://eden-feed.erg.abdn.ac.uk/dccp_exp +ccid4:my_ccid4
