@@ -1,133 +1,118 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 25 Mar 2008 16:20:06 +0000
-Subject: [PATCH 2/7] [DCCP]: Deprecate Ack Ratio sysctl
-Message-Id: <1206462011-24907-3-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Tue, 25 Mar 2008 16:20:09 +0000
+Subject: [PATCH 5/7] [TCP][DCCP]: Consolidate duplicated code for RFC3390 conversion
+Message-Id: <1206462011-24907-6-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch deprecates the Ack Ratio sysctl because
- * Ack Ratio is entirely ignored by CCID-3 and CCID-4,
- * Ack Ratio currently doesn't work in CCID-2 (i.e. is always set to 1);
- * even if it would work in CCID-2, there is no point for a user to change it:
-   - Ack Ratio is constrained by cwnd (RFC 4341, 6.1.2),
-   - if Ack Ratio > cwnd, the system resorts to spurious RTO timeouts
-     (since waiting for Acks which will never arrive in this window),
-   - cwnd is not a user-configurable value.
+While fixing a sparse warning in DCCP I found that the same code (conversion of
+RFC3390 bytes-to-packets) appears identically in 3 different places:
 
-The only reasonable place for Ack Ratio is to print it for debugging. It is
-planned to do this later on, as part of e.g. dccp_probe.
+ * TCP uses RFC 3390 in a packet-oriented manner (tcp_input.c);
+ * CCID-2 uses RFC 3390 in packet-oriented manner (RFC 4341);
+ * CCID-3 uses RFC 3390 in a packet-oriented manner
+   (RFC 4342, rfc3448bis).
 
-With this patch Ack Ratio is now under full control of feature negotiation:
- * Ack Ratio is resolved as a dependency of the selected CCID;
- * if the chosen CCID supports it (i.e. CCID = CCID-2), Ack Ratio is set to
-   the default of 2, following RFC 4340, 11.3 - "New connections start with Ack
-   Ratio 2 for both endpoints";
- * what happens then is part of another patch set, since it concerns the
-   dynamic update of Ack Ratio while the connection is in full flight.
-
-Thanks to Tomasz Grobelny for discussion leading up to this patch.
+This patch consolidates the code common to both TCP and DCCP.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- Documentation/networking/dccp.txt |    3 ---
- include/linux/dccp.h              |    2 --
- net/dccp/dccp.h                   |    1 -
- net/dccp/minisocks.c              |    1 -
- net/dccp/options.c                |    1 -
- net/dccp/sysctl.c                 |    7 -------
- 6 files changed, 0 insertions(+), 15 deletions(-)
+ include/net/tcp.h      |   14 ++++++++++++++
+ net/dccp/ccids/ccid2.c |    8 ++------
+ net/dccp/ccids/ccid3.c |    5 +----
+ net/ipv4/tcp_input.c   |   17 ++---------------
+ 4 files changed, 19 insertions(+), 25 deletions(-)
 
-diff --git a/Documentation/networking/dccp.txt b/Documentation/networking/dccp.txt
-index f0aeb20..43df448 100644
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -125,9 +125,6 @@ send_ndp = 1
- send_ackvec = 1
- 	Whether or not to send Ack Vector options (sec. 11.5).
- 
--ack_ratio = 2
--	The default Ack Ratio (sec. 11.3) to use.
--
- tx_ccid = 2
- 	Default CCID for the sender-receiver half-connection.
- 
-diff --git a/include/linux/dccp.h b/include/linux/dccp.h
-index 8669074..e416dfb 100644
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -370,7 +370,6 @@ static inline unsigned int dccp_hdr_len(const struct sk_buff *skb)
-   * @dccpms_ccid - Congestion Control Id (CCID) (section 10)
-   * @dccpms_send_ack_vector - Send Ack Vector Feature (section 11.5)
-   * @dccpms_send_ndp_count - Send NDP Count Feature (7.7.2)
--  * @dccpms_ack_ratio - Ack Ratio Feature (section 11.3)
-   * @dccpms_pending - List of features being negotiated
-   * @dccpms_conf -
-   */
-@@ -380,7 +379,6 @@ struct dccp_minisock {
- 	__u8			dccpms_tx_ccid;
- 	__u8			dccpms_send_ack_vector;
- 	__u8			dccpms_send_ndp_count;
--	__u8			dccpms_ack_ratio;
- 	struct list_head	dccpms_pending;
- 	struct list_head	dccpms_conf;
- };
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 2568993..53ff8da 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -98,7 +98,6 @@ extern int  sysctl_dccp_retries2;
- extern int  sysctl_dccp_feat_sequence_window;
- extern int  sysctl_dccp_feat_rx_ccid;
- extern int  sysctl_dccp_feat_tx_ccid;
--extern int  sysctl_dccp_feat_ack_ratio;
- extern int  sysctl_dccp_feat_send_ack_vector;
- extern int  sysctl_dccp_feat_send_ndp_count;
- extern int  sysctl_dccp_tx_qlen;
-diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
-index 56bd481..569f6ff 100644
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -47,7 +47,6 @@ void dccp_minisock_init(struct dccp_minisock *dmsk)
- 	dmsk->dccpms_sequence_window = sysctl_dccp_feat_sequence_window;
- 	dmsk->dccpms_rx_ccid	     = sysctl_dccp_feat_rx_ccid;
- 	dmsk->dccpms_tx_ccid	     = sysctl_dccp_feat_tx_ccid;
--	dmsk->dccpms_ack_ratio	     = sysctl_dccp_feat_ack_ratio;
- 	dmsk->dccpms_send_ack_vector = sysctl_dccp_feat_send_ack_vector;
- 	dmsk->dccpms_send_ndp_count  = sysctl_dccp_feat_send_ndp_count;
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -809,25 +809,12 @@ void tcp_update_metrics(struct sock *sk)
+ 	}
  }
-diff --git a/net/dccp/options.c b/net/dccp/options.c
-index 6831cd8..ab2f303 100644
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -26,7 +26,6 @@
- int sysctl_dccp_feat_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
- int sysctl_dccp_feat_rx_ccid	      = DCCPF_INITIAL_CCID;
- int sysctl_dccp_feat_tx_ccid	      = DCCPF_INITIAL_CCID;
--int sysctl_dccp_feat_ack_ratio	      = DCCPF_INITIAL_ACK_RATIO;
- int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
- int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
  
-diff --git a/net/dccp/sysctl.c b/net/dccp/sysctl.c
-index 2129599..f6e54f4 100644
---- a/net/dccp/sysctl.c
-+++ b/net/dccp/sysctl.c
-@@ -41,13 +41,6 @@ static struct ctl_table dccp_default_table[] = {
- 		.proc_handler	= proc_dointvec,
- 	},
- 	{
--		.procname	= "ack_ratio",
--		.data		= &sysctl_dccp_feat_ack_ratio,
--		.maxlen		= sizeof(sysctl_dccp_feat_ack_ratio),
--		.mode		= 0644,
--		.proc_handler	= proc_dointvec,
--	},
--	{
- 		.procname	= "send_ackvec",
- 		.data		= &sysctl_dccp_feat_send_ack_vector,
- 		.maxlen		= sizeof(sysctl_dccp_feat_send_ack_vector),
--- 
-1.5.3.GIT
-
+-/* Numbers are taken from RFC3390.
+- *
+- * John Heffner states:
+- *
+- *	The RFC specifies a window of no more than 4380 bytes
+- *	unless 2*MSS > 4380.  Reading the pseudocode in the RFC
+- *	is a bit misleading because they use a clamp at 4380 bytes
+- *	rather than use a multiplier in the relevant range.
+- */
+ __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst)
+ {
+ 	__u32 cwnd = (dst ? dst_metric(dst, RTAX_INITCWND) : 0);
+ 
+-	if (!cwnd) {
+-		if (tp->mss_cache > 1460)
+-			cwnd = 2;
+-		else
+-			cwnd = (tp->mss_cache > 1095) ? 3 : 4;
+-	}
++	if (!cwnd)
++		cwnd = rfc3390_bytes_to_packets(tp->mss_cache);
+ 	return min_t(__u32, cwnd, tp->snd_cwnd_clamp);
+ }
+ 
+--- a/include/net/tcp.h
++++ b/include/net/tcp.h
+@@ -770,6 +770,21 @@ static inline __u32 tcp_current_ssthresh
+ /* Use define here intentionally to get WARN_ON location shown at the caller */
+ #define tcp_verify_left_out(tp)	WARN_ON(tcp_left_out(tp) > tp->packets_out)
+ 
++/*
++ * Convert RFC3390 larger initial windows into an equivalent number of packets.
++ *
++ * John Heffner states:
++ *
++ *	The RFC specifies a window of no more than 4380 bytes
++ *	unless 2*MSS > 4380.  Reading the pseudocode in the RFC
++ *	is a bit misleading because they use a clamp at 4380 bytes
++ *	rather than a multiplier in the relevant range.
++ */
++static inline u32 rfc3390_bytes_to_packets(const u32 bytes)
++{
++	return bytes < 1095 ? 4 : (bytes > 1460 ? 2 : 3);
++}
++
+ extern void tcp_enter_cwr(struct sock *sk, const int set_ssthresh);
+ extern __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst);
+ 
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -598,12 +598,8 @@ static int ccid2_hc_tx_init(struct ccid 
+ 	/* RFC 4341, 5: initialise ssthresh to arbitrarily high (max) value */
+ 	hctx->ssthresh  = ~0U;
+ 
+-	/*
+-	 * RFC 4341, 5: "The cwnd parameter is initialized to at most four
+-	 * packets for new connections, following the rules from [RFC3390]".
+-	 * We need to convert the bytes of RFC3390 into the packets of RFC 4341.
+-	 */
+-	hctx->cwnd = min(4U, max(2U, 4380U / dp->dccps_mss_cache));
++	/* Use larger initial windows (RFC 3390, rfc2581bis) */
++	hctx->cwnd = rfc3390_bytes_to_packets(dp->dccps_mss_cache);
+ 
+ 	/* Make sure that Ack Ratio is enabled and within bounds. */
+ 	max_ratio = DIV_ROUND_UP(hctx->cwnd, 2);
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -81,15 +81,12 @@ static void ccid3_hc_tx_set_state(struct
+  *
+  *	X_init  =  min(4 * s, max(2 * s, 4380 bytes)) / RTT
+  *
+- * Note that RFC 3390 uses MSS, RFC 4342 refers to RFC 3390, and rfc3448bis
+- * (rev-02) clarifies the use of RFC 3390 with regard to the above formula.
+  * For consistency with other parts of the code, X_init is scaled by 2^6.
+  */
+ static inline u64 rfc3390_initial_rate(struct sock *sk)
+ {
+ 	const struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+-	const u32 w_init = min_t(u32, 4 * hctx->s,
+-				 max_t(u32, 2 * hctx->s, 4380U));
++	const u32 w_init = hctx->s * rfc3390_bytes_to_packets(hctx->s);
+ 
+ 	return scaled_div(w_init << 6, hctx->rtt);
+ }
