@@ -1,78 +1,130 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 15 Mar 2008 06:56:32 +0000
-Subject: [DCCP] [Patch 1/1] [BUG-FIX]: Fix problem with small RTTs in CCID-3
-Message-Id: <20080315065632.GA5323@gerrit.erg.abdn.ac.uk>
+Date: Tue, 25 Mar 2008 16:20:11 +0000
+Subject: [PATCH 7/7] [CCID-3]: Remove dead states
+Message-Id: <1206462011-24907-8-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Arnaldo,
+This patch is thanks to an investigation by Leandro Sales de Melo and his
+colleagues. They worked out two state diagrams which highlight the fact that
+the xxx_TERM states in CCID-3/4 are in fact not necessary.
 
-please consider the attached patch which fixes the reported problems with small
-RTTs in CCID-3. Clamping the RTT is not a good idea, since CCID-3 in many places
-computes its throughput in the form "xxx/RTT" - so that increasing the RTT by a
-factor of 10 will decrease the maximum achievable throughput by a factor of 10.
+And this can be confirmed by in turn looking at the code: the xxx_TERM states
+are only ever set in ccid3_hc_{rx,tx}_exit(). These two functions are part
+of the following call chain:
 
-The patch is at the bottom of the test tree. The bug has also been fixed
-in the CCID-4 subtree (a note has been added to patch #19 there).
+ * ccid_hc_{tx,rx}_exit() are called from ccid_delete() only;
+ * ccid_delete() invokes ccid_hc_{tx,rx}_exit() in the way of a destructor:
+   after calling ccid_hc_{tx,rx}_exit(), the CCID is released from memory;
+ * ccid_delete() is in turn called only by ccid_hc_{tx,rx}_delete();
+ * ccid_hc_{tx,rx}_delete() is called only if 
+   - feature negotiation failed   (dccp_feat_activate_values()),
+   - when changing the RX/TX CCID (to eject the current CCID),
+   - when destroying the socket   (in dccp_destroy_sock()).
 
-----------------------------> Patch / BUG-FIX <---------------------------------
-[CCID-3]: Fix "t_ipi explosion" bug
-
-The identification of this bug is thanks to Cheng Wei and Tomasz Grobelny.
-
-To avoid divide-by-zero, the implementation previously ignored RTTs smaller
-than 4 microseconds when performing integer division RTT/4. 
-
-When the RTT reached a value less than 4 microseconds (as observed on loopback),
-this prevented the Window Counter CCVal value from advancing. As a result, the
-receiver stopped sending feedback. This in turn caused non-ending expiries of
-the nofeedback timer at the sender, so that the sending rate was progressively
-reduced until reaching the bottom of one packet per 64 seconds.
-
-The patch fixes this bug by handling integer division more intelligently. Due to
-consistent use of dccp_sample_rtt(), divide-by-zero-RTT is avoided.
-
-The patch was tested to successfully eliminate the "t_ipi explosion" problem
-for loopback RTTs in the order of 1 microsecond - the sending behaviour now
-became stable and predictable.
-
-Since 1 microsecond is at the same time the minimum RTT resolution, the same
-stable behaviour can be expected for other (small) RTTs.
+In other words, when CCID-3 sets the state to xxx_TERM, it is at a time where
+no more processing should be going on, hence it is not necessary to introduce
+a dedicated exit state - this is implicit when unloading the CCID.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid3.c |   13 ++++---------
- 1 file changed, 4 insertions(+), 9 deletions(-)
+ net/dccp/ccids/ccid3.c |   21 +--------------------
+ net/dccp/ccids/ccid3.h |    2 --
+ 2 files changed, 1 insertion(+), 22 deletions(-)
 
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -193,22 +193,17 @@ static inline void ccid3_hc_tx_update_s(
+@@ -56,7 +56,6 @@ static const char *ccid3_tx_state_name(e
+ 	[TFRC_SSTATE_NO_SENT]  = "NO_SENT",
+ 	[TFRC_SSTATE_NO_FBACK] = "NO_FBACK",
+ 	[TFRC_SSTATE_FBACK]    = "FBACK",
+-	[TFRC_SSTATE_TERM]     = "TERM",
+ 	};
  
- /*
-  *	Update Window Counter using the algorithm from [RFC 4342, 8.1].
-- *	The algorithm is not applicable if RTT < 4 microseconds.
-+ *	As elsewhere, RTT > 0 is assumed by using dccp_sample_rtt().
-  */
- static inline void ccid3_hc_tx_update_win_count(struct ccid3_hc_tx_sock *hctx,
- 						ktime_t now)
+ 	return ccid3_state_names[state];
+@@ -340,10 +339,6 @@ static int ccid3_hc_tx_send_packet(struc
+ 			return (u32)delay / 1000L;
+ 
+ 		ccid3_hc_tx_update_win_count(hctx, now);
+-		break;
+-	case TFRC_SSTATE_TERM:
+-		DCCP_BUG("%s(%p) - Illegal state TERM", dccp_role(sk), sk);
+-		return -EINVAL;
+ 	}
+ 
+ 	/* prepare to send now (add options etc.) */
+@@ -379,10 +374,6 @@ static void ccid3_hc_tx_packet_recv(stru
+ 	    !(dcb->dccpd_type = DCCP_PKT_ACK ||
+ 	      dcb->dccpd_type = DCCP_PKT_DATAACK))
+ 		return;
+-	/* ... and only in the established state */
+-	if (hctx->state != TFRC_SSTATE_FBACK &&
+-	    hctx->state != TFRC_SSTATE_NO_FBACK)
+-		return;
+ 
+ 	opt_recv = &hctx->options_received;
+ 	now = ktime_get_real();
+@@ -557,9 +548,7 @@ static void ccid3_hc_tx_exit(struct sock
  {
--	u32 quarter_rtts;
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+ 
+-	ccid3_hc_tx_set_state(sk, TFRC_SSTATE_TERM);
+ 	sk_stop_timer(sk, &hctx->no_feedback_timer);
 -
--	if (unlikely(hctx->ccid3hctx_rtt < 4))	/* avoid divide-by-zero */
+ 	tfrc_tx_hist_purge(&hctx->hist);
+ }
+ 
+@@ -618,7 +607,6 @@ static const char *ccid3_rx_state_name(e
+ 	static char *ccid3_rx_state_names[] = {
+ 	[TFRC_RSTATE_NO_DATA] = "NO_DATA",
+ 	[TFRC_RSTATE_DATA]    = "DATA",
+-	[TFRC_RSTATE_TERM]    = "TERM",
+ 	};
+ 
+ 	return ccid3_rx_state_names[state];
+@@ -644,14 +632,9 @@ static void ccid3_hc_rx_send_feedback(st
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
+ 	struct dccp_sock *dp = dccp_sk(sk);
+-	ktime_t now;
++	ktime_t now = ktime_get_real();
+ 	s64 delta = 0;
+ 
+-	if (unlikely(hcrx->state = TFRC_RSTATE_TERM))
 -		return;
 -
--	quarter_rtts = ktime_us_delta(now, hctx->ccid3hctx_t_last_win_count);
--	quarter_rtts /= hctx->ccid3hctx_rtt / 4;
-+	u32 delta = ktime_us_delta(now, hctx->ccid3hctx_t_last_win_count),
-+	    quarter_rtts = (4 * delta) / hctx->ccid3hctx_rtt;
+-	now = ktime_get_real();
+-
+ 	switch (fbtype) {
+ 	case CCID3_FBACK_INITIAL:
+ 		hcrx->x_recv = 0;
+@@ -855,8 +838,6 @@ static void ccid3_hc_rx_exit(struct sock
+ {
+ 	struct ccid3_hc_rx_sock *hcrx = ccid3_hc_rx_sk(sk);
  
- 	if (quarter_rtts > 0) {
- 		hctx->ccid3hctx_t_last_win_count = now;
--		hctx->ccid3hctx_last_win_count	+= min_t(u32, quarter_rtts, 5);
-+		hctx->ccid3hctx_last_win_count	+= min(quarter_rtts, 5U);
- 		hctx->ccid3hctx_last_win_count	&= 0xF;		/* mod 16 */
- 	}
+-	ccid3_hc_rx_set_state(sk, TFRC_RSTATE_TERM);
+-
+ 	tfrc_rx_hist_purge(&hcrx->hist);
+ 	tfrc_lh_cleanup(&hcrx->li_hist);
  }
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -72,7 +72,6 @@ enum ccid3_hc_tx_states {
+ 	TFRC_SSTATE_NO_SENT = 1,
+ 	TFRC_SSTATE_NO_FBACK,
+ 	TFRC_SSTATE_FBACK,
+-	TFRC_SSTATE_TERM,
+ };
+ 
+ /** struct ccid3_hc_tx_sock - CCID3 sender half-connection socket
+@@ -127,7 +126,6 @@ static inline struct ccid3_hc_tx_sock *c
+ enum ccid3_hc_rx_states {
+ 	TFRC_RSTATE_NO_DATA = 1,
+ 	TFRC_RSTATE_DATA,
+-	TFRC_RSTATE_TERM    = 127,
+ };
+ 
+ /** struct ccid3_hc_rx_sock - CCID3 receiver half-connection socket
