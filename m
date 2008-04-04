@@ -1,25 +1,74 @@
-From: David Miller <davem@davemloft.net>
-Date: Tue, 22 Apr 2008 02:45:26 +0000
-Subject: Re: [PATCH] [DCCP]: Convert do_gettimeofday() to getnstimeofday().
-Message-Id: <20080421.194526.101135578.davem@davemloft.net>
+From: Patrick McHardy <kaber@trash.net>
+Date: Fri, 04 Apr 2008 12:13:16 +0000
+Subject: [DCCP]: Fix skb->cb conflicts with IP
+Message-Id: <47F61B5C.8090105@trash.net>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="------------050908030403050805050803"
 List-Id: <dccp.vger.kernel.org>
-References: <20080421.023503.242108516.davem@davemloft.net>
-In-Reply-To: <20080421.023503.242108516.davem@davemloft.net>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-2022-jp"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: YOSHIFUJI Hideaki / 吉藤英明 <yoshfuji@linux-ipv6.org>
-Date: Tue, 22 Apr 2008 11:40:42 +0900 (JST)
+This is a multi-part message in MIME format.
+--------------050908030403050805050803
+Content-Type: text/plain; charset=ISO-8859-15; format=flowed
+Content-Transfer-Encoding: 7bit
 
-> In article <20080421.142857.234288906.davem@davemloft.net> (at Mon, 21 Apr 2008 14:28:57 -0700 (PDT)), David Miller <davem@davemloft.net> says:
-> 
-> > Thanks for reviewing, patch applied.
-> 
-> Sorry I have just realized set_normalized_timespec() (used in timespec_sub())
-> is not exported, and link will fail because of it...
-> 
-> What should I/we do?  Send the patch to LKML as well?
 
-I'll apply and push this change, thank you.
+--------------050908030403050805050803
+Content-Type: text/plain;
+ name="x"
+Content-Transfer-Encoding: 7bit
+Content-Disposition: inline;
+ filename="x"
+
+commit eced67957ee99f7b5fafdc73a58bcd037a1789b2
+Author: Patrick McHardy <kaber@trash.net>
+Date:   Fri Apr 4 14:10:23 2008 +0200
+
+    [DCCP]: Fix skb->cb conflicts with IP
+    
+    dev_queue_xmit() and the other IP output functions expect to get a skb
+    with clear or properly initialized skb->cb. Unlike TCP and UDP, the
+    dccp_skb_cb doesn't contain a struct inet_skb_parm at the beginning,
+    so the DCCP-specific data is interpreted by the IP output functions.
+    This can cause false negatives for the conditional POST_ROUTING hook
+    invocation, making the packet bypass the hook.
+    
+    Add a inet_skb_parm/inet6_skb_parm union to the beginning of
+    dccp_skb_cb to avoid clashes. Also add a BUILD_BUG_ON to make
+    sure it fits in the cb.
+    
+    Signed-off-by: Patrick McHardy <kaber@trash.net>
+
+diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
+index fe7726b..f44d492 100644
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -325,6 +325,12 @@ static inline int dccp_bad_service_code(const struct sock *sk,
+  * This is used for transmission as well as for reception.
+  */
+ struct dccp_skb_cb {
++	union {
++		struct inet_skb_parm	h4;
++#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
++		struct inet6_skb_parm	h6;
++#endif
++	} header;
+ 	__u8  dccpd_type:4;
+ 	__u8  dccpd_ccval:4;
+ 	__u8  dccpd_reset_code,
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index e3f5d37..c91d3c1 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -1057,6 +1057,9 @@ static int __init dccp_init(void)
+ 	int ehash_order, bhash_order, i;
+ 	int rc = -ENOBUFS;
+ 
++	BUILD_BUG_ON(sizeof(struct dccp_skb_cb) >
++		     FIELD_SIZEOF(struct sk_buff, cb));
++
+ 	dccp_hashinfo.bind_bucket_cachep =
+ 		kmem_cache_create("dccp_bind_bucket",
+ 				  sizeof(struct inet_bind_bucket), 0,
+
+--------------050908030403050805050803--
