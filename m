@@ -1,7 +1,7 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Fri, 04 Apr 2008 13:26:44 +0000
+From: Patrick McHardy <kaber@trash.net>
+Date: Fri, 04 Apr 2008 13:40:55 +0000
 Subject: Re: [DCCP]: Fix skb->cb conflicts with IP
-Message-Id: <20080404132644.GA5989@ghostprotocols.net>
+Message-Id: <47F62FE7.9060508@trash.net>
 List-Id: <dccp.vger.kernel.org>
 References: <47F61B5C.8090105@trash.net>
 In-Reply-To: <47F61B5C.8090105@trash.net>
@@ -10,27 +10,20 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Fri, Apr 04, 2008 at 02:13:16PM +0200, Patrick McHardy escreveu:
-
-> commit eced67957ee99f7b5fafdc73a58bcd037a1789b2
-> Author: Patrick McHardy <kaber@trash.net>
-> Date:   Fri Apr 4 14:10:23 2008 +0200
+Gerrit Renker wrote:
+> Arnaldo,
 > 
->     [DCCP]: Fix skb->cb conflicts with IP
->     
->     dev_queue_xmit() and the other IP output functions expect to get a skb
->     with clear or properly initialized skb->cb. Unlike TCP and UDP, the
->     dccp_skb_cb doesn't contain a struct inet_skb_parm at the beginning,
->     so the DCCP-specific data is interpreted by the IP output functions.
->     This can cause false negatives for the conditional POST_ROUTING hook
->     invocation, making the packet bypass the hook.
->     
->     Add a inet_skb_parm/inet6_skb_parm union to the beginning of
->     dccp_skb_cb to avoid clashes. Also add a BUILD_BUG_ON to make
->     sure it fits in the cb.
->     
->     Signed-off-by: Patrick McHardy <kaber@trash.net>
+> just a thought - I recall that there used to be a bug related to this,
+> which required to insert the following before sending an skb:
+>      
+>      memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt))
+> 
+> This was about 1+1/2 .. 2 years ago and lead to crashes when the memset
+> was removed. Maybe with this solution the memsets are then no longer
+> necessary? The reference is
+>  * output.c:dccp_transmit_skb()
+>  * ipv4.c:dccp_v4_send_response()
 
-Thanks Patrick,
 
-Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Yes, that shouldn't be needed anymore with this patch.
+
