@@ -1,8 +1,10 @@
 From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Sun, 06 Apr 2008 20:10:02 +0000
+Date: Sun, 06 Apr 2008 21:57:46 +0000
 Subject: compatibility issues
-Message-Id: <200804062210.03693.tomasz@grobelny.oswiecenia.net>
+Message-Id: <200804062357.47148.tomasz@grobelny.oswiecenia.net>
 List-Id: <dccp.vger.kernel.org>
+References: <200804062210.03693.tomasz@grobelny.oswiecenia.net>
+In-Reply-To: <200804062210.03693.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
