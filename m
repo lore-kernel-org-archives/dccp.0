@@ -1,7 +1,7 @@
-From: Pablo Neira Ayuso <pablo@netfilter.org>
-Date: Sat, 05 Apr 2008 10:12:08 +0000
+From: Patrick McHardy <kaber@trash.net>
+Date: Sun, 06 Apr 2008 00:28:35 +0000
 Subject: Re: DCCP conntrack/NAT
-Message-Id: <47F75078.3070205@netfilter.org>
+Message-Id: <47F81933.4050102@trash.net>
 List-Id: <dccp.vger.kernel.org>
 References: <47F64C0D.5080700@trash.net>
 In-Reply-To: <47F64C0D.5080700@trash.net>
@@ -10,24 +10,39 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Jan Engelhardt wrote:
-> 
-> On Friday 2008-04-04 17:41, Patrick McHardy wrote:
->> These two patches contain my old conntrack/NAT helper for DCCP,
->> updated to net-2.6.26.git and the missing parts (almost entirely)
->> added.
->>
->> They both depend on some other netfilter patches, I've attached
->> them only hoping for some review :) A git tree which contains
->> the full set of patches is (once upload finishes) located at:
->>
->> git://git.kernel.org/pub/scm/linux/kernel/git/kaber/nf-2.6.26.git
-> 
-> Speaking of git... I noticed people.netfilter.org has a git-daemon,
-> so that would be fine for iptables, no?
+Pablo Neira Ayuso wrote:
+> Jan Engelhardt wrote:
+>   
+>>> +static int dccp_pkt_to_tuple(const struct sk_buff *skb, unsigned int
+>>> dataoff,
+>>> +                 struct nf_conntrack_tuple *tuple)
+>>> +{
+>>> +    struct dccp_hdr _hdr, *dh;
+>>> +
+>>> +    dh = skb_header_pointer(skb, dataoff, sizeof(_hdr), &_hdr);
+>>> +    if (dh = NULL)
+>>> +        return 0;
+>>> +
+>> skb_header_pointer() is used for the case of a non-linear skb (has to
+>> do with IP fragments?).
+>>     
+>
+> Indeed.
+>
+>   
+>> In ipv4_pkt_to_tuple in nf_conntrack_l3proto_ipv4.c,
+>> skb_header_pointer() is used to get the [source address of the] IP
+>> header. Since I figured the layer-3 header must always be
+>> unfragmented, would not it be simpler to use ip_hdr(), or is there
+>> something that mandates use of skb_header_pointer?
+>>     
+>
+> Right. I think that we can assume that the IP header is always linear (I
+> remember this from a conversation with Davem or Rusty), Patrick?
+>   
 
-No, that's for a different purpose. We are setting up another git
-repository in Vishnu that will keep soon iptables.
+Right, the IP header is linearized by ip_rcv() (or bridge netfilter).
+The pkt_to_tuple functions may be called for the inner packet of an
+ICMP message however, which might be in the non-linear area.
 
--- 
-"Los honestos son inadaptados sociales" -- Les Luthiers
+
