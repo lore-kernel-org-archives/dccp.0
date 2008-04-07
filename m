@@ -1,190 +1,145 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Sat, 05 Apr 2008 19:15:44 +0000
-Subject: [DCCP]: Add priority queuing policy
-Message-Id: <200804052115.44319.tomasz@grobelny.oswiecenia.net>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="Boundary-00=_g/89HSr4rKQIKx3"
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 07 Apr 2008 09:19:37 +0000
+Subject: Re: [DCCP]: Add priority queuing policy
+Message-Id: <20080407091936.GI6146@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
+References: <200804052115.44319.tomasz@grobelny.oswiecenia.net>
+In-Reply-To: <200804052115.44319.tomasz@grobelny.oswiecenia.net>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-This is a multi-part message in MIME format.
---Boundary-00=_g/89HSr4rKQIKx3
-Content-Type: text/plain;
-  charset="utf-8"
-Content-Transfer-Encoding: 7bit
-Content-Disposition: inline
+Please revise this patch with regard to CodingStyle -- checkpatch gave
+38 errors here.
+
+| --- a/net/dccp/dccp.h
+| +++ b/net/dccp/dccp.h
+| @@ -330,10 +330,16 @@ struct dccp_skb_cb {
+|  	__u16 dccpd_opt_len;
+|  	__u64 dccpd_seq;
+|  	__u64 dccpd_ack_seq;
+| +	char  dccpd_policy[16];
+|  };
+| =20
+|  #define DCCP_SKB_CB(__skb) ((struct dccp_skb_cb *)&((__skb)->cb[0]))
+| =20
+| +struct dccp_policy_prio {
+| +	s8	priority;
+| +};
+| +#define SKB_PRIO(__skbcb) ((struct dccp_policy_prio *)&((__skbcb)->dccpd=
+_policy[0]))
+| +
+There is an indirection here which is problematic:
+ * it pre-allocates 16 bytes but currently only uses one byte
+ * with regard to the recent patch for IPv4/v6 parameters, the skb_cb
+   space gets smaller, and there is no test such as BUILD_BUG_ON
+ * the element should be the struct (can remain anonymous), so there would =
+not be
+   the double-indirection in the SKB_PRIO typecast (which is also too long)
+
+| --- /dev/null
+| +++ b/net/dccp/qpolicy_prio.c
+| @@ -0,0 +1,88 @@
+| +/*
+| + *  net/dccp/qpolicy_prio.c
+| + *
+| + *  An implementation of the DCCP protocol
+| + *
+| + *  Copyright (c) 2008 Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
+| + *
+| + *  This program is free software; you can redistribute it and/or
+| + *  modify it under the terms of the GNU General Public License v2
+| + *  as published by the Free Software Foundation.
+| + */
+| +
+| +#include "qpolicy.h"
+| +#define POLICY_ID 1
+| +
+=3D> General comment: the functions in this file can also all be declared
+                     `static', since they are not used externally.
+| +struct sk_buff *dccp_queue_get_worst(struct sk_buff_head *list)
+| +{
+| +	int i, worstp =3D -128;
+| +	struct sk_buff *curr=3D(struct sk_buff*)list;
+| +	struct sk_buff *worst=3DNULL;
+| +	struct dccp_skb_cb *dcb;
+| +	for(i=3D0;i<list->qlen;i++)
+| +	{
+For structs, ifs, for/while loops, please place curly bracket on same line,=
+ cf. CodingStyle.=09
+| +		curr=3Dcurr->next;
+| +		dcb =3D DCCP_SKB_CB(curr);
+| +		if(SKB_PRIO(dcb)->priority > worstp)
+| +		{
+| +			worstp=3DSKB_PRIO(dcb)->priority;
+| +			worst=3Dcurr;
+| +		}
+| +	}
+| +	return worst;
+| +}
+| +
+| +void prio_push(struct sock *sk, struct sk_buff *skb, void* control, __ke=
+rnel_size_t controllen)
+| +{
+| +	struct dccp_policy_prio *dcp =3D (struct dccp_policy_prio *)control;
+| +	struct dccp_skb_cb *dcb =3D DCCP_SKB_CB(skb);
+| +	SKB_PRIO(dcb)->priority =3D 127;
+| +	if(dcp)
+| +		memcpy(SKB_PRIO(dcb), dcp, min(sizeof(struct dccp_policy_prio), contro=
+llen));
+| +	skb_queue_tail(&sk->sk_write_queue, skb);
+| +	if(sk->sk_write_queue.qlen >=3D sysctl_dccp_tx_qlen)
+| +	{
+| +		struct sk_buff* worst=DCcp_queue_get_worst(&sk->sk_write_queue);
+| +		skb_unlink(worst, &sk->sk_write_queue);
+| +		kfree_skb(worst);
+| +	}
+| +}
+| +
+| +/** no matter what we can push a packet into the queue =3D> queue is nev=
+er full */
+| +int prio_full(struct sock *sk)
+| +{
+| +	return 0;
+| +}
+| +
+| +struct sk_buff* prio_top(struct sock *sk)
+| +{
+| +	int i, bestp=127;
+Please leave spaces between '=3D'.
+| +	struct sk_buff *curr=3D(struct sk_buff*)(&sk->sk_write_queue);
+| +	struct sk_buff *best=3DNULL;
+| +	struct dccp_skb_cb *dcb;
+| +	for(i=3D0;i<sk->sk_write_queue.qlen;i++)
+| +	{
+| +		curr=3Dcurr->next;
+| +		dcb =3D DCCP_SKB_CB(curr);
+| +		if(SKB_PRIO(dcb)->priority < bestp)
+| +		{
+| +			bestp=3DSKB_PRIO(dcb)->priority;
+| +			best=3Dcurr;
+| +		}
+| +	}
+| +	return best;
+| +}
+| +
+| +void prio_pop(struct sock *sk, struct sk_buff *skb)
+| +{
+| +	skb_unlink(skb, &sk->sk_write_queue);
+| +}
+| +
+| +struct dccp_qpolicy_operations prio_policy_operations | +{
+| +	.policy_id =3D POLICY_ID,
+| +	.push =3D prio_push,
+| +	.full =3D prio_full,
+| +	.top =3D prio_top,
+| +	.pop =3D prio_pop,
+| +};
 
 
-This patch adds queuing policy that allows applications to prioritize packets.
-Each packet may (but is not required to) have attached information about its
-importance relative to other packets on this socket. If bandwidth is limited
-(as defined by CCID in use) less important packets are dropped before sending.
-
-Signed-off-by: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
----
- net/dccp/Makefile       |    2 +-
- net/dccp/dccp.h         |    6 +++
- net/dccp/qpolicy.c      |    2 +
- net/dccp/qpolicy_prio.c |   88 
-+++++++++++++++++++++++++++++++++++++++++++++++
- 4 files changed, 97 insertions(+), 1 deletions(-)
- create mode 100644 net/dccp/qpolicy_prio.c
--- 
-Regards,
-Tomasz Grobelny
-
---Boundary-00=_g/89HSr4rKQIKx3
-Content-Type: text/x-patch;
-  name="2c45163637ed2698c9787372e5d5dc99231d4754.diff"
-Content-Transfer-Encoding: 8bit
-Content-Disposition: attachment; filename="2c45163637ed2698c9787372e5d5dc99231d4754.diff"
-
-diff --git a/net/dccp/Makefile b/net/dccp/Makefile
-index 5f56132..849797f 100644
---- a/net/dccp/Makefile
-+++ b/net/dccp/Makefile
-@@ -2,7 +2,7 @@ obj-$(CONFIG_IP_DCCP) += dccp.o dccp_ipv4.o
- 
- dccp-y := ccid.o feat.o input.o minisocks.o options.o \
- 	  output.o proto.o timer.o ackvec.o \
--	  qpolicy.o qpolicy_simple.o
-+	  qpolicy.o qpolicy_simple.o qpolicy_prio.o
- 
- dccp_ipv4-y := ipv4.o
- 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 02a2b26..ef94f42 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -330,10 +330,16 @@ struct dccp_skb_cb {
- 	__u16 dccpd_opt_len;
- 	__u64 dccpd_seq;
- 	__u64 dccpd_ack_seq;
-+	char  dccpd_policy[16];
- };
- 
- #define DCCP_SKB_CB(__skb) ((struct dccp_skb_cb *)&((__skb)->cb[0]))
- 
-+struct dccp_policy_prio {
-+	s8	priority;
-+};
-+#define SKB_PRIO(__skbcb) ((struct dccp_policy_prio *)&((__skbcb)->dccpd_policy[0]))
-+
- /* RFC 4340, sec. 7.7 */
- static inline int dccp_non_data_packet(const struct sk_buff *skb)
- {
-diff --git a/net/dccp/qpolicy.c b/net/dccp/qpolicy.c
-index 71b4b7c..df8861a 100644
---- a/net/dccp/qpolicy.c
-+++ b/net/dccp/qpolicy.c
-@@ -13,9 +13,11 @@
- #include "qpolicy.h"
- 
- extern struct dccp_qpolicy_operations simple_policy_operations;
-+extern struct dccp_qpolicy_operations prio_policy_operations;
- struct dccp_qpolicy_operations* qpolicy_operations[] =
- {
- 	&simple_policy_operations,
-+	&prio_policy_operations,
- };
- 
- void dccp_qpolicy_init(struct sock *sk)
-diff --git a/net/dccp/qpolicy_prio.c b/net/dccp/qpolicy_prio.c
-new file mode 100644
-index 0000000..2fde6e5
---- /dev/null
-+++ b/net/dccp/qpolicy_prio.c
-@@ -0,0 +1,88 @@
-+/*
-+ *  net/dccp/qpolicy_prio.c
-+ *
-+ *  An implementation of the DCCP protocol
-+ *
-+ *  Copyright (c) 2008 Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-+ *
-+ *  This program is free software; you can redistribute it and/or
-+ *  modify it under the terms of the GNU General Public License v2
-+ *  as published by the Free Software Foundation.
-+ */
-+
-+#include "qpolicy.h"
-+#define POLICY_ID 1
-+
-+struct sk_buff *dccp_queue_get_worst(struct sk_buff_head *list)
-+{
-+	int i, worstp = -128;
-+	struct sk_buff *curr=(struct sk_buff*)list;
-+	struct sk_buff *worst=NULL;
-+	struct dccp_skb_cb *dcb;
-+	for(i=0;i<list->qlen;i++)
-+	{
-+		curr=curr->next;
-+		dcb = DCCP_SKB_CB(curr);
-+		if(SKB_PRIO(dcb)->priority > worstp)
-+		{
-+			worstp=SKB_PRIO(dcb)->priority;
-+			worst=curr;
-+		}
-+	}
-+	return worst;
-+}
-+
-+void prio_push(struct sock *sk, struct sk_buff *skb, void* control, __kernel_size_t controllen)
-+{
-+	struct dccp_policy_prio *dcp = (struct dccp_policy_prio *)control;
-+	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
-+	SKB_PRIO(dcb)->priority = 127;
-+	if(dcp)
-+		memcpy(SKB_PRIO(dcb), dcp, min(sizeof(struct dccp_policy_prio), controllen));
-+	skb_queue_tail(&sk->sk_write_queue, skb);
-+	if(sk->sk_write_queue.qlen >= sysctl_dccp_tx_qlen)
-+	{
-+		struct sk_buff* worst=dccp_queue_get_worst(&sk->sk_write_queue);
-+		skb_unlink(worst, &sk->sk_write_queue);
-+		kfree_skb(worst);
-+	}
-+}
-+
-+/** no matter what we can push a packet into the queue => queue is never full */
-+int prio_full(struct sock *sk)
-+{
-+	return 0;
-+}
-+
-+struct sk_buff* prio_top(struct sock *sk)
-+{
-+	int i, bestp=127;
-+	struct sk_buff *curr=(struct sk_buff*)(&sk->sk_write_queue);
-+	struct sk_buff *best=NULL;
-+	struct dccp_skb_cb *dcb;
-+	for(i=0;i<sk->sk_write_queue.qlen;i++)
-+	{
-+		curr=curr->next;
-+		dcb = DCCP_SKB_CB(curr);
-+		if(SKB_PRIO(dcb)->priority < bestp)
-+		{
-+			bestp=SKB_PRIO(dcb)->priority;
-+			best=curr;
-+		}
-+	}
-+	return best;
-+}
-+
-+void prio_pop(struct sock *sk, struct sk_buff *skb)
-+{
-+	skb_unlink(skb, &sk->sk_write_queue);
-+}
-+
-+struct dccp_qpolicy_operations prio_policy_operations =
-+{
-+	.policy_id = POLICY_ID,
-+	.push = prio_push,
-+	.full = prio_full,
-+	.top = prio_top,
-+	.pop = prio_pop,
-+};
-
---Boundary-00=_g/89HSr4rKQIKx3--
+--=20
 
 
+The University of Aberdeen is a charity registered in Scotland, No SC013683.
 
