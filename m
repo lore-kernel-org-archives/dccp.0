@@ -1,111 +1,176 @@
 From: Patrick McHardy <kaber@trash.net>
-Date: Tue, 08 Apr 2008 10:33:35 +0000
+Date: Tue, 08 Apr 2008 11:18:20 +0000
 Subject: Re: DCCP conntrack/NAT
-Message-Id: <47FB49FF.3000806@trash.net>
+Message-Id: <47FB547C.4050507@trash.net>
 MIME-Version: 1
-Content-Type: multipart/mixed; boundary="------------040505020903000000020202"
+Content-Type: multipart/mixed; boundary="------------020307000307030705080106"
 List-Id: <dccp.vger.kernel.org>
 References: <47F64C0D.5080700@trash.net>
 In-Reply-To: <47F64C0D.5080700@trash.net>
 To: dccp@vger.kernel.org
 
 This is a multi-part message in MIME format.
---------------040505020903000000020202
+--------------020307000307030705080106
 Content-Type: text/plain; charset=ISO-8859-15; format=flowed
 Content-Transfer-Encoding: 7bit
 
 Patrick McHardy wrote:
-> The attached patch contains the changes I've made so far
-> based on your review. I'll go through the remaining points
-> now.
+> Gerrit Renker wrote:
+>>
+>>    - timewait transition -- question: is it possible to re-incarnate a 
+>> new connection
+>>      here instead of ignoring the (new) Request?
 > 
+> Yes, I'll change this. The tricker case is a reincarnation in the
+> reverse direction. The conntrack entry must be killed and recreated
+> since the state table is directional and the client/server roles
+> change. Also needs a bit more thought.
 
-New version attached that doesn't only update the comments
-but also the actual state transitions :)
 
+The last patch handled reincarnations in the original direction,
+this one adds support for reopening a connection in the reverse
+direction. I used role reversal instead of recreating the conntrack
+entry since that should make it easier to add DCCP_LISTEN support
+later on.
 
---------------040505020903000000020202
+(Patch might not apply because of minor cleanups I made locally,
+I'll push out a new tree later).
+
+--------------020307000307030705080106
 Content-Type: text/plain;
  name="x"
 Content-Transfer-Encoding: 7bit
 Content-Disposition: inline;
  filename="x"
 
+diff --git a/include/linux/netfilter/nf_conntrack_dccp.h b/include/linux/netfilter/nf_conntrack_dccp.h
+index 33e57c8..f3b9ce8 100644
+--- a/include/linux/netfilter/nf_conntrack_dccp.h
++++ b/include/linux/netfilter/nf_conntrack_dccp.h
+@@ -15,12 +15,21 @@ enum ct_dccp_states {
+ 	CT_DCCP_INVALID,
+ 	__CT_DCCP_MAX
+ };
+-#define CT_DCCP_MAX	(__CT_DCCP_MAX - 1)
++#define CT_DCCP_MAX		(__CT_DCCP_MAX - 1)
++
++enum ct_dccp_roles {
++	CT_DCCP_ROLE_CLIENT,
++	CT_DCCP_ROLE_SERVER,
++	__CT_DCCP_ROLE_MAX
++};
++#define CT_DCCP_ROLE_MAX	(__CT_DCCP_ROLE_MAX - 1)
+ 
+ #ifdef __KERNEL__
++#include <net/netfilter/nf_conntrack_tuple.h>
+ 
+ struct nf_ct_dccp {
+ 	u_int8_t	state;
++	u_int8_t	role[IP_CT_DIR_MAX];
+ 	u_int64_t	handshake_seq;
+ };
+ 
 diff --git a/net/netfilter/nf_conntrack_proto_dccp.c b/net/netfilter/nf_conntrack_proto_dccp.c
-index 44c8aa6..e17bd4f 100644
+index bad3c6a..f768936 100644
 --- a/net/netfilter/nf_conntrack_proto_dccp.c
 +++ b/net/netfilter/nf_conntrack_proto_dccp.c
-@@ -70,7 +70,7 @@ static unsigned int dccp_timeout[CT_DCCP_MAX + 1] __read_mostly = {
- 	[CT_DCCP_REQUEST]	= 2 * DCCP_MSL,
- 	[CT_DCCP_RESPOND]	= 4 * DCCP_MSL,
- 	[CT_DCCP_PARTOPEN]	= 4 * DCCP_MSL,
--	[CT_DCCP_OPEN]		= 5 * 86400 * HZ,
-+	[CT_DCCP_OPEN]		= 12 * 3600 * HZ,
- 	[CT_DCCP_CLOSEREQ]	= 64 * HZ,
- 	[CT_DCCP_CLOSING]	= 64 * HZ,
- 	[CT_DCCP_TIMEWAIT]	= 2 * DCCP_MSL,
-@@ -142,12 +142,12 @@ dccp_state_table[IP_CT_DIR_MAX + 1][DCCP_PKT_SYNCACK + 1][CT_DCCP_MAX + 1] = {
- 		 * 			got lost after we saw it) or reincarnation
- 		 * sPO -> sIG		Request during PARTOPEN state, server will ignore it
- 		 * sOP -> sIG		Request during OPEN state: server will ignore it
--		 * sCR -> sIG		MUST respond with Close to CloseReq (8.3.)
-+		 * sCR -> sIG		FIXME MUST respond with Close to CloseReq (8.3.)
- 		 * sCG -> sIG
--		 * sTW -> sIG		Time-wait
-+		 * sTW -> sRQ		Reincarnation
- 		 *
- 		 *	sNO, sRQ, sRS, sPO. sOP, sCR, sCG, sTW, */
--			sRQ, sRQ, sRS, sIG, sIG, sIG, sIG, sIG,
-+			sRQ, sRQ, sRS, sIG, sIG, sIG, sIG, sRQ,
+@@ -138,8 +138,8 @@ static const char * const dccp_state_names[] = {
+  * or a DCCP_RESPONSE.
+  */
+ static const u_int8_t
+-dccp_state_table[IP_CT_DIR_MAX + 1][DCCP_PKT_SYNCACK + 1][CT_DCCP_MAX + 1] = {
+-	[IP_CT_DIR_ORIGINAL] = {
++dccp_state_table[CT_DCCP_ROLE_MAX + 1][DCCP_PKT_SYNCACK + 1][CT_DCCP_MAX + 1] = {
++	[CT_DCCP_ROLE_CLIENT] = {
+ 		[DCCP_PKT_REQUEST] = {
+ 		/*
+ 		 * sNO -> sRQ		Regular Request
+@@ -157,7 +157,7 @@ dccp_state_table[IP_CT_DIR_MAX + 1][DCCP_PKT_SYNCACK + 1][CT_DCCP_MAX + 1] = {
  		},
  		[DCCP_PKT_RESPONSE] = {
  		/*
-@@ -188,7 +188,7 @@ dccp_state_table[IP_CT_DIR_MAX + 1][DCCP_PKT_SYNCACK + 1][CT_DCCP_MAX + 1] = {
- 		/*
- 		 * sNO -> sIV		No connection
- 		 * sRQ -> sIV		No connection
--		 * sRS -> sIV		No connection
-+		 * sRS -> sPO		Ack for Response, move to PARTOPEN (8.1.5.)
- 		 * sPO -> sPO		Remain in PARTOPEN state
- 		 * sOP -> sOP		Regular DataAck packet in OPEN state
- 		 * sCR -> sCR		DataAck in CLOSEREQ MAY be processed (8.3.)
-@@ -196,7 +196,7 @@ dccp_state_table[IP_CT_DIR_MAX + 1][DCCP_PKT_SYNCACK + 1][CT_DCCP_MAX + 1] = {
- 		 * sTW -> sIV
+-		 * A Response in the original direction is always invalid.
++		 * A Response from the client is always invalid.
  		 *
  		 *	sNO, sRQ, sRS, sPO, sOP, sCR, sCG, sTW */
--			sIV, sIV, sIV, sPO, sOP, sCR, sCG, sIV
-+			sIV, sIV, sPO, sPO, sOP, sCR, sCG, sIV
+ 			sIV, sIV, sIV, sIV, sIV, sIV, sIV, sIV,
+@@ -254,13 +254,23 @@ dccp_state_table[IP_CT_DIR_MAX + 1][DCCP_PKT_SYNCACK + 1][CT_DCCP_MAX + 1] = {
+ 			sIG, sIG, sIG, sIG, sIG, sIG, sIG, sIG,
  		},
- 		[DCCP_PKT_CLOSEREQ] = {
+ 	},
+-	[IP_CT_DIR_REPLY] = {
++	[CT_DCCP_ROLE_SERVER] = {
+ 		[DCCP_PKT_REQUEST] = {
  		/*
-@@ -320,11 +320,11 @@ dccp_state_table[IP_CT_DIR_MAX + 1][DCCP_PKT_SYNCACK + 1][CT_DCCP_MAX + 1] = {
- 		 * sPO -> sOP -> sCR	Move directly to CLOSEREQ (8.1.5.)
- 		 * sOP -> sCR		CloseReq in OPEN state
- 		 * sCR -> sCR		Retransmit
--		 * sCG -> sIV		Already closing
-+		 * sCG -> sCR		Simultaneous close, client sends another Close
- 		 * sTW -> sIV		Already closed
+-		 * A Request in the reply direction is always invalid.
++		 * A Request from the server is only valid for reopening a
++		 * connection in TIMEWAIT state.
++		 *
++		 * sNO -> sIV
++		 * sRQ -> sIV
++		 * sRS -> sIV
++		 * sPO -> sIV
++		 * sOP -> sIV
++		 * sCR -> sIV
++		 * sCG -> sIV
++		 * sTW -> sRQ		Reincarnation, must reverse roles
  		 *
  		 *	sNO, sRQ, sRS, sPO, sOP, sCR, sCG, sTW */
--			sIV, sIV, sIV, sCR, sCR, sCR, sIV, sIV
-+			sIV, sIV, sIV, sCR, sCR, sCR, sCR, sIV
+-			sIV, sIV, sIV, sIV, sIV, sIV, sIV, sIV
++			sIV, sIV, sIV, sIV, sIV, sIV, sIV, sRQ
  		},
- 		[DCCP_PKT_CLOSE] = {
+ 		[DCCP_PKT_RESPONSE] = {
  		/*
-@@ -333,12 +333,12 @@ dccp_state_table[IP_CT_DIR_MAX + 1][DCCP_PKT_SYNCACK + 1][CT_DCCP_MAX + 1] = {
- 		 * sRS -> sIV		No connection
- 		 * sPO -> sOP -> sCG	Move direcly to CLOSING
- 		 * sOP -> sCG		Move to CLOSING
--		 * sCR -> sCG		Waiting for close from client
-+		 * sCR -> sIV		Close after CloseReq is invalid
- 		 * sCG -> sCG		Retransmit
- 		 * sTW -> sIV		Already closed
- 		 *
- 		 *	sNO, sRQ, sRS, sPO, sOP, sCR, sCG, sTW */
--			sIV, sIV, sIV, sCG, sCG, sCG, sCG, sIV
-+			sIV, sIV, sIV, sCG, sCG, sIV, sCG, sIV
- 		},
- 		[DCCP_PKT_RESET] = {
- 		/*
+@@ -410,7 +420,7 @@ static int dccp_new(struct nf_conn *ct, const struct sk_buff *skb,
+ 	dh = skb_header_pointer(skb, dataoff, sizeof(_dh), &dh);
+ 	BUG_ON(dh == NULL);
+ 
+-	state = dccp_state_table[IP_CT_DIR_ORIGINAL][dh->dccph_type][CT_DCCP_NONE];
++	state = dccp_state_table[CT_DCCP_ROLE_CLIENT][dh->dccph_type][CT_DCCP_NONE];
+ 	switch (state) {
+ 	default:
+ 		if (nf_ct_dccp_loose == 0) {
+@@ -425,6 +435,8 @@ static int dccp_new(struct nf_conn *ct, const struct sk_buff *skb,
+ 	}
+ 
+ 	ct->proto.dccp.state = CT_DCCP_NONE;
++	ct->proto.dccp.role[IP_CT_DIR_ORIGINAL] = CT_DCCP_ROLE_CLIENT;
++	ct->proto.dccp.role[IP_CT_DIR_REPLY] = CT_DCCP_ROLE_SERVER;
+ 	return 1;
+ 
+ out_invalid:
+@@ -446,8 +458,10 @@ static int dccp_packet(struct nf_conn *ct, const struct sk_buff *skb,
+ 		       unsigned int dataoff, enum ip_conntrack_info ctinfo,
+ 		       int pf, unsigned int hooknum)
+ {
++	enum ip_conntrack_dir dir = CTINFO2DIR(ctinfo);
+ 	struct dccp_hdr _dh, *dh;
+ 	u_int8_t type, old_state, new_state;
++	enum ct_dccp_roles role;
+ 
+ 	dh = skb_header_pointer(skb, dataoff, sizeof(_dh), &dh);
+ 	BUG_ON(dh == NULL);
+@@ -463,10 +477,20 @@ static int dccp_packet(struct nf_conn *ct, const struct sk_buff *skb,
+ 
+ 	write_lock_bh(&dccp_lock);
+ 
++	role = ct->proto.dccp.role[dir];
+ 	old_state = ct->proto.dccp.state;
+-	new_state = dccp_state_table[CTINFO2DIR(ctinfo)][type][old_state];
++	new_state = dccp_state_table[role][type][old_state];
+ 
+ 	switch (new_state) {
++	case CT_DCCP_REQUEST:
++		if (old_state == CT_DCCP_TIMEWAIT &&
++		    role == CT_DCCP_ROLE_SERVER) {
++			/* Reincarnation in the reverse direction: reopen and
++			 * reverse client/server roles. */
++			ct->proto.dccp.role[dir] = CT_DCCP_ROLE_CLIENT;
++			ct->proto.dccp.role[!dir] = CT_DCCP_ROLE_SERVER;
++		}
++		break;
+ 	case CT_DCCP_RESPOND:
+ 		if (old_state == CT_DCCP_REQUEST)
+ 			ct->proto.dccp.handshake_seq = dccp_hdr_seq(dh);
 
---------------040505020903000000020202--
+--------------020307000307030705080106--
