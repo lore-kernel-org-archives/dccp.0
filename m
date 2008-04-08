@@ -1,255 +1,83 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Wed, 02 Apr 2008 20:10:13 +0000
-Subject: [PATCH 1/5] [DCCP]: Start implementation of queuing policies
-Message-Id: <20080411102602.16463BD37@poczta.oswiecenia.net>
+From: Pavel Emelyanov <xemul@openvz.org>
+Date: Tue, 08 Apr 2008 16:56:14 +0000
+Subject: [RFC][PATCH 4/12][NETNS][DCCPV4]: Actually create ctl socket on each
+Message-Id: <47FBA923.6070807@openvz.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch moves code responsible for enqueuing and dequeuing packets to
-separate file. It also defines simple interface for queuing policy. For now
-there is only one policy that doesn't change kernel behaviour.
+Move the call to inet_ctl_sock_create to init callback (and
+inet_ctl_sock_destroy to exit one) and use proper ctl sock
+in dccp_v4_ctl_send_reset.
 
-Signed-off-by: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
+Signed-off-by: Pavel Emelyanov <xemul@openvz.org>
+
 ---
- net/dccp/Makefile         |    3 ++-
- net/dccp/output.c         |    8 +++++---
- net/dccp/proto.c          |    6 +++---
- net/dccp/qpolicy.c        |   40 ++++++++++++++++++++++++++++++++++++++++
- net/dccp/qpolicy.h        |   38 ++++++++++++++++++++++++++++++++++++++
- net/dccp/qpolicy_simple.c |   44 ++++++++++++++++++++++++++++++++++++++++++++
- 6 files changed, 132 insertions(+), 7 deletions(-)
- create mode 100644 net/dccp/qpolicy.c
- create mode 100644 net/dccp/qpolicy.h
- create mode 100644 net/dccp/qpolicy_simple.c
+ net/dccp/ipv4.c |   18 ++++++++----------
+ 1 files changed, 8 insertions(+), 10 deletions(-)
 
-diff --git a/net/dccp/Makefile b/net/dccp/Makefile
-index b68440b..5f56132 100644
---- a/net/dccp/Makefile
-+++ b/net/dccp/Makefile
-@@ -1,7 +1,8 @@
- obj-$(CONFIG_IP_DCCP) += dccp.o dccp_ipv4.o
- 
- dccp-y := ccid.o feat.o input.o minisocks.o options.o \
--	  output.o proto.o timer.o ackvec.o
-+	  output.o proto.o timer.o ackvec.o \
-+	  qpolicy.o qpolicy_simple.o
- 
- dccp_ipv4-y := ipv4.o
- 
-diff --git a/net/dccp/output.c b/net/dccp/output.c
-index 2c38587..2b072d3 100644
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -20,6 +20,7 @@
- #include "ackvec.h"
- #include "ccid.h"
- #include "dccp.h"
-+#include "qpolicy.h"
- 
- static inline void dccp_event_ack_sent(struct sock *sk)
- {
-@@ -239,7 +240,8 @@ static void dccp_xmit_packet(struct sock *sk)
- {
- 	int err, len;
- 	struct dccp_sock *dp = dccp_sk(sk);
--	struct sk_buff *skb = skb_dequeue(&sk->sk_write_queue);
-+	struct sk_buff *skb = qpolicy_top(sk);
-+	qpolicy_pop(sk, skb);
- 
- 	if (unlikely(skb = NULL))
- 		return;
-@@ -329,7 +331,7 @@ void dccp_write_xmit(struct sock *sk)
- 	struct dccp_sock *dp = dccp_sk(sk);
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 85931dc..cad62d8 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -505,7 +505,8 @@ static void dccp_v4_ctl_send_reset(struct sock *sk, struct sk_buff *rxskb)
+ 	const struct iphdr *rxiph;
  	struct sk_buff *skb;
+ 	struct dst_entry *dst;
+-	struct sock *ctl_sk = init_net.dccp.v4_ctl_sk;
++	struct net *net = dev_net(rxskb->dst->dev);
++	struct sock *ctl_sk = net->dccp.v4_ctl_sk;
  
--	while ((skb = skb_peek(&sk->sk_write_queue))) {
-+	while ((skb = qpolicy_top(sk))) {
- 		int rc = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb);
+ 	/* Never send a reset in response to a reset. */
+ 	if (dccp_hdr(rxskb)->dccph_type = DCCP_PKT_RESET)
+@@ -991,11 +992,16 @@ static struct inet_protosw dccp_v4_protosw = {
  
- 		switch (ccid_packet_dequeue_eval(rc)) {
-@@ -343,7 +345,7 @@ void dccp_write_xmit(struct sock *sk)
- 			dccp_xmit_packet(sk);
- 			break;
- 		case CCID_PACKET_ERR:
--			skb_dequeue(&sk->sk_write_queue);
-+			qpolicy_pop(sk, skb);
- 			kfree_skb(skb);
- 			dccp_pr_debug("packet discarded due to err=%d\n", rc);
- 		}
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index cbb8650..ea4492b 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -36,6 +36,7 @@
- #include "ccid.h"
- #include "dccp.h"
- #include "feat.h"
-+#include "qpolicy.h"
+ static int dccp_v4_init_net(struct net *net)
+ {
+-	return 0;
++	int err;
++
++	err = inet_ctl_sock_create(&net->dccp.v4_ctl_sk, PF_INET,
++				   SOCK_DCCP, IPPROTO_DCCP, net);
++	return err;
+ }
  
- DEFINE_SNMP_STAT(struct dccp_mib, dccp_statistics) __read_mostly;
+ static void dccp_v4_exit_net(struct net *net)
+ {
++	inet_ctl_sock_destroy(net->dccp.v4_ctl_sk);
+ }
  
-@@ -700,8 +701,7 @@ int dccp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
+ static struct pernet_operations dccp_v4_ops = {
+@@ -1016,19 +1022,12 @@ static int __init dccp_v4_init(void)
  
- 	lock_sock(sk);
+ 	inet_register_protosw(&dccp_v4_protosw);
  
--	if (sysctl_dccp_tx_qlen &&
--	    (sk->sk_write_queue.qlen >= sysctl_dccp_tx_qlen)) {
-+	if (qpolicy_full(sk)) {
- 		rc = -EAGAIN;
- 		goto out_release;
- 	}
-@@ -729,7 +729,7 @@ int dccp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
- 	if (rc != 0)
- 		goto out_discard;
- 
--	skb_queue_tail(&sk->sk_write_queue, skb);
-+	qpolicy_push(sk, skb, msg->msg_control, msg->msg_controllen);
- 	dccp_write_xmit(sk);
- out_release:
- 	release_sock(sk);
-diff --git a/net/dccp/qpolicy.c b/net/dccp/qpolicy.c
-new file mode 100644
-index 0000000..58d1e2c
---- /dev/null
-+++ b/net/dccp/qpolicy.c
-@@ -0,0 +1,40 @@
-+/*
-+ *  net/dccp/qpolicy.c
-+ *
-+ *  An implementation of the DCCP protocol
-+ *
-+ *  Copyright (c) 2008 Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-+ *
-+ *  This program is free software; you can redistribute it and/or
-+ *  modify it under the terms of the GNU General Public License v2
-+ *  as published by the Free Software Foundation.
-+ */
-+
-+#include "qpolicy.h"
-+
-+extern struct dccp_qpolicy_operations simple_policy_operations;
-+struct dccp_qpolicy_operations *qpolicy_operations[] +{
-+	&simple_policy_operations,
-+};
-+
-+void qpolicy_push(struct sock *sk, struct sk_buff *skb,
-+				void *control, __kernel_size_t controllen)
-+{
-+	qpolicy_operations[0]->push(sk, skb, control, controllen);
-+}
-+
-+int qpolicy_full(struct sock *sk)
-+{
-+	return qpolicy_operations[0]->full(sk);
-+}
-+
-+struct sk_buff *qpolicy_top(struct sock *sk)
-+{
-+	return qpolicy_operations[0]->top(sk);
-+}
-+
-+void qpolicy_pop(struct sock *sk, struct sk_buff *skb)
-+{
-+	qpolicy_operations[0]->pop(sk, skb);
-+}
-diff --git a/net/dccp/qpolicy.h b/net/dccp/qpolicy.h
-new file mode 100644
-index 0000000..7776dee
---- /dev/null
-+++ b/net/dccp/qpolicy.h
-@@ -0,0 +1,38 @@
-+/*
-+ *  net/dccp/qpolicy.h
-+ *
-+ *  An implementation of the DCCP protocol
-+ *
-+ *  Copyright (c) 2008 Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-+ *
-+ *  This program is free software; you can redistribute it and/or
-+ *  modify it under the terms of the GNU General Public License v2
-+ *  as published by the Free Software Foundation.
-+ */
-+
-+#ifndef _QPOLICY_H
-+#define _QPOLICY_H
-+
-+#include <linux/kernel.h>
-+#include <linux/socket.h>
-+#include <linux/dccp.h>
-+#include "dccp.h"
-+
-+struct dccp_qpolicy_operations {
-+	unsigned char policy_id;
-+
-+	/* Interface Routines */
-+	void (*push)(struct sock *sk, struct sk_buff *skb,
-+			void *control, __kernel_size_t controllen);
-+	int (*full)(struct sock *sk);
-+	struct sk_buff* (*top)(struct sock *sk);
-+	void (*pop)(struct sock *sk, struct sk_buff *skb);
-+};
-+
-+void qpolicy_push(struct sock *sk, struct sk_buff *skb,
-+				void *control, __kernel_size_t controllen);
-+int qpolicy_full(struct sock *sk);
-+struct sk_buff *qpolicy_top(struct sock *sk);
-+void qpolicy_pop(struct sock *sk, struct sk_buff *skb);
-+
-+#endif /* _QPOLICY_H */
-diff --git a/net/dccp/qpolicy_simple.c b/net/dccp/qpolicy_simple.c
-new file mode 100644
-index 0000000..cd78e51
---- /dev/null
-+++ b/net/dccp/qpolicy_simple.c
-@@ -0,0 +1,44 @@
-+/*
-+ *  net/dccp/qpolicy_simple.c
-+ *
-+ *  An implementation of the DCCP protocol
-+ *
-+ *  Copyright (c) 2008 Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-+ *
-+ *  This program is free software; you can redistribute it and/or
-+ *  modify it under the terms of the GNU General Public License v2
-+ *  as published by the Free Software Foundation.
-+ */
-+
-+#include "qpolicy.h"
-+#define POLICY_ID 0
-+
-+void simple_push(struct sock *sk, struct sk_buff *skb,
-+			void *control, __kernel_size_t controllen)
-+{
-+	skb_queue_tail(&sk->sk_write_queue, skb);
-+}
-+
-+int simple_full(struct sock *sk)
-+{
-+	return (sysctl_dccp_tx_qlen &&
-+		(sk->sk_write_queue.qlen >= sysctl_dccp_tx_qlen));
-+}
-+
-+struct sk_buff *simple_top(struct sock *sk)
-+{
-+	return skb_peek(&sk->sk_write_queue);
-+}
-+
-+void simple_pop(struct sock *sk, struct sk_buff *skb)
-+{
-+	skb_unlink(skb, &sk->sk_write_queue);
-+}
-+
-+struct dccp_qpolicy_operations simple_policy_operations = {
-+	.policy_id = POLICY_ID,
-+	.push = simple_push,
-+	.full = simple_full,
-+	.top = simple_top,
-+	.pop = simple_pop,
-+};
+-	err = inet_ctl_sock_create(&init_net.dccp.v4_ctl_sk, PF_INET,
+-				   SOCK_DCCP, IPPROTO_DCCP, &init_net);
+-	if (err)
+-		goto out_unregister_protosw;
+-
+ 	err = register_pernet_subsys(&dccp_v4_ops);
+ 	if (err)
+ 		goto out_destroy_ctl_sock;
+ out:
+ 	return err;
+ out_destroy_ctl_sock:
+-	inet_ctl_sock_destroy(init_net.dccp.v4_ctl_sk);
+-out_unregister_protosw:
+ 	inet_unregister_protosw(&dccp_v4_protosw);
+ 	inet_del_protocol(&dccp_v4_protocol, IPPROTO_DCCP);
+ out_proto_unregister:
+@@ -1039,7 +1038,6 @@ out_proto_unregister:
+ static void __exit dccp_v4_exit(void)
+ {
+ 	unregister_pernet_subsys(&dccp_v4_ops);
+-	inet_ctl_sock_destroy(init_net.dccp.v4_ctl_sk);
+ 	inet_unregister_protosw(&dccp_v4_protosw);
+ 	inet_del_protocol(&dccp_v4_protocol, IPPROTO_DCCP);
+ 	proto_unregister(&dccp_v4_prot);
 -- 
-1.5.4.5
-
+1.5.3.4
 
