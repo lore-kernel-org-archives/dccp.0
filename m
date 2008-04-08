@@ -1,31 +1,26 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Tue, 08 Apr 2008 18:16:17 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Tue, 08 Apr 2008 18:47:40 +0000
 Subject: Re: [DCCP]: Start implementation of queuing policies
-Message-Id: <200804082016.17417.tomasz@grobelny.oswiecenia.net>
+Message-Id: <5640c7e00804081147n4cbfb7e3h4119dcd3d7f37e4d@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <200804052115.33309.tomasz@grobelny.oswiecenia.net>
 In-Reply-To: <200804052115.33309.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="windows-1254"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-Dnia Monday 07 of April 2008, Gerrit Renker napisa=B3:
->  * please copy to both dccp@vger.kernel.org and netdev@vger.kernel.org -
->    it is a request by Arnaldo at the end of last year and helps to find
->    problems earlier;
->
-Should I be subscribed to both of these lists or can I expect that comments=
-=20
-will arrive directly at my mailbox?
-
->  * it would be great to have numbering in subsequent patches.
->
-Does there already exist any nice script that would create messages in corr=
-ect=20
-format (based on dccp tree) and pass it on to procmail for example? I tried=
-=20
-to craft one but it will need some corrections as per your suggestions.
---=20
-Regards,
-Tomasz Grobelny
+MjAwOC80LzkgVG9tYXN6IEdyb2JlbG55IDx0b21hc3pAZ3JvYmVsbnkub3N3aWVjZW5pYS5uZXQ+
+Ogo+IERuaWEgTW9uZGF5IDA3IG9mIEFwcmlsIDIwMDgsIEdlcnJpdCBSZW5rZXIgbmFwaXNhszoK
+Pgo+ID4gICogcGxlYXNlIGNvcHkgdG8gYm90aCBkY2NwQHZnZXIua2VybmVsLm9yZyBhbmQgbmV0
+ZGV2QHZnZXIua2VybmVsLm9yZyAtCj4gPiAgICBpdCBpcyBhIHJlcXVlc3QgYnkgQXJuYWxkbyBh
+dCB0aGUgZW5kIG9mIGxhc3QgeWVhciBhbmQgaGVscHMgdG8gZmluZAo+ID4gICAgcHJvYmxlbXMg
+ZWFybGllcjsKPiA+Cj4gU2hvdWxkIEkgYmUgc3Vic2NyaWJlZCB0byBib3RoIG9mIHRoZXNlIGxp
+c3RzIG9yIGNhbiBJIGV4cGVjdCB0aGF0IGNvbW1lbnRzCj4gd2lsbCBhcnJpdmUgZGlyZWN0bHkg
+YXQgbXkgbWFpbGJveD8KPgpDb21tZW50IHdpbGwgYXJyaXZlIGRpcmVjdGx5LCBidXQgSSB3b3Vs
+ZCBzdWJzY3JpYmUgdG8gZGNjcCBtYWlsaW5nCmxpc3QgaWYgeW91IGFyZSBnb2luZyB0byBkZXZl
+bG9wIGFzIG5vdCBoaWdoIHZvbHVtZS4gbmV0ZGV2IGlzIGhpZ2hlcgp2b2x1bWUuCgotLSAKV2Vi
+OiBodHRwOi8vd2FuZC5uZXQubnovfmlhbTQvCkJsb2c6IGh0dHA6Ly9pYW5zYmxvZy5qYW5kaS5j
+by5uegr/9Oi6ey5uxyuJt5+uia2GKyWKy/+x6d22F6WKd/+6ey5uxyuJt51xyv+Ke2F5uh3Kh9qZ
+6yxqB62iZqOit2iaj++B6v+R6ud6X+iuAyit6ZqOit2iaiKd+hq2G22n//++B6v+R6ud6f+iuD+Z
+qOit2iaj+Kd+j+EK
