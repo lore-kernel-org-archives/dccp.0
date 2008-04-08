@@ -1,7 +1,7 @@
 From: Patrick McHardy <kaber@trash.net>
-Date: Tue, 08 Apr 2008 14:26:02 +0000
+Date: Tue, 08 Apr 2008 16:21:59 +0000
 Subject: Re: DCCP conntrack/NAT
-Message-Id: <47FB807A.3000605@trash.net>
+Message-Id: <47FB9BA7.6080500@trash.net>
 List-Id: <dccp.vger.kernel.org>
 References: <47F64C0D.5080700@trash.net>
 In-Reply-To: <47F64C0D.5080700@trash.net>
@@ -10,26 +10,21 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Gerrit Renker wrote:
->>> I have a question regarding the original direction - currently it is
->>> linked to the client which actively initiates a connection. DCCP  
->>> suffers from the problem that peer-to-peer NAT traversal is not
->>> really possible just because of this client/server division. There
->>> is a proposal which effects a pseudo simultaneous open, by letting
->>> the server send an initiation packet, to fix this problem (TCP
->>> peer-to-peer NAT traversal also favours simultaneous-open). I wonder
->>> if this would be possible, but it is really a future-work question.
->>>       
->> Yes, that should be possible. But how does the server know that
->> the client intends to initiate a connection?
->>
->>     
-> This is outside the actual NAT implementation, via out-of-band, e.g. using SIP
-> or Session Traversal Utilities for NAT (draft-ietf-behave-rfc3489bis).
->
-> In this regard, the role-reversal patch will be a great help, since it
-> will allow support for peer-to-peer NAT traversal (i.e. NAT-ed server).
+Patrick McHardy wrote:
+> I've added this patch on top to handle the out-of-sync case by
+> letting Requests pass in (almost) any state and resyncing when
+> seeing a valid Response.
+> 
+> Last TODO before the DCCP_LISTEN support is to fix connection
+> pickup for established connections. Since it doesn't see the
+> initial Request/Response it doesn't know which side has which
+> role and also can't properly pick an inital state.
 
-This sounds like it would already work when using the netfilter
-SIP helper. But the DCCP_LISTEN method is a lot simpler.
+I skipped this for now since it gets a bit ugly and is
+not very important for an initial version. I'm uploading
+my current tree to kernel.org now, should be there within
+the next 20 minutes.
+
+I'll post a patch for DCCP_LISTEN soon (not sure if I will
+manage to get it ready today though).
 
