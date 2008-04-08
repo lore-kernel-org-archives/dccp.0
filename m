@@ -1,43 +1,71 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 01 Apr 2008 09:44:11 +0000
-Subject: [PATCH 2/2] [CCID-3]: Remove duplicate documentation
-Message-Id: <1207043051-27165-3-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Pavel Emelyanov <xemul@openvz.org>
+Date: Tue, 08 Apr 2008 17:26:39 +0000
+Subject: [RFC][PATCH 8/12][NETNS][DCCPV6]: Add dummy per-net operations.
+Message-Id: <47FBAACF.1060700@openvz.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This removes RX-socket documentation which is either duplicate or non-existent.
+They will be responsible for ctl socket initialization, but
+currently they are void.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Pavel Emelyanov <xemul@openvz.org>
+
 ---
- net/dccp/ccids/ccid3.h |    4 ----
- 1 files changed, 0 insertions(+), 4 deletions(-)
+ net/dccp/ipv6.c |   22 ++++++++++++++++++++++
+ 1 files changed, 22 insertions(+), 0 deletions(-)
 
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -130,16 +130,12 @@ enum ccid3_hc_rx_states {
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index b657dea..2ca5291 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -1171,6 +1171,20 @@ static struct inet_protosw dccp_v6_protosw = {
+ 	.flags		= INET_PROTOSW_ICSK,
+ };
  
- /** struct ccid3_hc_rx_sock - CCID3 receiver half-connection socket
-  *
-- *  @x_recv  -  Receiver estimate of send rate (RFC 3448 4.3)
-- *  @rtt  -  Receiver estimate of rtt (non-standard)
-- *  @p  -  Current loss event rate (RFC 3448 5.4)
-  *  @last_counter  -  Tracks window counter (RFC 4342, 8.1)
-  *  @state  -  Receiver state, one of %ccid3_hc_rx_states
-  *  @bytes_recv  -  Total sum of DCCP payload bytes
-  *  @x_recv  -  Receiver estimate of send rate (RFC 3448, sec. 4.3)
-  *  @rtt  -  Receiver estimate of RTT
-  *  @tstamp_last_feedback  -  Time at which last feedback was sent
-- *  @tstamp_last_ack  -  Time at which last feedback was sent
-  *  @hist  -  Packet history (loss detection + RTT sampling)
-  *  @li_hist  -  Loss Interval database
-  *  @s  -  Received packet size in bytes
++static int dccp_v6_init_net(struct net *net)
++{
++	return 0;
++}
++
++static void dccp_v6_exit_net(struct net *net)
++{
++}
++
++static struct pernet_operations dccp_v6_ops = {
++	.init   = dccp_v6_init_net,
++	.exit   = dccp_v6_exit_net,
++};
++
+ static int __init dccp_v6_init(void)
+ {
+ 	int err = proto_register(&dccp_v6_prot, 1);
+@@ -1188,8 +1202,15 @@ static int __init dccp_v6_init(void)
+ 				   SOCK_DCCP, IPPROTO_DCCP, &init_net);
+ 	if (err != 0)
+ 		goto out_unregister_protosw;
++
++	err = register_pernet_subsys(&dccp_v6_ops);
++	if (err != 0)
++		goto out_destroy_ctl_sock;
+ out:
+ 	return err;
++
++out_destroy_ctl_sock:
++	inet_ctl_sock_destroy(dccp_v6_ctl_sk);
+ out_unregister_protosw:
+ 	inet6_del_protocol(&dccp_v6_protocol, IPPROTO_DCCP);
+ 	inet6_unregister_protosw(&dccp_v6_protosw);
+@@ -1200,6 +1221,7 @@ out_unregister_proto:
+ 
+ static void __exit dccp_v6_exit(void)
+ {
++	unregister_pernet_subsys(&dccp_v6_ops);
+ 	inet_ctl_sock_destroy(dccp_v6_ctl_sk);
+ 	inet6_del_protocol(&dccp_v6_protocol, IPPROTO_DCCP);
+ 	inet6_unregister_protosw(&dccp_v6_protosw);
 -- 
-1.5.3.GIT
-
-
-
-The University of Aberdeen is a charity registered in Scotland, No SC013683.
+1.5.3.4
 
