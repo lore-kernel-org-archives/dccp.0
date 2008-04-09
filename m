@@ -1,26 +1,25 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 08 Apr 2008 18:47:40 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 09 Apr 2008 06:47:08 +0000
 Subject: Re: [DCCP]: Start implementation of queuing policies
-Message-Id: <5640c7e00804081147n4cbfb7e3h4119dcd3d7f37e4d@mail.gmail.com>
+Message-Id: <20080409064708.GB8092@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <200804052115.33309.tomasz@grobelny.oswiecenia.net>
 In-Reply-To: <200804052115.33309.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="windows-1254"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-MjAwOC80LzkgVG9tYXN6IEdyb2JlbG55IDx0b21hc3pAZ3JvYmVsbnkub3N3aWVjZW5pYS5uZXQ+
-Ogo+IERuaWEgTW9uZGF5IDA3IG9mIEFwcmlsIDIwMDgsIEdlcnJpdCBSZW5rZXIgbmFwaXNhszoK
-Pgo+ID4gICogcGxlYXNlIGNvcHkgdG8gYm90aCBkY2NwQHZnZXIua2VybmVsLm9yZyBhbmQgbmV0
-ZGV2QHZnZXIua2VybmVsLm9yZyAtCj4gPiAgICBpdCBpcyBhIHJlcXVlc3QgYnkgQXJuYWxkbyBh
-dCB0aGUgZW5kIG9mIGxhc3QgeWVhciBhbmQgaGVscHMgdG8gZmluZAo+ID4gICAgcHJvYmxlbXMg
-ZWFybGllcjsKPiA+Cj4gU2hvdWxkIEkgYmUgc3Vic2NyaWJlZCB0byBib3RoIG9mIHRoZXNlIGxp
-c3RzIG9yIGNhbiBJIGV4cGVjdCB0aGF0IGNvbW1lbnRzCj4gd2lsbCBhcnJpdmUgZGlyZWN0bHkg
-YXQgbXkgbWFpbGJveD8KPgpDb21tZW50IHdpbGwgYXJyaXZlIGRpcmVjdGx5LCBidXQgSSB3b3Vs
-ZCBzdWJzY3JpYmUgdG8gZGNjcCBtYWlsaW5nCmxpc3QgaWYgeW91IGFyZSBnb2luZyB0byBkZXZl
-bG9wIGFzIG5vdCBoaWdoIHZvbHVtZS4gbmV0ZGV2IGlzIGhpZ2hlcgp2b2x1bWUuCgotLSAKV2Vi
-OiBodHRwOi8vd2FuZC5uZXQubnovfmlhbTQvCkJsb2c6IGh0dHA6Ly9pYW5zYmxvZy5qYW5kaS5j
-by5uegr/9Oi6ey5uxyuJt5+uia2GKyWKy/+x6d22F6WKd/+6ey5uxyuJt51xyv+Ke2F5uh3Kh9qZ
-6yxqB62iZqOit2iaj++B6v+R6ud6X+iuAyit6ZqOit2iaiKd+hq2G22n//++B6v+R6ud6f+iuD+Z
-qOit2iaj+Kd+j+EK
+| >  * it would be great to have numbering in subsequent patches.
+| >
+| Does there already exist any nice script that would create messages in correct 
+| format (based on dccp tree) and pass it on to procmail for example? I tried 
+| to craft one but it will need some corrections as per your suggestions.
+| -- 
+git-format-patch / git-send-email are very useful and work great. 
+There is an excellent howto by Arnaldo which is archived at the bottom of 
+http://www.wlug.org.nz/KernelDevelopmentWithGit
+
+
+The University of Aberdeen is a charity registered in Scotland, No SC013683.
+
