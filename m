@@ -1,56 +1,62 @@
-From: Pavel Emelyanov <xemul@openvz.org>
-Date: Tue, 08 Apr 2008 16:58:58 +0000
-Subject: [RFC][PATCH 6/12][NETNS][DCCPV4]: Make per-net socket lookup.
-Message-Id: <47FBA9C7.5010408@openvz.org>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 10 Apr 2008 08:19:09 +0000
+Subject: [Announce]: DCCP Applications Library / iperf Update
+Message-Id: <20080410081909.GB19418@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-The inet_lookup family of functions requires a net to lookup
-a socket in, so give a proper one to them.
+           DCCP Applications - Update, new version, and fixes
 
-Signed-off-by: Pavel Emelyanov <xemul@openvz.org>
+1. iperf
+====-
+Someone reported problems using iperf on a mainline kernel. I have investigated
+this and there shouldn't be any problems since the MPS socket option is part of
+the current kernel. On the current netdev-2.6 kernel it works without problems.
 
----
- net/dccp/ipv4.c |    9 +++++----
- 1 files changed, 5 insertions(+), 4 deletions(-)
+Yet had a look through and checked, update is on
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/iperf/zip/iperf-2.0.2_DCCP-patched-CBR-continuous.tar.bz2
 
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index 11d0b85..66f860b 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -211,8 +211,9 @@ static void dccp_v4_err(struct sk_buff *skb, u32 info)
- 		return;
- 	}
- 
--	sk = inet_lookup(&init_net, &dccp_hashinfo, iph->daddr, dh->dccph_dport,
--			 iph->saddr, dh->dccph_sport, inet_iif(skb));
-+	sk = inet_lookup(dev_net(skb->dev), &dccp_hashinfo,
-+			iph->daddr, dh->dccph_dport,
-+			iph->saddr, dh->dccph_sport, inet_iif(skb));
- 	if (sk = NULL) {
- 		ICMP_INC_STATS_BH(ICMP_MIB_INERRORS);
- 		return;
-@@ -429,7 +430,7 @@ static struct sock *dccp_v4_hnd_req(struct sock *sk, struct sk_buff *skb)
- 	if (req != NULL)
- 		return dccp_check_req(sk, skb, req, prev);
- 
--	nsk = inet_lookup_established(&init_net, &dccp_hashinfo,
-+	nsk = inet_lookup_established(sock_net(sk), &dccp_hashinfo,
- 				      iph->saddr, dh->dccph_sport,
- 				      iph->daddr, dh->dccph_dport,
- 				      inet_iif(skb));
-@@ -810,7 +811,7 @@ static int dccp_v4_rcv(struct sk_buff *skb)
- 
- 	/* Step 2:
- 	 *	Look up flow ID in table and get corresponding socket */
--	sk = __inet_lookup(&init_net, &dccp_hashinfo,
-+	sk = __inet_lookup(dev_net(skb->dst->dev), &dccp_hashinfo,
- 			   iph->saddr, dh->dccph_sport,
- 			   iph->daddr, dh->dccph_dport, inet_iif(skb));
- 	/*
+Note -- Thanks to Ian's support, patches are now being prepared and forwarded 
+        to the new iperf project at sourceforge. 
+	Hopefully there will be	native DCCP support soon.
+
+
+2. DCCP Application Library
+============= This library tarball comes bundled with the ttcp/sock programs (below). It
+ hadn't been updated since last August and so there are quite a few updates.
+
+ I have uploaded a revised variant of the tarball onto
+ http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/dccp_applications_lib.tar.gz
+
+ The changes/fixes are:
+ * resolved build dependencies so that the build does not require 
+   UDP-Lite kernel headers (the build otherwise failed)
+ * included a subdirectory `set-up-udplite-support' which contains a
+   script to set up UDP-Lite userland support if one would like to do that
+ * Makefile now searches for DCCP kernel include files to avoid problems
+   due to missing <linux/tfrc.h> and outdated userland headers for DCCP
+ * fixed several bugs in the port of Steven's sock program
+ * tested all applications to work with/without UDP-Lite support
+ * fixed bug in service code parser (using strtok requires using strdup)
+
+ 2a. ttcp
+ --------
+ The ttcp file-transport tool with support for DCCP and IPv6. Here, UDP-Lite
+ conditional build support was added, so that the application will build even
+ when UDP-Lite is not supported by the host's userland.
+
+ 2b. sock
+ --------
+ W. R. Steven's sock program with support for DCCP and IPv6. Apart from also
+ adding conditional build support for UDP-Lite, there were several bug fixes:
+ considering DCCP's EAGAIN case, order of socket options and minor clean-ups.
+
+Thanks to everyone who reported bugs and problems.
 -- 
-1.5.3.4
+
+
+The University of Aberdeen is a charity registered in Scotland, No SC013683.
 
