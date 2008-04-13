@@ -1,7 +1,7 @@
 From: David Miller <davem@davemloft.net>
-Date: Fri, 11 Apr 2008 18:24:12 +0000
+Date: Sun, 13 Apr 2008 01:35:58 +0000
 Subject: Re: [DCCP]: Fix skb->cb conflicts with IP
-Message-Id: <20080411.112412.161949691.davem@davemloft.net>
+Message-Id: <20080412.183558.100508594.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
 References: <47F61B5C.8090105@trash.net>
 In-Reply-To: <47F61B5C.8090105@trash.net>
@@ -31,4 +31,4 @@ Date: Fri, 11 Apr 2008 11:05:01 -0300
 > 
 > Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 
-And for the record, I have it and will merge :-)
+Applied to net-2.6, thanks everyone.
