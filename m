@@ -1,113 +1,111 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Mon, 14 Apr 2008 23:45:05 +0000
-Subject: Re: [DCCP] [RFC] [Patchv2 1/1]: Queuing policies -- reworked version of Tomasz's patch set
-Message-Id: <200804150145.05571.tomasz@grobelny.oswiecenia.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 15 Apr 2008 15:14:03 +0000
+Subject: Re: [DCCP] [RFC] [Patchv2 1/1]: Queuing policies -- reworked
+Message-Id: <20080415151403.GA20735@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <20080414073915.GA9655@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20080414073915.GA9655@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Dnia Monday 14 of April 2008, Gerrit Renker napisa=B3:
-> [DCCP] [RFC]: Reworked queueing policy patch set
->
-> This is a re-worked version of Tomasz's priority-queueing patch set for
-> DCCP. The essential internals of his patch set have been left untouched,
-> in particular the prio/simple algorithms are the same as before.
->
-> The changes for which I am asking for comments are:
->
->   Given that each file has less than 100 lines, it seemed better to put
-> them all into one file and export the declarations in dccp.h, the result =
-is
-> now:
->
->   With less than 150 lines, there is still room for a few more policies.
->
-For now the files are small but I would expect at least qpolicy_prio.c to g=
-row=20
-a little bit in the future. What comes to mind are get/setsockopts (for=20
-example statistics about packets dropped by qpolicy), and per packet expiry=
-=20
-times. I didn't look how big the files are but wanted to have clear=20
-separation between specific policies and common code. But if you think that=
-=20
-this organization is better I have no problem with it.
+| >   * makes tx_qlen a socket member of dccp_sock (there was a bug in the
+| >     implementation -- tx_qlen was shared by all sockets using the same
+| > policy); 
+| Haven't tested it thoroughly but it shouldn't be so. After all qpol_txqlen was 
+| part of struct dccp_qpolicy which was in turn part of dccp_sock.
+| 
+I have to apologise here -- this was my oversight. The bug I assumed to be there 
+does not exist, since the tx_qlen was indeed part of the socket. Sorry.
 
-> 2. Let pop() return result
-> --------------------------
->   * at least for the forseeable future, the underlying queue is
-> sk_write_queue; * an skb can not be on two lists at the same time;
->   * thus skb_unlink will always be part of implementing pop();
->   * having pop() return the skb is more versatile (compare Assembler
-> pop()).
->
-That should be fine...
 
->   * makes tx_qlen a socket member of dccp_sock (there was a bug in the
->     implementation -- tx_qlen was shared by all sockets using the same
-> policy);=20
-Haven't tested it thoroughly but it shouldn't be so. After all qpol_txqlen =
-was=20
-part of struct dccp_qpolicy which was in turn part of dccp_sock.
+| > +/*
+| > + * Wrappers for methods provided by policy currently in use
+| > + */
+| > +void qpolicy_push(struct sock *sk, struct sk_buff *skb, struct msghdr
+| > *msg) +{
+| > +	struct dccp_packet_info *dcp = NULL;
+| > +
+| > +	if (msg->msg_control != NULL && msg->msg_controllen = sizeof(*dcp))
+| > +		dcp = (struct dccp_packet_info *)msg->msg_control;
+| > +
+| > +	qpol_table[dccp_sk(sk)->dccps_qpolicy].push(sk, skb, dcp);
+| > +}
+| > +
+| What happens if application is compiled with dccp_packet_info containing only 
+| one field (priority) and kernel containing two fields (for example priority 
+| and later added expiry time)? Wouldn't that implementation make extensions to 
+| dccp_packet_info impossible?
+Had not looked at it from this point of view. So you are suggesting
 
-> +/*
-> + * Wrappers for methods provided by policy currently in use
-> + */
-> +void qpolicy_push(struct sock *sk, struct sk_buff *skb, struct msghdr
-> *msg) +{
-> +	struct dccp_packet_info *dcp =3D NULL;
-> +
-> +	if (msg->msg_control !=3D NULL && msg->msg_controllen =3D sizeof(*dcp))
-> +		dcp =3D (struct dccp_packet_info *)msg->msg_control;
-> +
-> +	qpol_table[dccp_sk(sk)->dccps_qpolicy].push(sk, skb, dcp);
-> +}
-> +
-What happens if application is compiled with dccp_packet_info containing on=
-ly=20
-one field (priority) and kernel containing two fields (for example priority=
-=20
-and later added expiry time)? Wouldn't that implementation make extensions =
-to=20
-dccp_packet_info impossible?
+	if (msg->msg_control != NULL && msg->msg_controllen >= sizeof(*dcp))
+		dcp = (struct dccp_packet_info *)msg->msg_control;
 
-> @@ -501,6 +519,8 @@ struct dccp_sock {
->  	struct ccid			*dccps_hc_rx_ccid;
->  	struct ccid			*dccps_hc_tx_ccid;
->  	struct dccp_options_received	dccps_options_received;
-> +	__u8				dccps_qpolicy;
-> +	__u32				dccps_tx_qlen;
->  	enum dccp_role			dccps_role:2;
->  	__u8				dccps_hc_rx_insert_options:1;
->  	__u8				dccps_hc_tx_insert_options:1;
-I know that currently none of the policies has any per-socket data. But if =
-it=20
-had were should it go?
+instead? Agreed, point #1 to change in the patch.
 
-> +	case DCCP_SOCKOPT_QPOLICY_ID:
-> +		if (sk->sk_state !=3D DCCP_CLOSED)
-> +			err =3D -EISCONN;
-What about DCCP_LISTENING state?
 
-> --- a/Documentation/networking/dccp.txt
-> +++ b/Documentation/networking/dccp.txt
-> @@ -45,6 +45,17 @@ http://linux-net.osdl.org/index.php/DCCP
->
-> +DCCP_SOCKOPT_QPOLICY_TXQLEN sets the maximum TX queue length. This is
-> relevant only for +those TX dequeueing policies that honour this upper
-> bound (currently only the +simple/default policy does this). This socket
-> option overrides the default value +of the sysctl
-> /proc/sys/net/dccp/default/tx_qlen.
->
-In my implementation prio policy did honour DCCP_SOCKOPT_QPOLICY_TXQLEN=20
-setting. At least it was meant to do so.
+| 
+| > @@ -501,6 +519,8 @@ struct dccp_sock {
+| >  	struct ccid			*dccps_hc_rx_ccid;
+| >  	struct ccid			*dccps_hc_tx_ccid;
+| >  	struct dccp_options_received	dccps_options_received;
+| > +	__u8				dccps_qpolicy;
+| > +	__u32				dccps_tx_qlen;
+| >  	enum dccp_role			dccps_role:2;
+| >  	__u8				dccps_hc_rx_insert_options:1;
+| >  	__u8				dccps_hc_tx_insert_options:1;
+| I know that currently none of the policies has any per-socket data. But if it 
+| had were should it go?
+| 
+I can't see anything wrong with putting everything into dccp_sock. To do it well, 
+we could consider inserting documentation such as "this section is only for
+queueing policies" (as is done very well for struct tcp_sock).
 
-Having said "ok" here and there or nothing in other points I haven't tried =
+I see several advantages of this:
+ * by just storing the u8 of the policy ID, the socket as a whole gets smaller,
+ * when not using nested structs, the elements can be optimised for minimal space,
+ * the internals of the function pointer table can be hidden,
+ * the socket carries the same information as is passed on via socket options,
+   which simplifies querying.
 
-applying this patch nor tested your rework.
---=20
-Regards,
-Tomasz Grobelny
+
+| > +	case DCCP_SOCKOPT_QPOLICY_ID:
+| > +		if (sk->sk_state != DCCP_CLOSED)
+| > +			err = -EISCONN;
+| What about DCCP_LISTENING state?
+| 
+There is a problem with allowing this, considering for example:
+ * socket is created, and listen() is called,
+ * socket enters with default policy,
+ * now user decides to change policy from default ("simple") to "prio",
+ * before he can do that, the first packet arrives on the incoming
+   queue, policy is inherited to child socket,
+ * so this connection ends up with "simple" policy instead of "prio".
+
+
+| > +DCCP_SOCKOPT_QPOLICY_TXQLEN sets the maximum TX queue length. This is
+| > relevant only for +those TX dequeueing policies that honour this upper
+| > bound (currently only the +simple/default policy does this). This socket
+| > option overrides the default value +of the sysctl
+| > /proc/sys/net/dccp/default/tx_qlen.
+| >
+| In my implementation prio policy did honour DCCP_SOCKOPT_QPOLICY_TXQLEN 
+| setting. At least it was meant to do so.
+| 
+The documentation certainly needs more work, I just sketched something
+but it is not very good. So this is point #2 which needs to change.
+
+Ideally, it would have a little description of what each policy does and
+for which use case it is best suited.
+
+Please take your time and check through the other parts of the patch as
+well. I would like to accumulate the issues and then address each of the
+points. And also, do some testing.I haven't had time to write test code for
+prio policy -- is there something in your SVN repository?
+
+Gerrit
+
+
+The University of Aberdeen is a charity registered in Scotland, No SC013683.
+
