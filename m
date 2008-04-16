@@ -1,72 +1,74 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 16 Apr 2008 06:20:23 +0000
+Date: Wed, 16 Apr 2008 07:43:25 +0000
 Subject: Re: [DCCP] [RFC] [Patchv2 1/1]: Queuing policies -- reworked
-Message-Id: <20080416062023.GA4278@gerrit.erg.abdn.ac.uk>
+Message-Id: <20080416074325.GC4278@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <20080414073915.GA9655@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20080414073915.GA9655@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-| > | | What happens if application is compiled with dccp_packet_info
-| > | | containing only one field (priority) and kernel containing two fields
-| > | | (for example priority and later added expiry time)? Wouldn't that
-| > | | implementation make extensions to dccp_packet_info impossible?
+Quoting Tomasz Grobelny:
+| Dnia Tuesday 15 of April 2008, Gerrit Renker napisa?:
+| > | > @@ -501,6 +519,8 @@ struct dccp_sock {
+| > | >  	struct ccid			*dccps_hc_rx_ccid;
+| > | >  	struct ccid			*dccps_hc_tx_ccid;
+| > | >  	struct dccp_options_received	dccps_options_received;
+| > | > +	__u8				dccps_qpolicy;
+| > | > +	__u32				dccps_tx_qlen;
+| > | >  	enum dccp_role			dccps_role:2;
+| > | >  	__u8				dccps_hc_rx_insert_options:1;
+| > | >  	__u8				dccps_hc_tx_insert_options:1;
 | > |
-| > | Had not looked at it from this point of view. So you are suggesting
-| > |
-| > | 	if (msg->msg_control != NULL && msg->msg_controllen >= sizeof(*dcp))
-| > | 		dcp = (struct dccp_packet_info *)msg->msg_control;
-| > |
-| > | instead? Agreed, point #1 to change in the patch.
+| > | I know that currently none of the policies has any per-socket data. B=
+ut
+| > | if it had were should it go?
 | >
-| > No, the above is nonsense. If the application uses an earlier version of
-| > the API, then it needs to be recompiled, there is no way it could pretend
-| > to have an adequate size.
+| > I can't see anything wrong with putting everything into dccp_sock. To d=
+o it
+| > well, we could consider inserting documentation such as "this section is
+| > only for queueing policies" (as is done very well for struct tcp_sock).
 | >
-| That would effectively stop development of any policy. And it's not about 
-| pretending the structure has different size, it's just about using only the 
-| data that is provided by the application (even though it may be incomplete).
-| 
-| > So my take is that still the '=' is correct. But maybe this is a known
-| > problem?
-| >
-| I can't see a problem with copying smaller struct to bigger one. It would work 
-| like that:
-| 1. set default values for in-kernel structure,
-| 2. copy min(msg_control, sizeof(struct dccp_packet_info)) bytes from userspace 
-| structure to the kernel one.
-| 
-| In that sense the code above is in fact wrong but the idea alone should be ok.
-| -- 
-There is a more serious problem here: apparently no one tried to compile
-the `qpolicy' subtree since the changes on Monday. It fails with the
-BUILD_BUG_ON.
+| Let me remind you your comment made on 18/03/2008 on dccp ml to my first =
 
-I tried yesterday evening and found that there is not even a possibility
-of adding a single field to struct dccp_skb_cb: with the addition of the
-inet{,6}_skb_parm, the struct has reached its maximum size of 48 bytes
-(try printk("%u", sizeof(struct dccp_skb_cb));).
+| patch:
+|  --- START ---=20
+| @@ -545,6 +549,8 @@ struct dccp_sock {
+| =A0 =A0 =A0 =A0 __u8 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
+=A0dccps_hc_tx_insert_options:1;
+| =A0 =A0 =A0 =A0 __u8 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
+=A0dccps_server_timewait:1;
+| =A0 =A0 =A0 =A0 struct timer_list =A0 =A0 =A0 =A0 =A0 =A0 =A0 dccps_xmit_=
+timer;
+| + =A0 =A0 =A0 struct queuing_policy =A0 =A0=A0=A0=A0=A0=A0=A0=A0*dccps_po=
+licy;
+| + =A0 =A0 =A0 void =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
+=A0*dccps_policy_data;
+| =A0};
+|=20
+| I think this should be just one field for the policy, and the
+| policy_data can be an internal field of `struct queueing_policy'
+| (compare with struct ackvec or struct ccid).
+|  --- END ---=20
+|=20
+Hm, even after reading it again I still find that I don't like void* fields=
+. It
+may be a personal thing, but I think using void* as part of a field is bad =
+(and
+this was in an even earlier comment).
 
-There is a solution to this, will post a revised patch shortly.
+I think I understand your approach better now, after going through the
+patches again.
 
-With regard to your point above: I think there is a way of keeping the
-framework open without bending over backwards to ensure the binary
-compatibility.
 
-My question for you in this regard: which policy can you think of whose
-priorities/preferences can not be mapped into an unsigned 32-bit
-integer? I think that such a number is sufficiently expressive enough
-to cater for a wide range of policies. It can be interpreted as
- * symbolic value (enum)
- * ascii string (similar to DCCP service code)
- * millisecond timeout (with room for up to 7 weeks)
- * microsecond timeout (with room for up to 1.19 hours)
- * priority values (the large range 0..2^32-1 can be partitioned)
- * ... ?
-
+| Ok, you are right. If before DCCP_LISTENING there is always DCCP_CLOSED t=
+hen=20
+| there is no need to allow changing qpolicy in DCCP_LISTENING state.
+|=20
+Yes, that's right -- the initial state is always DCCP_CLOSED, set in
+dccp_init_sock().
 
 
 The University of Aberdeen is a charity registered in Scotland, No SC013683.
