@@ -1,173 +1,110 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 22 Apr 2008 17:41:52 +0000
-Subject: Re: [DCCP] [RFC] [Patchv2 1/1]: Queuing policies -- reworked
-Message-Id: <20080422174152.GD6039@gerrit.erg.abdn.ac.uk>
+From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
+Date: Tue, 22 Apr 2008 20:30:25 +0000
+Subject: Re: [DCCP] [RFC] [Patchv2 1/1]: Queuing policies -- reworked version of Tomasz's patch set
+Message-Id: <200804222230.25743.tomasz@grobelny.oswiecenia.net>
 List-Id: <dccp.vger.kernel.org>
 References: <20080414073915.GA9655@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20080414073915.GA9655@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-| If we iron this out we could finally return to the main subject of this 
-| thread. That is Patch v2 by me and Gerrit...
-| -- 
-Fully agree - we just need to decide whether or not to use skb->priority.
+Dnia Tuesday 22 of April 2008, Gerrit Renker napisa=B3:
+> | > | While we are developing in the test tree compatibility is not
+> | > | important at all. But real world needs compatibility, especially if
+> | > | it's not that expensive. Otherwise people will get weird behaviour
+> | > | without any messages indicating what is wrong. And it's certainly n=
+ot
+> | > | how code should be written. It can't be that binary package of VLC
+> | > | (or any other streaming server) cannot use newer kernel version
+> | > | because we added a new field.
+> | >
+> | > True, but we need to get something working first. There is no point
+> | > exporting an API which only works half.
+> |
+> | You can never assume that the API is feature complete. Even if it "works
+> | half" at the beginning (which is I guess quite normal) it should be easy
+> | to make it "work full" without breaking compatibility when it's not
+> | necessary.
+>
+> No I don't agree. Things that work half are worse than constant failures,
+> since it is never clear when they will fail next. But maybe you didn't me=
+an
+> that.
+>
+I mean that what we are currently discussing (only priorities) is in itself=
+=20
+useful ("works half"). Adding more features (expiry times) would be a nice =
 
-Below is as far as I got in integrating your patch last week, it shows
-only the major changes. The following bits have been updated:
+but non essential feature ("work full").
 
- * skb->priority now cleared before passing the skb onto layer 3;
- * order of statements in prio_push() reversed (first dropping worst
-   skb and then pushing the new skb - this is better when e.g.
-   tx_qlen=1);
- * added general parsing routine for cmsg(3) socket control messages
-   and defined one for the SOL_DCCP socket level; thanks to advice
-   by Dave Miller
+(a bit of reordering)
+> So we can reduce this to the other question "is 32 bit enough for priority
+> information".
+>
+That is an important question. But I'm afraid the answer is no (even though=
+ I=20
+thought otherwise when writing previous mail). When we want to add packet=20
+expiry times we will need a field for timestamp. Which is quite big (64=20
+bits?). But note that it is only needed for in-kernel implemetation.=20
+Userspace can write this information on as low as 16 bits. This leads me to=
+=20
+conclusions stated below.
 
+> | > Semantically there is no restriction of what the u32 number represent=
+s.
+> | > And it is a large space. I don't think that a larger size is required.
+> |
+> | Ok, for now 32 bits are enough and I can't think of the need to use more
+> | bits. I wouldn't be so sure about future though. But ok, if it turns up
+> | that we need more space in the future then we will see, there is no need
+> | to worry about it now. We can indeed assume 32 bits for now.
+>
+> So it only remains to see whether to use a field in dccp_skb_cb, or to
+> use skb->priority. I think the latter has advantages, since this field
+> is only set/used for the SO_PRIORITY field (in socket(7)).
+>
+I think we should distingish two things:
+1. How do we pass data along with each packet from userspace to kernelspace.
+2. How do we store data in in-kernel skb for internal use.
+I'm afraid there was no such separation in my patches and mixing those two =
 
+things causes a lots misunderstandings.
 
-A new and updated version has been uploaded to
+Ad 1. In this case we need not care about sizes etc. Clean and extensible=20
+interface is very important. We can also have very different priority data =
 
-    git://eden-feed.erg.abdn.ac.uk/dccp_exp
-    subtree `qpolicy'
+representantion from what is later stored in skb.
+Ad 2. In this case sizes do matter. We can use whichever fields we want. In=
+=20
+particular we need not keep all the data passed from userspace application =
+in=20
+one chunk but we can distribute it among arbitrary skb fields.
 
-The implementation needs some more testing.
+So this could look like that:
+Userspace application fills in a structure:
+struct dccp_packet_info {
+	s8 priority; //as it is now
+	u16 expire_after; //up to 65s with 1ms accuracy
+}
+and passes it to sendmsg(..., struct dccp_packet_info pktinfo), which passe=
+s=20
+it to qpolicy_push which passes it to qpolicy_prio_push which does the tric=
+ky=20
+stuff with CMSG and does:
+skb->priority=3Dpktinfo->priority;
+skb->tstamp=3Dnow()+pktinfo->expire_after;
+(possibly other things that could potentially store data in dccp_skb_cb)
 
-I have uploaded matching userspace code to 
+This would allow us to:
+1. Use existing skb fields in a clean way. I mean according to their names =
 
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/packet_prio_tests.tar.gz
+(priority, tstamp).
+2. Have a clean userspace interface not affected by internal kernel=20
+implementation details.
 
-Will send an update next week and then we can discuss my edits, it
-remains your patch. Simply too busy this week.
-
-
-Gerrit
-
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -195,6 +195,12 @@ enum dccp_feature_numbers {
- 	DCCPF_MAX_CCID_SPECIFIC = 255,
- };
- 
-+/* DCCP socket control message types for cmsg */
-+enum dccp_cmsg_type {
-+	DCCP_SCM_PRIORITY = 1,
-+	DCCP_SCM_MAX
-+};
-+
- /* DCCP priorities for outgoing/queued packets */
- enum dccp_packet_dequeueing_policy {
- 	DCCPQ_POLICY_SIMPLE,
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -706,6 +706,32 @@ int compat_dccp_getsockopt(struct sock *
- EXPORT_SYMBOL_GPL(compat_dccp_getsockopt);
- #endif
- 
-+static int dccp_msghdr_parse(struct msghdr *msg, __u32 **priority)
-+{
-+	struct cmsghdr *cmsg = CMSG_FIRSTHDR(msg);
-+
-+	for (; cmsg != NULL; cmsg = CMSG_NXTHDR(msg, cmsg)) {
-+
-+		if (!CMSG_OK(msg, cmsg))
-+			return -EINVAL;
-+
-+		/* Only look at DCCP-related socket control messages */
-+		if (cmsg->cmsg_level != SOL_DCCP)
-+			continue;
-+
-+		switch (cmsg->cmsg_type) {
-+		case DCCP_SCM_PRIORITY:
-+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(__u32)))
-+				return -EINVAL;
-+			*priority = (__u32 *)CMSG_DATA(cmsg);
-+			break;
-+		default:
-+			return -EINVAL;
-+		}
-+	}
-+	return 0;
-+}
-+
- int dccp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
- 		 size_t len)
- {
-@@ -714,11 +740,15 @@ int dccp_sendmsg(struct kiocb *iocb, str
- 	const int noblock = flags & MSG_DONTWAIT;
- 	struct sk_buff *skb;
- 	int rc, size;
-+	__u32 *pprio = NULL;
- 	long timeo;
- 
- 	if (len > dp->dccps_mss_cache)
- 		return -EMSGSIZE;
- 
-+	if (dccp_msghdr_parse(msg, &pprio))
-+		return -EINVAL;
-+
- 	lock_sock(sk);
- 
- 	if (dccp_qpolicy_full(sk)) {
-@@ -749,7 +779,9 @@ int dccp_sendmsg(struct kiocb *iocb, str
- 	if (rc != 0)
- 		goto out_discard;
- 
--	dccp_qpolicy_push(sk, skb, msg);
-+	skb->priority = pprio != NULL ? *pprio : 0;
-+
-+	dccp_qpolicy_push(sk, skb);
- 	dccp_write_xmit(sk);
- out_release:
- 	release_sock(sk);
---- a/net/dccp/qpolicy.c
-+++ b/net/dccp/qpolicy.c
-@@ -97,13 +102,8 @@ static struct dccp_qpolicy_operations {
- /*
-  *	Externally visible interface
-  */
--void dccp_qpolicy_push(struct sock *sk, struct sk_buff *skb, struct msghdr *msg)
-+void dccp_qpolicy_push(struct sock *sk, struct sk_buff *skb)
- {
--	if (msg->msg_control = NULL || msg->msg_controllen != sizeof(__u32))
--		skb->priority = 0;	/* implies lowest-possible priority */
--	else
--		skb->priority = get_unaligned((__u32 *)msg->msg_control);
--
- 	qpol_table[dccp_sk(sk)->dccps_qpolicy].push(sk, skb);
- }
- 
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -51,7 +51,11 @@ during an established connection are not
- defined: the "simple" policy (DCCPQ_POLICY_SIMPLE), which does nothing special,
- and a priority-based variant (DCCPQ_POLICY_PRIO). The latter allows to pass an
- u32 priority value as ancillary data to sendmsg(), where higher numbers indicate
--a higher packet priority (similar to SO_PRIORITY).
-+a higher packet priority (similar to SO_PRIORITY). This ancillary data needs to
-+be formatted using a cmsg(3) message header filled in as follows:
-+	cmsg->cmsg_level = SOL_DCCP;
-+	cmsg->cmsg_type	 = DCCP_SCM_PRIORITY;
-+	cmsg->cmsg_len	 = CMSG_LEN(sizeof(uint32_t));
- 
- DCCP_SOCKOPT_QPOLICY_TXQLEN sets the maximum length of the output queue. A zero
- value is always interpreted as unbounded queue length. If different from zero,
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -257,6 +257,9 @@ static void dccp_xmit_packet(struct sock
- 		DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_DATA;
- 	}
- 
-+	/* Clear priority value used by the qpolicy subsystem */
-+	skb->priority = 0;
-+
- 	err = dccp_transmit_skb(sk, skb);
- 	if (err)
- 		dccp_pr_debug("transmit_skb() returned err=%d\n", err);
--- 
-
-
-The University of Aberdeen is a charity registered in Scotland, No SC013683.
-
+What do you think of such decoupling?
+--=20
+Regards,
+Tomasz Grobelny
