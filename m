@@ -1,62 +1,41 @@
-From: "Leandro Sales" <leandroal@gmail.com>
-Date: Fri, 25 Apr 2008 22:21:43 +0000
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Fri, 25 Apr 2008 22:56:41 +0000
 Subject: Re: DCCP iperf
-Message-Id: <5bc4c4570804251521s6c801004waa347bb7be81351f@mail.gmail.com>
+Message-Id: <5640c7e00804251556v29c930abme522659345bd8dce@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <324670298.69157.1209100427851.JavaMail.nobody@mail51.abv.bg>
 In-Reply-To: <324670298.69157.1209100427851.JavaMail.nobody@mail51.abv.bg>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="windows-1254"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-V2h5IGRvIG5vdCB1c2UgSVBlcmYgd2l0aCBEQ0NQIGlmIEdlcnJpdCBwcm92aWRlZCBnb29kIHBh
-dGNoZXMgZm9yIGl0PwpJJ20gaW4gdGhlIHNhbWUgc2l0dWF0aW9uIGxpa2UgeW91IGJvdGgsIHRo
-ZSBkaWZmZXJlbmNlIGlzIHRoYXQgSSB3aWxsCnByZXNlbnQgbXkgZGlzc2VydGF0aW9uIG5leHQg
-d2VlayBhbmQgbWFueSBvZiB0aGUgZXhwZXJpbWVudHMgdGhhdCBJCnBlcmZvcm1lZCB3YXMgdXNp
-bmcgSVBlcmYgd2l0aCBEQ0NQIHN1cHBvcnQgYnkgR2Vycml0LiBQbGVhc2UsIHJlZmVyCnRvIHRo
-ZSBmb2xsb3dpbmcgbGluazoKICB3d3cuZXJnLmFiZG4uYWMudWsvdXNlcnMvZ2Vycml0L2RjY3Av
-YXBwcwogIFBsZWFzZSwgY29uc2lkZXIgdGhlIHVzZSBvZiBteSBHU3RyZWFtZXIgcGx1Z2luIGZv
-ciBEQ0NQLCB3aGljaCBJCmRldmVsb3BlZCBkdXJpbmcgbXkgbWFzdGVyLiBJIHdpbGwgcHVibGlz
-aCBteSBkaXNzZXJ0YXRpb24gaW4gYQplbmdsaXNoIHZlcnNpb24gdG9vLiBOb3dhZGF5cyBpdCBp
-cyBvbmx5IGluIHBvcnR1Z3Vlc2UuCiAgRmVlbCBmcmVlIHRvIGFzayBtb3JlIHF1ZXN0aW9uIGlu
-IGNhc2Ugb2YgZG91YnQuCgpPbiA0LzI1LzA4LCBUb21hc3ogR3JvYmVsbnkgPHRvbWFzekBncm9i
-ZWxueS5vc3dpZWNlbmlhLm5ldD4gd3JvdGU6Cj4gRG5pYSBGcmlkYXkgMjUgb2YgQXByaWwgMjAw
-OCwgbmFwaXNhs2W2Ogo+ID4gRGVhciBBbGwsCj4gPgo+ID4gIE15IG5hbWUgaXMgUm9zdGlzbGF2
-YSBTbGF2b3ZhLiBJIGFtIGEgbWFzdGVyIHN0dWRlbnQgaW4gVGVjaG5pY2FsCj4gPiBVbml2ZXJz
-aXR5IG9mIFNvZmlhIGFuZCBJJ20gd29ya2luZyBvbiBteSB0aGVzaXMgYWJvdXQgdGhlIG5ldyB0
-cmFuc3BvcnQKPiA+IHByb3RvY29scyBhbmQgdGhhdCBpcyB3aHkgSSdtIG11Y2ggaW50ZXJlc3Rl
-ZCBpbiBEQ0NQLiBCdXQgSSBmYWNlZCBzb21lCj4gSSdtIGluIGEgdmVyeSBzaW1pbGFyIHNpdHVh
-dGlvbi4gOi0pCj4KPiA+IGRpZmZpY3VsdG5lc3MgcnVubmluZyBpdC4gSSB3b3VsZCBsaWtlIHRv
-IGFzayB5b3UgZm9yIHNvbWUgaGVscCB0byBzdGFydAo+ID4gdXNpbmcgdGhlIERDQ1AgdGVzdCBz
-b3VyY2UgdHJlZS4gSSBjb21waWxlZCB0aGUga2VybmVsIHRvIGVuYWJsZSBEQ0NQLCBidXQKPiA+
-IHN0aWxsIHdoZW4gdHJ5aW5nIHRvIHJ1biBpcGVyZiB3aXRoIERDQ1AgaGF2ZSB0aGUgbWVzc2Fn
-ZSAiUHJvdG9jb2wgbm90Cj4gPiBhdmFpbGFibGUiLiBIb3cgdG8gY29tcGlsZSB0aGUgY29kZSBm
-cm9tIHRoZSBEQ0NQIHRlc3QgdHJlZSBzbyB0byBtYWtlIHRoZQo+ID4gRENDUCBydW4sIHVzaW5n
-IGlwZXJmIGZvciB0aGUgYmVnaW5uaW5nPwo+ID4KPiBOZXZlciB0cmllZCB0byB1c2UgaXBlcmYg
-d2l0aCBEQ0NQIChpdCBtYXkgYmUgdGhhdCByZWxlYXNlZCB2ZXJzaW9ucyBkbyBub3QKPiBzdXBw
-b3J0IERDQ1ApIGJ1dCBEQ0NQIGFsb25lIGNlcnRhaW5seSB3b3JrcyBmb3IgbWUuIElmIHlvdSB3
-YW50IHRvIHVzZSB0ZXN0Cj4gdHJlZSBmaXJzdCBwdWxsIGl0IGZyb20gZ2l0Oi8vZWRlbi1mZWVk
-LmVyZy5hYmRuLmFjLnVrL2RjY3BfZXhwLmdpdCB0aGVuCj4gc3dpdGNoIHRvIGNvcnJlY3QgYnJh
-bmNoIChtb3N0IHByb2JhYmx5IG9yaWdpbi9kY2NwKSwgYW5kIGNvbXBpbGUgd2l0aCBEQ0NQCj4g
-ZW5hYmxlZDoKPiAkIGNhdCAuY29uZmlnfCBncmVwIC1pIGRjY3AKPiBDT05GSUdfTkVURklMVEVS
-X1hUX01BVENIX0RDQ1A9bQo+IENPTkZJR19JUF9EQ0NQPW0KPiBDT05GSUdfSU5FVF9EQ0NQX0RJ
-QUc9bQo+IENPTkZJR19JUF9EQ0NQX0FDS1ZFQz15Cj4gIyBEQ0NQIENDSURzIENvbmZpZ3VyYXRp
-b24gKEVYUEVSSU1FTlRBTCkKPiBDT05GSUdfSVBfRENDUF9DQ0lEMj1tCj4gQ09ORklHX0lQX0RD
-Q1BfQ0NJRDJfREVCVUc9eQo+IENPTkZJR19JUF9EQ0NQX0NDSUQzPW0KPiBDT05GSUdfSVBfREND
-UF9DQ0lEM19ERUJVRz15Cj4gQ09ORklHX0lQX0RDQ1BfQ0NJRDNfUlRPEDAwCj4gQ09ORklHX0lQ
-X0RDQ1BfVEZSQ19MSUI9bQo+IENPTkZJR19JUF9EQ0NQX1RGUkNfREVCVUc9eQo+ICMgRENDUCBL
-ZXJuZWwgSGFja2luZwo+IENPTkZJR19JUF9EQ0NQX0RFQlVHPXkKPiBDT05GSUdfTkVUX0RDQ1BQ
-Uk9CRT1tCj4KPiBBbHNvIGhhdmUgYSBsb29rIGF0IGh0dHA6Ly93YW5kLmNzLndhaWthdG8uYWMu
-bnovfmlhbTQvZGNjcC9pbmRleC5odG1sLCBpbgo+IHBhcnRpY3VsYXIgaHR0cDovL3dhbmQuY3Mu
-d2Fpa2F0by5hYy5uei9+aWFtNC9zb2Z0d2FyZS9pbmRleC5odG1sCj4gLS0KPiBSZWdhcmRzLAo+
-IFRvbWFzeiBHcm9iZWxueQo+IC0tCj4gVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxpc3Q6IHNl
-bmQgdGhlIGxpbmUgInVuc3Vic2NyaWJlIGRjY3AiIGluCj4gdGhlIGJvZHkgb2YgYSBtZXNzYWdl
-IHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKPiBNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBo
-dHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWwKPgoKCi0tIApMZWFuZHJv
-IE1lbG8gZGUgU2FsZXMuClBlcnZhc2l2ZSBhbmQgRW1iZWRkZWQgQ29tcHV0aW5nIExhYm9yYXRv
-cnkKQlJpc2EgYW5kIEUtUGhvbmUgUHJvamVjdHMgTWFuYWdlcgpOZXR3b3JrIEFkbWluIEAgaHR0
-cDovL2VtYmVkZGVkLnVmY2cuZWR1LmJyL2luZGV4ZW4uaHRtbAorNTUgODMgMzMxMC0xNDA0IChl
-eHRlbnNpb24gMjA4KQoKaHR0cDovL3d3dy5sZWFuZHJvc2FsZXMuY29tLwr/9Oi6ey5uxyuJt5+u
-ia2GKyWKy/+x6d22F6WKd/+6ey5uxyuJt51xyv+Ke2F5uh3Kh9qZ6yxqB62iZqOit2iaj++B6v+R
-6ud6X+iuAyit6ZqOit2iaiKd+hq2G22n//++B6v+R6ud6f+iuD+ZqOit2iaj+Kd+j+EK
+2008/4/26 Leandro Sales <leandroal@gmail.com>:
+> Why do not use IPerf with DCCP if Gerrit provided good patches for it?
+>  I'm in the same situation like you both, the difference is that I will
+>  present my dissertation next week and many of the experiments that I
+>  performed was using IPerf with DCCP support by Gerrit. Please, refer
+>  to the following link:
+>   www.erg.abdn.ac.uk/users/gerrit/dccp/apps
+>   Please, consider the use of my GStreamer plugin for DCCP, which I
+>  developed during my master. I will publish my dissertation in a
+>  english version too. Nowadays it is only in portuguese.
+>   Feel free to ask more question in case of doubt.
+>
+>
+I too would recommend Gerrit's website rather than mine as more up to
+date. Also see:
+http://www.linux-foundation.org/en/Net:DCCP
+
+Gerrit is trying to get DCCP merged into iperf. Please note iperf
+website has changed to:
+http://sourceforge.net/projects/iperf
+
+Good luck!
+
+Regards
+
+Ian
+-- 
+Web: http://wand.net.nz/~iam4/
+Blog: http://iansblog.jandi.co.nz
