@@ -1,33 +1,18 @@
-From: David Miller <davem@davemloft.net>
-Date: Mon, 14 Apr 2008 05:38:58 +0000
-Subject: Re: [RFC][PATCH 10/12][NETNS][DCCPV6]: Move the dccp_v6_ctl_sk on
-Message-Id: <20080413.223858.65283072.davem@davemloft.net>
+From: rostislava slavova <rostislava_ps@abv.bg>
+Date: Fri, 25 Apr 2008 05:13:47 +0000
+Subject: DCCP iperf
+Message-Id: <324670298.69157.1209100427851.JavaMail.nobody@mail51.abv.bg>
 List-Id: <dccp.vger.kernel.org>
-References: <47FBAB09.9000305@openvz.org>
-In-Reply-To: <47FBAB09.9000305@openvz.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Tue, 8 Apr 2008 15:18:04 -0300
+Dear All,
 
-> Em Tue, Apr 08, 2008 at 09:27:37PM +0400, Pavel Emelyanov escreveu:
-> > diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
-> > index 2ca5291..109dab3 100644
-> > --- a/net/dccp/ipv6.c
-> > +++ b/net/dccp/ipv6.c
-> > @@ -33,8 +33,7 @@
-> >  #include "ipv6.h"
-> >  #include "feat.h"
-> >  
-> > -/* Socket used for sending RSTs and ACKs */
-> > -static struct sock *dccp_v6_ctl_sk;
-> > +/* dccp_v6_ctl_sk is used for sending RSTs and ACKs */
-> 
-> Wrong comment?
+ My name is Rostislava Slavova. I am a master student in Technical University of Sofia and I'm working on my thesis about the new transport protocols and that is why I'm much interested in DCCP. But I faced some difficultness running it.
+ I would like to ask you for some help to start using the DCCP test source tree. I compiled the kernel to enable DCCP, but still when trying to run iperf with DCCP have the message "Protocol not available".
+ How to compile the code from the DCCP test tree so to make the DCCP run, using iperf for the beginning?
 
-Pavel, please send a patch to fix this up, relative to net-2.6.26
-
-Thanks!
+ Best Regards,
+ Rossi
