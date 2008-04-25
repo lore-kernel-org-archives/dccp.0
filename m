@@ -1,57 +1,62 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Fri, 25 Apr 2008 08:42:53 +0000
+From: "Leandro Sales" <leandroal@gmail.com>
+Date: Fri, 25 Apr 2008 22:21:43 +0000
 Subject: Re: DCCP iperf
-Message-Id: <200804251042.54071.tomasz@grobelny.oswiecenia.net>
+Message-Id: <5bc4c4570804251521s6c801004waa347bb7be81351f@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <324670298.69157.1209100427851.JavaMail.nobody@mail51.abv.bg>
 In-Reply-To: <324670298.69157.1209100427851.JavaMail.nobody@mail51.abv.bg>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="windows-1254"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-Dnia Friday 25 of April 2008, napisa=B3e=B6:
-> Dear All,
->
->  My name is Rostislava Slavova. I am a master student in Technical
-> University of Sofia and I'm working on my thesis about the new transport
-> protocols and that is why I'm much interested in DCCP. But I faced some
-I'm in a very similar situation. :-)
-
-> difficultness running it. I would like to ask you for some help to start
-> using the DCCP test source tree. I compiled the kernel to enable DCCP, but
-> still when trying to run iperf with DCCP have the message "Protocol not
-> available". How to compile the code from the DCCP test tree so to make the
-> DCCP run, using iperf for the beginning?
->
-Never tried to use iperf with DCCP (it may be that released versions do not=
-=20
-support DCCP) but DCCP alone certainly works for me. If you want to use tes=
-t=20
-tree first pull it from git://eden-feed.erg.abdn.ac.uk/dccp_exp.git then=20
-switch to correct branch (most probably origin/dccp), and compile with DCCP=
-=20
-enabled:
-$ cat .config| grep -i dccp
-CONFIG_NETFILTER_XT_MATCH_DCCP=3Dm
-CONFIG_IP_DCCP=3Dm
-CONFIG_INET_DCCP_DIAG=3Dm
-CONFIG_IP_DCCP_ACKVEC=3Dy
-# DCCP CCIDs Configuration (EXPERIMENTAL)
-CONFIG_IP_DCCP_CCID2=3Dm
-CONFIG_IP_DCCP_CCID2_DEBUG=3Dy
-CONFIG_IP_DCCP_CCID3=3Dm
-CONFIG_IP_DCCP_CCID3_DEBUG=3Dy
-CONFIG_IP_DCCP_CCID3_RTO=1000
-CONFIG_IP_DCCP_TFRC_LIB=3Dm
-CONFIG_IP_DCCP_TFRC_DEBUG=3Dy
-# DCCP Kernel Hacking
-CONFIG_IP_DCCP_DEBUG=3Dy
-CONFIG_NET_DCCPPROBE=3Dm
-
-Also have a look at http://wand.cs.waikato.ac.nz/~iam4/dccp/index.html, in =
-
-particular http://wand.cs.waikato.ac.nz/~iam4/software/index.html
---=20
-Regards,
-Tomasz Grobelny
+V2h5IGRvIG5vdCB1c2UgSVBlcmYgd2l0aCBEQ0NQIGlmIEdlcnJpdCBwcm92aWRlZCBnb29kIHBh
+dGNoZXMgZm9yIGl0PwpJJ20gaW4gdGhlIHNhbWUgc2l0dWF0aW9uIGxpa2UgeW91IGJvdGgsIHRo
+ZSBkaWZmZXJlbmNlIGlzIHRoYXQgSSB3aWxsCnByZXNlbnQgbXkgZGlzc2VydGF0aW9uIG5leHQg
+d2VlayBhbmQgbWFueSBvZiB0aGUgZXhwZXJpbWVudHMgdGhhdCBJCnBlcmZvcm1lZCB3YXMgdXNp
+bmcgSVBlcmYgd2l0aCBEQ0NQIHN1cHBvcnQgYnkgR2Vycml0LiBQbGVhc2UsIHJlZmVyCnRvIHRo
+ZSBmb2xsb3dpbmcgbGluazoKICB3d3cuZXJnLmFiZG4uYWMudWsvdXNlcnMvZ2Vycml0L2RjY3Av
+YXBwcwogIFBsZWFzZSwgY29uc2lkZXIgdGhlIHVzZSBvZiBteSBHU3RyZWFtZXIgcGx1Z2luIGZv
+ciBEQ0NQLCB3aGljaCBJCmRldmVsb3BlZCBkdXJpbmcgbXkgbWFzdGVyLiBJIHdpbGwgcHVibGlz
+aCBteSBkaXNzZXJ0YXRpb24gaW4gYQplbmdsaXNoIHZlcnNpb24gdG9vLiBOb3dhZGF5cyBpdCBp
+cyBvbmx5IGluIHBvcnR1Z3Vlc2UuCiAgRmVlbCBmcmVlIHRvIGFzayBtb3JlIHF1ZXN0aW9uIGlu
+IGNhc2Ugb2YgZG91YnQuCgpPbiA0LzI1LzA4LCBUb21hc3ogR3JvYmVsbnkgPHRvbWFzekBncm9i
+ZWxueS5vc3dpZWNlbmlhLm5ldD4gd3JvdGU6Cj4gRG5pYSBGcmlkYXkgMjUgb2YgQXByaWwgMjAw
+OCwgbmFwaXNhs2W2Ogo+ID4gRGVhciBBbGwsCj4gPgo+ID4gIE15IG5hbWUgaXMgUm9zdGlzbGF2
+YSBTbGF2b3ZhLiBJIGFtIGEgbWFzdGVyIHN0dWRlbnQgaW4gVGVjaG5pY2FsCj4gPiBVbml2ZXJz
+aXR5IG9mIFNvZmlhIGFuZCBJJ20gd29ya2luZyBvbiBteSB0aGVzaXMgYWJvdXQgdGhlIG5ldyB0
+cmFuc3BvcnQKPiA+IHByb3RvY29scyBhbmQgdGhhdCBpcyB3aHkgSSdtIG11Y2ggaW50ZXJlc3Rl
+ZCBpbiBEQ0NQLiBCdXQgSSBmYWNlZCBzb21lCj4gSSdtIGluIGEgdmVyeSBzaW1pbGFyIHNpdHVh
+dGlvbi4gOi0pCj4KPiA+IGRpZmZpY3VsdG5lc3MgcnVubmluZyBpdC4gSSB3b3VsZCBsaWtlIHRv
+IGFzayB5b3UgZm9yIHNvbWUgaGVscCB0byBzdGFydAo+ID4gdXNpbmcgdGhlIERDQ1AgdGVzdCBz
+b3VyY2UgdHJlZS4gSSBjb21waWxlZCB0aGUga2VybmVsIHRvIGVuYWJsZSBEQ0NQLCBidXQKPiA+
+IHN0aWxsIHdoZW4gdHJ5aW5nIHRvIHJ1biBpcGVyZiB3aXRoIERDQ1AgaGF2ZSB0aGUgbWVzc2Fn
+ZSAiUHJvdG9jb2wgbm90Cj4gPiBhdmFpbGFibGUiLiBIb3cgdG8gY29tcGlsZSB0aGUgY29kZSBm
+cm9tIHRoZSBEQ0NQIHRlc3QgdHJlZSBzbyB0byBtYWtlIHRoZQo+ID4gRENDUCBydW4sIHVzaW5n
+IGlwZXJmIGZvciB0aGUgYmVnaW5uaW5nPwo+ID4KPiBOZXZlciB0cmllZCB0byB1c2UgaXBlcmYg
+d2l0aCBEQ0NQIChpdCBtYXkgYmUgdGhhdCByZWxlYXNlZCB2ZXJzaW9ucyBkbyBub3QKPiBzdXBw
+b3J0IERDQ1ApIGJ1dCBEQ0NQIGFsb25lIGNlcnRhaW5seSB3b3JrcyBmb3IgbWUuIElmIHlvdSB3
+YW50IHRvIHVzZSB0ZXN0Cj4gdHJlZSBmaXJzdCBwdWxsIGl0IGZyb20gZ2l0Oi8vZWRlbi1mZWVk
+LmVyZy5hYmRuLmFjLnVrL2RjY3BfZXhwLmdpdCB0aGVuCj4gc3dpdGNoIHRvIGNvcnJlY3QgYnJh
+bmNoIChtb3N0IHByb2JhYmx5IG9yaWdpbi9kY2NwKSwgYW5kIGNvbXBpbGUgd2l0aCBEQ0NQCj4g
+ZW5hYmxlZDoKPiAkIGNhdCAuY29uZmlnfCBncmVwIC1pIGRjY3AKPiBDT05GSUdfTkVURklMVEVS
+X1hUX01BVENIX0RDQ1A9bQo+IENPTkZJR19JUF9EQ0NQPW0KPiBDT05GSUdfSU5FVF9EQ0NQX0RJ
+QUc9bQo+IENPTkZJR19JUF9EQ0NQX0FDS1ZFQz15Cj4gIyBEQ0NQIENDSURzIENvbmZpZ3VyYXRp
+b24gKEVYUEVSSU1FTlRBTCkKPiBDT05GSUdfSVBfRENDUF9DQ0lEMj1tCj4gQ09ORklHX0lQX0RD
+Q1BfQ0NJRDJfREVCVUc9eQo+IENPTkZJR19JUF9EQ0NQX0NDSUQzPW0KPiBDT05GSUdfSVBfREND
+UF9DQ0lEM19ERUJVRz15Cj4gQ09ORklHX0lQX0RDQ1BfQ0NJRDNfUlRPEDAwCj4gQ09ORklHX0lQ
+X0RDQ1BfVEZSQ19MSUI9bQo+IENPTkZJR19JUF9EQ0NQX1RGUkNfREVCVUc9eQo+ICMgRENDUCBL
+ZXJuZWwgSGFja2luZwo+IENPTkZJR19JUF9EQ0NQX0RFQlVHPXkKPiBDT05GSUdfTkVUX0RDQ1BQ
+Uk9CRT1tCj4KPiBBbHNvIGhhdmUgYSBsb29rIGF0IGh0dHA6Ly93YW5kLmNzLndhaWthdG8uYWMu
+bnovfmlhbTQvZGNjcC9pbmRleC5odG1sLCBpbgo+IHBhcnRpY3VsYXIgaHR0cDovL3dhbmQuY3Mu
+d2Fpa2F0by5hYy5uei9+aWFtNC9zb2Z0d2FyZS9pbmRleC5odG1sCj4gLS0KPiBSZWdhcmRzLAo+
+IFRvbWFzeiBHcm9iZWxueQo+IC0tCj4gVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxpc3Q6IHNl
+bmQgdGhlIGxpbmUgInVuc3Vic2NyaWJlIGRjY3AiIGluCj4gdGhlIGJvZHkgb2YgYSBtZXNzYWdl
+IHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKPiBNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBo
+dHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWwKPgoKCi0tIApMZWFuZHJv
+IE1lbG8gZGUgU2FsZXMuClBlcnZhc2l2ZSBhbmQgRW1iZWRkZWQgQ29tcHV0aW5nIExhYm9yYXRv
+cnkKQlJpc2EgYW5kIEUtUGhvbmUgUHJvamVjdHMgTWFuYWdlcgpOZXR3b3JrIEFkbWluIEAgaHR0
+cDovL2VtYmVkZGVkLnVmY2cuZWR1LmJyL2luZGV4ZW4uaHRtbAorNTUgODMgMzMxMC0xNDA0IChl
+eHRlbnNpb24gMjA4KQoKaHR0cDovL3d3dy5sZWFuZHJvc2FsZXMuY29tLwr/9Oi6ey5uxyuJt5+u
+ia2GKyWKy/+x6d22F6WKd/+6ey5uxyuJt51xyv+Ke2F5uh3Kh9qZ6yxqB62iZqOit2iaj++B6v+R
+6ud6X+iuAyit6ZqOit2iaiKd+hq2G22n//++B6v+R6ud6f+iuD+ZqOit2iaj+Kd+j+EK
