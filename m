@@ -1,43 +1,58 @@
-From: Wei Yongjun <yjwei@cn.fujitsu.com>
-Date: Fri, 23 May 2008 01:08:48 +0000
-Subject: [PATCH] DCCP: Fix to handle short sequence numbers packet correctly
-Message-Id: <48361920.9090309@cn.fujitsu.com>
+From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
+Date: Fri, 02 May 2008 13:45:15 +0000
+Subject: [DCCP] kernel BUG on connecting
+Message-Id: <200805021545.16399.tomasz@grobelny.oswiecenia.net>
 List-Id: <dccp.vger.kernel.org>
-References: <4834EA23.3070309@cn.fujitsu.com>
-In-Reply-To: <4834EA23.3070309@cn.fujitsu.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-RFC4340 said:
-  8.5.  Pseudocode
-       ...
-       If P.type is not Data, Ack, or DataAck and P.X = 0 (the packet
-             has short sequence numbers), drop packet and return
-
-But DCCP has some mistake to handle short sequence numbers packet, now 
-it drop packet only if P.type is Data, Ack, or DataAck and P.X = 0.
-
-This patch fixed this problem.
-
-Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
-Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-
---- a/net/dccp/ipv4.c	2008-05-18 11:54:29.000000000 -0400
-+++ b/net/dccp/ipv4.c	2008-05-18 11:55:51.000000000 -0400
-@@ -741,8 +741,8 @@ int dccp_invalid_packet(struct sk_buff *
- 	 * If P.type is not Data, Ack, or DataAck and P.X = 0 (the packet
- 	 * has short sequence numbers), drop packet and return
- 	 */
--	if (dh->dccph_type >= DCCP_PKT_DATA    &&
--	    dh->dccph_type <= DCCP_PKT_DATAACK && dh->dccph_x = 0)  {
-+	if ((dh->dccph_type < DCCP_PKT_DATA    ||
-+	    dh->dccph_type > DCCP_PKT_DATAACK) && dh->dccph_x = 0)  {
- 		DCCP_WARN("P.type (%s) not Data || [Data]Ack, while P.X = 0\n",
- 			  dccp_packet_name(dh->dccph_type));
- 		return 1;
-
-
-
-
+VG9kYXkgYWZ0ZXIgSSBwdWxsZWQgZnJvbSBkY2NwIHRlc3QgdHJlZSBJIGdldCB0aGUgZm9sbG93
+aW5nIHdoaWxlIHRyeWluZyB0byAKY29ubmVjdC4gQXMgdGhlcmUgd2VyZSBubyBjaGFuZ2VzIGlu
+IGRjY3AgdHJlZSBhbG9uZSBJIGFzc3VtZSB0aGUgYnVnIG11c3QgCmhhdmUgYmVlbiBpbnRyb2R1
+Y2VkIChvciBzaW1wbHkgdW5jb3ZlcmVkKSBieSBhIHBhdGNoIGluIG5ldGRldiB0cmVlLiBBbnkg
+CmlkZWFzPwoKc2tiX3VuZGVyX3BhbmljOiB0ZXh0OmUwODRjYzU1IGxlbjo0IHB1dDo0IGhlYWQ6
+ZGYwMTZjNWMgZGF0YTpkZjAxNjdmYyAKdGFpbDoweGRmMDE2ODAwIGVuZDoweGRmMDE2YzgwIGRl
+djo8TlVMTD4KLS0tLS0tLS0tLS0tWyBjdXQgaGVyZSBdLS0tLS0tLS0tLS0tCmtlcm5lbCBCVUcg
+CmF0IC9ob21lL3VzZXJzL3RvbWVrL3JwbS9CVUlMRC9rZXJuZWwtdmFuaWxsYS0yLjYuMjUvbGlu
+dXgtMi42LjI1L25ldC9jb3JlL3NrYnVmZi5jOjE0OSEKaW52YWxpZCBvcGNvZGU6IDAwMDAgWyMx
+XSBTTVAKTW9kdWxlcyBsaW5rZWQgaW46IGRjY3BfY2NpZDIgZGNjcF9jY2lkMyBkY2NwX3RmcmNf
+bGliIGRjY3BfaXB2NCBkY2NwIApubHNfaXNvODg1OV8xIG5sc191dGY4IHNtYmZzIGlwdjYgc2No
+X3NmcSBwY25ldDMyIG1paSBpZGVfcGNpX2dlbmVyaWMgcGlpeCAKaWRlX2NkX21vZCBjZHJvbSBl
+dmRldgoKUGlkOiAyMzczLCBjb21tOiBjbGllbnQgTm90IHRhaW50ZWQgKDIuNi4yNV92YW5pbGxh
+LTEgIzEpCkVJUDogMDA2MDpbPGMwMmQ2NzVjPl0gRUZMQUdTOiAwMDAxMDI4NiBDUFU6IDAKRUlQ
+IGlzIGF0IHNrYl91bmRlcl9wYW5pYysweDVjLzB4NjAKRUFYOiAwMDAwMDA3NCBFQlg6IGRmMDE2
+YzVjIEVDWDogMDAwMDAwODIgRURYOiAwMDAwMDA0NgpFU0k6IDAwMDAwMDAwIEVESTogMDAwMDAw
+MDQgRUJQOiBkZGQwM2M5OCBFU1A6IGRkZDAzYzZjCiBEUzogMDA3YiBFUzogMDA3YiBGUzogMDBk
+OCBHUzogMDAzMyBTUzogMDA2OApQcm9jZXNzIGNsaWVudCAocGlkOiAyMzczLCB0ad1kMDIwMDAg
+dGFza98xMDhiYjAgdGFzay50ad1kMDIwMDApClN0YWNrOiBjMDQxYTdjNCBlMDg0Y2M1NSAwMDAw
+MDAwNCAwMDAwMDAwNCBkZjAxNmM1YyBkZjAxNjdmYyBkZjAxNjgwMCBkZjAxNmM4MAogICAgICAg
+YzAzZmZmMWUgZGYxYWIxNDAgMDAwMDAwMDQgZGRkMDNjYTQgYzAyZDc2ZmEgMDAwMDAwMDEgMDAw
+MDAwMDAgZTA4NGNjNTUKICAgICAgIDAwMDAwMDA0IGRkY2QxZjQwIDAwMDAwMDAwIGUwODQ5MmM1
+IDIwMDQxZjQwIGRmMWFiMTQwIDAwMDAwMDAwIDAwMDAwMDIwCkNhbGwgVHJhY2U6CiBbPGUwODRj
+YzU1Pl0gPyBkY2NwX2luc2VydF9mbl9vcHQrMHg4NS8weDE4MCBbZGNjcF0KIFs8YzAyZDc2ZmE+
+XSA/IHNrYl9wdXNoKzB4MmEvMHg0MAogWzxlMDg0Y2M1NT5dID8gZGNjcF9pbnNlcnRfZm5fb3B0
+KzB4ODUvMHgxODAgW2RjY3BdCiBbPGUwODQ5MmM1Pl0gPyBkY2NwX2ZlYXRfcHJpbnR2YWxzKzB4
+MzUvMHg3MCBbZGNjcF0KIFs8ZTA4NGE4ZGU+XSA/IGRjY3BfZmVhdF9pbnNlcnRfb3B0cysweDEy
+ZS8weDJmMCBbZGNjcF0KIFs8YzAxMjU0Y2I+XSA/IHByaW50aysweDFiLzB4MjAKIFs8ZTA4NGM4
+YjQ+XSA/IGRjY3BfaW5zZXJ0X29wdGlvbnMrMHgxYjQvMHg0ZDAgW2RjY3BdCiBbPGMwMTI5ODRj
+Pl0gPyBfX2RvX3NvZnRpcnErMHhjYy8weGYwCiBbPGMwMTI1NGNiPl0gPyBwcmludGsrMHgxYi8w
+eDIwCiBbPGUwODRkN2NiPl0gPyBkY2NwX3RyYW5zbWl0X3NrYisweGRiLzB4NDYwIFtkY2NwXQog
+WzxlMDg0ZTZlNT5dID8gZGNjcF9jb25uZWN0KzB4MTM1LzB4MWUwIFtkY2NwXQogWzxlMDg2ZmVl
+MT5dID8gZGNjcF92NF9jb25uZWN0KzB4MzMxLzB4M2MwIFtkY2NwX2lwdjRdCiBbPGMwMzIzZjE4
+Pl0gPyBpbmV0X3N0cmVhbV9jb25uZWN0KzB4MWI4LzB4MjQwCiBbPGMwMmQyNzgxPl0gPyBzeXNf
+Y29ubmVjdCsweDkxLzB4YjAKIFs8YzAxMWZiYzU+XSA/IGhydGlja19zZXQrMHg4NS8weDEwMAog
+WzxjMDM0ZmY5Mz5dID8gc2NoZWR1bGUrMHgyMzMvMHg2ZTAKIFs8YzAyNmQ1MTY+XSA/IHR0eV93
+cml0ZSsweDFhNi8weDFjMAogWzxjMDJkMzBhOT5dID8gc3lzX3NvY2tldGNhbGwrMHgyNDkvMHgy
+OTAKIFs8YzAyNmQzNzA+XSA/IHR0eV93cml0ZSsweDAvMHgxYzAKIFs8YzAxMDNjZWE+XSA/IHN5
+c2NhbGxfY2FsbCsweDcvMHhiCiA9PT09PT09PT09PUNvZGU6IDAwIDAwIDg5IDVjIDI0IDE0IDhi
+IDk4IGEwIDAwIDAwIDAwIDg5IDU0IDI0IDBjIDg5IDVjIDI0IDEwIDhiIDQwIDUwIDg5IAo0YyAy
+NCAwNCBjNyAwNCAyNCBjNCBhNyA0MSBjMCA4OSA0NCAyNCAwOCBlOCA1NCBlZCBlNCBmZiA8MGY+
+IDBiIGViIGZlIDU1IDg5IAplNSA1NiA1MyBiYiAxZSBmZiAzZiBjMCA4MyBlYyAyNCA4YiA3MCAx
+NCA4NQpFSVA6IFs8YzAyZDY3NWM+XSBza2JfdW5kZXJfcGFuaWMrMHg1Yy8weDYwIFNTOkVTUCAw
+MDY4OmRkZDAzYzZjCi0tLVsgZW5kIHRyYWNlIDkyOTA0MTgwOGUyMGZhMGQgXS0tLQotLSAKUmVn
+YXJkcywKVG9tYXN6IEdyb2JlbG55Ci0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBz
+ZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2Ug
+dG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRw
+Oi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
