@@ -1,215 +1,217 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 23 May 2008 11:09:39 +0000
-Subject: [RFT] [Announce]: DCCP Test Tree Updated
-Message-Id: <20080523110939.GA14843@gerrit.erg.abdn.ac.uk>
+Date: Tue, 06 May 2008 07:38:05 +0000
+Subject: [PATCH 4/4] [CCID-3]: Remove indirection when parsing options
+Message-Id: <1210059485-691-5-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is an annotated list of changes/fixes for the DCCP test tree, these fixes
-have been applied, and the updated tree has been uploaded to 
+The `options_received' struct is redundant, since it re-duplicates the existing
+`p' and `x_recv' fields. This patch removes the sub-struct and migrates the
+related format conversion operations (cf. below) to ccid3_hc_tx_parse_options().
 
-	git://eden-feed.erg.abdn.ac.uk/dccp_exp
-	subtree 'dccp' and 'ccid4'
+The patch also adds a convenience function to convert a reciprocal value into
+the loss rate p, performing the scaling and considering the two special cases:
 
---------------------------------------------------------------------------------
-(1) Let dccp_feat_init() return proper return value instead of always -EPROTO.
---------------------------------------------------------------------------------
---- b/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -191,14 +191,12 @@
- 	dp->dccps_service	= DCCP_SERVICE_CODE_IS_ABSENT;
- 	dp->dccps_tx_qlen	= sysctl_dccp_tx_qlen;
- 
-+	dccp_init_xmit_timers(sk);
-+
- 	INIT_LIST_HEAD(&dp->dccps_featneg);
- 	/* control socket doesn't need feat nego */
- 	if (likely(ctl_sock_initialized))
--		if (dccp_feat_init(sk))
--			return -EPROTO;
--
--	dccp_init_xmit_timers(sk);
--
-+		return dccp_feat_init(sk);
- 	return 0;
- }
---------------------------------------------------------------------------------
-(2) The feature negotiation initialisation has been overhauled with regard to
-    => replaced function to initialise the sysctls with manual initialisation;
-    => resolved memory leak: in some cases, dccp_feat_init() returned an
-                             error without de-allocating the preference lists
-			     for the TX/RX CCIDs;
-    => removed clumsy tables for the initialisation;			     
---------------------------------------------------------------------------------
---- b/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -27,17 +27,16 @@
- #include "ccid.h"
- #include "feat.h"
- 
--/* sysctls related to initialisation of option values */
--unsigned long	sysctl_dccp_feat_sequence_window;
--int		sysctl_dccp_feat_rx_ccid,
--		sysctl_dccp_feat_tx_ccid;
-+/* feature-specific sysctls - initialised to the defaults from RFC 4340, 6.4 */
-+unsigned long	sysctl_dccp_sequence_window __read_mostly = 100;
-+int		sysctl_dccp_rx_ccid	    __read_mostly = 2,
-+		sysctl_dccp_tx_ccid	    __read_mostly = 2;
- 
- /*
-  * Feature activation handlers.
-  *
-- * This uses an u64 argument in all cases to provide enough room for NN/SP
-- * features. Verifiying that the values are within their allowed range happens
-- * earlier and is not something that should be done at this late stage.
-+ * These all use an u64 argument, to provide enough room for NN/SP features. At
-+ * this stage the negotiated values have been checked to be within their range.
-  */
- static int dccp_hdlr_ccid(struct sock *sk, u64 ccid, bool rx)
+ * 1/(2^32-1) is mapped into 0% as per RFC 4342, 8.5;
+ * 1/0        is mapped into the maximum of 100%.
+
+This further fixes a bug in ccid3_hc_rx_getsockopt (1/0 was mapped into ~0U),
+which now allows to consistently print the scaled p-values as
+
+	printf("Loss Event Rate = %u.%04u %%\n", rx_info.tfrcrx_p / 10000,
+						 rx_info.tfrcrx_p % 10000);
+
+Lastly, documentation about the scaling factor used for fractions was added.
+
+	  ----------------------------------------------
+           Why the fields are redundant [can be removed]
+	  ----------------------------------------------
+The Loss Event Rate p and the Receive Rate x_recv are initially 0 when first
+loading CCID-3, as ccid_new() zeroes out the entire ccid3_hc_tx_sock.
+
+When Loss Event Rate or Receive Rate options are received, they are stored by
+ccid3_hc_tx_parse_options() into the fields `ccid3or_loss_event_rate' and
+`ccid3or_receive_rate' of the sub-struct `options_received' in ccid3_hc_tx_sock.
+
+After parsing (considering only the established state - dccp_rcv_established()),
+the packet is passed on to ccid_hc_tx_packet_recv(). This calls the CCID-3
+specific routine ccid3_hc_tx_packet_recv(), which performs the following copy
+operations between fields of ccid3_hc_tx_sock:
+
+ * hctx->options_received.ccid3or_receive_rate is copied into hctx->x_recv,
+   after scaling it for fixpoint arithmetic, by 2^64;
+ * hctx->options_received.ccid3or_loss_event_rate is copied into hctx->p,
+   considering the above special cases; in addition, a value of 0 here needs to
+   be mapped into p=0 (when no Loss Event Rate option has been received yet).
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c    |   27 +++++++++------------------
+ net/dccp/ccids/ccid3.h    |    9 +--------
+ net/dccp/ccids/lib/tfrc.h |   26 ++++++++++++++++++++++++--
+ 3 files changed, 34 insertions(+), 28 deletions(-)
+
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -366,11 +366,10 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, unsigned int len)
+ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
  {
-@@ -1370,55 +1369,43 @@
- 	return 0;	/* ignore FN options in all other states */
- }
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+-	struct ccid3_options_received *opt_recv = &hctx->options_received;
+ 	struct tfrc_tx_hist_entry *acked;
+ 	ktime_t now;
+ 	unsigned long t_nfb;
+-	u32 pinv, r_sample;
++	u32 r_sample;
  
--/* initialise sysctls with default values from the table */
--void __init dccp_feat_initialise_sysctls(void)
--{
--	sysctl_dccp_feat_rx_ccid = dccp_feat_default_value(DCCPF_CCID);
--	sysctl_dccp_feat_tx_ccid = dccp_feat_default_value(DCCPF_CCID);
--	sysctl_dccp_feat_sequence_window -				dccp_feat_default_value(DCCPF_SEQUENCE_WINDOW);
--}
+ 	/* we are only interested in ACKs */
+ 	if (!(DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK ||
+@@ -395,17 +394,6 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	r_sample  = dccp_sample_rtt(sk, ktime_us_delta(now, acked->stamp));
+ 	hctx->rtt = tfrc_ewma(hctx->rtt, r_sample, 9);
+ 
+-	/* Update receive rate in units of 64 * bytes/second */
+-	hctx->x_recv = opt_recv->ccid3or_receive_rate;
+-	hctx->x_recv <<= 6;
 -
- /**
-  * dccp_feat_init  -  Seed feature negotiation with host-specific defaults
-  * This initialises global defaults, depending on the value of the sysctls.
-  * These can later be overridden by registering changes via setsockopt calls.
-  * The last link in the chain is finalise_settings, to make sure that between
-  * here and the start of actual feature negotiation no inconsistencies enter.
-+ *
-+ * All features not appearing below use either defaults or are otherwise
-+ * later adjusted through dccp_feat_finalise_settings().
-  */
- int dccp_feat_init(struct sock *sk)
- {
- 	struct list_head *fn = &dccp_sk(sk)->dccps_featneg;
- 	u8 on = 1, off = 0;
--	int rc = 0, i;
--	/*
--	 * All features not appearing in these tables use either defaults or
--	 * are later adjusted in dccp_feat_finalise_settings().
--	 */
--	struct {
--		u8	feat_num;
--		u64	val;
--	} nn [] = {
--		{ DCCPF_SEQUENCE_WINDOW, sysctl_dccp_feat_sequence_window },
--		/* Ack Ratio is via sockopt, currently no other NN features */
--	};
-+	int rc;
- 	struct {
--		u8	feat_num;
--		bool	is_local;
--		bool	mandatory;
--		u8	*val;
--		u8	len;
--	} sp[] = {
--		{ DCCPF_CCID,		true,	false }, /* local  / TX CCID */
--		{ DCCPF_CCID,		false,	false }, /* remote / RX CCID */
--		/* Advertise that short seqnos are not supported (7.6.1) */
--		{ DCCPF_SHORT_SEQNOS,	true,	true, &off, sizeof(off) },
--		/*
--		 * RFC 4340 12.1: "If a DCCP is not ECN capable, it MUST send
--		 * Mandatory `Change L(ECN Incapable, 1)' options [...]".
--		 */
--		{ DCCPF_ECN_INCAPABLE,	true,	true, &on, sizeof(on) },
--	};
-+		u8 *val;
-+		u8 len;
-+	} tx, rx;
-+
-+	/* Non-negotiable (NN) features */
-+	rc = __feat_register_nn(fn, DCCPF_SEQUENCE_WINDOW, 0,
-+				    sysctl_dccp_sequence_window);
-+	if (rc)
-+		return rc;
-+
-+	/* Server-priority (SP) features */
-+
-+	/* Advertise that short seqnos are not supported (7.6.1) */
-+	rc = __feat_register_sp(fn, DCCPF_SHORT_SEQNOS, true, true, &off, 1);
-+	if (rc)
-+		return rc;
-+
-+	/* RFC 4340 12.1: "If a DCCP is not ECN capable, ..." */
-+	rc = __feat_register_sp(fn, DCCPF_ECN_INCAPABLE, true, true, &on, 1);
-+	if (rc)
-+		return rc;
- 
+-	/* Update loss event rate (which is scaled by 1e6) */
+-	pinv = opt_recv->ccid3or_loss_event_rate;
+-	if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
+-		hctx->p = 0;
+-	else				       /* can not exceed 100% */
+-		hctx->p = scaled_div(1, pinv);
+-
  	/*
- 	 * We advertise the available list of CCIDs and reorder according to
-@@ -1426,27 +1413,28 @@
- 	 * singleton values (which always leads to failure).
- 	 * These settings can still (later) be overridden via sockopts.
+ 	 * Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
  	 */
--	if (ccid_get_default_ccids(&sp[0].val, &sp[0].len) ||
--	    ccid_get_default_ccids(&sp[1].val, &sp[1].len))
-+	if (ccid_get_builtin_ccids(&tx.val, &tx.len) ||
-+	    ccid_get_builtin_ccids(&rx.val, &rx.len))
- 		return -ENOBUFS;
+@@ -478,7 +466,6 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, u8 packet_type,
+ 				     u8 option, u8 *optval, u8 optlen)
+ {
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+-	struct ccid3_options_received *opt_recv = &hctx->options_received;
+ 	__be32 opt_val;
  
- 	/* Pre-load all CCID modules that are going to be advertised */
--	if (ccid_request_modules(sp[0].val, sp[0].len))
--		return -EUNATCH;
--
--	if (!dccp_feat_prefer(sysctl_dccp_feat_tx_ccid, sp[0].val, sp[0].len) ||
--	    !dccp_feat_prefer(sysctl_dccp_feat_rx_ccid, sp[1].val, sp[1].len))
--		rc = -ENOPROTOOPT;
--
--	for (i = 0; rc = 0 && i < ARRAY_SIZE(nn); i++)
--		rc = __feat_register_nn(fn, nn[i].feat_num, 0, nn[i].val);
--
--	for (i = 0; rc = 0 && i < ARRAY_SIZE(sp); i++)
--		rc = __feat_register_sp(fn, sp[i].feat_num, sp[i].is_local,
--					sp[i].mandatory, sp[i].val, sp[i].len);
--
--	kfree(sp[0].val);
--	kfree(sp[1].val);
-+	rc = -EUNATCH;
-+	if (ccid_request_modules(tx.val, tx.len))
-+		goto free_ccid_lists;
+ 	switch (option) {
+@@ -495,11 +482,16 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, u8 packet_type,
+ 		opt_val = ntohl(get_unaligned((__be32 *)optval));
+ 
+ 		if (option = TFRC_OPT_RECEIVE_RATE) {
+-			opt_recv->ccid3or_receive_rate = opt_val;
++			/* Receive Rate is kept in units of 64 bytes/second */
++			hctx->x_recv = opt_val;
++			hctx->x_recv <<= 6;
 +
-+	if (!dccp_feat_prefer(sysctl_dccp_tx_ccid, tx.val, tx.len) ||
-+	    !dccp_feat_prefer(sysctl_dccp_rx_ccid, rx.val, rx.len))
-+		goto free_ccid_lists;
+ 			ccid3_pr_debug("%s(%p), RECEIVE_RATE=%u\n",
+ 				       dccp_role(sk), sk, opt_val);
+ 		} else {
+-			opt_recv->ccid3or_loss_event_rate = opt_val;
++			/* Update the fixpoint Loss Event Rate fraction */
++			hctx->p = tfrc_invert_loss_rate(opt_val);
 +
-+	rc = __feat_register_sp(fn, DCCPF_CCID, true, false, tx.val, tx.len);
-+	if (rc)
-+		goto free_ccid_lists;
+ 			ccid3_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
+ 				       dccp_role(sk), sk, opt_val);
+ 		}
+@@ -836,8 +828,7 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
+ 			return -EINVAL;
+ 		rx_info.tfrcrx_x_recv = hcrx->x_recv;
+ 		rx_info.tfrcrx_rtt    = hcrx->rtt;
+-		rx_info.tfrcrx_p      = hcrx->p_inverse = 0 ? ~0U :
+-					   scaled_div(1, hcrx->p_inverse);
++		rx_info.tfrcrx_p      = tfrc_invert_loss_rate(hcrx->p_inverse);
+ 		len = sizeof(rx_info);
+ 		val = &rx_info;
+ 		break;
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -59,11 +59,6 @@ enum ccid3_options {
+ 	TFRC_OPT_RECEIVE_RATE	 = 194,
+ };
+ 
+-struct ccid3_options_received {
+-	u32 ccid3or_loss_event_rate;
+-	u32 ccid3or_receive_rate;
+-};
+-
+ /* TFRC sender states */
+ enum ccid3_hc_tx_states {
+ 	TFRC_SSTATE_NO_SENT = 1,
+@@ -77,7 +72,7 @@ enum ccid3_hc_tx_states {
+  * @x_recv - Receive rate    in 64 * bytes per second
+  * @x_calc - Calculated rate in bytes per second
+  * @rtt - Estimate of current round trip time in usecs
+- * @p - Current loss event rate (0-1) scaled by 1000000
++ * @p - Current loss event rate (0-1) scaled by %TFRC_SCALE
+  * @s - Packet size in bytes
+  * @t_rto - Nofeedback Timer setting in usecs
+  * @t_ipi - Interpacket (send) interval (RFC 3448, 4.6) in usecs
+@@ -90,7 +85,6 @@ enum ccid3_hc_tx_states {
+  * @t_nom - Nominal send time of next packet
+  * @delta - Send timer delta (RFC 3448, 4.6) in usecs
+  * @hist - Packet history
+- * @options_received - Parsed set of retrieved options
+  */
+ struct ccid3_hc_tx_sock {
+ 	u64				x;
+@@ -109,7 +103,6 @@ struct ccid3_hc_tx_sock {
+ 	ktime_t				t_nom;
+ 	u32				delta;
+ 	struct tfrc_tx_hist_entry	*hist;
+-	struct ccid3_options_received	options_received;
+ };
+ 
+ static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
+--- a/net/dccp/ccids/lib/tfrc.h
++++ b/net/dccp/ccids/lib/tfrc.h
+@@ -28,11 +28,20 @@ extern int tfrc_debug;
+ #define tfrc_pr_debug(format, a...)
+ #endif
+ 
+-/* integer-arithmetic divisions of type (a * 1000000)/b */
++/*
++ * Routines and constants to perform scaled fixpoint arithmetic.
++ *
++ * To avoid carrying around the remainder of division operations, we scale all
++ * division operations by %TFRC_SCALE. The current factor is balanced, i.e. will
++ * not produce u32 overflow under reasonable conditions. In places where very
++ * large values could occur, scaled_div32() performs an additional sanity check.
++ */
++#define TFRC_SCALE	1000000
 +
-+	rc = __feat_register_sp(fn, DCCPF_CCID, false, false, rx.val, rx.len);
-+
-+free_ccid_lists:
-+	kfree(tx.val);
-+	kfree(rx.val);
- 	return rc;
+ static inline u64 scaled_div(u64 a, u32 b)
+ {
+ 	BUG_ON(b=0);
+-	a *= 1000000;
++	a *= TFRC_SCALE;
+ 	do_div(a, b);
+ 	return a;
  }
---------------------------------------------------------------------------------
-(3) The following functions have been renamed for consistency.
---------------------------------------------------------------------------------
---- b/net/dccp/ccid.h
-+++ b/net/dccp/ccid.h
-@@ -99,10 +99,10 @@
- 	return (void *)ccid->ccid_priv;
+@@ -50,6 +59,19 @@ static inline u32 scaled_div32(u64 a, u32 b)
  }
  
--extern int  ccid_get_default_ccids(u8 **ccid_array, u8 *array_len);
- extern bool ccid_support_check(u8 const *ccid_array, u8 array_len);
--extern int  ccid_getsockopt_available_ccids(struct sock *sk, int len,
--					    char __user *, int __user *);
-+extern int  ccid_get_builtin_ccids(u8 **ccid_array, u8 *array_len);
-+extern int  ccid_getsockopt_builtin_ccids(struct sock *sk, int len,
-+					  char __user *, int __user *);
+ /**
++ * tfrc_invert_loss_rate  -  Invert reciprocal to give scaled Loss Event Rate p
++ * Maps @reciprocal into a percentage p so that 100% corresponds to %TFRC_SCALE.
++ * The highest possible value, 1/0, is mapped into 100%. The smallest possible
++ * value 1/UINT_MAX is rounded down to 0, using the convention of RFC 4342, 8.5.
++ */
++static inline u32 tfrc_invert_loss_rate(const u32 reciprocal)
++{
++	if (reciprocal = UINT_MAX)
++		return 0;
++	return reciprocal <= 1 ? TFRC_SCALE : scaled_div(1, reciprocal);
++}
++
++/**
+  * tfrc_ewma  -  Exponentially weighted moving average
+  * @weight: Weight to be used as damping factor, in units of 1/10
+  */
 -- 
+1.5.5
+
+
+
+The University of Aberdeen is a charity registered in Scotland, No SC013683.
+
