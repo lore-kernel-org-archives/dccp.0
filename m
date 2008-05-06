@@ -1,116 +1,79 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 22 May 2008 14:59:35 +0000
-Subject: [DCCP] [CCID-3] [Patch 1/1]: Simplify (readability of) two complex
-Message-Id: <20080522145935.GB18242@gerrit.erg.abdn.ac.uk>
+Date: Tue, 06 May 2008 07:38:01 +0000
+Subject: [DCCP/CCID-3] [PATCH 0/4]: Bug fixes and smaller TX socket
+Message-Id: <1210059485-691-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is an update of the test tree, two changesets which had previously
-been sitting in different patches, both have now been given an explanation
-of what is going on.  Test tree will be updated accordingly.
+A small set of updates, including a bug fix and, by removing redundancies,
+reducing the size of the CCID-3/4 socket by a further 18 bytes.  
+  
+All changes have been uploaded to
+	git://eden-feed.erg.abdn.ac.uk/dccp_exp	[dccp,ccid4]
+and the `ccid4' subtree has been updated to mirror the changes to CCID-3.	
 
->>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Patch <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-[CCID-3]: Simplify (readability of) two complex expressions
 
-This simplifies the complex way in which two statements are written:
 
- (a) It simplifies the control flow of update_x in the following manner,
-     where in addition the function call to `scaled_div()' was taken out
-     of the max() macro to avoid multiple evaluation.
+Patch #1: Removes the ugly history-lookup function tfrc_tx_hist_rtt(), since
+          its complex passing of return values triggered ambiguous bug
+	  warnings; further subsuming/replacing an earlier test tree patch.
+	  The code format is thanks to an earlier suggestion by Arnaldo.
 
-     The RFC 3448 control flow is (point (4) in section 4.3):
+Patch #2: Removes some redundancies (32 lines) in ccid3_hc_tx_parse_options().
 
-	If (p > 0)
-		Calculate X_calc using the TCP throughput equation.
-		X = max(min(X_calc, 2*X_recv), s/t_mbi);
-	Else
-		If (t_now - tld >= R)
-			X = max(min(2*X, 2*X_recv), s/R);
-			tld = t_now;
+Patch #3: Allows ccid_hc_{tx,rx}_parse_options() to check the packet type on
+          which options where received, as necessitated by RFC 4340, 10.3.
 
-     In real life we must scale X by 2^6, to approximate the floating-point
-     operations of RFC 3448. This makes most expressions very hard to read.
+Patch #4: Finds that the `options_received' sub-struct of ccid3_hc_tx_sock
+          is redundant, and removes it altogether. The conversion of received
+	  options now happens directly, in ccid3_hc_tx_parse_options().
 
-     So the patch introduces a new parameter low_thresh, which corresponds to
-       * scaled s/t_mbi if p > 0;
-       * scaled s/R     if p = 0 and if t_now - tld >= R.
 
-     This parameter gives the case-dependent minimum value of X; the first is
-     the requirement to send at least one packet per t_mbid seconds; the
-     second ensures that at least one packet per RTT is sent during slow-start.
 
-     Hence it is a general constraint, so that if X does not change in 
-     subsequent calls to update_x(), we need not check if X is below the 
-     minimum value. Only if X has changed as a result of entering either
-     of the if/else cases above, do we need to check if it is below minimum.
+                  ---------------------------------  
+                  ***** Test Tree Update Note *****
+                  ---------------------------------
+Work on the last patch further helped to fix an omission in an earlier test tree
+patch  entitled "[CCID-3]: Remove dead states". The difference below includes:
 
-     A similar idea is in the upcoming rfc3448bis, section 4.5 ("Reducing
-     Oscillations"). This is a second point why the patch is needed: without
-     separating the test of "X < minimum", it is not possible to add the
-     "Preventing Oscillation" mechanism, whose use rfc3448bis recommends.
+ * the unnecessary test ("state != NO_FBACK") was removed (the timer
+   is first started when changing from NO_SENT => NO_FBACK and from
+   then on the state toggles between FBACK and NO_FBACK);
 
- (b) It replaces the statement
+ * the timer is instead disarmed when the socket is no longer in the
+   established state: when closing the connection, it is not necessary
+   to restart the nofeedback timer -- the connection is in its last
+   stages anyway, and the relevant retransmissions of Close or CloseReq
+   packets then happen as a matter of course;
 
- 	X_recv = max(X_recv / 2, s * 64 / (2 * TFRC_T_MBI))
+ * I think that the following BUG_ON in ccid3_hc_tx_no_feedback_timer(),
+	BUG_ON(hctx->p && !hctx->x_calc),
+   is now also redundant since, as long as the TX side receives feedback,
+   tx_packet_recv is called after tx_parse_options, so that p > 0 leads
+   to calling tfrc_calc_x().
 
-     with the equivalent
-
-      	X_recv = max(s * 64 / TFRC_T_MBI, X_recv) / 2
-
-     by putting the common factor `1/2' outside the max().
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/ccid3.c |   18 ++++++++++--------
- 1 file changed, 10 insertions(+), 8 deletions(-)
-
---- a/net/dccp/ccids/ccid3.c
+--- b/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -128,7 +128,8 @@ static u32 ccid3_hc_tx_idle_rtt(struct c
- static void ccid3_hc_tx_update_x(struct sock *sk, ktime_t *stamp)
- {
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
--	u64 min_rate = 2 * hctx->x_recv;
-+	u64 min_rate = 2 * hctx->x_recv,
-+	    low_thresh = ((u64)hctx->s) << 6;
- 	const u64 old_x = hctx->x;
- 	ktime_t now = stamp ? *stamp : ktime_get_real();
+@@ -213,10 +213,13 @@ static void ccid3_hc_tx_no_feedback_timer(unsigned long
+ 	ccid3_pr_debug("%s(%p, state=%s) - entry \n", dccp_role(sk), sk,
+ 		       ccid3_tx_state_name(hctx->state));
  
-@@ -146,17 +147,19 @@ static void ccid3_hc_tx_update_x(struct 
- 	if (hctx->p > 0) {
- 
- 		hctx->x = min(((u64)hctx->x_calc) << 6, min_rate);
--		hctx->x = max(hctx->x, (((u64)hctx->s) << 6) / TFRC_T_MBI);
-+		low_thresh /= TFRC_T_MBI;
- 
- 	} else if (ktime_us_delta(now, hctx->t_ld) - (s64)hctx->rtt >= 0) {
- 
--		hctx->x = min(2 * old_x, min_rate);
--		hctx->x = max(hctx->x, scaled_div(low_thresh, hctx->rtt));
--
-+		hctx->x    = min(2 * old_x, min_rate);
-+		low_thresh = scaled_div(low_thresh, hctx->rtt);
- 		hctx->t_ld = now;
- 	}
- 
- 	if (hctx->x != old_x) {
-+		if (hctx->x < low_thresh)
-+			hctx->x = low_thresh;
++	/* Ignore and do not restart after leaving the established state */
++	if ((1 << sk->sk_state) & ~(DCCPF_OPEN | DCCPF_PARTOPEN))
++		goto out;
 +
- 		ccid3_pr_debug("X_prev=%u, X_now=%u, X_calc=%u, "
- 			       "X_recv=%u\n", (unsigned)(old_x >> 6),
- 			       (unsigned)(hctx->x >> 6), hctx->x_calc,
-@@ -241,9 +244,8 @@ static void ccid3_hc_tx_no_feedback_time
- 		BUG_ON(hctx->p && !hctx->x_calc);
++	/* Reset feedback state to "no feedback received" */
+ 	if (hctx->state = TFRC_SSTATE_FBACK)
+ 		ccid3_hc_tx_set_state(sk, TFRC_SSTATE_NO_FBACK);
+-	else if (hctx->state != TFRC_SSTATE_NO_FBACK)
+-		goto out;
  
- 		if (hctx->x_calc > (hctx->x_recv >> 5))
--			hctx->x_recv -				max(hctx->x_recv / 2,
--				    (((__u64)hctx->s) << 6) / (2 * TFRC_T_MBI));
-+			hctx->x_recv = max((((u64)hctx->s) << 6) / TFRC_T_MBI,
-+					   hctx->x_recv) / 2;
- 		else {
- 			hctx->x_recv = hctx->x_calc;
- 			hctx->x_recv <<= 4;
+ 	/*
+ 	 * Determine new allowed sending rate X as per draft rfc3448bis-00, 4.4
+
+
+The University of Aberdeen is a charity registered in Scotland, No SC013683.
+
