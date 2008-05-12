@@ -1,216 +1,179 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 06 May 2008 07:38:05 +0000
-Subject: [PATCH 4/4] [CCID-3]: Remove indirection when parsing options
-Message-Id: <1210059485-691-5-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 12 May 2008 07:48:03 +0000
+Subject: [PATCH 1/2] [RFT] [CCID-3]: Bug fix for the inter-packet scheduling algorithm
+Message-Id: <1210578484-12571-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-The `options_received' struct is redundant, since it re-duplicates the existing
-`p' and `x_recv' fields. This patch removes the sub-struct and migrates the
-related format conversion operations (cf. below) to ccid3_hc_tx_parse_options().
+This fixes a subtle bug in the calculation of the inter-packet gap and shows
+that t_delta, as it is currently used, is not needed. And hence replaced.
 
-The patch also adds a convenience function to convert a reciprocal value into
-the loss rate p, performing the scaling and considering the two special cases:
+The algorithm from RFC 3448, 4.6 below continually computes a send time t_nom,
+which is initialised with the current time t_now; t_gran = 1E6 / HZ specifies
+the scheduling granularity, s the packet size, and X the sending rate:
 
- * 1/(2^32-1) is mapped into 0% as per RFC 4342, 8.5;
- * 1/0        is mapped into the maximum of 100%.
+  t_distance = t_nom - t_now;		// in microseconds
+  t_delta    = min(t_ipi, t_gran) / 2;	// `delta' parameter in microseconds
 
-This further fixes a bug in ccid3_hc_rx_getsockopt (1/0 was mapped into ~0U),
-which now allows to consistently print the scaled p-values as
+  if (t_distance >= t_delta) {
+	reschedule after (t_distance / 1000) milliseconds;
+  } else {
+  	t_ipi  = s / X;			// inter-packet interval in usec
+	t_nom += t_ipi;			// compute the next send time
+	send packet now;
+  }
 
-	printf("Loss Event Rate = %u.%04u %%\n", rx_info.tfrcrx_p / 10000,
-						 rx_info.tfrcrx_p % 10000);
 
-Lastly, documentation about the scaling factor used for fractions was added.
+1) Description of the bug
+-------------------------
+Rescheduling requires a conversion into milliseconds, due to this call chain:
 
-	  ----------------------------------------------
-           Why the fields are redundant [can be removed]
-	  ----------------------------------------------
-The Loss Event Rate p and the Receive Rate x_recv are initially 0 when first
-loading CCID-3, as ccid_new() zeroes out the entire ccid3_hc_tx_sock.
+ * ccid3_hc_tx_send_packet() returns a timeout in milliseconds,
+ * this value is converted by msecs_to_jiffies() in dccp_write_xmit(),
+ * and finally used as jiffy-expires-value for sk_reset_timer().
 
-When Loss Event Rate or Receive Rate options are received, they are stored by
-ccid3_hc_tx_parse_options() into the fields `ccid3or_loss_event_rate' and
-`ccid3or_receive_rate' of the sub-struct `options_received' in ccid3_hc_tx_sock.
+The highest jiffy resolution with HZ00 is 1 millisecond, so using a higher
+granularity does not seem to make much sense here.
 
-After parsing (considering only the established state - dccp_rcv_established()),
-the packet is passed on to ccid_hc_tx_packet_recv(). This calls the CCID-3
-specific routine ccid3_hc_tx_packet_recv(), which performs the following copy
-operations between fields of ccid3_hc_tx_sock:
+As a consequence, values of t_distance < 1000 are truncated to 0. This issue
+has so far been resolved by using instead
 
- * hctx->options_received.ccid3or_receive_rate is copied into hctx->x_recv,
-   after scaling it for fixpoint arithmetic, by 2^64;
- * hctx->options_received.ccid3or_loss_event_rate is copied into hctx->p,
-   considering the above special cases; in addition, a value of 0 here needs to
-   be mapped into p=0 (when no Loss Event Rate option has been received yet).
+  if (t_distance >= t_delta + 1000)
+	reschedule after (t_distance / 1000) milliseconds;
+
+The bug is in artificially inflating t_delta to t_delta' = t_delta + 1000. This
+is unnecessarily large, a more adequate value is t_delta' = max(t_delta, 1000).
+
+
+2) Consequences of using the corrected t_delta'
+-----------------------------------------------
+Since t_delta <= t_gran/2 = 10^6/(2*HZ), we have t_delta <= 1000 as long as
+HZ >= 500. This means that t_delta' = max(1000, t_delta) is constant at 1000.
+
+On the other hand, when using a coarse HZ value of HZ < 500, we have three
+sub-cases that can all be reduced to using another constant of t_gran/2.
+
+ (a) The first case arises when t_ipi > t_gran. Here t_delta' is the constant
+     t_delta' = max(1000, t_gran/2) = t_gran/2.
+
+ (b) If t_ipi <= 2000 < t_gran = 10^6/HZ usec, then t_delta = t_ipi/2 <= 1000,
+     so that t_delta' = max(1000, t_delta) = 1000 < t_gran/2.
+
+ (c) If 2000 < t_ipi <= t_gran, we have t_delta' = max(t_delta, 1000) = t_ipi/2.
+
+In the second and third cases we have delay values less than t_gran/2, which is
+in the order of less than or equal to half a jiffy.
+
+How these are treated depends on how fractions of a jiffy are handled: they
+are either always rounded down to 0, or always rounded up to 1 jiffy (assuming
+non-zero values). In both cases the error is on average in the order of 50%.
+
+Thus we are not increasing the error when in the second/third case we replace
+a value less than t_gran/2 with 0, by setting t_delta' to the constant t_gran/2.
+
+
+3) Summary
+----------
+Fixing (1) and considering (2), the patch replaces t_delta with a constant,
+whose value depends on CONFIG_HZ, changing the above algorithm to:
+
+  if (t_distance >= t_delta')
+	reschedule after (t_distance / 1000) milliseconds;
+
+where t_delta' = 10^6/(2*HZ) if HZ < 500, and t_delta' = 1000 otherwise.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid3.c    |   27 +++++++++------------------
- net/dccp/ccids/ccid3.h    |    9 +--------
- net/dccp/ccids/lib/tfrc.h |   26 ++++++++++++++++++++++++--
- 3 files changed, 34 insertions(+), 28 deletions(-)
+ net/dccp/ccids/ccid3.h |   19 ++++++++++++++-----
+ net/dccp/ccids/ccid3.c |   17 +++++++----------
+ 2 files changed, 21 insertions(+), 15 deletions(-)
 
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -366,11 +366,10 @@ static void ccid3_hc_tx_packet_sent(struct sock *sk, unsigned int len)
- static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- {
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
--	struct ccid3_options_received *opt_recv = &hctx->options_received;
- 	struct tfrc_tx_hist_entry *acked;
- 	ktime_t now;
- 	unsigned long t_nfb;
--	u32 pinv, r_sample;
-+	u32 r_sample;
- 
- 	/* we are only interested in ACKs */
- 	if (!(DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_ACK ||
-@@ -395,17 +394,6 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	r_sample  = dccp_sample_rtt(sk, ktime_us_delta(now, acked->stamp));
- 	hctx->rtt = tfrc_ewma(hctx->rtt, r_sample, 9);
- 
--	/* Update receive rate in units of 64 * bytes/second */
--	hctx->x_recv = opt_recv->ccid3or_receive_rate;
--	hctx->x_recv <<= 6;
--
--	/* Update loss event rate (which is scaled by 1e6) */
--	pinv = opt_recv->ccid3or_loss_event_rate;
--	if (pinv = ~0U || pinv = 0)	       /* see RFC 4342, 8.5   */
--		hctx->p = 0;
--	else				       /* can not exceed 100% */
--		hctx->p = scaled_div(1, pinv);
--
- 	/*
- 	 * Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
- 	 */
-@@ -478,7 +466,6 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, u8 packet_type,
- 				     u8 option, u8 *optval, u8 optlen)
- {
- 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
--	struct ccid3_options_received *opt_recv = &hctx->options_received;
- 	__be32 opt_val;
- 
- 	switch (option) {
-@@ -495,11 +482,16 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, u8 packet_type,
- 		opt_val = ntohl(get_unaligned((__be32 *)optval));
- 
- 		if (option = TFRC_OPT_RECEIVE_RATE) {
--			opt_recv->ccid3or_receive_rate = opt_val;
-+			/* Receive Rate is kept in units of 64 bytes/second */
-+			hctx->x_recv = opt_val;
-+			hctx->x_recv <<= 6;
-+
- 			ccid3_pr_debug("%s(%p), RECEIVE_RATE=%u\n",
- 				       dccp_role(sk), sk, opt_val);
- 		} else {
--			opt_recv->ccid3or_loss_event_rate = opt_val;
-+			/* Update the fixpoint Loss Event Rate fraction */
-+			hctx->p = tfrc_invert_loss_rate(opt_val);
-+
- 			ccid3_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
- 				       dccp_role(sk), sk, opt_val);
- 		}
-@@ -836,8 +828,7 @@ static int ccid3_hc_rx_getsockopt(struct sock *sk, const int optname, int len,
- 			return -EINVAL;
- 		rx_info.tfrcrx_x_recv = hcrx->x_recv;
- 		rx_info.tfrcrx_rtt    = hcrx->rtt;
--		rx_info.tfrcrx_p      = hcrx->p_inverse = 0 ? ~0U :
--					   scaled_div(1, hcrx->p_inverse);
-+		rx_info.tfrcrx_p      = tfrc_invert_loss_rate(hcrx->p_inverse);
- 		len = sizeof(rx_info);
- 		val = &rx_info;
- 		break;
 --- a/net/dccp/ccids/ccid3.h
 +++ b/net/dccp/ccids/ccid3.h
-@@ -59,11 +59,6 @@ enum ccid3_options {
- 	TFRC_OPT_RECEIVE_RATE	 = 194,
- };
+@@ -47,12 +47,23 @@
+ /* Two seconds as per RFC 3448 4.2 */
+ #define TFRC_INITIAL_TIMEOUT	   (2 * USEC_PER_SEC)
  
--struct ccid3_options_received {
--	u32 ccid3or_loss_event_rate;
--	u32 ccid3or_receive_rate;
--};
+-/* In usecs - half the scheduling granularity as per RFC3448 4.6 */
+-#define TFRC_OPSYS_HALF_TIME_GRAN  (USEC_PER_SEC / (2 * HZ))
 -
- /* TFRC sender states */
- enum ccid3_hc_tx_states {
- 	TFRC_SSTATE_NO_SENT = 1,
-@@ -77,7 +72,7 @@ enum ccid3_hc_tx_states {
-  * @x_recv - Receive rate    in 64 * bytes per second
-  * @x_calc - Calculated rate in bytes per second
-  * @rtt - Estimate of current round trip time in usecs
-- * @p - Current loss event rate (0-1) scaled by 1000000
-+ * @p - Current loss event rate (0-1) scaled by %TFRC_SCALE
-  * @s - Packet size in bytes
-  * @t_rto - Nofeedback Timer setting in usecs
-  * @t_ipi - Interpacket (send) interval (RFC 3448, 4.6) in usecs
-@@ -90,7 +85,6 @@ enum ccid3_hc_tx_states {
+ /* Parameter t_mbi from [RFC 3448, 4.3]: backoff interval in seconds */
+ #define TFRC_T_MBI		   64
+ 
++/*
++ * The t_delta parameter (RFC 3448, 4.6): delays of less than %USEC_PER_MSEC are
++ * rounded down to 0, since sk_reset_timer() here uses millisecond granularity.
++ * Hence we can use a constant t_delta = %USEC_PER_MSEC when HZ >= 500. A coarse
++ * resolution of HZ < 500 means that the error is below one timer tick (t_gran)
++ * when using the constant t_delta  =  t_gran / 2  =  %USEC_PER_SEC / (2 * HZ).
++ */
++#if (HZ >= 500)
++# define TFRC_T_DELTA		   USEC_PER_MSEC
++#else
++# define TFRC_T_DELTA		   USEC_PER_SEC / (2 * HZ)
++# warning Coarse CONFIG_HZ resolution -- higher value recommended for CCID-3.
++#endif
++
+ enum ccid3_options {
+ 	TFRC_OPT_LOSS_EVENT_RATE = 192,
+ 	TFRC_OPT_LOSS_INTERVALS	 = 193,
+@@ -83,7 +94,6 @@ enum ccid3_hc_tx_states {
+  * @no_feedback_timer - Handle to no feedback timer
+  * @t_ld - Time last doubled during slow start
   * @t_nom - Nominal send time of next packet
-  * @delta - Send timer delta (RFC 3448, 4.6) in usecs
+- * @delta - Send timer delta (RFC 3448, 4.6) in usecs
   * @hist - Packet history
-- * @options_received - Parsed set of retrieved options
   */
  struct ccid3_hc_tx_sock {
- 	u64				x;
-@@ -109,7 +103,6 @@ struct ccid3_hc_tx_sock {
+@@ -101,7 +111,6 @@ struct ccid3_hc_tx_sock {
+ 	struct timer_list		no_feedback_timer;
+ 	ktime_t				t_ld;
  	ktime_t				t_nom;
- 	u32				delta;
+-	u32				delta;
  	struct tfrc_tx_hist_entry	*hist;
--	struct ccid3_options_received	options_received;
  };
  
- static inline struct ccid3_hc_tx_sock *ccid3_hc_tx_sk(const struct sock *sk)
---- a/net/dccp/ccids/lib/tfrc.h
-+++ b/net/dccp/ccids/lib/tfrc.h
-@@ -28,11 +28,20 @@ extern int tfrc_debug;
- #define tfrc_pr_debug(format, a...)
- #endif
- 
--/* integer-arithmetic divisions of type (a * 1000000)/b */
-+/*
-+ * Routines and constants to perform scaled fixpoint arithmetic.
-+ *
-+ * To avoid carrying around the remainder of division operations, we scale all
-+ * division operations by %TFRC_SCALE. The current factor is balanced, i.e. will
-+ * not produce u32 overflow under reasonable conditions. In places where very
-+ * large values could occur, scaled_div32() performs an additional sanity check.
-+ */
-+#define TFRC_SCALE	1000000
-+
- static inline u64 scaled_div(u64 a, u32 b)
- {
- 	BUG_ON(b=0);
--	a *= 1000000;
-+	a *= TFRC_SCALE;
- 	do_div(a, b);
- 	return a;
- }
-@@ -50,6 +59,19 @@ static inline u32 scaled_div32(u64 a, u32 b)
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -90,19 +90,16 @@ static inline u64 rfc3390_initial_rate(struct sock *sk)
+ 	return scaled_div(w_init << 6, hctx->rtt);
  }
  
- /**
-+ * tfrc_invert_loss_rate  -  Invert reciprocal to give scaled Loss Event Rate p
-+ * Maps @reciprocal into a percentage p so that 100% corresponds to %TFRC_SCALE.
-+ * The highest possible value, 1/0, is mapped into 100%. The smallest possible
-+ * value 1/UINT_MAX is rounded down to 0, using the convention of RFC 4342, 8.5.
-+ */
-+static inline u32 tfrc_invert_loss_rate(const u32 reciprocal)
-+{
-+	if (reciprocal = UINT_MAX)
-+		return 0;
-+	return reciprocal <= 1 ? TFRC_SCALE : scaled_div(1, reciprocal);
-+}
-+
+-/*
+- * Recalculate t_ipi and delta (should be called whenever X changes)
 +/**
-  * tfrc_ewma  -  Exponentially weighted moving average
-  * @weight: Weight to be used as damping factor, in units of 1/10
++ * ccid3_update_send_interval  -  Calculate new t_ipi = s / X_inst
++ * This respects the granularity of X_inst (64 * bytes/second).
   */
--- 
-1.5.5
-
+ static void ccid3_update_send_interval(struct ccid3_hc_tx_sock *hctx)
+ {
+-	/* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second) */
+ 	hctx->t_ipi = scaled_div32(((u64)hctx->s) << 6, hctx->x);
+ 
+-	/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
+-	hctx->delta = min_t(u32, hctx->t_ipi / 2, TFRC_OPSYS_HALF_TIME_GRAN);
+-
+-	ccid3_pr_debug("t_ipi=%u, delta=%u, s=%u, X=%u\n", hctx->t_ipi,
+-		       hctx->delta, hctx->s, (unsigned)(hctx->x >> 6));
++	ccid3_pr_debug("t_ipi=%u, s=%u, X=%u\n", hctx->t_ipi,
++		       hctx->s, (unsigned)(hctx->x >> 6));
+ }
+ 
+ static u32 ccid3_hc_tx_idle_rtt(struct ccid3_hc_tx_sock *hctx, ktime_t now)
+@@ -336,8 +333,8 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 		 * else
+ 		 *       // send the packet in (t_nom - t_now) milliseconds.
+ 		 */
+-		if (delay - (s64)hctx->delta >= 1000)
+-			return (u32)delay / 1000L;
++		if (delay >= TFRC_T_DELTA)
++			return (u32)delay / USEC_PER_MSEC;
+ 
+ 		ccid3_hc_tx_update_win_count(hctx, now);
+ 	}
 
 
 The University of Aberdeen is a charity registered in Scotland, No SC013683.
