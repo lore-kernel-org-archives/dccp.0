@@ -1,7 +1,7 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 12 May 2008 10:38:39 +0000
+From: Tommi Saviranta <wnd@iki.fi>
+Date: Mon, 12 May 2008 10:39:37 +0000
 Subject: Re: CCID4 Testing - bug fix
-Message-Id: <20080512103839.GA6274@gerrit.erg.abdn.ac.uk>
+Message-Id: <20080512103937.GA6034@kikai.katei.fi>
 List-Id: <dccp.vger.kernel.org>
 References: <09D3F703EF3B0A4CBE28449EA9F3D32009EB46E6@nicta-atp-mail.in.nicta.com.au>
 In-Reply-To: <09D3F703EF3B0A4CBE28449EA9F3D32009EB46E6@nicta-atp-mail.in.nicta.com.au>
@@ -10,22 +10,17 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-| Since the reduction applies to X_calc only, IMHO it should be moved like this:
-| 
-| 	/* Update sending rate (step 4 of [RFC 3448, 4.3]) */
-|         if (hctx->p > 0) {
-| 		hctx->x_calc = tfrc_calc_x(NOM_PACKET_SIZE, 
-| 					   hctx->rtt, hctx->p);
-| 
-| 		/* Apply header penalty as per RFC 4828, 4.2 */
-| 		hctx->x_calc *= hctx->s;
-| 		do_div(hctx->x_calc, hctx->s + CCID4HCTX_H);
-| 	}
-| 
-No that won't work since it only changes X_calc. So it is probably all
-well to just delete the call to  ccid4_hc_tx_x_header_penalty() below
-"} else if (ktime_us_delta(now, h", as on your website.
+On Mon, May 12, 2008 at 11:26:37 +0100, Gerrit Renker wrote:
+> | Patch details: we modify the sender rate in the initial phase when
+> | congestion control is not yet applied. In the original code, the header
+> | penalty rate reduction of s/(s+overhead) was, I believe, incorrectly
+> | applied to all sender rates. 
+> 
+> The CCID4-02 draft indeed speaks of "allowed transmit rate derived from
+> the TCP throughput equation" in section 5, which seems to imply that X_calc
+> (and not X in general) is meant, which confirms your interpretation.
 
-
-The University of Aberdeen is a charity registered in Scotland, No SC013683.
+I've been wondering why CCID 4 performed like this, but somehow I came
+to accept this as a feature. Now it appears that I've been blind to my
+own mistakes. Good thing someone spotted this.
 
