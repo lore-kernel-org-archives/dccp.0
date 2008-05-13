@@ -1,42 +1,37 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 13 May 2008 17:03:25 +0000
+From: =?iso-8859-1?q?R=E9mi_Denis-Courmont?= <rdenis@simphalempin.com>
+Date: Tue, 13 May 2008 17:06:34 +0000
 Subject: Re: [RFC] [DCCP]: Deprecate SOCK_DCCP in favour of SOCK_DGRAM
-Message-Id: <20080513170325.GB11499@gerrit.erg.abdn.ac.uk>
+Message-Id: <200805132006.35010.rdenis@simphalempin.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20080513072853.GB4514@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20080513072853.GB4514@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-| > the existing stuff alone, and then requiring programs that want to use
-| > getaddrinfo to use it that way?
-| 
-| I wonder what is the problem with doing what I did when adding support
-| for DCCP in ttcp, or for AF_LLC in ssh, ncftp, vsftpd, etc, i.e.
-| getaddrinfo/getnameinfo wrappers that look if SOCK_DCCP or AF_LLC are
-| being asked for and doing the right thing.
-| 
-Using work-arounds is brittle and frustrating when the API behaviour
-suddenly changes. My experience of using such a wrapper was:
+Le Tuesday 13 May 2008 19:59:35 David Stevens, vous avez =E9crit=A0:
+>         Well, SOCK_STREAM/IPPROTO_DCCP then. :-) But it isn't really that
+> either, as Remi said.
+>         If you do a connect() on a UDP socket, it doesn't cease to
+> be a SOCK_DGRAM socket, so I don't really care about that distinction,
+> but if others do, that's ok with me. There are ACKs here, too, so maybe.
 
- * it passed UDP(-Lite), TCP through without changing the socket type;
- * when passed DCCP, it set the socket type to 0, to avoid `ai_socktype
-   not supported' getaddrinfo error;
- * this used to work fine until about January, when something in the
-   lookup machinery for dual-stack hosts changed:
-   - before, AF_UNSPEC + ai_socktype=0 put IPv6 first into the result list,
-   - now the the result order is reversed (IPv4 sockets are returned first)
- * so maybe "pretending to be UDP" (ai_socktype=SOCK_DGRAM) is a better
-   workaround (at least it worked until this afternoon :)
+But connect() is a _non-blocking_ operation which merely sets the _default_=
+=20
+destination (you can still sendto() someone else).
 
+Using socket types blindly may also break applications using=20
+getsockopt(SO_TYPE), if they exists (I think I wrote one once...) to=20
+determine how to use a socket.
 
-| What would be the problem of SOCK_DCCP being handled in glibc in such a
-| fashion?
-That is probably the best and most robust solution one can think of.
+SOCK_DCCP was perhaps a bad idea, but SOCK_DGRAM seems worse. In the end, i=
+t's=20
+more a matter of patching libc getaddrinfo than changing the kernel API=20
+anyway. Did AIX not have a similar socket type as DCCP under a more generic=
+=20
+name by the way?
 
-Even the suggestion of changing to SOCK_DGRAM+IPPROTO_DCCP is just another
-work-around and, as David and Remi confirmed, a bad one at that.
-
-Gerrit
+--=20
+R=E9mi Denis-Courmont
+http://www.remlab.net/
