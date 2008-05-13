@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 13 May 2008 09:37:18 +0000
+Date: Tue, 13 May 2008 13:46:31 +0000
 Subject: Re: [RFC] [DCCP]: Deprecate SOCK_DCCP in favour of SOCK_DGRAM
-Message-Id: <20080513093718.GA24185@gerrit.erg.abdn.ac.uk>
+Message-Id: <20080513134631.GA7024@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <20080513072853.GB4514@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20080513072853.GB4514@gerrit.erg.abdn.ac.uk>
@@ -11,29 +11,27 @@ Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
 | 
-| > Is there support for this change or are there reasons to keep SOCK_DCCP?
+| DCCP clearly fails the POSIX definition of SOCK_DGRAM in different ways.
 | 
-| You'll have to accept it forever since there have been several
-| kernel releases already with DCCP support added and there are
-| applications out there.
+| I think this is not a good idea.
 | 
-And maybe it is not necessary or worth to change it. 
+Thanks for the clarification. Even in Posix, datagram = connection-less.
+Plus the issues with older kernel releases. Question resolved, no SOCK_DGRAM.
 
-But there is a problem, the cause is not necessarily the above:
 
- * using an ai_socktype=0 used to work for DCCP; on dual-stack hosts,
-   IPv6 addresses were returned first, so that both IPv6 and IPv4
-   clients (v6-mapped-v4) could connect to the server,
+| > It also relieves the libc writers from having to support another socket
+| > type.
+| 
+| As long as SOCK_DCCP-or-whatever is not automatically selected when
+| ai_socktype is nul, this should be both easy to implement in libc *and*
+| backward compatible (applications will not try to use DCCP implicitly).
+| 
+There are two possibilities:
+ * as additional supported protocol (there are many new transport
+   protocols, perhaps there is some kind of modular support),
+ * if DCCP service codes are part of the lookup, then getting library
+   support can take longer (algorithm changes).
 
- * within the last three months there was a change in the lookup
-   behaviour so that now IPv4 addresses are returned first on dual
-   stack hosts when AF_UNSPEC is specified with ai_socktype=0,
-
- * changing preference values in /etc/gai.conf did not help,
-
- * the only fix was the following (pretend to be UDP):
-
-	if (inSettings->mProtocol = IPPROTO_DCCP)
-		hints.ai_socktype = SOCK_DGRAM;
-
-Maybe there is a better fix for this.
+Both may take a while until available. In the meantime it would be good
+to find some smart workaround for getaddrinfo, as changes in the internals
+so far required to fix applications several times.
