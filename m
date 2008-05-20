@@ -1,75 +1,74 @@
-From: Alessandro Ferraiuolo <aferraiuolo@gmail.com>
-Date: Tue, 20 May 2008 13:55:16 +0000
-Subject: DCCP kernel crash during feature negotiation
-Message-Id: <4832D844.8010205@gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 20 May 2008 14:53:00 +0000
+Subject: Re: DCCP kernel crash during feature negotiation
+Message-Id: <20080520145300.GA22697@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
+References: <4832D844.8010205@gmail.com>
+In-Reply-To: <4832D844.8010205@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hello,
-we are working with DCCP for a project at the University of Naples 
-"Federico II"
-and we observed an unusual behavior of the kernel used in these tests.
- 
-Test-bed:         -Debian with Kernel 2.6.25-rc8
+Dear Alessandro,
 
-(test tree from "git://eden-feed.erg.abdn.ac.uk/dccp_exp my_dccp")
+thank you very much for reporting and especially for providing a helpful
+capture file.
 
-                  -2 Pc connected back-to-back
-                  -D-ITG used as traffic generator
- 
-We use the default kernel configuration, i.e. we issued no sysctl 
-commands regarding dccp.
-However, D-ITG allows to specify the ccid to be used on the command line.
-Our code is essentially this:
- 
-struct dccp_so_feat dsf;
-dsf.dccpsf_feat = 1;
-dsf.dccpsf_val = &required_ccid;
-dsf.dccpsf_len = sizeof(ccid);
-setsockopt(sock,SOL_DCCP, 3, &dsf, sizeof(dsf))
-setsockopt(sock,SOL_DCCP, 4, &dsf, sizeof(dsf))
- 
-... where required_ccid is specified by the user on the command line.
- 
-Loading only the module named "dccp" (with "modprobe dccp"), when we use
-ccid2, we have no problems. The module dccp_ccid2  is loaded automatically
-and everything goes all right.
- 
-When we try to use ccid3, unlike ccid2, the module dccp_ccid3 is not
-loaded. The two pc start communicating by using ccid2
+I am sorry, but you are not using the test tree. 
 
-and, after few packets, they try to change it through the options
-"CHANGE L" and "CHANGE R". From this moment they enter into a loop
-in which each of them sends to the other one a CHANGE_L, a CHANGE_R, a
-CONFIRM_L, and a CONFIRM_R.
-They send these options inside ack packets and, after few seconds, the
-flow of ACKs becomes so fast that the kernel freezes and the system crashes.
- 
-You can find a trace of data-flow sniffed by Wireshark at the following 
-link:
+The problems you state are both known bugs in the feature negotiation of
+the mainline kernel.
+
+The implementation can identified in the DCCP-Request/Response handshake:
+ * The old implementation exchanges singleton values. This is why
+   CCID-3 ends up talking to CCID-2, there is no real "negotiation".
+ * The new implementation uses lists for all server-priority values
+   - the Request contains Change L/R options from the client;
+   - the Response has the Confirm R/L options from the server plus Change L/R;
+   - the Ack and/or DataAcks sent by the client contain the Confirm R/L for
+     the server-options sent in the Response, completing this handshake.
 
 
-http://wpage.unina.it/a.botta/dccp_ccid3_error 
-<http://wpage.unina.it/a.botta/dccp_ccid3_error>
+So please, can you try again to dowload the test tree, using either
 
-In this trace you can observe that after the normal start of
-communication with some TCP packet, Sender and
-Receiver start to try to change the options in the previously explained
-never ending loop.
- 
-We know that not loading the module and trying to use it is not the
-right procedure. However, we do not believe this behavior is correct.
+ (a) Snapshot patch from
+     http://www.erg.abdn.ac.uk/users/gerrit/dccp/testing_dccp/test-tree/ 
+     (It should apply without a single problem; any problem - please do let me know).
 
-Do you think that D-ITG has to cope with this problem or is demanded to
-the kernel ?
- 
-Thank you for your help and bye.
- 
-Alessandro
- 
-P.S. In the mainline kernel (2.6.22 version) this does not happen.
-If we do not load the modules, the communication never starts.
+ (b) Pull the tree by using
 
+     git checkout -b dccp master		
+     git pull git://eden-feed.erg.abdn.ac.uk/dccp_exp +dccp:dccp
+
+     This checks out a fresh subtree `dccp' and pulls the subtree.
+
+Another quick test is to run a "wc -l net/dccp/feat.c". If > 1500 then
+it is the test tree, otherwise it is not.
+
+People stumbled over this before - I'd welcome suggestions to make
+pulling the test tree easier. A subtree had been chosen to avoid messing
+up people's `master' branches.
+
+
+> P.S. In the mainline kernel (2.6.22 version) this does not happen.
+> If we do not load the modules, the communication never starts.
+These differences are probably due to differences between 2.6.22 and
+2.6.26-rc2. But the feature negotiation is broken in both.
+
+
+Regarding the struct dccp_so_feat, there was an earlier suggestion and
+request for comments to deprecate struct dccp_so_feat in favour of
+dedicated socket options - it would be good to have input/suggestions
+for this.
+
+
+In the test tree, this replacement is in part available already, with
+regard to CCIDs, it has the following socket options 
+ * DCCP_SOCKOPT_TX_CCID sets/gets the TX CCID,
+ * DCCP_SOCKOPT_RX_CCID is the same for the RX CCID, 
+ * DCCP_SOCKOPT_CCID    sets both (a common case).
+
+(Further information is in Documentation/networking/dccp.txt)
+
+Gerrit
