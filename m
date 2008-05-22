@@ -1,21 +1,39 @@
-From: David Miller <davem@davemloft.net>
-Date: Tue, 27 May 2008 19:31:06 +0000
-Subject: Re: [PATCH 2/7] [CCID-2]: Remove ccid2hc{tx,rx}_ prefixes
-Message-Id: <20080527.123106.193724545.davem@davemloft.net>
+From: Wei Yongjun <yjwei@cn.fujitsu.com>
+Date: Thu, 22 May 2008 03:36:03 +0000
+Subject: [PATCH] DCCP: Fix to handle short sequence numbers packet correctly
+Message-Id: <4834EA23.3070309@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1211877167-10995-3-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1211877167-10995-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 27 May 2008 15:07:44 +0100
+RFC4340 said:
+  8.5.  Pseudocode
+       ...
+       If P.type is not Data, Ack, or DataAck and P.X = 0 (the packet
+             has short sequence numbers), drop packet and return
 
-> If you still find the above unacceptable with regard to the policy,
-> is there an alternative/compromise which would satisfy both goals?
+But DCCP has some mistake to handle short sequence numbers packet, now 
+it drop packet only if P.type is Data, Ack, or DataAck and P.X = 0.
 
-I listed on in another response to one of these patches.
+This patch fixed this problem.
 
-You can also make the prefix shorter.
+Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
+
+--- a/net/dccp/ipv4.c	2008-05-18 11:54:29.000000000 -0400
++++ b/net/dccp/ipv4.c	2008-05-18 11:55:51.000000000 -0400
+@@ -741,8 +741,8 @@ int dccp_invalid_packet(struct sk_buff *
+ 	 * If P.type is not Data, Ack, or DataAck and P.X = 0 (the packet
+ 	 * has short sequence numbers), drop packet and return
+ 	 */
+-	if (dh->dccph_type >= DCCP_PKT_DATA    &&
+-	    dh->dccph_type <= DCCP_PKT_DATAACK && dh->dccph_x = 0)  {
++	if ((dh->dccph_type < DCCP_PKT_DATA    ||
++	    dh->dccph_type > DCCP_PKT_DATAACK) && dh->dccph_x = 0)  {
+ 		DCCP_WARN("P.type (%s) not Data || [Data]Ack, while P.X = 0\n",
+ 			  dccp_packet_name(dh->dccph_type));
+ 		return 1;
+
+
+
