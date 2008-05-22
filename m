@@ -1,104 +1,103 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Thu, 22 May 2008 00:35:41 +0000
-Subject: Re: [PATCH 1/1] [DCCP][QPOLICY]: Make information about qpolicies available to userspace
-Message-Id: <200805220235.41441.tomasz@grobelny.oswiecenia.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 22 May 2008 10:02:46 +0000
+Subject: Re: [PATCH 1/1] [DCCP][QPOLICY]: Make information about qpolicies
+Message-Id: <20080522100246.GB4827@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <20080517155916.34622BD22@poczta.oswiecenia.net>
 In-Reply-To: <20080517155916.34622BD22@poczta.oswiecenia.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Dnia Wednesday 21 of May 2008, Gerrit Renker napisa=B3:
-> Hi Tomasz,
->
-> | Since packets with invalid cmsg parameters can be rejected by kernel
-> | there is a need to allow applications to access information on available
-> | policies and their respective cmsg parameters at runtime. This patch
-> | simplifies maintaining compatibility between userspace applications and
-> | DCCP code.
->
-> The difference to querying supported CCIDs is that
->  * CCIDs are all defined per RFC documents, and that
-Yes, but does that change anything?
+| But when it gets into mainline people should be able to write applications 
+| that will be forward and backward compatible (as far as possible) with 
+| various kernel versions.
+| 
+The main answer to that is below, but compare for instance with TCP -
+few socket options need runtime discovery. The type of their parameters
+and their option values are all described in a manpage. On the other
+hand, I like your approach of trying to come up with a novel solution.
 
->  * different combinations of CCIDs are possible due to the Kconfig option=
-s.
->
-Here we can have various kernel versions which is not much different. In bo=
-th=20
-cases we need runtime feature detection.
+| > DCCP is full of half-finished things. 
+| That's why I'm trying to finish the qpolicy framework. Without providing 
+| runtime information it will turn out that application developers will be 
+| afraid to use new features just because the application won't be able to 
+| check if given parameter is supported or not.
+| 
+And you have done a good job so far, it is a very useful addition.
 
-> As far as I understand your patch, querying here has a different role -
-> ensuring compatibilities between kernel versions.
->
-Yes.
 
-> I think it might be too early for that:
->  * it takes quite a long while until patches propagate through to
->    mainline (more than half a year), so that there is the time to
->    come up with a single, well-tested interface;
-But when it gets into mainline people should be able to write applications =
+| > I would much prefer to keep this 
+| > as simple as at all possible, to have time/room to fix the missing parts
+| > (such as no ECN support) in DCCP.
+| >
+| I understand that there might be some missing features in DCCP that are more 
+| important than yet another informational getsockopt. But these features are 
+| IMO highly independent and can be developed in parallel.
+| 
+Agreed.
 
-that will be forward and backward compatible (as far as possible) with=20
-various kernel versions.
+| > As a possible suggestion, I came up with a minimalistic variant of
+| > querying the interface - only 7 lines, including documentation.
+| >
+| > This is attached and it works by exploiting that
+| >  * policy IDs are just numbers;
+| >  * so that we could use the highest supported ID instead of an array;
+| I don't like the "highest supported ID" approach. But if you don't like arrays 
+| a simple "bool getsockopt" would do, we could just ask the kernel if it 
+| supports given qpolicy. Like (in pseudocode):
+| bool supports_prio=getsockopt(sk,DCCP_SOCKOPT_QPOLICY_AVAILABLE,QPOLICY_PRIO);
+| Would that be ok?
+| 
+What I sent is just a sketch, nothing set in stone. I am happy to take
+my patch out of the repository if there are better solutions.
 
->  * at this stage it would be better to have documentation (man pages,
->    web pages, sample application code etc.) to allow people to use
->    the interface - few will want to discover the interface by grepping
->    through source code.
->
-Sure it would be nice to have applications that use this interface. But in =
-my=20
-opinion the basic interface is not yet ready to be included in mainline=20
-applications. It especially lacks features that will allow application=20
-developers to maintain compatibility.
 
-> DCCP is full of half-finished things.=20
-That's why I'm trying to finish the qpolicy framework. Without providing=20
-runtime information it will turn out that application developers will be=20
-afraid to use new features just because the application won't be able to=20
-check if given parameter is supported or not.
+| >  * parameters are tied to the individual policy, so that a second
+| >    query (about which parameters are supported) is not necessary.
+| >
+| Can you guarantee that nobody ever will add a parameter? In fact even today I 
+| can think of two parameters that could be added: the previously discussed 
+| timeout and my new concept - the identity or category parameter (which is a 
+| subject for a separate thread).
+| 
+During the design phase it is almost certain to change several times.
 
-> I would much prefer to keep this=20
-> as simple as at all possible, to have time/room to fix the missing parts
-> (such as no ECN support) in DCCP.
->
-I understand that there might be some missing features in DCCP that are mor=
-e=20
-important than yet another informational getsockopt. But these features are=
-=20
-IMO highly independent and can be developed in parallel.
+When the design phase is over, it will have some parts that will not
+likely change.
 
-> As a possible suggestion, I came up with a minimalistic variant of
-> querying the interface - only 7 lines, including documentation.
->
-> This is attached and it works by exploiting that
->  * policy IDs are just numbers;
->  * so that we could use the highest supported ID instead of an array;
-I don't like the "highest supported ID" approach. But if you don't like arr=
-ays=20
-a simple "bool getsockopt" would do, we could just ask the kernel if it=20
-supports given qpolicy. Like (in pseudocode):
-bool supports_prio=3Dgetsockopt(sk,DCCP_SOCKOPT_QPOLICY_AVAILABLE,QPOLICY_P=
-RIO);
-Would that be ok?
+Hence I am trying to figure out - how much change is due to re-designing
+things and how much change is de facto required for a useful dynamic
+interface?
 
->  * parameters are tied to the individual policy, so that a second
->    query (about which parameters are supported) is not necessary.
->
-Can you guarantee that nobody ever will add a parameter? In fact even today=
- I=20
-can think of two parameters that could be added: the previously discussed=20
-timeout and my new concept - the identity or category parameter (which is a=
-=20
-subject for a separate thread).
+| BTW, the somewhat big code was meant to act as a framework for other features. 
+| Like getting information about percent of dropped packets in prio qpolicy 
+| queue.
+| -- 
+Ah - didn't understand what the qpolicy-specific getsockopt hooks were for.
 
-BTW, the somewhat big code was meant to act as a framework for other featur=
-es.=20
-Like getting information about percent of dropped packets in prio qpolicy=20
-queue.
---=20
-Regards,
-Tomasz Grobelny
+I think there is a way of doing this, but it requires a bit more work. 
+This would be to use netlink sockets to communicate/request/poll information. 
+
+The two alternatives I am aware of are
+
+ * kernel/userspace connector
+   [ Documentation/connector/connector.txt ]
+ * generic netlink interface
+   http://www.linux-foundation.org/en/Net:Generic_Netlink_HOWTO
+
+If done well, the interface could be very useful for several other
+things in DCCP:
+ * querying qpolicy interface (with regard to this email thread)	
+ * querying the CCIDs (available, set preference list)
+ * getting much-needed runtime statistics into user-space
+   - this is a feature missing in UDP (and partly also TCP)
+   - so far only via CCID-3 getsockopt (tx_info/rx_info)
+   - there is research which says it would be nice to have the
+     current RTT, loss statistics etc in user-space
+ * thus calling for a generic solution.
+
+What do you think about this alternative?
+
+- Gerrit
