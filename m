@@ -1,104 +1,116 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 31 May 2008 13:49:01 +0000
-Subject: [Patch v3 1/1] [tcp/dccp]: Consolidate duplicate code which does
-Message-Id: <20080531134901.GA4757@gerrit.erg.abdn.ac.uk>
+Date: Thu, 22 May 2008 14:59:35 +0000
+Subject: [DCCP] [CCID-3] [Patch 1/1]: Simplify (readability of) two complex
+Message-Id: <20080522145935.GB18242@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Please disregard previous version of this patch, which had an error:
-when `bytes' = 1095, the sender can still send 4 full windows (4*1095 = 4380).
-The inter-diff to the previous version is:
+This is an update of the test tree, two changesets which had previously
+been sitting in different patches, both have now been given an explanation
+of what is going on.  Test tree will be updated accordingly.
 
-	-	return bytes < 1095 ? 4 : (bytes > 1460 ? 2 : 3);
-	+	return bytes <= 1095 ? 4 : (bytes > 1460 ? 2 : 3);
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Patch <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+[CCID-3]: Simplify (readability of) two complex expressions
 
+This simplifies the complex way in which two statements are written:
 
------------------------------> Patch v2 <------------------------------------------	
-tcp/dccp: Consolidate duplicate code which does RFC3390 conversion
+ (a) It simplifies the control flow of update_x in the following manner,
+     where in addition the function call to `scaled_div()' was taken out
+     of the max() macro to avoid multiple evaluation.
 
-This patch consolidates the code common to TCP and CCID-2:
+     The RFC 3448 control flow is (point (4) in section 4.3):
 
- * TCP uses RFC 3390 in a packet-oriented manner (tcp_input.c) and
- * CCID-2 uses RFC 3390 in packet-oriented manner (RFC 4341).
+	If (p > 0)
+		Calculate X_calc using the TCP throughput equation.
+		X = max(min(X_calc, 2*X_recv), s/t_mbi);
+	Else
+		If (t_now - tld >= R)
+			X = max(min(2*X, 2*X_recv), s/R);
+			tld = t_now;
+
+     In real life we must scale X by 2^6, to approximate the floating-point
+     operations of RFC 3448. This makes most expressions very hard to read.
+
+     So the patch introduces a new parameter low_thresh, which corresponds to
+       * scaled s/t_mbi if p > 0;
+       * scaled s/R     if p = 0 and if t_now - tld >= R.
+
+     This parameter gives the case-dependent minimum value of X; the first is
+     the requirement to send at least one packet per t_mbid seconds; the
+     second ensures that at least one packet per RTT is sent during slow-start.
+
+     Hence it is a general constraint, so that if X does not change in 
+     subsequent calls to update_x(), we need not check if X is below the 
+     minimum value. Only if X has changed as a result of entering either
+     of the if/else cases above, do we need to check if it is below minimum.
+
+     A similar idea is in the upcoming rfc3448bis, section 4.5 ("Reducing
+     Oscillations"). This is a second point why the patch is needed: without
+     separating the test of "X < minimum", it is not possible to add the
+     "Preventing Oscillation" mechanism, whose use rfc3448bis recommends.
+
+ (b) It replaces the statement
+
+ 	X_recv = max(X_recv / 2, s * 64 / (2 * TFRC_T_MBI))
+
+     with the equivalent
+
+      	X_recv = max(s * 64 / TFRC_T_MBI, X_recv) / 2
+
+     by putting the common factor `1/2' outside the max().
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- include/net/tcp.h      |   15 +++++++++++++++
- net/dccp/ccids/ccid2.c |    8 ++------
- net/ipv4/tcp_input.c   |   17 ++---------------
- 3 files changed, 19 insertions(+), 21 deletions(-)
+ net/dccp/ccids/ccid3.c |   18 ++++++++++--------
+ 1 file changed, 10 insertions(+), 8 deletions(-)
 
---- a/include/net/tcp.h
-+++ b/include/net/tcp.h
-@@ -783,6 +783,21 @@ static inline __u32 tcp_current_ssthresh
- /* Use define here intentionally to get WARN_ON location shown at the caller */
- #define tcp_verify_left_out(tp)	WARN_ON(tcp_left_out(tp) > tp->packets_out)
- 
-+/*
-+ * Convert RFC3390 larger initial windows into an equivalent number of packets.
-+ *
-+ * John Heffner states:
-+ *
-+ *	The RFC specifies a window of no more than 4380 bytes
-+ *	unless 2*MSS > 4380.  Reading the pseudocode in the RFC
-+ *	is a bit misleading because they use a clamp at 4380 bytes
-+ *	rather than a multiplier in the relevant range.
-+ */
-+static inline u32 rfc3390_bytes_to_packets(const u32 bytes)
-+{
-+	return bytes <= 1095 ? 4 : (bytes > 1460 ? 2 : 3);
-+}
-+
- extern void tcp_enter_cwr(struct sock *sk, const int set_ssthresh);
- extern __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst);
- 
---- a/net/ipv4/tcp_input.c
-+++ b/net/ipv4/tcp_input.c
-@@ -808,25 +808,12 @@ void tcp_update_metrics(struct sock *sk)
- 	}
- }
- 
--/* Numbers are taken from RFC3390.
-- *
-- * John Heffner states:
-- *
-- *	The RFC specifies a window of no more than 4380 bytes
-- *	unless 2*MSS > 4380.  Reading the pseudocode in the RFC
-- *	is a bit misleading because they use a clamp at 4380 bytes
-- *	rather than use a multiplier in the relevant range.
-- */
- __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst)
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -128,7 +128,8 @@ static u32 ccid3_hc_tx_idle_rtt(struct c
+ static void ccid3_hc_tx_update_x(struct sock *sk, ktime_t *stamp)
  {
- 	__u32 cwnd = (dst ? dst_metric(dst, RTAX_INITCWND) : 0);
+ 	struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
+-	u64 min_rate = 2 * hctx->x_recv;
++	u64 min_rate = 2 * hctx->x_recv,
++	    low_thresh = ((u64)hctx->s) << 6;
+ 	const u64 old_x = hctx->x;
+ 	ktime_t now = stamp ? *stamp : ktime_get_real();
  
--	if (!cwnd) {
--		if (tp->mss_cache > 1460)
--			cwnd = 2;
--		else
--			cwnd = (tp->mss_cache > 1095) ? 3 : 4;
--	}
-+	if (!cwnd)
-+		cwnd = rfc3390_bytes_to_packets(tp->mss_cache);
- 	return min_t(__u32, cwnd, tp->snd_cwnd_clamp);
- }
+@@ -146,17 +147,19 @@ static void ccid3_hc_tx_update_x(struct 
+ 	if (hctx->p > 0) {
  
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -711,12 +711,8 @@ static int ccid2_hc_tx_init(struct ccid 
- 	/* RFC 4341, 5: initialise ssthresh to arbitrarily high (max) value */
- 	hctx->ccid2hctx_ssthresh  = ~0U;
+ 		hctx->x = min(((u64)hctx->x_calc) << 6, min_rate);
+-		hctx->x = max(hctx->x, (((u64)hctx->s) << 6) / TFRC_T_MBI);
++		low_thresh /= TFRC_T_MBI;
  
--	/*
--	 * RFC 4341, 5: "The cwnd parameter is initialized to at most four
--	 * packets for new connections, following the rules from [RFC3390]".
--	 * We need to convert the bytes of RFC3390 into the packets of RFC 4341.
--	 */
--	hctx->ccid2hctx_cwnd = clamp(4380U / dp->dccps_mss_cache, 2U, 4U);
-+	/* Use larger initial windows (RFC 3390, rfc2581bis) */
-+	hctx->ccid2hctx_cwnd = rfc3390_bytes_to_packets(dp->dccps_mss_cache);
+ 	} else if (ktime_us_delta(now, hctx->t_ld) - (s64)hctx->rtt >= 0) {
  
- 	/* Make sure that Ack Ratio is enabled and within bounds. */
- 	max_ratio = DIV_ROUND_UP(hctx->ccid2hctx_cwnd, 2);
+-		hctx->x = min(2 * old_x, min_rate);
+-		hctx->x = max(hctx->x, scaled_div(low_thresh, hctx->rtt));
+-
++		hctx->x    = min(2 * old_x, min_rate);
++		low_thresh = scaled_div(low_thresh, hctx->rtt);
+ 		hctx->t_ld = now;
+ 	}
+ 
+ 	if (hctx->x != old_x) {
++		if (hctx->x < low_thresh)
++			hctx->x = low_thresh;
++
+ 		ccid3_pr_debug("X_prev=%u, X_now=%u, X_calc=%u, "
+ 			       "X_recv=%u\n", (unsigned)(old_x >> 6),
+ 			       (unsigned)(hctx->x >> 6), hctx->x_calc,
+@@ -241,9 +244,8 @@ static void ccid3_hc_tx_no_feedback_time
+ 		BUG_ON(hctx->p && !hctx->x_calc);
+ 
+ 		if (hctx->x_calc > (hctx->x_recv >> 5))
+-			hctx->x_recv -				max(hctx->x_recv / 2,
+-				    (((__u64)hctx->s) << 6) / (2 * TFRC_T_MBI));
++			hctx->x_recv = max((((u64)hctx->s) << 6) / TFRC_T_MBI,
++					   hctx->x_recv) / 2;
+ 		else {
+ 			hctx->x_recv = hctx->x_calc;
+ 			hctx->x_recv <<= 4;
