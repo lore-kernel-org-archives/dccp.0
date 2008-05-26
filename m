@@ -1,36 +1,30 @@
-From: Giuseppe Galeota <giuseppegaleota@libero.it>
-Date: Mon, 26 May 2008 11:53:02 +0000
-Subject: Experimental_DCCP_source_tree: Snapshot patch for kernel 2.6.24
-Message-Id: <483AA49E.2000804@libero.it>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 26 May 2008 12:11:50 +0000
+Subject: Re: Experimental_DCCP_source_tree: Snapshot patch for kernel 2.6.24
+Message-Id: <20080526121150.GA12718@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
+References: <483AA49E.2000804@libero.it>
+In-Reply-To: <483AA49E.2000804@libero.it>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi,
-I have followed the guide from 
-http://www.linux-foundation.org/en/Net:DCCP_Testing in order to use the 
-Monitoring DCCP.
-I also need to apply the web100 patch, that is valid only for a kernel 
-2.6.*24* (http://www.web100.org).
+Hi Giuseppe,
 
-So, I have downloaded the kernel 2.6.24 from 
-http://www.kernel.org/pub/linux/kernel/v2.6/linux-2.6.24.tar.gz, and I 
-applied the web100 patch (that is, 
-web100-2.6.24-2.5.19-200802211940.patch , downloaded from 
-http://www.web100.org). This is OK.
-After that, I tried to enable the Experimental_DCCP_source_tree using 
-the Snapshot patch, that I have downloaded from 
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/testing_dccp/test-tree/test-tree_2.6.24.diff.gz, 
-but  without success.
-(If you want, I can post the result).
+you are the second one to report this and I am beginning to think that
+the snapshot patches may not be such a good idea. The problem is that
+they are taken on the day that the `EXTRAVERSION' variable changes in
+the top-level Makefile.
 
-I also tried to apply the web100 patch to the kernel ( or nigthly 
-snapshot of the DCCP tree ) downloaded from 
-http://eden-feed.erg.abdn.ac.uk/latest-dccp-test-tree.tar.bz2, but 
-without success.
+I have downloaded a 2.6.24, and found that 
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/testing_dccp/test-tree/test-tree_2.6.24-rc8.diff.gz
 
-Have you suggestions to resolve this situation?
+applied cleanly, i.e. probably this is the version later published as
+2.6.24 on kernel.org. Could you give this a try please?
 
-Giuseppe Galeota
+But even then, the older patches are lacking some of the more recent
+fixes. I will try to backport the latest snapshot patch to 2.6.24 if
+I can find some time.
+
+Gerrit
