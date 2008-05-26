@@ -1,21 +1,36 @@
-From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
-Date: Fri, 02 May 2008 20:52:36 +0000
-Subject: Re: [DCCP] kernel BUG on connecting
-Message-Id: <200805022252.36579.tomasz@grobelny.oswiecenia.net>
+From: Giuseppe Galeota <giuseppegaleota@libero.it>
+Date: Mon, 26 May 2008 11:53:02 +0000
+Subject: Experimental_DCCP_source_tree: Snapshot patch for kernel 2.6.24
+Message-Id: <483AA49E.2000804@libero.it>
 List-Id: <dccp.vger.kernel.org>
-References: <200805021545.16399.tomasz@grobelny.oswiecenia.net>
-In-Reply-To: <200805021545.16399.tomasz@grobelny.oswiecenia.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Dnia Friday 02 of May 2008, Gerrit Renker napisa=B3:
-> With regard to your bug - did you build the full kernel or just the
-> modules? You seem to lack room in the skb, if only the modules were
-> built (but not the changed kernel core), this would be a likely cause.
->=20
-Yes, indeed. Rebuild helped. Thanks a lot for quick help.
---=20
-Regards,
-Tomasz Grobelny
+Hi,
+I have followed the guide from 
+http://www.linux-foundation.org/en/Net:DCCP_Testing in order to use the 
+Monitoring DCCP.
+I also need to apply the web100 patch, that is valid only for a kernel 
+2.6.*24* (http://www.web100.org).
+
+So, I have downloaded the kernel 2.6.24 from 
+http://www.kernel.org/pub/linux/kernel/v2.6/linux-2.6.24.tar.gz, and I 
+applied the web100 patch (that is, 
+web100-2.6.24-2.5.19-200802211940.patch , downloaded from 
+http://www.web100.org). This is OK.
+After that, I tried to enable the Experimental_DCCP_source_tree using 
+the Snapshot patch, that I have downloaded from 
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/testing_dccp/test-tree/test-tree_2.6.24.diff.gz, 
+but  without success.
+(If you want, I can post the result).
+
+I also tried to apply the web100 patch to the kernel ( or nigthly 
+snapshot of the DCCP tree ) downloaded from 
+http://eden-feed.erg.abdn.ac.uk/latest-dccp-test-tree.tar.bz2, but 
+without success.
+
+Have you suggestions to resolve this situation?
+
+Giuseppe Galeota
