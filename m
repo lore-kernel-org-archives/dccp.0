@@ -1,94 +1,61 @@
-From: "Roksana Boreli" <Roksana.Boreli@nicta.com.au>
-Date: Thu, 15 May 2008 03:18:15 +0000
-Subject: RE: [CCID-4] [Patch 1/1]: Bug fix - no header penalty during slow-start
-Message-Id: <09D3F703EF3B0A4CBE28449EA9F3D32009EB4FC3@nicta-atp-mail.in.nicta.com.au>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 27 May 2008 08:32:44 +0000
+Subject: [PATCH 4/7] [CCID-3]: Fix "t_ipi explosion" bug
+Message-Id: <1211877167-10995-5-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <20080514091623.GA21885@gerrit.erg.abdn.ac.uk>
-In-Reply-To: <20080514091623.GA21885@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Thanks very much that's fine (and sorry for us not acting on it
-earlier). 
+The identification of this bug is thanks to Cheng Wei and Tomasz Grobelny.
 
+To avoid divide-by-zero, the implementation previously ignored RTTs smaller
+than 4 microseconds when performing integer division RTT/4.
 
-Kind regards, Roksana
+When the RTT reached a value less than 4 microseconds (as observed on loopback),
+this prevented the Window Counter CCVal value from advancing. As a result, the
+receiver stopped sending feedback. This in turn caused non-ending expiries of
+the nofeedback timer at the sender, so that the sending rate was progressively
+reduced until reaching the minimum of one packet per 64 seconds.
 
-
------Original Message-----
-From: Gerrit Renker [mailto:gerrit@erg.abdn.ac.uk] 
-Sent: Wednesday, 14 May 2008 7:16 PM
-To: Babil
-Cc: Roksana Boreli; dccp@vger.kernel.org; Emmanuel Lochin (External)
-Subject: [CCID-4] [Patch 1/1]: Bug fix - no header penalty during
-slow-start
-
-I haven't heard back so I put the following patch corresponding to your
-description at the top of the ccid4 subtree. I can easily replace it if
-people wanted this differently.
-
--------------------------> Patch 
--------------------------> <------------------------------------------
-[CCID4]: No header penalty in slow-start
-
-Bug fix reported by Roksana Boreli on 12/5/2008: header penalty was
-incorrectly applied during slow-start.
-
-For packet sizes s this meant that the slow-start degenerated into an
-exponential decrease, due to
-
- X_0   = RFC3390 initial rate
- X_i+1 = 2 / (1 + 36/s) * X_i	; for i >= 1
-
-When s < 36, the multiplicative factor is less than 1, causing a
-reduction of X each time during slow start.
+The patch fixes this bug by handling integer division more intelligently. Due to
+consistent use of dccp_sample_rtt(), divide-by-zero-RTT is avoided.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid4.c |   19 ++++++-------------
- 1 file changed, 6 insertions(+), 13 deletions(-)
+ net/dccp/ccids/ccid3.c |   13 ++++---------
+ 1 files changed, 4 insertions(+), 9 deletions(-)
 
---- a/net/dccp/ccids/ccid4.c
-+++ b/net/dccp/ccids/ccid4.c
-@@ -93,17 +93,6 @@ static void ccid4_update_send_interval(s  }
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -181,22 +181,17 @@ static inline void ccid3_hc_tx_update_s(struct ccid3_hc_tx_sock *hctx, int len)
  
- /**
-- * ccid4_hc_tx_x_header_penalty  -  Update allowed sending rate X
-- * @hctx: half-connection to adjust
-- * This function adjusts sending rate according to [TFRC-SP, Section 5]
-- */
--static inline void ccid4_hc_tx_x_header_penalty(struct tfrc_hc_tx_sock
-*hctx) -{
--	hctx->x *= hctx->s;
--	do_div(hctx->x, (hctx->s + CCID4HCTX_H));
--}
+ /*
+  *	Update Window Counter using the algorithm from [RFC 4342, 8.1].
+- *	The algorithm is not applicable if RTT < 4 microseconds.
++ *	As elsewhere, RTT > 0 is assumed by using dccp_sample_rtt().
+  */
+ static inline void ccid3_hc_tx_update_win_count(struct ccid3_hc_tx_sock *hctx,
+ 						ktime_t now)
+ {
+-	u32 quarter_rtts;
 -
--/**
-  * ccid4_hc_tx_update_x  -  Update allowed sending rate X
-  * @stamp: most recent time if available - can be left NULL.
-  * This function tracks draft rfc3448bis, check there for latest
-details.
-@@ -136,14 +125,18 @@ static void ccid4_hc_tx_update_x(struct 
+-	if (unlikely(hctx->rtt < 4))	/* avoid divide-by-zero */
+-		return;
+-
+-	quarter_rtts = ktime_us_delta(now, hctx->t_last_win_count);
+-	quarter_rtts /= hctx->rtt / 4;
++	u32 delta = ktime_us_delta(now, hctx->t_last_win_count),
++	    quarter_rtts = (4 * delta) / hctx->rtt;
  
- 		hctx->x = min(((u64)hctx->x_calc) << 6, min_rate);
- 		low_thresh /= TFRC_T_MBI;
--		ccid4_hc_tx_x_header_penalty(hctx);
-+		/*
-+		 * CCID-4 Header Penalty:
-+		 * Adjust sending rate according to [TFRC-SP, Section 5]
-+		 */
-+		hctx->x *= hctx->s;
-+		do_div(hctx->x, hctx->s + CCID4HCTX_H);
- 
- 	} else if (ktime_us_delta(now, hctx->t_ld) - (s64)hctx->rtt >0) {
- 
- 		hctx->x    = min(2 * old_x, min_rate);
- 		low_thresh = scaled_div(low_thresh, hctx->rtt);
- 		hctx->t_ld = now;
--		ccid4_hc_tx_x_header_penalty(hctx);
+ 	if (quarter_rtts > 0) {
+ 		hctx->t_last_win_count = now;
+-		hctx->last_win_count  += min_t(u32, quarter_rtts, 5);
++		hctx->last_win_count  += min(quarter_rtts, 5U);
+ 		hctx->last_win_count  &= 0xF;		/* mod 16 */
  	}
- 
- 	if (hctx->x != old_x) {
+ }
+-- 
+1.5.5
 
