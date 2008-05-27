@@ -1,49 +1,24 @@
-From: "Leandro Sales" <leandroal@gmail.com>
-Date: Wed, 21 May 2008 23:53:16 +0000
-Subject: Re: Reporting possible bug in DCCP Feature negotiation
-Message-Id: <5bc4c4570805211653h5f3f2e70gd2c390b8d7073caf@mail.gmail.com>
+From: rostislava slavova <rostislava_ps@abv.bg>
+Date: Tue, 27 May 2008 09:26:46 +0000
+Subject: Video streaming over DCCP quality measurment
+Message-Id: <1838771609.66604.1211880406891.JavaMail.apache@mail51.abv.bg>
 List-Id: <dccp.vger.kernel.org>
-References: <5bc4c4570803061215s36fac06ctc2015cc2d079ea9@mail.gmail.com>
-In-Reply-To: <5bc4c4570803061215s36fac06ctc2015cc2d079ea9@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="windows-1251"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-Good! :)
-   and about our Internet test, when are you available again? I was
-very busy since that week that you traveled. I'm about to release a
-new version of dccp gstreamer plugin which will support multthread
-transmission: this means that the plugin will be able to send
-multimedia flows to a set of connected clients. Additionally, I talked
-to one of the GStreamer developers and they want to integrate it to be
-distributed as part of the available plugins for gstreamer. For this
-first moment, it will be enter in gst-plugin-bad and then, after we
-complete some submission requirements, the plugin will be distributed
-in gst-plugin-goods.
-   About CCID-4, I currently have many issues related to related
-stuffs of my master dissertation and I will have time to dedicate
-again to CCID-4 implementation only in two or three week, when I
-finish my master dissertation and I will be available for CCID-4. For
-this time and later, no problem if others want to submit patches.
-
-Leandro.
-
-On Wed, May 21, 2008 at 8:18 AM, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrot=
-e:
-> | Is the patch already in the test tree?
-> |
-> Yes, plus the one that followed:
-> http://eden-feed.erg.abdn.ac.uk/cgi-bin/cgit?r=DCcp_exp
->
-
-
-
---=20
-Leandro Melo de Sales.
-Pervasive and Embedded Computing Laboratory
-BRisa and E-Phone Projects Manager
-Network Admin @ http://embedded.ufcg.edu.br/indexen.html
-+55 83 3310-1404 (extension 208)
-
-http://www.leandrosales.com/
+SGVsbG8sCklzIGFueW9uZSBhYmxlIHRvIHRlbGwgbWUgd2hhdCBtZXRob2RzIHNob3VsZCBJIHVz
+ZSB0byBtZWFzdXJlIHBhY2tldCBsb3NzLCBkZWxheSBhbmQgaml0dGVyIG9mIHRoZSBzdHJlYW0g
+b3ZlciBEQ0NQPyBJIG5lZWQgdG8gY29sbGVjdCB2YWx1ZXMgb2YgdGhlc2UgcGFyYW1ldGVycyBh
+bmQgY29tcGFyZSB0aGVtIHRvIHRoZSBzYW1lIHZpYSBvdGhlciB3ZWxsIGtub3duIHByb3RvY29s
+cyAoVURQLCBUQ1ApLiBDYW4geW91IHBsZWFzZSBoZWxwIG1lLCBvciBhdCBsZWFzdCBwb2ludCBt
+ZSBpbiB0aGUgcmlnaHQgZGlyZWN0aW9uLCBhcyBpdCBzZWVtcyB0byBtZSB0aGF0IHRoZXJlIGlz
+IG5vIHNvZnR3YXJlIHRoYXQgY2FuIHRha2UgdGhlc2UgbWVhc3VyZW1lbnRzLiBBbnkgaGVscCB3
+aWxsIGJlIG11Y2ggYXBwcmVjaWF0ZWQuCkJlc3QgcmVnYXJkcywKUm9zc3kKCi0tLS0tLS0tLS0t
+LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCtL6
+8PHoIPHlIOTi7unt6OohCmh0dHA6Ly96b29tLmJnL3BhZ2UucGhwP2JpZD02Ci0tClRvIHVuc3Vi
+c2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBp
+bgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3Jl
+IG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZv
+Lmh0bWw=
