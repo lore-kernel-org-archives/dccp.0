@@ -1,87 +1,46 @@
-From: Wei Yongjun <yjwei@cn.fujitsu.com>
-Date: Tue, 13 May 2008 10:52:21 +0000
-Subject: Re: [PATCH] DCCP: Fix to reset the connection with Reset Code 5	Option
-Message-Id: <482972E5.8060703@cn.fujitsu.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 27 May 2008 08:32:41 +0000
+Subject: [PATCH 1/7] [DCCP]: Fix to handle short sequence numbers packet correctly
+Message-Id: <1211877167-10995-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <48294E9C.4060209@cn.fujitsu.com>
-In-Reply-To: <48294E9C.4060209@cn.fujitsu.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Gerrit Renker:
+From: Wei Yongjun <yjwei@cn.fujitsu.com>
 
-I think your should update your patch to avoid compile error:
+RFC4340 said:
+  8.5.  Pseudocode
+       ...
+       If P.type is not Data, Ack, or DataAck and P.X = 0 (the packet
+             has short sequence numbers), drop packet and return
 
-+#define dccp_feat_print_opt(opt, feat, val, len, mandatory)              \
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-+    dccp_pr_debug("%s(%s, ", dccp_feat_oname(opt), dccp_feat_fname(feat));\
-+    dccp_feat_printvals(feat, val, len);                      \
-+    dccp_pr_debug_cat(") %s\n", mandatory ? "!" : "");
-...snip...
-+#else    /* ! CONFIG_IP_DCCP_DEBUG */
-+#define dccp_feat_print_opt(opt, feat, fval, mandatory)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+But DCCP has some mistake to handle short sequence numbers packet, now
+it drop packet only if P.type is Data, Ack, or DataAck and P.X = 0.
 
-The first dccp_feat_print_opt() take 5 parameters when 
-CONFIG_IP_DCCP_DEBUG, but the second one just take 4.
+This patch fixed this problem.
 
+Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
+Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ net/dccp/ipv4.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
 
-Gerrit Renker wrote:
->> Sorry for my stupid patch since I can get the test git tree.
->>
->>     
-> There is nothing at all wrong with the patch and I apologise for the
-> remark, since it is not your fault not to be aware of the test tree.
->
-> That was my fault - in at least one of the 4 cases David Miller copied the
-> changeset over to dccp@vger. I am working with Arnaldo de Melo (the DCCP
-> maintainer) on a solution for this, to avoid future overlap. It is not
-> your issue, so sorry.
->
-> For the moment the best is to apply this patch and fix the problem in
-> the mainline variant of net/dccp.
->
->
->   
->> But, Is there any other way to get the git tree? I download a patch from 
->> following URL:
->>   
->> http://www.erg.abdn.ac.uk/users/gerrit/dccp/testing_dccp/test-tree/test-tree_2.6.25.diff.gz
->> I used this patch to my linux-2.6.25, there is error happend. and it has 
->> compile error too.
->>     
-> This is possible since the snapshots are taken on the day a new release
-> comes out. Thanks for the notice, the outdated snapshot will be replaced.
->
->   
->> Is this patch is based on linux-2.6.25? If I want to send a patch, I  
->> must create my patch base on what version of kernel?
->>
->>     
-> The test tree tracks the netdev-2.6 kernel and only touches net/dccp. It
-> can be pulled from
-> 	git://eden-feed.erg.abdn.ac.uk/dccp_exp (subtree `dccp')
->
->
-> Gerrit
->
->
->   
-
-
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -739,8 +739,8 @@ int dccp_invalid_packet(struct sk_buff *skb)
+ 	 * If P.type is not Data, Ack, or DataAck and P.X = 0 (the packet
+ 	 * has short sequence numbers), drop packet and return
+ 	 */
+-	if (dh->dccph_type >= DCCP_PKT_DATA    &&
+-	    dh->dccph_type <= DCCP_PKT_DATAACK && dh->dccph_x = 0)  {
++	if ((dh->dccph_type < DCCP_PKT_DATA    ||
++	    dh->dccph_type > DCCP_PKT_DATAACK) && dh->dccph_x = 0)  {
+ 		DCCP_WARN("P.type (%s) not Data || [Data]Ack, while P.X = 0\n",
+ 			  dccp_packet_name(dh->dccph_type));
+ 		return 1;
 -- 
---------------------------------------------------
-Wei Yongjun
-Development Dept.I
-Nanjing Fujitsu Nanda Software Tech. Co., Ltd.(FNST)
-8/F., Civil Defense Building, No.189 Guangzhou Road,
-Nanjing, 210029, China
-TEL: +86+25-86630523-836
-COINS: 79955-836
-FAX: +86+25-83317685
-MAIL: yjwei@cn.fujitsu.com
---------------------------------------------------
-This communication is for use by the intended recipient(s) only and may contain information that is privileged, confidential and exempt from disclosure under applicable law. If you are not an intended recipient of this communication, you are hereby notified that any dissemination, distribution or copying hereof is strictly prohibited.  If you have received this communication in error, please notify me by reply e-mail, permanently delete this communication from your system, and destroy any hard copies you may have printed
+1.5.5
 
