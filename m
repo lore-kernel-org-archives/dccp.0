@@ -1,53 +1,99 @@
-From: Remi Denis-Courmont <rdenis@simphalempin.com>
-Date: Tue, 13 May 2008 12:53:59 +0000
-Subject: Re: [RFC] [DCCP]: Deprecate =?UTF-8?Q?SOCK=5FDCCP=20in=20favour=20of=20SO?=
-Message-Id: <48a00ddc692de4b7b71273614e61ab17@chewa.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 28 May 2008 06:24:51 +0000
+Subject: [Patch v2 1/1] [tcp/dccp]: Consolidate duplicate code which does
+Message-Id: <20080528062451.GB4480@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+Please find below recoded patch as requested. 
 
-On Tue, 13 May 2008 08:28:53 +0100, Gerrit Renker <gerrit@erg.abdn.ac.uk>
-wrote:
-> There is an API and an address resolution problem involved in specifying
-a
-> separate/distinct socket type `SOCK_DCCP'.
-(...)
-> Having also seen the work-arounds in programs that other people wrote,
-> I believe that the above change will make it in the long term easier for
-> people to write DCCP-enabled applications.
+>>>>>>>>>>>>>>>>>>>>> Patch v2 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-DCCP clearly fails the POSIX definition of SOCK_DGRAM in different ways.
+tcp/dccp: Consolidate duplicate code which does RFC3390 conversion
 
-I think this is not a good idea.
+This patch consolidates the code common to TCP and CCID-2:
 
-> It also relieves the libc writers from having to support another socket
-> type.
+ * TCP uses RFC 3390 in a packet-oriented manner (tcp_input.c) and
+ * CCID-2 uses RFC 3390 in packet-oriented manner (RFC 4341).
 
-As long as SOCK_DCCP-or-whatever is not automatically selected when
-ai_socktype is nul, this should be both easy to implement in libc *and*
-backward compatible (applications will not try to use DCCP implicitly).
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ include/net/tcp.h      |   15 +++++++++++++++
+ net/dccp/ccids/ccid2.c |    8 ++------
+ net/ipv4/tcp_input.c   |   17 ++---------------
+ 3 files changed, 19 insertions(+), 21 deletions(-)
 
-> A quick look at SCTP shows that they also did not introduce new socket
-> types, relying on the existing SOCK_STREAM/SOCK_SEQPACKET ones.
-
-But they follow the semantics for them.
-
-> It might be still early enough to resolve this, before it is widely used
-> and can then only be supported via work-arounds.
->=20
-> I can't see a disadvantage here and the only work required is to update
-> that
-> datagram-based not automatically means connection-less.
->=20
-> Is there support for this change or are there reasons to keep SOCK_DCCP?
-
-Maybe the name SOCK_DCCP sucks, but I think DCCP needs a "new" socket type
-anyway.
-
---=20
-R=C3=A9mi Denis-Courmont
-http://www.remlab.net
-
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -808,25 +808,12 @@ void tcp_update_metrics(struct sock *sk)
+ 	}
+ }
+ 
+-/* Numbers are taken from RFC3390.
+- *
+- * John Heffner states:
+- *
+- *	The RFC specifies a window of no more than 4380 bytes
+- *	unless 2*MSS > 4380.  Reading the pseudocode in the RFC
+- *	is a bit misleading because they use a clamp at 4380 bytes
+- *	rather than use a multiplier in the relevant range.
+- */
+ __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst)
+ {
+ 	__u32 cwnd = (dst ? dst_metric(dst, RTAX_INITCWND) : 0);
+ 
+-	if (!cwnd) {
+-		if (tp->mss_cache > 1460)
+-			cwnd = 2;
+-		else
+-			cwnd = (tp->mss_cache > 1095) ? 3 : 4;
+-	}
++	if (!cwnd)
++		cwnd = rfc3390_bytes_to_packets(tp->mss_cache);
+ 	return min_t(__u32, cwnd, tp->snd_cwnd_clamp);
+ }
+ 
+--- a/include/net/tcp.h
++++ b/include/net/tcp.h
+@@ -783,6 +783,21 @@ static inline __u32 tcp_current_ssthresh
+ /* Use define here intentionally to get WARN_ON location shown at the caller */
+ #define tcp_verify_left_out(tp)	WARN_ON(tcp_left_out(tp) > tp->packets_out)
+ 
++/*
++ * Convert RFC3390 larger initial windows into an equivalent number of packets.
++ *
++ * John Heffner states:
++ *
++ *	The RFC specifies a window of no more than 4380 bytes
++ *	unless 2*MSS > 4380.  Reading the pseudocode in the RFC
++ *	is a bit misleading because they use a clamp at 4380 bytes
++ *	rather than a multiplier in the relevant range.
++ */
++static inline u32 rfc3390_bytes_to_packets(const u32 bytes)
++{
++	return bytes < 1095 ? 4 : (bytes > 1460 ? 2 : 3);
++}
++
+ extern void tcp_enter_cwr(struct sock *sk, const int set_ssthresh);
+ extern __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst);
+ 
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -711,12 +711,8 @@ static int ccid2_hc_tx_init(struct ccid 
+ 	/* RFC 4341, 5: initialise ssthresh to arbitrarily high (max) value */
+ 	hctx->ccid2hctx_ssthresh  = ~0U;
+ 
+-	/*
+-	 * RFC 4341, 5: "The cwnd parameter is initialized to at most four
+-	 * packets for new connections, following the rules from [RFC3390]".
+-	 * We need to convert the bytes of RFC3390 into the packets of RFC 4341.
+-	 */
+-	hctx->ccid2hctx_cwnd = clamp(4380U / dp->dccps_mss_cache, 2U, 4U);
++	/* Use larger initial windows (RFC 3390, rfc2581bis) */
++	hctx->ccid2hctx_cwnd = rfc3390_bytes_to_packets(dp->dccps_mss_cache);
+ 
+ 	/* Make sure that Ack Ratio is enabled and within bounds. */
+ 	max_ratio = DIV_ROUND_UP(hctx->ccid2hctx_cwnd, 2);
