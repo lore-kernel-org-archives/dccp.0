@@ -1,74 +1,104 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sun, 18 May 2008 16:44:31 +0000
-Subject: [DCCP] [RFT/Bug-Fix] [Patch 1/1]: Special case for client-PARTOPEN
-Message-Id: <20080518164431.GA24987@gerrit.erg.abdn.ac.uk>
+Date: Sat, 31 May 2008 13:49:01 +0000
+Subject: [Patch v3 1/1] [tcp/dccp]: Consolidate duplicate code which does
+Message-Id: <20080531134901.GA4757@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-     (This is an update for the test-tree, not meant for mainline now)
+Please disregard previous version of this patch, which had an error:
+when `bytes' = 1095, the sender can still send 4 full windows (4*1095 = 4380).
+The inter-diff to the previous version is:
 
---------------------------> Patch <-------------------------------------
-[DCCP]: Special case for client-PARTOPEN with DataAcks
+	-	return bytes < 1095 ? 4 : (bytes > 1460 ? 2 : 3);
+	+	return bytes <= 1095 ? 4 : (bytes > 1460 ? 2 : 3);
 
-There are two conflicting goals: providing a large room for options and allowing
-the client to send DataAcks in the "half-open" PARTOPEN state. 
 
-To increase robustness, it is necessary to resend Confirm feature-negotiation
-options, even though the RFC does not mandate it. But feature negotiation
-options can take (much) more room than the options on common DataAck packets.
+-----------------------------> Patch v2 <------------------------------------------	
+tcp/dccp: Consolidate duplicate code which does RFC3390 conversion
 
-Instead of reducing the MPS always for a case which only applies to the three
-messages send during initial handshake, this patch devises a special case:
-if the payload length of the DataAck in PARTOPEN is too large, an Ack is sent
-to carry the options, and the feature-negotiation list is then flushed.
+This patch consolidates the code common to TCP and CCID-2:
 
-This means that the server gets two Acks for one Response. If both Acks get
-lost, it is probably better to restart the connection anyway and devising yet
-another special-case does not seem worth the extra complexity.
+ * TCP uses RFC 3390 in a packet-oriented manner (tcp_input.c) and
+ * CCID-2 uses RFC 3390 in packet-oriented manner (RFC 4341).
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/feat.h   |    3 +++
- net/dccp/output.c |   16 +++++++++++++++-
- 2 files changed, 18 insertions(+), 1 deletion(-)
+ include/net/tcp.h      |   15 +++++++++++++++
+ net/dccp/ccids/ccid2.c |    8 ++------
+ net/ipv4/tcp_input.c   |   17 ++---------------
+ 3 files changed, 19 insertions(+), 21 deletions(-)
 
---- a/net/dccp/feat.h
-+++ b/net/dccp/feat.h
-@@ -23,6 +23,9 @@
- #define DCCPF_SEQ_WMIN		32
- #define DCCPF_SEQ_WMAX		0x3FFFFFFFFFFFull
+--- a/include/net/tcp.h
++++ b/include/net/tcp.h
+@@ -783,6 +783,21 @@ static inline __u32 tcp_current_ssthresh
+ /* Use define here intentionally to get WARN_ON location shown at the caller */
+ #define tcp_verify_left_out(tp)	WARN_ON(tcp_left_out(tp) > tp->packets_out)
  
-+/* Feature-negotiation overhead in multiples of 4-byte words */
-+#define DCCP_FEATNEG_OVERHEAD_FACTOR	32
++/*
++ * Convert RFC3390 larger initial windows into an equivalent number of packets.
++ *
++ * John Heffner states:
++ *
++ *	The RFC specifies a window of no more than 4380 bytes
++ *	unless 2*MSS > 4380.  Reading the pseudocode in the RFC
++ *	is a bit misleading because they use a clamp at 4380 bytes
++ *	rather than a multiplier in the relevant range.
++ */
++static inline u32 rfc3390_bytes_to_packets(const u32 bytes)
++{
++	return bytes <= 1095 ? 4 : (bytes > 1460 ? 2 : 3);
++}
 +
- enum dccp_feat_type {
- 	FEAT_AT_RX   = 1,	/* located at RX side of half-connection  */
- 	FEAT_AT_TX   = 2,	/* located at TX side of half-connection  */
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -245,7 +245,21 @@ static void dccp_xmit_packet(struct sock
- 	len = skb->len;
+ extern void tcp_enter_cwr(struct sock *sk, const int set_ssthresh);
+ extern __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst);
  
- 	if (sk->sk_state = DCCP_PARTOPEN) {
--		/* See 8.1.5.  Handshake Completion */
-+		const u32 overhead = DCCP_FEATNEG_OVERHEAD_FACTOR << 2;
-+		/*
-+		 * See 8.1.5 - Handshake Completion.
-+		 * For robustness we resend Confirm options until the client has
-+		 * entered OPEN. Unfortunately, the "copious space for options"
-+		 * (RFC 4340, 4.6) means that there is less space for payload.
-+		 * For overly large payloads, send second Ack to carry options.
-+		 */
-+		if (!list_empty(&dp->dccps_featneg) &&
-+		    len + overhead >= dp->dccps_mss_cache) {
-+			DCCP_WARN("Payload too large (%d) for featneg.\n", len);
-+			dccp_send_ack(sk);
-+			dccp_feat_list_purge(&dp->dccps_featneg);
-+		}
-+
- 		inet_csk_schedule_ack(sk);
- 		inet_csk_reset_xmit_timer(sk, ICSK_TIME_DACK,
- 					      inet_csk(sk)->icsk_rto,
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -808,25 +808,12 @@ void tcp_update_metrics(struct sock *sk)
+ 	}
+ }
+ 
+-/* Numbers are taken from RFC3390.
+- *
+- * John Heffner states:
+- *
+- *	The RFC specifies a window of no more than 4380 bytes
+- *	unless 2*MSS > 4380.  Reading the pseudocode in the RFC
+- *	is a bit misleading because they use a clamp at 4380 bytes
+- *	rather than use a multiplier in the relevant range.
+- */
+ __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst)
+ {
+ 	__u32 cwnd = (dst ? dst_metric(dst, RTAX_INITCWND) : 0);
+ 
+-	if (!cwnd) {
+-		if (tp->mss_cache > 1460)
+-			cwnd = 2;
+-		else
+-			cwnd = (tp->mss_cache > 1095) ? 3 : 4;
+-	}
++	if (!cwnd)
++		cwnd = rfc3390_bytes_to_packets(tp->mss_cache);
+ 	return min_t(__u32, cwnd, tp->snd_cwnd_clamp);
+ }
+ 
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -711,12 +711,8 @@ static int ccid2_hc_tx_init(struct ccid 
+ 	/* RFC 4341, 5: initialise ssthresh to arbitrarily high (max) value */
+ 	hctx->ccid2hctx_ssthresh  = ~0U;
+ 
+-	/*
+-	 * RFC 4341, 5: "The cwnd parameter is initialized to at most four
+-	 * packets for new connections, following the rules from [RFC3390]".
+-	 * We need to convert the bytes of RFC3390 into the packets of RFC 4341.
+-	 */
+-	hctx->ccid2hctx_cwnd = clamp(4380U / dp->dccps_mss_cache, 2U, 4U);
++	/* Use larger initial windows (RFC 3390, rfc2581bis) */
++	hctx->ccid2hctx_cwnd = rfc3390_bytes_to_packets(dp->dccps_mss_cache);
+ 
+ 	/* Make sure that Ack Ratio is enabled and within bounds. */
+ 	max_ratio = DIV_ROUND_UP(hctx->ccid2hctx_cwnd, 2);
