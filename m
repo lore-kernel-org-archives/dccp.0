@@ -1,7 +1,7 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 04 Jun 2008 08:09:30 +0000
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Wed, 04 Jun 2008 13:21:52 +0000
 Subject: Re: [PATCH - test-tree] DCCP: Increment sequence number on
-Message-Id: <20080604080930.GA5723@gerrit.erg.abdn.ac.uk>
+Message-Id: <20080604132152.GA17595@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 References: <4846462F.3020004@cn.fujitsu.com>
 In-Reply-To: <4846462F.3020004@cn.fujitsu.com>
@@ -10,13 +10,19 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+Em Wed, Jun 04, 2008 at 03:37:19PM +0800, Wei Yongjun escreveu:
 > When retransmit the first REQUEST, the sequence number does not be  
 > increased. This is because before retransmit the first REQUEST packet,  
 > the icsk->icsk_retransmits is 0, so dccp_transmit_skb() will fetch the  
 > dp->dccps_iss as the retransmit sequence number.
 >
 > This patch fix the problem.
->
+
+Looks like a hack, ugh. Proper fix must be not bumping it on
+dccp_transmit_skb when the packet is a REQUEST, no?
+
+- Arnaldo
+
 > Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
 >
 > --- a/net/dccp/output.c	2008-05-29 22:27:55.000000000 -0400
@@ -40,17 +46,3 @@ To: dccp@vger.kernel.org
 >
 > 	skb = alloc_skb(sk->sk_prot->max_header, sk->sk_allocation);
 > 	if (unlikely(skb = NULL))
->
-Ack - excellent spotting. 
-
-The problem is that icsk->retransmits is increased only after calling
-dccp_transmit_skb() via dccp_retransmit_skb(), hence the sequence number is
-increased only in the second retransmit.
-
-I will put this into the test tree later on today, I am thinking about
-finding a different solution around the fact that GSS is always
-increased at the top of dccp_transmit_skb().
-
-Thanks a lot for investigating this.
-
-Gerrit
