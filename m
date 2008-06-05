@@ -1,44 +1,38 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 10 Jun 2008 12:53:42 +0000
-Subject: [PATCH 6/7] dccp: Bug in initial acknowledgment number assignment
-Message-Id: <1213102423-27486-7-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 05 Jun 2008 14:44:35 +0000
+Subject: [dccp] [RFC/RFT] [Patch 0/2]: Test-tree update to handle
+Message-Id: <20080605144435.GA8800@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Step 8.5 in RFC 4340 says for the newly cloned socket
+Here are two patches for the test tree. As with all RFC/RFT patches, these are
+posted with the main objective of getting review/comments, and are then put into
+the test tree for ... testing.
 
-           Initialize S.GAR := S.ISS,
+These patches evolved thanks to input provided by Wei Yongjun regarding an
+unresolved problem with retransmissions, fixed by the following two updates:
 
-but what in fact the code (minisocks.c) does is
+Patch #1: allows to distinguish retransmitted from original packets,
+          using a slight reordering of existing code.
+          This is the main fix for the earlier problem of not incrementing
+	  the sequence number properly on retransmitted Request packets.
 
-           Initialize S.GAR := S.ISR,
+	  The patch introduces a generic condition which can also be tested
+	  by other code (e.g. for the retransmission of Close/CloseReq).
 
-which is wrong (typo?) -- fixed by the patch.
+Patch #2: puts two strongly related statements, dccp_entail() and
+          skb_clone() both in dccp_entail(), since they are not 
+	  independent. Patch can be a matter of taste and may be omitted.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/minisocks.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
 
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -165,12 +165,12 @@ out_free:
- 		/* See dccp_v4_conn_request */
- 		newdmsk->dccpms_sequence_window = req->rcv_wnd;
- 
--		newdp->dccps_gar = newdp->dccps_isr = dreq->dreq_isr;
--		dccp_update_gsr(newsk, dreq->dreq_isr);
--
--		newdp->dccps_iss = dreq->dreq_iss;
-+		newdp->dccps_gar = newdp->dccps_iss = dreq->dreq_iss;
- 		dccp_update_gss(newsk, dreq->dreq_iss);
- 
-+		newdp->dccps_isr = dreq->dreq_isr;
-+		dccp_update_gsr(newsk, dreq->dreq_isr);
-+
- 		/*
- 		 * SWL and AWL are initially adjusted so that they are not less than
- 		 * the initial Sequence Numbers received and sent, respectively:
+The patches are not yet committed - if there are no major objections, they will
+be added to the test tree tomoroow, on 
+
+	git://eden-feed.erg.abdn.ac.uk/dccp_exp (subtree dccp)
+
+with snapshots on
+	http://eden-feed.erg.abdn.ac.uk/latest-dccp-test-tree.tar.bz2
+	http://eden-feed.erg.abdn.ac.uk/latest-dccp-test-tree.diff.gz
