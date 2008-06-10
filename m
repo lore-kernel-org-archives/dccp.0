@@ -1,68 +1,125 @@
 From: Wei Yongjun <yjwei@cn.fujitsu.com>
-Date: Tue, 10 Jun 2008 09:00:46 +0000
-Subject: [PATCH] DCCP: Initialize ireq6->pktopts before used it
-Message-Id: <484E42BE.9020408@cn.fujitsu.com>
+Date: Tue, 10 Jun 2008 09:05:50 +0000
+Subject: Re: [PATCH] DCCP: Initialize ireq6->pktopts before used it
+Message-Id: <484E43EE.60406@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
+References: <484E42BE.9020408@cn.fujitsu.com>
+In-Reply-To: <484E42BE.9020408@cn.fujitsu.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-aXJlcTYtPnBrdG9wdHMgaXMgbm90IGluaXRpYWxpemVkIGFmdGVyIGRjY3BfcmVxc2tfaW5pdCgp
-LCBhbmQgaXQgd2lsbCAKYmUgZnJlZSBpbiBkY2NwX3Y2X3JlcXNrX2Rlc3RydWN0b3IoKSwgc28g
-aWYgZGNjcF9wYXJzZV9vcHRpb25zKCkgaXMgCmZhaWwsIHRoaXMgbWF5IGNhdXNlIGtlcm5lbCBw
-YW5pYyBzaW5jZSBpcmVxNi0+cGt0b3B0cyBpcyBub3QgaW5pdGlhbGl6ZWQuCgpUaGlzIHBhdGNo
-IGZpeCB0aGlzIHByb2JsZW0gYnkgaW5pdGlhbGl6ZSBpcmVxNi0+cGt0b3B0cyBiZWZvcmUgdXNl
-ZCBpdC4KCnN0YXRpYyB2b2lkIGRjY3BfdjZfcmVxc2tfZGVzdHJ1Y3RvcihzdHJ1Y3QgcmVxdWVz
-dF9zb2NrICpyZXEpCnsKICAgICAgICBkY2NwX2ZlYXRfbGlzdF9wdXJnZSgmZGNjcF9yc2socmVx
-KS0+ZHJlcV9mZWF0bmVnKTsKICAgICAgICBpZiAoaW5ldDZfcnNrKHJlcSktPnBrdG9wdHMgIT0g
-TlVMTCkKICAgICAgICAgICAgICAgIGtmcmVlX3NrYihpbmV0Nl9yc2socmVxKS0+cGt0b3B0cyk7
-Cn0KClBpZDogMCwgY29tbTogc3dhcHBlciBOb3QgdGFpbnRlZCAoMi42LjI2LXJjMiAjMSkKRUlQ
-OiAwMDYwOls8YzA1YWNkYWY+XSBFRkxBR1M6IDAwMDEwMjA2IENQVTogMApFSVAgaXMgYXQga2Zy
-ZWVfc2tiKzB4OS8weDMwCkVBWDogMDAwMDJmZGUgRUJYOiBjNzMwNmU4MCBFQ1g6IGM3ODAxMDgw
-IEVEWDogMDAwMDJmZGUKRVNJOiBjNzk4MzY4MCBFREk6IGM3MmQ5ODAwIEVCUDogYzA3NWFkZmMg
-RVNQOiBjMDc1YWRmYwpEUzogMDA3YiBFUzogMDA3YiBGUzogMDBkOCBHUzogMDAwMCBTUzogMDA2
-OApQcm9jZXNzIHN3YXBwZXIgKHBpZDogMCwgdGnANzVhMDAwIHRhc2vANmRmM2EwIHRhc2sudGnA
-NzE0MDAwKQpTdGFjazogYzA3NWFlMDggYzhhMjU5ZDggYzdhMGY4NDggYzA3NWFlMzggYzhhMjYw
-ZmMgYzc5ODM2ODAgYzcyZDk4MDAgYzcyZDliOTAKICAgICAgNjQwMDAwMDAgYzc5ODM2YTAgYzcz
-MDZlODAgOGNmMjQzN2YgYzdhMGY4NDggYzc5ODM2ODAgYzcyZDk4MDAgYzA3NWFlNzgKICAgICAg
-Yzg5ZTZjNzggYzc5ODM2ODAgYzcyZDk4MDAgMGE4MDQ1MDAgYzc5ODM2YTAgMGMwMTE5MDggZjI0
-MjA2Y2MgYzQ2YzM2NjAKQ2FsbCBUcmFjZToKWzxjOGEyNTlkOD5dID8gZGNjcF92Nl9yZXFza19k
-ZXN0cnVjdG9yKzB4MWYvMHgyMiBbZGNjcF9pcHY2XQpbPGM4YTI2MGZjPl0gPyBkY2NwX3Y2X2Nv
-bm5fcmVxdWVzdCsweDI0My8weDI3ZCBbZGNjcF9pcHY2XQpbPGM4OWU2Yzc4Pl0gPyBkY2NwX3Jj
-dl9zdGF0ZV9wcm9jZXNzKzB4M2QvMHg0YjUgW2RjY3BdCls8YzhhMjU5NzY+XSA/IGRjY3BfdjZf
-ZG9fcmN2KzB4MTMyLzB4MTc1IFtkY2NwX2lwdjZdCls8YzA1YmIzNTU+XSA/IHNrX2ZpbHRlcisw
-eDY2LzB4NmQKWzxjMDVhYjVjMj5dID8gc2tfcmVjZWl2ZV9za2IrMHgzMi8weDdjCls8YzhhMjY3
-YjM+XSA/IGRjY3BfdjZfcmN2KzB4MmE1LzB4MzJhIFtkY2NwX2lwdjZdCls8YzhlZTJlZTA+XSA/
-IGlwNl9pbnB1dF9maW5pc2grMHgxNTgvMHgyODAgW2lwdjZdCls8YzhlZTMwNGE+XSA/IGlwNl9p
-bnB1dCsweDQyLzB4NDcgW2lwdjZdCls8YzhlZTMzNTc+XSA/IGlwdjZfcmN2KzB4MjdjLzB4MmM5
-IFtpcHY2XQpbPGMwNWIxMzM2Pl0gPyBuZXRpZl9yZWNlaXZlX3NrYisweDJlMC8weDM0OQpbPGM4
-OGYyYTEyPl0gPyBwY25ldDMyX3BvbGwrMHgzMzMvMHg2NmUgW3BjbmV0MzJdCls8YzA0MzhhZmE+
-XSA/IGNsb2Nrc291cmNlX3dhdGNoZG9nKzB4MjFlLzB4MjJkCls8YzA0MDQyOGI+XSA/IGNvbW1v
-bl9pbnRlcnJ1cHQrMHgyMy8weDI4Cls8YzA1YjMwOGM+XSA/IG5ldF9yeF9hY3Rpb24rMHg4Zi8w
-eDE0NwpbPGMwNDI3YzViPl0gPyBfX2RvX3NvZnRpcnErMHg2NC8weGNkCls8YzA0MDU4OTg+XSA/
-IGRvX3NvZnRpcnErMHg1NS8weDg4Cls8YzA0MjdiZjU+XSA/IGlycV9leGl0KzB4MzgvMHgzYQpb
-PGMwNDEyYjQyPl0gPyBzbXBfYXBpY190aW1lcl9pbnRlcnJ1cHQrMHg3MS8weDdmCls8YzA0MDI1
-ZWI+XSA/IGRlZmF1bHRfaWRsZSsweDAvMHg0MgpbPGMwNDA0MzQ4Pl0gPyBhcGljX3RpbWVyX2lu
-dGVycnVwdCsweDI4LzB4MzAKWzxjMDQwMjVlYj5dID8gZGVmYXVsdF9pZGxlKzB4MC8weDQyCls8
-YzA0MDI2MTg+XSA/IGRlZmF1bHRfaWRsZSsweDJkLzB4NDIKWzxjMDQwMjU2Nj5dID8gY3B1X2lk
-bGUrMHg4Yi8weDlmCls8YzA2MGM4OWE+XSA/IHJlc3RfaW5pdCsweDRlLzB4NTAKPT09PT09PT09
-PT09IAoKClNpZ25lZC1vZmYtYnk6IFdlaSBZb25nanVuIDx5andlaUBjbi5mdWppdHN1LmNvbT4K
-Ci0tLSBhL25ldC9kY2NwL2lwdjYuYwkyMDA4LTA1LTI5IDIyOjI3OjU1LjAwMDAwMDAwMCAtMDQw
-MAorKysgYi9uZXQvZGNjcC9pcHY2LmMJMjAwOC0wNi0wNSAwNTo1ODowMC4wMDAwMDAwMDAgLTA0
-MDAKQEAgLTQxMyw2ICs0MTMsOSBAQCBzdGF0aWMgaW50IGRjY3BfdjZfY29ubl9yZXF1ZXN0KHN0
-cnVjdCBzCiAJaWYgKGRjY3BfcmVxc2tfaW5pdChyZXEsIGRjY3Bfc2soc2spLCBza2IpKQogCQln
-b3RvIGRyb3BfYW5kX2ZyZWU7CiAKKwlpcmVxNiA9IGluZXQ2X3JzayhyZXEpOworCWlyZXE2LT5w
-a3RvcHRzCT0gTlVMTDsKKwogCWRyZXEgPSBkY2NwX3JzayhyZXEpOwogCWlmIChkY2NwX3BhcnNl
-X29wdGlvbnMoc2ssIGRyZXEsIHNrYikpCiAJCWdvdG8gZHJvcF9hbmRfZnJlZTsKQEAgLTQyMCwx
-MCArNDIzLDggQEAgc3RhdGljIGludCBkY2NwX3Y2X2Nvbm5fcmVxdWVzdChzdHJ1Y3QgcwogCWlm
-IChzZWN1cml0eV9pbmV0X2Nvbm5fcmVxdWVzdChzaywgc2tiLCByZXEpKQogCQlnb3RvIGRyb3Bf
-YW5kX2ZyZWU7CiAKLQlpcmVxNiA9IGluZXQ2X3JzayhyZXEpOwogCWlwdjZfYWRkcl9jb3B5KCZp
-cmVxNi0+cm10X2FkZHIsICZpcHY2X2hkcihza2IpLT5zYWRkcik7CiAJaXB2Nl9hZGRyX2NvcHko
-JmlyZXE2LT5sb2NfYWRkciwgJmlwdjZfaGRyKHNrYiktPmRhZGRyKTsKLQlpcmVxNi0+cGt0b3B0
-cwk9IE5VTEw7CiAKIAlpZiAoaXB2Nl9vcHRfYWNjZXB0ZWQoc2ssIHNrYikgfHwKIAkgICAgbnAt
-PnJ4b3B0LmJpdHMucnhpbmZvIHx8IG5wLT5yeG9wdC5iaXRzLnJ4b2luZm8gfHwKCgotLQpUbyB1
-bnN1YnNjcmliZSBmcm9tIHRoaXMgbGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNj
-cCIgaW4KdGhlIGJvZHkgb2YgYSBtZXNzYWdlIHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcK
-TW9yZSBtYWpvcmRvbW8gaW5mbyBhdCAgaHR0cDovL3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8t
-aW5mby5odG1s
+I think I should add dccp_v6_reqsk_init() do to the init work since=20
+dccp_reqsk_init may be fail too.
+
+Wei Yongjun wrote:
+> ireq6->pktopts is not initialized after dccp_reqsk_init(), and it will=20
+> be free in dccp_v6_reqsk_destructor(), so if dccp_parse_options() is=20
+> fail, this may cause kernel panic since ireq6->pktopts is not=20
+> initialized.
+>
+> This patch fix this problem by initialize ireq6->pktopts before used it.
+>
+> static void dccp_v6_reqsk_destructor(struct request_sock *req)
+> {
+>        dccp_feat_list_purge(&dccp_rsk(req)->dreq_featneg);
+>        if (inet6_rsk(req)->pktopts !=3D NULL)
+>                kfree_skb(inet6_rsk(req)->pktopts);
+> }
+>
+> Pid: 0, comm: swapper Not tainted (2.6.26-rc2 #1)
+> EIP: 0060:[<c05acdaf>] EFLAGS: 00010206 CPU: 0
+> EIP is at kfree_skb+0x9/0x30
+> EAX: 00002fde EBX: c7306e80 ECX: c7801080 EDX: 00002fde
+> ESI: c7983680 EDI: c72d9800 EBP: c075adfc ESP: c075adfc
+> DS: 007b ES: 007b FS: 00d8 GS: 0000 SS: 0068
+> Process swapper (pid: 0, ti=C075a000 task=C06df3a0 task.ti=C0714000)
+> Stack: c075ae08 c8a259d8 c7a0f848 c075ae38 c8a260fc c7983680 c72d9800=20
+> c72d9b90
+>      64000000 c79836a0 c7306e80 8cf2437f c7a0f848 c7983680 c72d9800=20
+> c075ae78
+>      c89e6c78 c7983680 c72d9800 0a804500 c79836a0 0c011908 f24206cc=20
+> c46c3660
+> Call Trace:
+> [<c8a259d8>] ? dccp_v6_reqsk_destructor+0x1f/0x22 [dccp_ipv6]
+> [<c8a260fc>] ? dccp_v6_conn_request+0x243/0x27d [dccp_ipv6]
+> [<c89e6c78>] ? dccp_rcv_state_process+0x3d/0x4b5 [dccp]
+> [<c8a25976>] ? dccp_v6_do_rcv+0x132/0x175 [dccp_ipv6]
+> [<c05bb355>] ? sk_filter+0x66/0x6d
+> [<c05ab5c2>] ? sk_receive_skb+0x32/0x7c
+> [<c8a267b3>] ? dccp_v6_rcv+0x2a5/0x32a [dccp_ipv6]
+> [<c8ee2ee0>] ? ip6_input_finish+0x158/0x280 [ipv6]
+> [<c8ee304a>] ? ip6_input+0x42/0x47 [ipv6]
+> [<c8ee3357>] ? ipv6_rcv+0x27c/0x2c9 [ipv6]
+> [<c05b1336>] ? netif_receive_skb+0x2e0/0x349
+> [<c88f2a12>] ? pcnet32_poll+0x333/0x66e [pcnet32]
+> [<c0438afa>] ? clocksource_watchdog+0x21e/0x22d
+> [<c040428b>] ? common_interrupt+0x23/0x28
+> [<c05b308c>] ? net_rx_action+0x8f/0x147
+> [<c0427c5b>] ? __do_softirq+0x64/0xcd
+> [<c0405898>] ? do_softirq+0x55/0x88
+> [<c0427bf5>] ? irq_exit+0x38/0x3a
+> [<c0412b42>] ? smp_apic_timer_interrupt+0x71/0x7f
+> [<c04025eb>] ? default_idle+0x0/0x42
+> [<c0404348>] ? apic_timer_interrupt+0x28/0x30
+> [<c04025eb>] ? default_idle+0x0/0x42
+> [<c0402618>] ? default_idle+0x2d/0x42
+> [<c0402566>] ? cpu_idle+0x8b/0x9f
+> [<c060c89a>] ? rest_init+0x4e/0x50
+> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D>
+> Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
+>
+> --- a/net/dccp/ipv6.c    2008-05-29 22:27:55.000000000 -0400
+> +++ b/net/dccp/ipv6.c    2008-06-05 05:58:00.000000000 -0400
+> @@ -413,6 +413,9 @@ static int dccp_v6_conn_request(struct s
+>     if (dccp_reqsk_init(req, dccp_sk(sk), skb))
+>         goto drop_and_free;
+>
+> +    ireq6 =3D inet6_rsk(req);
+> +    ireq6->pktopts    =3D NULL;
+> +
+>     dreq =3D dccp_rsk(req);
+>     if (dccp_parse_options(sk, dreq, skb))
+>         goto drop_and_free;
+> @@ -420,10 +423,8 @@ static int dccp_v6_conn_request(struct s
+>     if (security_inet_conn_request(sk, skb, req))
+>         goto drop_and_free;
+>
+> -    ireq6 =3D inet6_rsk(req);
+>     ipv6_addr_copy(&ireq6->rmt_addr, &ipv6_hdr(skb)->saddr);
+>     ipv6_addr_copy(&ireq6->loc_addr, &ipv6_hdr(skb)->daddr);
+> -    ireq6->pktopts    =3D NULL;
+>
+>     if (ipv6_opt_accepted(sk, skb) ||
+>         np->rxopt.bits.rxinfo || np->rxopt.bits.rxoinfo ||
+>
+>
+> --=20
+> To unsubscribe from this list: send the line "unsubscribe dccp" in
+> the body of a message to majordomo@vger.kernel.org
+> More majordomo info at  http://vger.kernel.org/majordomo-info.html
+>
+>
+
+
+--=20
+--------------------------------------------------
+Wei Yongjun
+Development Dept.I
+Nanjing Fujitsu Nanda Software Tech. Co., Ltd.(FNST)
+8/F., Civil Defense Building, No.189 Guangzhou Road,
+Nanjing, 210029, China
+TEL: +86+25-86630523-836
+COINS: 79955-836
+FAX: +86+25-83317685
+MAIL: yjwei@cn.fujitsu.com
+--------------------------------------------------
+This communication is for use by the intended recipient(s) only and may con=
+tain information that is privileged, confidential and exempt from disclosur=
+e under applicable law. If you are not an intended recipient of this commun=
+ication, you are hereby notified that any dissemination, distribution or co=
+pying hereof is strictly prohibited.  If you have received this communicati=
+on in error, please notify me by reply e-mail, permanently delete this comm=
+unication from your system, and destroy any hard copies you may have printed
+
