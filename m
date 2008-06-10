@@ -1,29 +1,28 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 23 Jun 2008 08:28:54 +0000
-Subject: Re: DCCP and NAT
-Message-Id: <20080623082854.GA14592@gerrit.erg.abdn.ac.uk>
+Date: Tue, 10 Jun 2008 12:53:36 +0000
+Subject: [Patch 0/7] [dccp]: DCCP bug-fixes for net-2.6
+Message-Id: <1213102423-27486-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <485E62DD.4050405@libero.it>
-In-Reply-To: <485E62DD.4050405@libero.it>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Giuseppe, -
-> My ISP (Vodafone Italia) use the NAT, so it's impossible to use dccp  
-> protocol in a connection between two host that support DCCP.
-> Have you suggestion in order to resolve this problem?
->
-Since you are most likely using ISP NAT equipment and since only the
-Linux NAT at the moment supports DCCP, the only way around this is
-tunnelling. Tom Phelan has written a draft for UDP encapsulation of DCCP
-http://www.phelan-4.com/dccp/draft-phelan-dccp-natencap-00.txt
-and provides software (DCCP-TP) with support for UDP tunnelling:
-http://www.phelan-4.com/dccp-tp/tiki-index.php
+Hi David,
 
-Is it possible for you to use Linux NAT instead of the Vodafone NAT?
-If yes, we have developed an alternative NAT traversal solution which
-does not require tunnelling. Will put information out about this later.
+please consider pulling from
 
-Gerrit
+	git://eden-feed.erg.abdn.ac.uk/net-2.6 
+
+This set has bug-fixes only, non-bug fixes will follow at a later stage.
+
+Some test-tree patches need to be reworked with regard to prefix conventions,
+will send a request-for-comments later this week to enquire about this.     
+
+Patch #1: Fixes a divide-by-zero bug in CCID-3.
+Patch #2: Resolves sparse warnings (gathered from several patches in the tree). 
+Patch #3: Enforces that Ack Vectors are not interpreted on request sockets.
+Patch #4: Computation error in CCID-3 allowed sending rate.
+Patch #5: Sending rate in CCID-3 truncated due to u64 -> u32 conversion.
+Patch #6: Typo in initial sequence number assignment.
+Patch #7: Bug in the initialisation of v4/v6 request-socket option areas.
