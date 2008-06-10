@@ -1,76 +1,68 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 19 Jun 2008 13:38:18 +0000
-Subject: Re: QUESTION : Feature length about the non-negotiable feature
-Message-Id: <20080619133818.GB15815@gerrit.erg.abdn.ac.uk>
+From: Wei Yongjun <yjwei@cn.fujitsu.com>
+Date: Tue, 10 Jun 2008 09:00:46 +0000
+Subject: [PATCH] DCCP: Initialize ireq6->pktopts before used it
+Message-Id: <484E42BE.9020408@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
-References: <48579530.4010807@cn.fujitsu.com>
-In-Reply-To: <48579530.4010807@cn.fujitsu.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-> The RFC doesn't really require that you reset the connection just if the  
-> length is strange.  Accepting valid values expressed in an strange 
-> length, but generating only the required lengths, seems like a good 
-> application of the TCP robustness principle ("be conservative in what you 
-> do,  be liberal in what you accept from others", explicitly in RFC4340 
-> 3.6).
->
-Thank you for the input. I had written this with possible forthcoming
-inter-op tests in mind. What Wei is doing is in principle also an
-inter-op test, with the difference that it uses and automated test stack.
-
-> The discussion on whether Sequence Window should be variable-length begins here:
->
-> http://www.ietf.org/mail-archive/web/dccp/current/msg01257.html
-> search for "MW5: Section 7.5.2, second paragraph"
->
-> The two followups have a bit more.
->
-> Magnus Westerlund was one of the IETF's expert reviewers for DCCP; his 
-> opinion carried some weight.  Probably I folded too early (I thought the 
-> extra "complexity" of a variable-length option wouldn't matter, and the 
-> option might occur frequently).
->
-There are several arguments which raise questions:
-
- (1) Making it variable-length increases code complexity
-     I think this is not very relevant. The reason is that any option
-     also needs to be converted into network-byte order (3.1). When the
-     quantities are not 16 or 32 bit, the htons/htonl functions can not
-     be used. Arnaldo has written a very clever function dccp_encode_value_var()
-     which does both the byte-order conversion and the variable-length copy
-     in one swoop. So there is little overhead in making it variable-lengh.
-     And for the receiver code the case is similar.
-
- (2) This option occurs infrequently
-     Agree with the above point: NN options are exchanged during the
-     established phase and so it depends how frequently they appear.
-     In any case they are retransmitted until acknowledged, which is
-     one point that increases the frequency.
-     If there is a path change or the application increases/decreases
-     the sending rate then Sequence Window also needs to be updated,
-     hence "occurs infrequently" is not always true.
-     It is costly for the loss detection and the Ack Vector length to
-     get out of synch, so it seems better to update the Sequence Window
-     frequently (i.e. when it changes) rather than risking a "Step 6
-     failed" (8.5).
-
- (3) Header compression
-     This did not occur in the discussion but someone mentioned a
-     header compression argument as a possible cause for keeping the
-     option fixed length. The gain for header compression seems low,
-     since Change options are only sent if one endpoint leaves the STABLE
-     state (6.6.2) and thus the value of subsequent Change options on
-     the same path will always have different values.
-
-
-> One solution might be a "dccp_pedantic" sysctl, defaulting to 0, where 
-> Linux DCCP is guaranteed to be RFC compliant only if "dccp_pedantic" is 
-> 1.  (And Sequence Window is variable-length if "dccp_pedantic" is 0.)
-I think this refers to the length of outgoing options? In any event,
-if people wanted to test different behaviours, it could be made a
-Kconfig menu option.
-
-Gerrit
+aXJlcTYtPnBrdG9wdHMgaXMgbm90IGluaXRpYWxpemVkIGFmdGVyIGRjY3BfcmVxc2tfaW5pdCgp
+LCBhbmQgaXQgd2lsbCAKYmUgZnJlZSBpbiBkY2NwX3Y2X3JlcXNrX2Rlc3RydWN0b3IoKSwgc28g
+aWYgZGNjcF9wYXJzZV9vcHRpb25zKCkgaXMgCmZhaWwsIHRoaXMgbWF5IGNhdXNlIGtlcm5lbCBw
+YW5pYyBzaW5jZSBpcmVxNi0+cGt0b3B0cyBpcyBub3QgaW5pdGlhbGl6ZWQuCgpUaGlzIHBhdGNo
+IGZpeCB0aGlzIHByb2JsZW0gYnkgaW5pdGlhbGl6ZSBpcmVxNi0+cGt0b3B0cyBiZWZvcmUgdXNl
+ZCBpdC4KCnN0YXRpYyB2b2lkIGRjY3BfdjZfcmVxc2tfZGVzdHJ1Y3RvcihzdHJ1Y3QgcmVxdWVz
+dF9zb2NrICpyZXEpCnsKICAgICAgICBkY2NwX2ZlYXRfbGlzdF9wdXJnZSgmZGNjcF9yc2socmVx
+KS0+ZHJlcV9mZWF0bmVnKTsKICAgICAgICBpZiAoaW5ldDZfcnNrKHJlcSktPnBrdG9wdHMgIT0g
+TlVMTCkKICAgICAgICAgICAgICAgIGtmcmVlX3NrYihpbmV0Nl9yc2socmVxKS0+cGt0b3B0cyk7
+Cn0KClBpZDogMCwgY29tbTogc3dhcHBlciBOb3QgdGFpbnRlZCAoMi42LjI2LXJjMiAjMSkKRUlQ
+OiAwMDYwOls8YzA1YWNkYWY+XSBFRkxBR1M6IDAwMDEwMjA2IENQVTogMApFSVAgaXMgYXQga2Zy
+ZWVfc2tiKzB4OS8weDMwCkVBWDogMDAwMDJmZGUgRUJYOiBjNzMwNmU4MCBFQ1g6IGM3ODAxMDgw
+IEVEWDogMDAwMDJmZGUKRVNJOiBjNzk4MzY4MCBFREk6IGM3MmQ5ODAwIEVCUDogYzA3NWFkZmMg
+RVNQOiBjMDc1YWRmYwpEUzogMDA3YiBFUzogMDA3YiBGUzogMDBkOCBHUzogMDAwMCBTUzogMDA2
+OApQcm9jZXNzIHN3YXBwZXIgKHBpZDogMCwgdGnANzVhMDAwIHRhc2vANmRmM2EwIHRhc2sudGnA
+NzE0MDAwKQpTdGFjazogYzA3NWFlMDggYzhhMjU5ZDggYzdhMGY4NDggYzA3NWFlMzggYzhhMjYw
+ZmMgYzc5ODM2ODAgYzcyZDk4MDAgYzcyZDliOTAKICAgICAgNjQwMDAwMDAgYzc5ODM2YTAgYzcz
+MDZlODAgOGNmMjQzN2YgYzdhMGY4NDggYzc5ODM2ODAgYzcyZDk4MDAgYzA3NWFlNzgKICAgICAg
+Yzg5ZTZjNzggYzc5ODM2ODAgYzcyZDk4MDAgMGE4MDQ1MDAgYzc5ODM2YTAgMGMwMTE5MDggZjI0
+MjA2Y2MgYzQ2YzM2NjAKQ2FsbCBUcmFjZToKWzxjOGEyNTlkOD5dID8gZGNjcF92Nl9yZXFza19k
+ZXN0cnVjdG9yKzB4MWYvMHgyMiBbZGNjcF9pcHY2XQpbPGM4YTI2MGZjPl0gPyBkY2NwX3Y2X2Nv
+bm5fcmVxdWVzdCsweDI0My8weDI3ZCBbZGNjcF9pcHY2XQpbPGM4OWU2Yzc4Pl0gPyBkY2NwX3Jj
+dl9zdGF0ZV9wcm9jZXNzKzB4M2QvMHg0YjUgW2RjY3BdCls8YzhhMjU5NzY+XSA/IGRjY3BfdjZf
+ZG9fcmN2KzB4MTMyLzB4MTc1IFtkY2NwX2lwdjZdCls8YzA1YmIzNTU+XSA/IHNrX2ZpbHRlcisw
+eDY2LzB4NmQKWzxjMDVhYjVjMj5dID8gc2tfcmVjZWl2ZV9za2IrMHgzMi8weDdjCls8YzhhMjY3
+YjM+XSA/IGRjY3BfdjZfcmN2KzB4MmE1LzB4MzJhIFtkY2NwX2lwdjZdCls8YzhlZTJlZTA+XSA/
+IGlwNl9pbnB1dF9maW5pc2grMHgxNTgvMHgyODAgW2lwdjZdCls8YzhlZTMwNGE+XSA/IGlwNl9p
+bnB1dCsweDQyLzB4NDcgW2lwdjZdCls8YzhlZTMzNTc+XSA/IGlwdjZfcmN2KzB4MjdjLzB4MmM5
+IFtpcHY2XQpbPGMwNWIxMzM2Pl0gPyBuZXRpZl9yZWNlaXZlX3NrYisweDJlMC8weDM0OQpbPGM4
+OGYyYTEyPl0gPyBwY25ldDMyX3BvbGwrMHgzMzMvMHg2NmUgW3BjbmV0MzJdCls8YzA0MzhhZmE+
+XSA/IGNsb2Nrc291cmNlX3dhdGNoZG9nKzB4MjFlLzB4MjJkCls8YzA0MDQyOGI+XSA/IGNvbW1v
+bl9pbnRlcnJ1cHQrMHgyMy8weDI4Cls8YzA1YjMwOGM+XSA/IG5ldF9yeF9hY3Rpb24rMHg4Zi8w
+eDE0NwpbPGMwNDI3YzViPl0gPyBfX2RvX3NvZnRpcnErMHg2NC8weGNkCls8YzA0MDU4OTg+XSA/
+IGRvX3NvZnRpcnErMHg1NS8weDg4Cls8YzA0MjdiZjU+XSA/IGlycV9leGl0KzB4MzgvMHgzYQpb
+PGMwNDEyYjQyPl0gPyBzbXBfYXBpY190aW1lcl9pbnRlcnJ1cHQrMHg3MS8weDdmCls8YzA0MDI1
+ZWI+XSA/IGRlZmF1bHRfaWRsZSsweDAvMHg0MgpbPGMwNDA0MzQ4Pl0gPyBhcGljX3RpbWVyX2lu
+dGVycnVwdCsweDI4LzB4MzAKWzxjMDQwMjVlYj5dID8gZGVmYXVsdF9pZGxlKzB4MC8weDQyCls8
+YzA0MDI2MTg+XSA/IGRlZmF1bHRfaWRsZSsweDJkLzB4NDIKWzxjMDQwMjU2Nj5dID8gY3B1X2lk
+bGUrMHg4Yi8weDlmCls8YzA2MGM4OWE+XSA/IHJlc3RfaW5pdCsweDRlLzB4NTAKPT09PT09PT09
+PT09IAoKClNpZ25lZC1vZmYtYnk6IFdlaSBZb25nanVuIDx5andlaUBjbi5mdWppdHN1LmNvbT4K
+Ci0tLSBhL25ldC9kY2NwL2lwdjYuYwkyMDA4LTA1LTI5IDIyOjI3OjU1LjAwMDAwMDAwMCAtMDQw
+MAorKysgYi9uZXQvZGNjcC9pcHY2LmMJMjAwOC0wNi0wNSAwNTo1ODowMC4wMDAwMDAwMDAgLTA0
+MDAKQEAgLTQxMyw2ICs0MTMsOSBAQCBzdGF0aWMgaW50IGRjY3BfdjZfY29ubl9yZXF1ZXN0KHN0
+cnVjdCBzCiAJaWYgKGRjY3BfcmVxc2tfaW5pdChyZXEsIGRjY3Bfc2soc2spLCBza2IpKQogCQln
+b3RvIGRyb3BfYW5kX2ZyZWU7CiAKKwlpcmVxNiA9IGluZXQ2X3JzayhyZXEpOworCWlyZXE2LT5w
+a3RvcHRzCT0gTlVMTDsKKwogCWRyZXEgPSBkY2NwX3JzayhyZXEpOwogCWlmIChkY2NwX3BhcnNl
+X29wdGlvbnMoc2ssIGRyZXEsIHNrYikpCiAJCWdvdG8gZHJvcF9hbmRfZnJlZTsKQEAgLTQyMCwx
+MCArNDIzLDggQEAgc3RhdGljIGludCBkY2NwX3Y2X2Nvbm5fcmVxdWVzdChzdHJ1Y3QgcwogCWlm
+IChzZWN1cml0eV9pbmV0X2Nvbm5fcmVxdWVzdChzaywgc2tiLCByZXEpKQogCQlnb3RvIGRyb3Bf
+YW5kX2ZyZWU7CiAKLQlpcmVxNiA9IGluZXQ2X3JzayhyZXEpOwogCWlwdjZfYWRkcl9jb3B5KCZp
+cmVxNi0+cm10X2FkZHIsICZpcHY2X2hkcihza2IpLT5zYWRkcik7CiAJaXB2Nl9hZGRyX2NvcHko
+JmlyZXE2LT5sb2NfYWRkciwgJmlwdjZfaGRyKHNrYiktPmRhZGRyKTsKLQlpcmVxNi0+cGt0b3B0
+cwk9IE5VTEw7CiAKIAlpZiAoaXB2Nl9vcHRfYWNjZXB0ZWQoc2ssIHNrYikgfHwKIAkgICAgbnAt
+PnJ4b3B0LmJpdHMucnhpbmZvIHx8IG5wLT5yeG9wdC5iaXRzLnJ4b2luZm8gfHwKCgotLQpUbyB1
+bnN1YnNjcmliZSBmcm9tIHRoaXMgbGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNj
+cCIgaW4KdGhlIGJvZHkgb2YgYSBtZXNzYWdlIHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcK
+TW9yZSBtYWpvcmRvbW8gaW5mbyBhdCAgaHR0cDovL3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8t
+aW5mby5odG1s
