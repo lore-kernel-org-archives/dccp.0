@@ -1,57 +1,123 @@
 From: Wei Yongjun <yjwei@cn.fujitsu.com>
-Date: Tue, 10 Jun 2008 07:31:15 +0000
-Subject: [PATCH] DCCP: Fix double free of skb which may cause kernel panic
-Message-Id: <484E2DC3.1030407@cn.fujitsu.com>
+Date: Tue, 10 Jun 2008 07:45:24 +0000
+Subject: Re: [PATCH] DCCP: Fix double free of skb which may cause kernel panic
+Message-Id: <484E3114.4090808@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
+References: <484E2DC3.1030407@cn.fujitsu.com>
+In-Reply-To: <484E2DC3.1030407@cn.fujitsu.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-U2luY2Ugc2tiIHdpbGwgYmUgZnJlZSBhZnRlciBzZW5kIHJlc2V0LCBrZnJlZV9za2Ioc2tiKSBp
-biAKZGNjcF92Nl9jdGxfc2VuZF9yZXNldCgpIHdpbGwgY2F1c2Uga2VybmVsIHBhbmljLgoKc3Rh
-dGljIGludCBkY2NwX3Y2X2RvX3JjdihzdHJ1Y3Qgc29jayAqc2ssIHN0cnVjdCBza19idWZmICpz
-a2IpCi4uLnNuaXAuLi4KcmVzZXQ6CiAgICAgICAgIGRjY3BfdjZfY3RsX3NlbmRfcmVzZXQoc2ss
-IHNrYik7CmRpc2NhcmQ6CiAgICAgICAgIGlmIChvcHRfc2tiICE9IE5VTEwpCiAgICAgICAgICAg
-ICAgICAgX19rZnJlZV9za2Iob3B0X3NrYik7CiAgICAgICAga2ZyZWVfc2tiKHNrYik7CiAgICAg
-ICAgcmV0dXJuIDA7Cn0KClRoaXMgcGF0Y2ggZml4IHRoaXMgcHJvYmxlbS4KClBpZDogMCwgY29t
-bTogc3dhcHBlciBOb3QgdGFpbnRlZCAoMi42LjI2LXJjMiAjMSkKRUlQOiAwMDYwOls8YzA1YWNk
-YWY+XSBFRkxBR1M6IDAwMDEwMjA2IENQVTogMApFSVAgaXMgYXQga2ZyZWVfc2tiKzB4OS8weDMw
-CkVBWDogMDAwMDJmZGUgRUJYOiBjNzMwNmU4MCBFQ1g6IGM3ODAxMDgwIEVEWDogMDAwMDJmZGUK
-RVNJOiBjNzk4MzY4MCBFREk6IGM3MmQ5ODAwIEVCUDogYzA3NWFkZmMgRVNQOiBjMDc1YWRmYwog
-RFM6IDAwN2IgRVM6IDAwN2IgRlM6IDAwZDggR1M6IDAwMDAgU1M6IDAwNjgKUHJvY2VzcyBzd2Fw
-cGVyIChwaWQ6IDAsIHRpwDc1YTAwMCB0YXNrwDZkZjNhMCB0YXNrLnRpwDcxNDAwMCkKU3RhY2s6
-IGMwNzVhZTA4IGM4YTI1OWQ4IGM3YTBmODQ4IGMwNzVhZTM4IGM4YTI2MGZjIGM3OTgzNjgwIGM3
-MmQ5ODAwIGM3MmQ5YjkwCiAgICAgICA2NDAwMDAwMCBjNzk4MzZhMCBjNzMwNmU4MCA4Y2YyNDM3
-ZiBjN2EwZjg0OCBjNzk4MzY4MCBjNzJkOTgwMCBjMDc1YWU3OAogICAgICAgYzg5ZTZjNzggYzc5
-ODM2ODAgYzcyZDk4MDAgMGE4MDQ1MDAgYzc5ODM2YTAgMGMwMTE5MDggZjI0MjA2Y2MgYzQ2YzM2
-NjAKQ2FsbCBUcmFjZToKIFs8YzhhMjU5ZDg+XSA/IGRjY3BfdjZfcmVxc2tfZGVzdHJ1Y3Rvcisw
-eDFmLzB4MjIgW2RjY3BfaXB2Nl0KIFs8YzhhMjYwZmM+XSA/IGRjY3BfdjZfY29ubl9yZXF1ZXN0
-KzB4MjQzLzB4MjdkIFtkY2NwX2lwdjZdCiBbPGM4OWU2Yzc4Pl0gPyBkY2NwX3Jjdl9zdGF0ZV9w
-cm9jZXNzKzB4M2QvMHg0YjUgW2RjY3BdCiBbPGM4YTI1OTc2Pl0gPyBkY2NwX3Y2X2RvX3Jjdisw
-eDEzMi8weDE3NSBbZGNjcF9pcHY2XQogWzxjMDViYjM1NT5dID8gc2tfZmlsdGVyKzB4NjYvMHg2
-ZAogWzxjMDVhYjVjMj5dID8gc2tfcmVjZWl2ZV9za2IrMHgzMi8weDdjCiBbPGM4YTI2N2IzPl0g
-PyBkY2NwX3Y2X3JjdisweDJhNS8weDMyYSBbZGNjcF9pcHY2XQogWzxjOGVlMmVlMD5dID8gaXA2
-X2lucHV0X2ZpbmlzaCsweDE1OC8weDI4MCBbaXB2Nl0KIFs8YzhlZTMwNGE+XSA/IGlwNl9pbnB1
-dCsweDQyLzB4NDcgW2lwdjZdCiBbPGM4ZWUzMzU3Pl0gPyBpcHY2X3JjdisweDI3Yy8weDJjOSBb
-aXB2Nl0KIFs8YzA1YjEzMzY+XSA/IG5ldGlmX3JlY2VpdmVfc2tiKzB4MmUwLzB4MzQ5CiBbPGM4
-OGYyYTEyPl0gPyBwY25ldDMyX3BvbGwrMHgzMzMvMHg2NmUgW3BjbmV0MzJdCiBbPGMwNDM4YWZh
-Pl0gPyBjbG9ja3NvdXJjZV93YXRjaGRvZysweDIxZS8weDIyZAogWzxjMDQwNDI4Yj5dID8gY29t
-bW9uX2ludGVycnVwdCsweDIzLzB4MjgKIFs8YzA1YjMwOGM+XSA/IG5ldF9yeF9hY3Rpb24rMHg4
-Zi8weDE0NwogWzxjMDQyN2M1Yj5dID8gX19kb19zb2Z0aXJxKzB4NjQvMHhjZAogWzxjMDQwNTg5
-OD5dID8gZG9fc29mdGlycSsweDU1LzB4ODgKIFs8YzA0MjdiZjU+XSA/IGlycV9leGl0KzB4Mzgv
-MHgzYQogWzxjMDQxMmI0Mj5dID8gc21wX2FwaWNfdGltZXJfaW50ZXJydXB0KzB4NzEvMHg3Zgog
-WzxjMDQwMjVlYj5dID8gZGVmYXVsdF9pZGxlKzB4MC8weDQyCiBbPGMwNDA0MzQ4Pl0gPyBhcGlj
-X3RpbWVyX2ludGVycnVwdCsweDI4LzB4MzAKIFs8YzA0MDI1ZWI+XSA/IGRlZmF1bHRfaWRsZSsw
-eDAvMHg0MgogWzxjMDQwMjYxOD5dID8gZGVmYXVsdF9pZGxlKzB4MmQvMHg0MgogWzxjMDQwMjU2
-Nj5dID8gY3B1X2lkbGUrMHg4Yi8weDlmCiBbPGMwNjBjODlhPl0gPyByZXN0X2luaXQrMHg0ZS8w
-eDUwCiA9PT09PT09PT09PQoKU2lnbmVkLW9mZi1ieTogV2VpIFlvbmdqdW4gPHlqd2VpQGNuLmZ1
-aml0c3UuY29tPgoKLS0tIGEvbmV0L2RjY3AvaXB2Ni5jCTIwMDgtMDUtMjkgMjI6Mjc6NTUuMDAw
-MDAwMDAwIC0wNDAwCisrKyBiL25ldC9kY2NwL2lwdjYuYwkyMDA4LTA2LTA1IDA0OjEzOjE4LjAw
-MDAwMDAwMCAtMDQwMApAQCAtMzMzLDggKzMzMyw2IEBAIHN0YXRpYyB2b2lkIGRjY3BfdjZfY3Rs
-X3NlbmRfcmVzZXQoc3RydWMKIAkJCXJldHVybjsKIAkJfQogCX0KLQotCWtmcmVlX3NrYihza2Ip
-OwogfQogCiBzdGF0aWMgc3RydWN0IHJlcXVlc3Rfc29ja19vcHMgZGNjcDZfcmVxdWVzdF9zb2Nr
-X29wcyA9IHsKCgoKCi0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBs
-aW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jk
-b21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5r
-ZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
+Hi, Gerrit Renker
+
+Please ignore this mail, I will sent the patch again after the patch is=20
+witten correctly.
+
+Thanks.
+
+Wei Yongjun wrote:
+
+> Since skb will be free after send reset, kfree_skb(skb) in=20
+> dccp_v6_ctl_send_reset() will cause kernel panic.
+>
+> static int dccp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
+> ...snip...
+> reset:
+>         dccp_v6_ctl_send_reset(sk, skb);
+> discard:
+>         if (opt_skb !=3D NULL)
+>                 __kfree_skb(opt_skb);
+>        kfree_skb(skb);
+>        return 0;
+> }
+>
+> This patch fix this problem.
+>
+> Pid: 0, comm: swapper Not tainted (2.6.26-rc2 #1)
+> EIP: 0060:[<c05acdaf>] EFLAGS: 00010206 CPU: 0
+> EIP is at kfree_skb+0x9/0x30
+> EAX: 00002fde EBX: c7306e80 ECX: c7801080 EDX: 00002fde
+> ESI: c7983680 EDI: c72d9800 EBP: c075adfc ESP: c075adfc
+> DS: 007b ES: 007b FS: 00d8 GS: 0000 SS: 0068
+> Process swapper (pid: 0, ti=C075a000 task=C06df3a0 task.ti=C0714000)
+> Stack: c075ae08 c8a259d8 c7a0f848 c075ae38 c8a260fc c7983680 c72d9800=20
+> c72d9b90
+>       64000000 c79836a0 c7306e80 8cf2437f c7a0f848 c7983680 c72d9800=20
+> c075ae78
+>       c89e6c78 c7983680 c72d9800 0a804500 c79836a0 0c011908 f24206cc=20
+> c46c3660
+> Call Trace:
+> [<c8a259d8>] ? dccp_v6_reqsk_destructor+0x1f/0x22 [dccp_ipv6]
+> [<c8a260fc>] ? dccp_v6_conn_request+0x243/0x27d [dccp_ipv6]
+> [<c89e6c78>] ? dccp_rcv_state_process+0x3d/0x4b5 [dccp]
+> [<c8a25976>] ? dccp_v6_do_rcv+0x132/0x175 [dccp_ipv6]
+> [<c05bb355>] ? sk_filter+0x66/0x6d
+> [<c05ab5c2>] ? sk_receive_skb+0x32/0x7c
+> [<c8a267b3>] ? dccp_v6_rcv+0x2a5/0x32a [dccp_ipv6]
+> [<c8ee2ee0>] ? ip6_input_finish+0x158/0x280 [ipv6]
+> [<c8ee304a>] ? ip6_input+0x42/0x47 [ipv6]
+> [<c8ee3357>] ? ipv6_rcv+0x27c/0x2c9 [ipv6]
+> [<c05b1336>] ? netif_receive_skb+0x2e0/0x349
+> [<c88f2a12>] ? pcnet32_poll+0x333/0x66e [pcnet32]
+> [<c0438afa>] ? clocksource_watchdog+0x21e/0x22d
+> [<c040428b>] ? common_interrupt+0x23/0x28
+> [<c05b308c>] ? net_rx_action+0x8f/0x147
+> [<c0427c5b>] ? __do_softirq+0x64/0xcd
+> [<c0405898>] ? do_softirq+0x55/0x88
+> [<c0427bf5>] ? irq_exit+0x38/0x3a
+> [<c0412b42>] ? smp_apic_timer_interrupt+0x71/0x7f
+> [<c04025eb>] ? default_idle+0x0/0x42
+> [<c0404348>] ? apic_timer_interrupt+0x28/0x30
+> [<c04025eb>] ? default_idle+0x0/0x42
+> [<c0402618>] ? default_idle+0x2d/0x42
+> [<c0402566>] ? cpu_idle+0x8b/0x9f
+> [<c060c89a>] ? rest_init+0x4e/0x50
+> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D>
+>
+> Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
+>
+> --- a/net/dccp/ipv6.c    2008-05-29 22:27:55.000000000 -0400
+> +++ b/net/dccp/ipv6.c    2008-06-05 04:13:18.000000000 -0400
+> @@ -333,8 +333,6 @@ static void dccp_v6_ctl_send_reset(struc
+>             return;
+>         }
+>     }
+> -
+> -    kfree_skb(skb);
+> }
+>
+> static struct request_sock_ops dccp6_request_sock_ops =3D {
+>
+>
+>
+>
+> --=20
+> To unsubscribe from this list: send the line "unsubscribe dccp" in
+> the body of a message to majordomo@vger.kernel.org
+> More majordomo info at  http://vger.kernel.org/majordomo-info.html
+>
+>
+
+
+--=20
+--------------------------------------------------
+Wei Yongjun
+Development Dept.I
+Nanjing Fujitsu Nanda Software Tech. Co., Ltd.(FNST)
+8/F., Civil Defense Building, No.189 Guangzhou Road,
+Nanjing, 210029, China
+TEL: +86+25-86630523-836
+COINS: 79955-836
+FAX: +86+25-83317685
+MAIL: yjwei@cn.fujitsu.com
+--------------------------------------------------
+This communication is for use by the intended recipient(s) only and may con=
+tain information that is privileged, confidential and exempt from disclosur=
+e under applicable law. If you are not an intended recipient of this commun=
+ication, you are hereby notified that any dissemination, distribution or co=
+pying hereof is strictly prohibited.  If you have received this communicati=
+on in error, please notify me by reply e-mail, permanently delete this comm=
+unication from your system, and destroy any hard copies you may have printed
+
