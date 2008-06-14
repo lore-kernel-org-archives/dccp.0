@@ -1,92 +1,120 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 12 Jun 2008 09:07:10 +0000
-Subject: Re: [PATCH 1/1] [DCCP][QPOLICY]: Make information about qpolicies
-Message-Id: <20080612090710.GA6307@gerrit.erg.abdn.ac.uk>
+From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
+Date: Sat, 14 Jun 2008 23:58:28 +0000
+Subject: Re: [PATCH 1/1] [DCCP][QPOLICY]: Make information about qpolicies available to userspace
+Message-Id: <200806150158.28488.tomasz@grobelny.oswiecenia.net>
 List-Id: <dccp.vger.kernel.org>
 References: <20080517155916.34622BD22@poczta.oswiecenia.net>
 In-Reply-To: <20080517155916.34622BD22@poczta.oswiecenia.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="windows-1252"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-fCA+IEJ1dCB0aGVyZSBhcmUgYWxzbyBhcmVhcyB3aGVyZSB0aGUgcmF0ZSBvZiBjaGFuZ2UgaXMg
-cmVsYXRpdmVseSBsb3cgb3IKfCA+IGV2ZW4gYWJzZW50OiBEb2N1bWVudGF0aW9uL0FCSS9SRUFE
-TUUgZm9yIGluc3RhbmNlIG1lbnRpb25zIDQgZGlmZmVyZW50CnwgPiBsZXZlbHMgb2Ygc3RhYmls
-aXR5IChzdGFibGUvdGVzdGluZy9vYnNvbGV0ZS9yZW1vdmVkKSwgdGhlIG1vc3QgZW50cmllcwp8
-ID4gYXJlIHVuZGVyIGB0ZXN0aW5nJy4KfCA+CnwgVGhpcyBvbmUgc2hvdWxkIHByb2JhYmx5IGJl
-IG1hcmtlZCBhcyB0ZXN0aW5nIHRvby4gQW5kIHByb2JhYmx5IGJlIG1vdmVkIHRvIAp8IHN0YWJs
-ZSB3aXRoIHRpbWUgKHdoZW4gaXQgcHJvdmVzIHVzZWZ1bCBmb3IgYXBwbGljYXRpb25zKS4KfCAK
-SW4gdGhlIHRlc3QgdHJlZSB0aGVyZSBhcmUgdHdvIGxldmVscyBvZiB0ZXN0aW5nOgoKICogYW55
-IHN1YnRyZWVzIHRyZWUgYXJlIG9wZW4gZm9yIHdyaXRpbmcgZXhwZXJpbWVudGFsIHBhdGNoZXMs
-CiAgIGZvciByZWZpbmVtZW50LCBhbmQgZm9yIHBhdGNoZXMgdGhhdCBtYXkgYmUgcmV3cml0dGVu
-IGxhdGVyOwoKICogdGhlIHRlc3QgdHJlZSBpdHNlbGYgaXMgZm9yIGxhdGVyIGNvbnNpZGVyYXRp
-b24gaW4gbWFpbmxpbmUgYW5kIHRoZXJlZm9yZQogICBpcyBtb3JlIGNvbnNlcnZhdGl2ZS4gVGhl
-IG1haW4gcmVhc29uIGZvciBrZWVwaW5nIHRoZSBwYXRjaGVzIGluIHRoYXQgdHJlZQogICBpcyB0
-byBleHRlbmQgdGhlIHBoYXNlIG9mIHBhdGNoIHJldmlldywgdG8gZmlsdGVyIG91dCBidWdzIHRo
-YXQgbWF5IHN0aWxsCiAgIGx1cmsgc29tZXdoZXJlLCBzbyB0aGF0IHJlZ3Jlc3Npb25zIGFyZSBt
-aW5pbWlzZWQgd2hlbiBzdWJtaXR0aW5nLgoKCnwgPiB3aHkgbm90IGltcGxlbWVudCBhIHN5c2N0
-bCAod2hpY2ggaXMgYWxzbyBtaXJyb3JlZCBpbgp8ID4gL3Byb2Mvc3lzKSB0aGF0IGNvbnRhaW5z
-IGFsbCBhdmFpbGFibGUvaW1wbGVtZW50ZWQgcXBvbGljaWVzIGFzIGEKfCA+IHNwYWNlLXNlcGFy
-YXRlZCBzdHJpbmcsIHN1Y2ggYXMKfCA+CnwgPiAJY2F0IC9wcm9jL3N5cy9uZXQvaXB2NC90Y3Bf
-YXZhaWxhYmxlX2Nvbmdlc3Rpb25fY29udHJvbCA/CnwgPgp8IENvdWxkIGJlIC9wcm9jL3N5cy4g
-SSBqdXN0IGhhZCBhbiBpbXByZXNzaW9uIHRoYXQgc3lzY3RscyBhcmUgZm9yIHNldHRpbmcgCnwg
-Y2VydGFpbiB2YXJpYWJsZXMgdXNlZCBpbiBrZXJuZWwuIEJ1dCBhcyBmYXIgYXMgSSB1bmRlcnN0
-YW5kIGl0IHRoZSAKfCBkaWZmZXJlbmNlIGlzIGhpZ2hseSBzdWJqZWN0aXZlIGFuZCBJJ20gb2sg
-d2l0aCBib3RoIC9wcm9jIGFuZCAvcHJvYy9zeXMuIApZZXMgdGhhdCBpcyBub3QgaW1tZWRpYXRl
-bHkgb2J2aW91cywgdGhlcmUgYXJlIGZhciBtb3JlIHN5c2N0bHMgd2l0aCB3cml0ZQpwZXJtaXNz
-aW9ucyB0aGFuIGluZm9ybWF0aXZlL3JlYWQtb25seSBzeXNjdGxzOgogKiByZWFkLW9ubHk6ICAg
-NyBlbnRyaWVzIHdpdGggIGBmaW5kIC9wcm9jL3N5cy9uZXQvIC1wZXJtICA0NDRgIAogKiB3cml0
-ZTogICAgIDQ4NiBlbnRyaWVzIHdpdGggIGBmaW5kIC9wcm9jL3N5cy9uZXQvIC1wZXJtIC8yMjJg
-CgoKfCBXb3VsZCBiZSBuaWNlIHRvIGhhdmUgbW9yZSBvcGluaW9ucyAoQXJuYWxkbz8gb3RoZXJz
-Pykgd2hldGhlciB3ZSBzaG91bGQgCnwgZmF2b3VyIG9uZSBvdmVyIG90aGVyLgpBZ3JlZSB3aXRo
-IHRoaXMgY2FsbC4gCgoKfCBCdXQgaWYgdGhlIGFwcGxpY2F0aW9uIHdhbnRzIGluZm9ybWF0aW9u
-IGFib3V0IGltcGxlbWVudGVkIHBhcmFtZXRlcnMgdGhlcmUgaXMgCnwgY3VycmVudGx5IG5vIHdh
-eSB0byBnZXQgaXQuIEl0IGNhbiB0cnkgdG8gc2VuZCgpIHBhY2tldCBhbmQgY2hlY2sgcmV0dXJu
-IAp8IHZhbHVlICh3aGljaCBpcyBxdWl0ZSBhIGhhY2sgdG8gYmUgaG9uZXN0KS4gSXQgd2lsbCB3
-b3JrIGlmIHRoZSBwYXJhbWV0ZXIgaXMgCnwgbm90IGltcGxlbWVudGVkIGF0IGFsbC4gQnV0IHdo
-YXQgaGFwcGVucyB3aGVuIHlvdSB0cnkgdG8gc2V0IHByaW9yaXR5IGZvciBhIAp8IHBhY2tldCBh
-bmQgdXNlICJzaW1wbGUiIHFwb2xpY3k/IEFGQUlSIG5vdGhpbmcgLSB5b3UgZ2V0IG5vIGluZm9y
-bWF0aW9uIAp8IHdoYXRzb2V2ZXIgdGhhdCB0aGlzIHBhcmFtZXRlciB3aWxsIG5vdCBiZSB1c2Vk
-IGluc2lkZSBxcG9saWN5Lgp8IAp8IEFuZCB0aGF0J3Mgd2h5IHdlIG5lZWQgaW5mb3JtYXRpb24g
-YWJvdXQgcGFyYW1ldGVycyBpbiAvcHJvYyBvciAvcHJvYy9zeXMuCnwgClNvcnJ5IEkgY2FuJ3Qg
-c2VlIGhlcmUgd2h5IHdlIG5lZWQgaW5mb3JtYXRpb24gYWJvdXQgcGFyYW1ldGVycy4gV2hlbgpp
-bnRyb2R1Y2luZyBhIG5ldyBzb2NrZXQgb3B0aW9uIHRoZXJlIGlzIGEgY29udmVudGlvbiBvZiBo
-b3cgdG8gdXNlIGl0LgoKRm9yIHNvY2tvcHRzLCB0aGUgdHlwZSBvZiB0aGUgYXJndW1lbnQgaXMg
-bGlzdGVkIGZvciBlYWNoIG9wdGlvbiB0eXBlLgoKV2l0aCBxcG9saWNpZXMsIHRoZXJlIGlzIG9u
-ZSBtb3JlIGluZGlyZWN0aW9uLCBzaW5jZSB0aGVyZSBpcyBubwppbW1lZGlhdGUgcmV0dXJuIHZh
-bHVlLiBCdXQgZXZlbiBmb3IgdGhpcyBraW5kIG9mIHNvY2tldCBvcHRpb24gdGhlcmUKZXhpc3Qg
-c2ltaWxhciBjYXNlcywgZm9yIGluc3RhbmNlIGluIHRoZSBtYW5wYWdlIG9mIGlwdjYoNykKICog
-SVBWNl9SRUNWRVJSIChib29sZWFuKSBzZXRzIGRlbGl2ZXJ5IG9mIGVycm9yIG1lc3NhZ2VzIHdo
-aWNoIHJldHVybiBhICJzdHJ1Y3QKICAgc29ja19leHRlbmRlZF9lcnIiIHZpYSBjbXNnKDMpIHdo
-ZW4gTVNHX0VSUlFVRVVFIGlzIHNldCBpbiByZWN2bXNnKDIpCiAqIElQVjZfUEtUSU5GTyAoYm9v
-bGVhbikgc2V0cyB0aGUgZGVsaXZlcnkgb2YgSVBWNl9QS1RJTkZPIGNvbnRyb2wgbWVzc2FnZXMs
-CiAgIGFuZCB0aGlzIG9uZSBoYXMgYW4gYXNzb2NpYXRlZCBjb25zdHJhaW50IC0gd29ya3Mgb25s
-eSBvbiBTT0NLX0RHUkFNL1NPQ0tfUkFXCgoKfCA+IElmIHdlIGFncmVlIG9uIHVzaW5nIHVuaXF1
-ZSBzdHJpbmdzIHRvIGlkZW50aWZ5IHFwb2xpY2llcyB0aGVuIHdlIGNhbgp8ID4ga2VlcCB0aGUg
-cnVudGltZSBkaXNjb3ZlcnkgbXVjaCBzaW1wbGVyLiBJIHRoaW5rIGEgbWFucGFnZSB3b3VsZCBi
-ZSBtb3JlCnwgPiBoZWxwZnVsIGhlcmUsIHNpbmNlIHRoZSBydW50aW1lIGRpc2NvdmVyeSBvZiBw
-YXJhbWV0ZXJzIGlzIG5vdAp8ID4gaW1tZWRpYXRlbHkgb2J2aW91cy4KfCA+CnwgTWFucGFnZSBv
-ZiB3aGF0PyBEb2N1bWVudGF0aW9uIGlzIGNlcnRhaW5seSBuZWVkZWQgYnV0IGJlZm9yZSB3cml0
-aW5nIG9uZSB3ZSAKfCBuZWVkIHRvIGhhdmUgYSBiYXNpYyBpbXBsZW1lbnRhdGlvbiB3ZSBhZ3Jl
-ZSB1cG9uLgp8IC0tIApUaGVyZSBpcyBpbmRlZWQgYSBtaXN1bmRlcnN0YW5kaW5nLgoKV2UgaGF2
-ZSBhbHJlYWR5IGFuIGltcGxlbWVudGF0aW9uIHdlIGFncmVlZCB1cG9uOgpodHRwOi8vZWRlbi1m
-ZWVkLmVyZy5hYmRuLmFjLnVrL2NnaS1iaW4vZ2l0d2ViLmNnaT9w3GNwX2V4cC5naXQ7YT1jb21t
-aXRkaWZmO2iHY2Y4YjNjZTk2Mzk3ZjkzNDc3NTYxN2JhMjRlYjFmZjQwNDc0N2EKCldpdGggYSBt
-YW5wYWdlIEkgbWVhbiB0byBkb2N1bWVudCAKICogaG93IHRoZSB0d28gY3VycmVudGx5IGF2YWls
-YWJsZSBxcG9saWNpZXMgKCJzaW1wbGUiIGFuZCAicHJpbyIpIGFyZSBlbmFibGVkOwogKiB3aGlj
-aCBhZGRpdGlvbmFsIGNvbnN0cmFpbnRzIHRoZXkgaGF2ZSAoZS5nLiBob3cgdGhleSBpbnRlcnBy
-ZXQgdHhfcWxlbik7CiAqIGluZm9ybWF0aW9uIHNwZWNpZmljIHRvIGEgcG9saWN5IChlLmcuIHRo
-YXQgaGlnaGVyIHByaW9yaXR5IHZhbHVlcyBpbiB0aGUKICAgInByaW8iIHBvbGljeSBtZWFuIGEg
-aGlnaGVyIHByaW9yaXR5LCBjb21wYXJhYmxlIHRvIFNPX1BSSU9SSVRZIGluIHNvY2tldCg3KSk7
-CiAqIHdoaWNoIGFuY2lsbGFyeSBkYXRhIHRoZSBwb2xpY2llcyByZXF1aXJlICh0aGUgcHJvY2Zz
-IHBhcmFtZXRlcnMpCiAgIC0gc2ltcGxlOiBubyBhbmNpbGxhcnkgcGFyYW1ldGVycwogICAtIHBy
-aW86ICAgdTMyIHByaW9yaXR5IHZhbHVlLCBwYXNzZWQgYXMgRENDUF9TQ01fUFJJT1JJVFkgdmlh
-IGNtc2coMyksCiAgICAgICAgICAgICB1c2luZyBhIGxldmVsIG9mIFNPTF9EQ0NQIGFuZCBhIGxl
-bmd0aCBvZiBDTVNHX0xFTihzaXplb2YodWludDMyX3QpKTsKICogLi4uIHByb2JhYmx5IEkgaGF2
-ZSBtaXNzZWQgc29tZXRoaW5nIGhlcmUKCldpdGggdGhhdCBraW5kIG9mIGRvY3VtZW50YXRpb24s
-IEkgdGhpbmssIHdlIHdvdWxkIG5vdCBuZWVkIHJ1bnRpbWUgZGlzY292ZXJ5Cm9mIHBhcmFtZXRl
-cnMuCi0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1
-YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIu
-a2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3Jn
-L21ham9yZG9tby1pbmZvLmh0bWw=
+Dnia Thursday 12 of June 2008, Gerrit Renker napisa=B3:
+> | But if the application wants information about implemented parameters
+> | there is currently no way to get it. It can try to send() packet and
+> | check return value (which is quite a hack to be honest). It will work if
+> | the parameter is not implemented at all. But what happens when you try =
+to
+> | set priority for a packet and use "simple" qpolicy? AFAIR nothing - you
+> | get no information whatsoever that this parameter will not be used insi=
+de
+> | qpolicy.
+> |
+> | And that's why we need information about parameters in /proc or
+> | /proc/sys.
+>
+> Sorry I can't see here why we need information about parameters. When
+> introducing a new socket option there is a convention of how to use it.
+>
+> For sockopts, the type of the argument is listed for each option type.
+>
+You seem to assume that a given qpolicy is a fixed set of functionality at =
+the=20
+time of submission to the mainline kernel. In that case you are right, the =
+
+application developer knows which parameters he can attach to a packet to b=
+e=20
+sent (and (s)he knows it at the time of development), so no parameter=20
+detection is necessary.
+
+But I view it a bit differently. I think we have to go back to the discussi=
+on=20
+about how to add the "timeout" parameter (or any other). Basically there ar=
+e=20
+two ways:
+ 1. add a new "timeout" qpolicy (as you proposed),
+ 2. extend an existing "prio" qpolicy adding DCCP_SCM_TIMEOUT parameter (as=
+ I=20
+propose). BTW, the "prio" name is a bit misleading, the qpolicy should=20
+probably be named "advanced" or something like that.
+
+In other words the basic question is: do we want to add new parameters to=20
+existing qpolicies (then we need parameter discovery) or we don't want new =
+
+parameters (then we don't need information about parameters available at=20
+runtime).
+
+Having defined the alternatives it's time to decide which is better. I, of =
+
+course, claim that mine (which is adding new parameters to existing=20
+qpolicies). That's simply because I think that providing both=20
+DCCP_SCM_TIMEOUT and DCCP_SCM_PRIORITY parameters may be useful. And I don'=
+t=20
+see an obvoius way of achieving that goal with "new policy for new paramete=
+r"=20
+approach.
+
+I hope this lengthy text is understandable. Either way, the question is=20
+simple: what is your concept of adding DCCP_SCM_TIMEOUT parameter?
+
+> | > If we agree on using unique strings to identify qpolicies then we can
+> | > keep the runtime discovery much simpler. I think a manpage would be
+> | > more helpful here, since the runtime discovery of parameters is not
+> | > immediately obvious.
+> |
+> | Manpage of what? Documentation is certainly needed but before writing o=
+ne
+> | we need to have a basic implementation we agree upon.
+> | --
+>
+> There is indeed a misunderstanding.
+>
+> We have already an implementation we agreed upon:
+> http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dcom=
+mitd
+>iff;h=87cf8b3ce96397f934775617ba24eb1ff404747a
+>
+Yes, but I would consider it not yet ready for application development. Why=
+?=20
+See subject of this mail and previous paragraphs.
+
+> With a manpage I mean to document
+Is there any "man dccp"?
+
+>  * how the two currently available qpolicies ("simple" and "prio") are
+> enabled; * which additional constraints they have (e.g. how they interpret
+> tx_qlen); * information specific to a policy (e.g. that higher priority
+> values in the "prio" policy mean a higher priority, comparable to
+> SO_PRIORITY in socket(7)); * which ancillary data the policies require (t=
+he
+> procfs parameters) - simple: no ancillary parameters
+>    - prio:   u32 priority value, passed as DCCP_SCM_PRIORITY via cmsg(3),
+>              using a level of SOL_DCCP and a length of
+> CMSG_LEN(sizeof(uint32_t)); * ... probably I have missed something here
+>
+Fine. But where exactly should it be described? Which file? I downloaded=20
+latest man pages from [1] but dccp is not even mentioned there. Or should a=
+=20
+new man page be created (which would involve explaining what is dccp in the=
+=20
+first place)?
+
+[1] http://www.kernel.org/pub/linux/docs/manpages/man-pages-2.80.tar.bz2
+
+> With that kind of documentation, I think, we would not need runtime
+> discovery of parameters.
+I still don't agree, see previous paragraphs.
+--=20
+Regards,
+Tomasz Grobelny
