@@ -1,23 +1,27 @@
-From: David Miller <davem@davemloft.net>
-Date: Tue, 10 Jun 2008 19:32:36 +0000
-Subject: Re: [Patch 0/7] [dccp]: DCCP bug-fixes for net-2.6
-Message-Id: <20080610.123236.158548229.davem@davemloft.net>
+From: Wei Yongjun <yjwei@cn.fujitsu.com>
+Date: Tue, 17 Jun 2008 10:42:56 +0000
+Subject: QUESTION : Feature length about the non-negotiable feature
+Message-Id: <48579530.4010807@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1213102423-27486-1-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1213102423-27486-1-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 10 Jun 2008 13:53:36 +0100
+Now non-negotiable feature does not has a fix size, it's length is 
+decide by the value of the non-negotiable feature. For example, the 
+client send Sequence Window Feature as the following: 0x23 0x04 0x03 
+0x64, the Sequence Window Feature has the length of 1-byte only.
 
-> please consider pulling from
-> 
-> 	git://eden-feed.erg.abdn.ac.uk/net-2.6 
+But RFC4340 said:
 
-Please redo your tree, fixing up the SHA1 commit ID reference in the
-first changeset as I asked, and I will pull this into net-2.6
+7.5.2.  Sequence Window Feature
+   Sequence Window has feature number 3 and is non-negotiable.  It 
+takes  48-bit (6-byte) integer values, like DCCP sequence numbers.  
+Change  and Confirm options for Sequence Window are therefore 9 bytes long.
 
-Thanks.
+Is this correct? Or there are some RFCs said the non-negotiable feature 
+has variable length?
+
+
+
