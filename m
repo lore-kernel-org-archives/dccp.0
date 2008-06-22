@@ -1,24 +1,21 @@
-From: David Miller <davem@davemloft.net>
-Date: Thu, 12 Jun 2008 01:10:16 +0000
-Subject: Re: [Patch 0/6] [dccp]: DCCP bug-fixes for net-2.6 (revision 01)
-Message-Id: <20080611.181016.52330906.davem@davemloft.net>
+From: Giuseppe Galeota <giuseppegaleota@libero.it>
+Date: Sun, 22 Jun 2008 14:34:05 +0000
+Subject: DCCP and NAT
+Message-Id: <485E62DD.4050405@libero.it>
 List-Id: <dccp.vger.kernel.org>
-References: <20080611103647.GD8403@gerrit.erg.abdn.ac.uk>
-In-Reply-To: <20080611103647.GD8403@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 11 Jun 2008 11:36:47 +0100
+Dear Gerrit,
+do you remember me? I wrote you about  dccp_modprobe. I have resolved 
+that prolem, but now I have another.
 
-> please consider the revised set of DCCP Bug-Fix patches
-> (changelog below), which can be pulled from:
-> 
-> 	git://eden-feed.erg.abdn.ac.uk/net-2.6
-> 
-> All patches are in branch `master', on top of a freshly cloned net-2.6 tree.
-> Result has been compile-tested again.
+My ISP (Vodafone Italia) use the NAT, so it's impossible to use dccp 
+protocol in a connection between two host that support DCCP.
+Have you suggestion in order to resolve this problem?
 
-Pulled and pushed back out to net-2.6, thanks!
+Thanks,
+Giuseppe
+ 
