@@ -1,59 +1,73 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 10 Jun 2008 12:53:40 +0000
-Subject: [PATCH 4/7] dccp ccid-3: TFRC reverse-lookup Bug-Fix
-Message-Id: <1213102423-27486-5-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 23 Jun 2008 14:16:28 +0000
+Subject: [Announce]: Test Tree updated to allow ECN support in Ack Vectors
+Message-Id: <20080623141628.GA1249@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This fixes a bug in the reverse lookup of p: given a value f(p), instead of p,
-the function returned the smallest tabulated value f(p).
+This is a small change in the internal Ack Vector API of the test tree.
 
-The smallest tabulated value of
+The reason is that dccp_ackvec_input() needs a reference to the @skb, since
+otherwise it will later not be able to 
+ * detect whether the @skb was ECN-marked or
+ * what the value of the ECN-Nonce is on the @skb.
 
-   10^6 * f(p) =  sqrt(2*p/3) + 12 * sqrt(3*p/8) * (32 * p^3 + p)
+The following two patches were updated, the combined inter-diff is below:
+ * "dccp ccid-2: Update code for the Ack Vector input/registration routine"
+ * "dccp ccid-2: Consolidate Ack-Vector processing within main DCCP module"
 
-for p=0.0001 is 8172.
-
-Since this value is scaled by 10^6, the outcome of this bug is that a loss
-of 8172/10^6 = 0.8172% was reported whenever the input was below the table
-resolution of 0.01%.
-
-This means that the value was over 80 times too high, resulting in large spikes
-of the initial loss interval, thus unnecessarily reducing the throughput.
-
-Also corrected the printk format (%u for u32).
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/lib/tfrc_equation.c |    8 ++++----
- 1 files changed, 4 insertions(+), 4 deletions(-)
-
---- a/net/dccp/ccids/lib/tfrc_equation.c
-+++ b/net/dccp/ccids/lib/tfrc_equation.c
-@@ -661,7 +661,7 @@ u32 tfrc_calc_x(u16 s, u32 R, u32 p)
+--- b/net/dccp/ackvec.h
++++ b/net/dccp/ackvec.h
+@@ -106,7 +106,7 @@
+ extern struct dccp_ackvec *dccp_ackvec_alloc(const gfp_t priority);
+ extern void dccp_ackvec_free(struct dccp_ackvec *av);
  
- EXPORT_SYMBOL_GPL(tfrc_calc_x);
+-extern void dccp_ackvec_input(struct dccp_ackvec *av, u64 seqno, u8 state);
++extern void dccp_ackvec_input(struct dccp_ackvec *av, struct sk_buff *skb);
+ extern int  dccp_ackvec_update_records(struct dccp_ackvec *av, u64 seq, u8 sum);
+ extern void dccp_ackvec_clear_state(struct dccp_ackvec *av, const u64 ackno);
+ extern u16  dccp_ackvec_buflen(const struct dccp_ackvec *av);
+--- b/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -246,12 +246,12 @@
  
--/*
-+/**
-  *  tfrc_calc_x_reverse_lookup  -  try to find p given f(p)
-  *
-  *  @fvalue: function value to match, scaled by 1000000
-@@ -676,11 +676,11 @@ u32 tfrc_calc_x_reverse_lookup(u32 fvalue)
+ /**
+  * dccp_ackvec_input  -  Register incoming packet in the buffer
+- * @av:		buffer/records to update
+- * @seqno:	sequence number to register as received
+- * @state:	how packet with @seqno was received, one of %dccp_ackvec_states
+  */
+-void dccp_ackvec_input(struct dccp_ackvec *av, u64 seqno, u8 state)
++void dccp_ackvec_input(struct dccp_ackvec *av, struct sk_buff *skb)
+ {
++	u64 seqno = DCCP_SKB_CB(skb)->dccpd_seq;
++	enum dccp_ackvec_states state = DCCPAV_RECEIVED;
++
+ 	if (dccp_ackvec_is_empty(av)) {
+ 		dccp_ackvec_add_new(av, 1, seqno, state);
+ 		av->av_tail_ackno = seqno;
+--- b/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -162,13 +162,12 @@
+ static void dccp_handle_ackvec_processing(struct sock *sk, struct sk_buff *skb)
+ {
+ 	struct dccp_ackvec *av = dccp_sk(sk)->dccps_hc_rx_ackvec;
+-	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
  
- 	/* Error cases. */
- 	if (fvalue < tfrc_calc_x_lookup[0][1]) {
--		DCCP_WARN("fvalue %d smaller than resolution\n", fvalue);
--		return tfrc_calc_x_lookup[0][1];
-+		DCCP_WARN("fvalue %u smaller than resolution\n", fvalue);
-+		return TFRC_SMALLEST_P;
- 	}
- 	if (fvalue > tfrc_calc_x_lookup[TFRC_CALC_X_ARRSIZE - 1][0]) {
--		DCCP_WARN("fvalue %d exceeds bounds!\n", fvalue);
-+		DCCP_WARN("fvalue %u exceeds bounds!\n", fvalue);
- 		return 1000000;
- 	}
+-	if (av != NULL) {
+-		if (dcb->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
+-			dccp_ackvec_clear_state(av, dcb->dccpd_ack_seq);
+-		dccp_ackvec_input(av, dcb->dccpd_seq, DCCPAV_RECEIVED);
+-	}
++	if (av = NULL)
++		return;
++	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
++		dccp_ackvec_clear_state(av, DCCP_SKB_CB(skb)->dccpd_ack_seq);
++	dccp_ackvec_input(av, skb);
+ }
  
+ static void dccp_deliver_input_to_ccids(struct sock *sk, struct sk_buff *skb)
+-- 
