@@ -1,75 +1,65 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 29 Jul 2008 14:06:13 +0000
-Subject: [PATCH 6/6] dccp: Toggle debug output without module unloading
-Message-Id: <1217340373-12620-7-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sat, 12 Jul 2008 14:51:50 +0000
+Subject: [PATCH 4/4] dccp ccid-3: Length of loss intervals
+Message-Id: <1215874310-10534-5-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This sets the sysfs permissions so that root can toggle the `debug'
-parameter available for nearly every DCCP module. This is useful
-since there are various module inter-dependencies. The debug flag
-can now be toggled at runtime using
+This corrects an error in the computation of the open loss interval I_0:
+  * the interval length is (highest_seqno - start_seqno) + 1
+  * and not (highest_seqno - start_seqno).
 
-  echo 1 > /sys/module/dccp/parameters/dccp_debug
-  echo 1 > /sys/module/dccp_ccid2/parameters/ccid2_debug
-  echo 1 > /sys/module/dccp_ccid3/parameters/ccid3_debug
-  echo 1 > /sys/module/dccp_tfrc_lib/parameters/tfrc_debug
+This condition was not fully clear in RFC 3448, but reflects the current
+revision state of rfc3448bis and is also consistent with RFC 4340, 6.1.1.
+
+Further changes:
+----------------
+ * variable renamed due to line length constraints;
+ * explicit typecast to `s64' to avoid implicit signed/unsigned casting.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid2.c    |    2 +-
- net/dccp/ccids/ccid3.c    |    2 +-
- net/dccp/ccids/lib/tfrc.c |    2 +-
- net/dccp/proto.c          |    2 +-
- 4 files changed, 4 insertions(+), 4 deletions(-)
+ net/dccp/ccids/lib/loss_interval.c |   10 +++++-----
+ 1 files changed, 5 insertions(+), 5 deletions(-)
 
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -661,7 +661,7 @@ static struct ccid_operations ccid2 = {
- };
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -90,14 +90,14 @@ u8 tfrc_lh_update_i_mean(struct tfrc_loss_hist *lh, struct sk_buff *skb)
+ {
+ 	struct tfrc_loss_interval *cur = tfrc_lh_peek(lh);
+ 	u32 old_i_mean = lh->i_mean;
+-	s64 length;
++	s64 len;
  
- #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
--module_param(ccid2_debug, bool, 0444);
-+module_param(ccid2_debug, bool, 0644);
- MODULE_PARM_DESC(ccid2_debug, "Enable debug messages");
- #endif
+ 	if (cur = NULL)			/* not initialised */
+ 		return 0;
  
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -790,7 +790,7 @@ module_param(do_osc_prev, bool, 0644);
- MODULE_PARM_DESC(do_osc_prev, "Use Oscillation Prevention (RFC 3448, 4.5)");
+-	length = dccp_delta_seqno(cur->li_seqno, DCCP_SKB_CB(skb)->dccpd_seq);
++	len = dccp_delta_seqno(cur->li_seqno, DCCP_SKB_CB(skb)->dccpd_seq) + 1;
  
- #ifdef CONFIG_IP_DCCP_CCID3_DEBUG
--module_param(ccid3_debug, bool, 0444);
-+module_param(ccid3_debug, bool, 0644);
- MODULE_PARM_DESC(ccid3_debug, "Enable debug messages");
- #endif
+-	if (length - cur->li_length <= 0)	/* duplicate or reordered */
++	if (len - (s64)cur->li_length <= 0)	/* duplicate or reordered */
+ 		return 0;
  
---- a/net/dccp/ccids/lib/tfrc.c
-+++ b/net/dccp/ccids/lib/tfrc.c
-@@ -10,7 +10,7 @@
+ 	if (SUB16(dccp_hdr(skb)->dccph_ccval, cur->li_ccval) > 4)
+@@ -114,7 +114,7 @@ u8 tfrc_lh_update_i_mean(struct tfrc_loss_hist *lh, struct sk_buff *skb)
+ 	if (tfrc_lh_length(lh) = 1)		/* due to RFC 3448, 6.3.1 */
+ 		return 0;
  
- #ifdef CONFIG_IP_DCCP_TFRC_DEBUG
- int tfrc_debug;
--module_param(tfrc_debug, bool, 0444);
-+module_param(tfrc_debug, bool, 0644);
- MODULE_PARM_DESC(tfrc_debug, "Enable debug messages");
- #endif
+-	cur->li_length = length;
++	cur->li_length = len;
+ 	tfrc_lh_calc_i_mean(lh);
  
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -1092,7 +1092,7 @@ MODULE_PARM_DESC(thash_entries, "Number of ehash buckets");
+ 	return (lh->i_mean < old_i_mean);
+@@ -159,7 +159,7 @@ int tfrc_lh_interval_add(struct tfrc_loss_hist *lh, struct tfrc_rx_hist *rh,
+ 	else {
+ 		cur->li_length = dccp_delta_seqno(cur->li_seqno, new->li_seqno);
+ 		new->li_length = dccp_delta_seqno(new->li_seqno,
+-				  tfrc_rx_hist_last_rcv(rh)->tfrchrx_seqno);
++				  tfrc_rx_hist_last_rcv(rh)->tfrchrx_seqno) + 1;
+ 		if (lh->counter > (2*LIH_SIZE))
+ 			lh->counter -= LIH_SIZE;
  
- #ifdef CONFIG_IP_DCCP_DEBUG
- int dccp_debug;
--module_param(dccp_debug, bool, 0444);
-+module_param(dccp_debug, bool, 0644);
- MODULE_PARM_DESC(dccp_debug, "Enable debug messages");
- 
- EXPORT_SYMBOL_GPL(dccp_debug);
--- 
-1.5.5
-
