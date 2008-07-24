@@ -1,63 +1,38 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 29 Jul 2008 14:06:08 +0000
-Subject: [PATCH 1/6] dccp ccid-3: Implement rfc3448bis change to initial-rate computation
-Message-Id: <1217340373-12620-2-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Wei Yongjun <yjwei@cn.fujitsu.com>
+Date: Thu, 24 Jul 2008 08:51:15 +0000
+Subject: [PATCH 4/4] DCCP: Add check for missing sequence number in ICMPv6
+Message-Id: <48884283.8070705@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-The patch updates CCID-3 with regard to the latest rfc3448bis-06:
- * in the first revisions of the draft, MSS was used for the RFC 3390 window;
- * then (from revision #1 to revision #2), it used the packet size `s';
- * now, in this revision (and apparently final), the value is back to MSS.
+RFC4340 said:
+  ICMP Datagram Too Big messages with incorrect or missing Sequence
+Numbers may be ignored, or the DCCP implementation may lower the PMTU
+only temporarily in response.
 
-This change has an implication for the case when no RTT sample is available,
-at the time of sending the first packet:
- * with RTT sample, 2*MSS/RTT <= initial_rate <= 4*MSS/RTT;
- * without RTT sample, the initial rate is one packet (s bytes) per second
-   (sec. 4.2), but using s instead of MSS here creates an imbalance, since
-   this would further reduce the initial sending rate.
+This patch add the check for missing sequence number in ICMPv6 message.
 
-Hence the patch uses MSS (called MPS in RFC 4340) in all places.
+Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/ccids/ccid3.c |   12 +++++-------
- 1 files changed, 5 insertions(+), 7 deletions(-)
-
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -53,18 +53,16 @@ static int ccid3_debug;
- /*
-  * Compute the initial sending rate X_init in the manner of RFC 3390:
-  *
-- *	X_init  =  min(4 * s, max(2 * s, 4380 bytes)) / RTT
-+ *	X_init  =  min(4 * MPS, max(2 * MPS, 4380 bytes)) / RTT
-  *
-- * Note that RFC 3390 uses MSS, RFC 4342 refers to RFC 3390, and rfc3448bis
-- * (rev-02) clarifies the use of RFC 3390 with regard to the above formula.
-  * For consistency with other parts of the code, X_init is scaled by 2^6.
-  */
- static inline u64 rfc3390_initial_rate(struct sock *sk)
- {
--	const struct ccid3_hc_tx_sock *hctx = ccid3_hc_tx_sk(sk);
--	const __u32 w_init = clamp_t(__u32, 4380U, 2 * hctx->s, 4 * hctx->s);
-+	const u32 mps = dccp_sk(sk)->dccps_mss_cache,
-+	       w_init = clamp(4380U, 2 * mps, 4 * mps);
+diff -Nurp a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -95,6 +95,12 @@ static void dccp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
+ 	int err;
+ 	__u64 seq;
  
--	return scaled_div(w_init << 6, hctx->rtt);
-+	return scaled_div(w_init << 6, ccid3_hc_tx_sk(sk)->rtt);
- }
- 
- /**
-@@ -293,7 +291,7 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
- 			 * - set sending rate X_pps = 1pps as per RFC 3448, 4.2.
- 			 */
- 			hctx->rtt = DCCP_FALLBACK_RTT;
--			hctx->x   = hctx->s;
-+			hctx->x	  = dp->dccps_mss_cache;
- 			hctx->x <<= 6;
- 		}
- 		ccid3_update_send_interval(hctx);
++	if (skb->len < offset + 12 ||
++	    skb->len < offset + __dccp_basic_hdr_len(dh)) {
++		ICMP6_INC_STATS_BH(__in6_dev_get(skb->dev), ICMP_MIB_INERRORS);
++		return;
++	}
++
+ 	sk = inet6_lookup(dev_net(skb->dev), &dccp_hashinfo,
+ 			&hdr->daddr, dh->dccph_dport,
+ 			&hdr->saddr, dh->dccph_sport, inet6_iif(skb));
+
+
+
