@@ -1,27 +1,33 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 29 Jul 2008 18:56:22 +0000
-Subject: Re: [PATCH 3/7] dccp tfrc: Suppress unavoidable "below resolution" warning
-Message-Id: <5640c7e00807291156m2af40714h5bbaa0e7677a6f44@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 25 Jul 2008 09:02:52 +0000
+Subject: [net-2.6 PATCH 0/6] dccp: ICMP bug fixes by Wei Yongjun
+Message-Id: <1216976578-17767-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1217268843-19667-4-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1217268843-19667-4-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Tue, Jul 29, 2008 at 6:13 AM, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> In the congestion-avoidance phase a decay of p towards 0 is natural once fewer
-> losses are encountered. Hence the warning message "p is below resolution" is
-> not necessary, and thus turned into a debug message by this patch.
->
-> The TFRC_SMALLEST_P is needed since in theory p never actually reaches 0. When
-> no further losses are encountered, the loss interval I_0 grows in length,
-> causing p to decrease towards 0, causing X_calc = s/(RTT * f(p)) to increase.
->
-> With the given minimum-resolution this congestion avoidance phase stops at some
-> fixed value, an approximation formula has been added to the documentation.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Hi Dave, 
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+can you please have a look at this set of ICMP/DCCP bug fixes by Wei Yongjun,
+augmented by two inter-related test tree patches that solve a related bug.
+
+Patch #1: Provides a way to distinguish original from retransmitted packets.
+Patch #2: Fixes a bug - AWL was never updated. Needed by the third patch.
+Patch #3: Corrects ICMPv4 sequence number check to use AWL/H instead of SWL/H.
+Patch #4: Implements check from patch #3 for ICMPv6.
+Patch #5: Fixes an insufficient-length check for 
+
+All patches have been compile-tested, the first two have been in the test
+tree for over at least one month.
+
+Can you please consider pulling from
+
+	git://eden-feed.erg.abdn.ac.uk/net-2.6		(subtree `master')
+
+At your discretion, as none of the bugs is severe,
+
+   	git://eden-feed.erg.abdn.ac.uk/net-next-2.6	(subtree `master')
+
+contains the same set of patches. Both trees have been freshly cloned today.	
