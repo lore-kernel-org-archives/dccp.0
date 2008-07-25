@@ -1,41 +1,41 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 28 Jul 2008 18:14:03 +0000
-Subject: [PATCH 7/7] dccp ccid-3: Replace lazy BUG_ON with condition
-Message-Id: <1217268843-19667-8-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Wei Yongjun <yjwei@cn.fujitsu.com>
+Date: Fri, 25 Jul 2008 02:41:22 +0000
+Subject: [PATCHv2 4/4] DCCP: Add check for missing sequence number in ICMPv6
+Message-Id: <48893D52.9090408@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-The BUG_ON(w_tot = 0) only holds if there is no more than 1 loss interval in
-the loss history. If there is only a single loss interval, the calc_i_mean()
-routine need in fact not be called (RFC 3448, 6.3.1).
+RFC4340 said:
+  ICMP Datagram Too Big messages with incorrect or missing Sequence
+Numbers may be ignored, or the DCCP implementation may lower the PMTU
+only temporarily in response.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+This patch add the check for missing sequence number in ICMPv6 message.
+
+Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
 ---
- net/dccp/ccids/lib/loss_interval.c |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ net/dccp/ipv6.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
 
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -67,7 +67,10 @@ static void tfrc_lh_calc_i_mean(struct tfrc_loss_hist *lh)
- 	u32 i_i, i_tot0 = 0, i_tot1 = 0, w_tot = 0;
- 	int i, k = tfrc_lh_length(lh) - 1; /* k is as in rfc3448bis, 5.4 */
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index c9b32a8..bc5e305 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -96,6 +96,11 @@ static void dccp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
+ 	__u64 seq;
+ 	struct net *net = dev_net(skb->dev);
  
--	for (i=0; i <= k; i++) {
-+	if (k <= 0)
++	if (skb->len < offset + __dccp_basic_hdr_len(dh)) {	
++		ICMP6_INC_STATS_BH(__in6_dev_get(skb->dev), ICMP6_MIB_INERRORS);
 +		return;
++	}
 +
-+	for (i = 0; i <= k; i++) {
- 		i_i = tfrc_lh_get_interval(lh, i);
- 
- 		if (i < k) {
-@@ -78,7 +81,6 @@ static void tfrc_lh_calc_i_mean(struct tfrc_loss_hist *lh)
- 			i_tot1 += i_i * tfrc_lh_weights[i-1];
- 	}
- 
--	BUG_ON(w_tot = 0);
- 	lh->i_mean = max(i_tot0, i_tot1) / w_tot;
- }
- 
+ 	sk = inet6_lookup(net, &dccp_hashinfo,
+ 			&hdr->daddr, dh->dccph_dport,
+ 			&hdr->saddr, dh->dccph_sport, inet6_iif(skb));
+
+
+
