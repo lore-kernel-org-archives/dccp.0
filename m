@@ -1,30 +1,38 @@
-From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
-Date: Tue, 29 Jul 2008 18:54:48 +0000
-Subject: Re: [PATCH 2/7] dccp ccid-3: Simplified handling of TX states
-Message-Id: <5640c7e00807291154q56b2d1f0q49b7903f998f86ed@mail.gmail.com>
+From: Wei Yongjun <yjwei@cn.fujitsu.com>
+Date: Fri, 25 Jul 2008 02:40:32 +0000
+Subject: [PATCHv2 3/4] DCCP: Fix to check missing sequence number for ICMP
+Message-Id: <48893D20.6020609@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1217268843-19667-3-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1217268843-19667-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Tue, Jul 29, 2008 at 6:13 AM, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> Since CCIDs are only used during the established phase of a connection,
-> they have very little internal state; this specifically reduces to:
->
->  * "no packet sent" if and only if s = 0, for the TX packet size s;
->
->  * when the first packet has been sent (i.e. `s' > 0), the question is whether
->   or not feedback has been received:
->   - if a feedback packet is received, "feedback = yes" is set,
->   - if the nofeedback timer expires,  "feedback = no"  is set.
->
-> Thus the CCID only needs to remember state about whether or not feedback
-> has been received. This is now implemented using a boolean flag, which is
-> toggled when a feedback packet arrives or the nofeedback timer expires.
->
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+If we want check the sequence number, the length of dccp packet must not
+less than __dccp_basic_hdr_len(dh). If the length of dccp packet is less
+than this value, check for sequence number will get unpredictable result.
 
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+This patch fix the problem.
+
+Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
+---
+ net/dccp/ipv4.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 8fd4d57..0c5f82d 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -207,7 +207,7 @@ static void dccp_v4_err(struct sk_buff *skb, u32 info)
+ 	int err;
+ 	struct net *net = dev_net(skb->dev);
+ 
+-	if (skb->len < (iph->ihl << 2) + 8) {
++	if (skb->len < (iph->ihl << 2) + __dccp_basic_hdr_len(dh)) {
+ 		ICMP_INC_STATS_BH(net, ICMP_MIB_INERRORS);
+ 		return;
+ 	}
+
+
+
+
