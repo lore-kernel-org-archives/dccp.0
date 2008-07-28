@@ -1,42 +1,41 @@
-From: Wei Yongjun <yjwei@cn.fujitsu.com>
-Date: Fri, 25 Jul 2008 02:35:58 +0000
-Subject: [PATCHv2 1/4] DCCP: Fix to check the sequence number in ICMP message
-Message-Id: <48893C0E.7020904@cn.fujitsu.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 28 Jul 2008 18:14:03 +0000
+Subject: [PATCH 7/7] dccp ccid-3: Replace lazy BUG_ON with condition
+Message-Id: <1217268843-19667-8-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-The payload of ICMP message is a part of the packet which send by 
-ourself, so check the sequence number must used AWL and AWH, not SWL and 
-SWH.
+The BUG_ON(w_tot = 0) only holds if there is no more than 1 loss interval in
+the loss history. If there is only a single loss interval, the calc_i_mean()
+routine need in fact not be called (RFC 3448, 6.3.1).
 
-For example:
-     Endpoint A                  Endpoint B
-
-     DATA-ACK       -------->
-     (SEQ=X)
-                    <--------    ICMP (Fragmentation Needed)
-                                 (SEQ=X)
-
-Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ipv4.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
+ net/dccp/ccids/lib/loss_interval.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index f966729..8fd4d57 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -238,7 +238,7 @@ static void dccp_v4_err(struct sk_buff *skb, u32 info)
- 	dp = dccp_sk(sk);
- 	seq = dccp_hdr_seq(dh);
- 	if ((1 << sk->sk_state) & ~(DCCPF_REQUESTING | DCCPF_LISTEN) &&
--	    !between48(seq, dp->dccps_swl, dp->dccps_swh)) {
-+	    !between48(seq, dp->dccps_awl, dp->dccps_awh)) {
- 		NET_INC_STATS_BH(net, LINUX_MIB_OUTOFWINDOWICMPS);
- 		goto out;
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -67,7 +67,10 @@ static void tfrc_lh_calc_i_mean(struct tfrc_loss_hist *lh)
+ 	u32 i_i, i_tot0 = 0, i_tot1 = 0, w_tot = 0;
+ 	int i, k = tfrc_lh_length(lh) - 1; /* k is as in rfc3448bis, 5.4 */
+ 
+-	for (i=0; i <= k; i++) {
++	if (k <= 0)
++		return;
++
++	for (i = 0; i <= k; i++) {
+ 		i_i = tfrc_lh_get_interval(lh, i);
+ 
+ 		if (i < k) {
+@@ -78,7 +81,6 @@ static void tfrc_lh_calc_i_mean(struct tfrc_loss_hist *lh)
+ 			i_tot1 += i_i * tfrc_lh_weights[i-1];
  	}
-
-
+ 
+-	BUG_ON(w_tot = 0);
+ 	lh->i_mean = max(i_tot0, i_tot1) / w_tot;
+ }
+ 
