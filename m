@@ -1,38 +1,31 @@
-From: Wei Yongjun <yjwei@cn.fujitsu.com>
-Date: Fri, 25 Jul 2008 02:40:32 +0000
-Subject: [PATCHv2 3/4] DCCP: Fix to check missing sequence number for ICMP
-Message-Id: <48893D20.6020609@cn.fujitsu.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 29 Jul 2008 14:06:07 +0000
+Subject: [RFC/RFT] [PATCH 0/6] dccp ccid-3: Last batch of test-tree updates (sender side)
+Message-Id: <1217340373-12620-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-If we want check the sequence number, the length of dccp packet must not
-less than __dccp_basic_hdr_len(dh). If the length of dccp packet is less
-than this value, check for sequence number will get unpredictable result.
+This is the third and last patch set containing updates for CCID-3. While
+the first two focused on the receiver side, this set contains updates
+for the sender side. Review and comments are welcome.
 
-This patch fix the problem.
-
-Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
----
- net/dccp/ipv4.c |    2 +-
- 1 files changed, 1 insertions(+), 1 deletions(-)
-
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index 8fd4d57..0c5f82d 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -207,7 +207,7 @@ static void dccp_v4_err(struct sk_buff *skb, u32 info)
- 	int err;
- 	struct net *net = dev_net(skb->dev);
- 
--	if (skb->len < (iph->ihl << 2) + 8) {
-+	if (skb->len < (iph->ihl << 2) + __dccp_basic_hdr_len(dh)) {
- 		ICMP_INC_STATS_BH(net, ICMP_MIB_INERRORS);
- 		return;
- 	}
+Patch #1: Implements rfc3448bis changes to computing the initial sending rate.
+Patch #2: Adds support/choice for measuring the packet size `s' wrt. rfc3448bis.
+Patch #3: Removes an unused Kconfig statement. 
+Patch #4: Simplifies computations for checking the range of t_ipi. 
+Patch #5: Implements Oscillation-Reduction as per rfc3448bis, 4.5 
+Patch #6: Use sysfs to change debug parameters when module is loaded. 
 
 
+The now-updated test tree is available via
 
+	git://eden-feed.erg.abdn.ac.uk/dccp_exp		(subtree `dccp')
 
+All changes have been ported to the CCID-4 tree as well and are on
+
+	git://eden-feed.erg.abdn.ac.uk/dccp_exp		(subtree `ccid4')
+
+There is also a web view available. Changes have been tested for both CCID-3/4.
