@@ -1,94 +1,157 @@
-From: "Leandro Sales" <leandroal@gmail.com>
-Date: Sun, 06 Jul 2008 14:29:43 +0000
-Subject: [Announce] Release of the DCCP Plugin 0.6 for GStreamer
-Message-Id: <5bc4c4570807060729p447847aarcc452cde09c6dea5@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 29 Jul 2008 10:05:50 +0000
+Subject: [PATCH 5/7] dccp tfrc: Increase number of RTT samples
+Message-Id: <1217325952-12337-6-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <5bc4c4570802270510r563ad586qa74eaf6ef59b68e0@mail.gmail.com>
-In-Reply-To: <5bc4c4570802270510r563ad586qa74eaf6ef59b68e0@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-SGVsbG8gbGlzdCEKCiBJJ20gcGxlYXNlZCB0byBhbm5vdW5jZSB0aGUgdmVyc2lvbiB2MC42IG9m
-IHRoZSBEQ0NQIEdTdHJlYW1lcgpQbHVnaW4uIFBsZWFzZSwgbGV0IG1lIGtub3cgaWYgeW91IGhh
-dmUgYW55IHByb2JsZW0gb24gcnVubmluZwp0aGUgcGx1Z2luLCBzdWdnZXN0aW9ucyBhbmQgaW1w
-cm92ZW1lbnRzIHRoYXQgeW91IHByb3ZpZGVkIGZvciBpdC4KVGhlIG1haW4gbmV3cyBmb3IgdGhp
-cyByZWxlYXNlIGlzIHRoYXQgdGhlIHBsdWdpbiBjYW4gbm93IHN1cHBvcnQKbXVsdGlwbGUgY29u
-bmVjdGlvbiBpbiB0aGUgc2VydmVyIGVsZW1lbnQgYW5kIHNoYXJlIHRoZSBzYW1lIHNvY2tpZApi
-ZXR3ZWVuIHRvIEdTdHJlYW1lciBlbGVtZW50cy4KCiBXaGF0IGlzIEdTdHJlYW1lcj8KID09PT09
-PT09PQoKIEdTdHJlYW1lciBbMV0gaXMgYSBsaWJyYXJ5IHRoYXQgYWxsb3dzIHRoZSBjb25zdHJ1
-Y3Rpb24gb2YgZ3JhcGhzIG9mCm1lZGlhLWhhbmRsaW5nIGNvbXBvbmVudHMsIHJhbmdpbmcgZnJv
-bSBzaW1wbGUgT2dnL1ZvcmJpcyBwbGF5YmFjayB0bwpjb21wbGV4IGF1ZGlvIChtaXhpbmcpIGFu
-ZCB2aWRlbyAobm9uLWxpbmVhciBlZGl0aW5nKSBwcm9jZXNzaW5nLgpBcHBsaWNhdGlvbnMgY2Fu
-IHRha2UgYWR2YW50YWdlIG9mIGFkdmFuY2VzIGluIGNvZGVjIGFuZCBmaWx0ZXIKdGVjaG5vbG9n
-eSB0cmFuc3BhcmVudGx5LiBEZXZlbG9wZXJzIGNhbiBhZGQgbmV3IGNvZGVjcyBhbmQgZmlsdGVy
-cyBieQp3cml0aW5nIGEgc2ltcGxlIHBsdWdpbiB3aXRoIGEgY2xlYW4sIGdlbmVyaWMgaW50ZXJm
-YWNlLiBHU3RyZWFtZXIgaXMKcmVsZWFzZWQgdW5kZXIgdGhlIExHUEwuCgogV2hhdCBpcyBEQ0NQ
-PwogPT09PT09CiBUaGUgRGF0YWdyYW0gQ29uZ2VzdGlvbiBDb250cm9sIFByb3RvY29sIChEQ0NQ
-KSBbMl0gaXMgYSB0cmFuc3BvcnQKcHJvdG9jb2wgdGhhdCBwcm92aWRlcyBiaWRpcmVjdGlvbmFs
-IHVuaWNhc3QgY29ubmVjdGlvbnMgb2YKY29uZ2VzdGlvbi1jb250cm9sbGVkIHVucmVsaWFibGUg
-ZGF0YWdyYW1zLiBEQ0NQIGlzIHN1aXRhYmxlIGZvcgphcHBsaWNhdGlvbnMgdGhhdCB0cmFuc2Zl
-ciBmYWlybHkgbGFyZ2UgYW1vdW50cyBvZiBkYXRhIGFuZCB0aGF0IGNhbgpiZW5lZml0IGZyb20g
-Y29udHJvbCBvdmVyIHRoZSB0cmFkZW9mZiBiZXR3ZWVuIHRpbWVsaW5lc3MgYW5kCnJlbGlhYmls
-aXR5LgoKIEl0IGlzIGEgbWVzc2FnZS1vcmllbnRlZCB0cmFuc3BvcnQgbGF5ZXIgcHJvdG9jb2wg
-dGhhdCBpbXBsZW1lbnRzCnJlbGlhYmxlIGNvbm5lY3Rpb24gc2V0dXAsIHRlYXJkb3duLCBFQ04s
-IGNvbmdlc3Rpb24gY29udHJvbCwgYW5kCmZlYXR1cmUgbmVnb3RpYXRpb24uIEl0IHdhcyBwdWJs
-aXNoZWQgYXMgUkZDIDQzNDAgIGJ5IElFVEYgaW4gTWFyY2gsCjIwMDYuIExpbnV4IGhhZCBhbiBp
-bXBsZW1lbnRhdGlvbiBvZiBEQ0NQIHNpbmNlIHZlcnNpb24gMi42LjE0IGFuZAp0aGlzIGNvbnRp
-bnVlcyB0byBpbXByb3ZlIHdpdGggZWFjaCByZWxlYXNlLiBUaGUgbGF0ZXN0IG9mZmljaWFsCnZl
-cnNpb24gb2YgdGhlIERDQ1AgY29kZSBjYW4gYmUgZm91bmQgYXQgWzNdIGFuZCBhdCBbNF0uCgog
-V2hhdCBpcyBEQ0NQIFBsdWdpbiBmb3IgR1N0cmVhbWVyPwogPT09PT09PT09PT09PT09PT0KCiBJ
-dCBpcyBhIHBsdWdpbiB0aGF0IGFsbG93cyB0cmFuc2ZlciBkYXRhIG92ZXIgdGhlIG5ldHdvcmsg
-dmlhIERDQ1AKZm9yIEdTdHJlYW1lci4gQWNjb3JkaW5nIHRvIGFsbCB0aGUgdGVzdHMgdGhhdCB3
-ZSBwcm9jZWVkZWQsIHRoZQpwbHVnaW4gaXMgYWJsZSB0byBzdHJlYW0gYXVkaW8gZmlsZXMsIHN1
-Y2ggYXMgbXAzLCBhdWRpbyBjYXB0dXJlZCBmcm9tCnRoZSBtaWNyb3Bob25lIGFuZCByYXcgZGF0
-YSBmaWxlcy4KCiBDSEFOR0VMT0cKID09PT0KIC0gQWRkaW5nIHN1cHBvcnQgdG8gbWFueSBjbGll
-bnQgY29ubmVjdGlvbnMgdG8gZGNjcHNlcnZlcnNpbmsuCiAgICAgbmV3IHByb3BlcnR5OiB3YWl0
-LWNvbm5lY3Rpb25zIC0gV2FpdCBmb3IgbWFueSBjbGllbnQgY29ubmVjdGlvbnMKICAgICAgICAg
-ICAgICAgICAgICAgICBmbGFnczogcmVhZGFibGUsIHdyaXRhYmxlCiAgICAgICAgICAgICAgICAg
-ICAgICAgQm9vbGVhbi4gRGVmYXVsdDogZmFsc2UgQ3VycmVudDogZmFsc2UKIC0gQWRkaW5nIHNh
-bXBsZSBmb3Igc2hhcmluZyBzb2NrZXQgaWQgYmV0d2VlbiB0d28gaW5zdGFuY2VzIG9mIGFuIGVs
-ZW1lbnQKICAgICBTZWUgZm9sZGVyIGV4YW1wbGVzL2NhbGwKIC0gQWRkaW5nIHNhbXBsZSBvZiBz
-ZW5kIE1QMyBzdHJlYW0uCiAgICAgU2VlIGZvbGRlciBleGFtcGxlcy9tcDNTdHJlYW0KIC0gQ2hh
-bmdpbmcgdGhlIG5hbWUgb2YgdGhlIHByb3BlcnR5IHNvY2stZmQgdG8gc29ja2ZkLgogLSBNb3Jl
-IGNvZGUgcmVmYWN0b3JpbmcgYW5kIHNvbWUgaW50ZXJuYWwgZml4ZXMgdG8gcmVtb3ZlIHNvbWUg
-d2FybmluZ3MKCiBUT0RPIExpc3QKID09PT0KIC0gSW1wcm92ZSB0aGUgaW1wbGVtZW50YXRpb24g
-b2YgdGhlIHNlbmQgbWVjaGFuaXNtIGFkZGluZyB0aGUKUGFyYXNsYXNoIHNvbHV0aW9uIGJhc2Vk
-IG9uIHF1ZXVlCgogSG93IHRvIGNvbnRyaWJ1dGU/CiA9PT09PT09PT0KCiBQbGVhc2UsIGNvbnRh
-Y3QgbWUgYXQgbGVhbmRyb2FsIFthdF0gZ21haWwgW2RvdF0gY29tCgogV2hlcmUgaXMgRENDUCBQ
-bHVnaW4/CiA9PT09PT09PT09CiBUaGUgRENDUCBwbHVnaW4gZm9yIEdTdHJlYW1lciBpcyB1bmRl
-ciB2ZXJzaW9uIGNvbnRyb2wgb2YgdGhlCkUtUGhvbmUuIFRoZSBFLVBob25lIChFbWJlZGRlZC1Q
-aG9uZSkgcHJvamVjdCBhaW1zIHRvIGRldmVsb3AgYSBWb0lQCmNsaWVudCBmb3IgTWFlbW8gcGxh
-dGZvcm0gYmFzZWQgb24gRENDUCB0cmFuc3BvcnQgcHJvdG9jb2wuIEluIHRoaXMKcHJvamVjdCB3
-ZSBhcmUgYWxzbyBpbXBsZW1lbnRpbmcgdGhlIENDSUQtNCBbNV0gSUVURiBkcmFmdHMgb24gdGhl
-CmxpbnV4IGtlcm5lbC4KCiBEZXZlbG9wbWVudDoKIGh0dHA6Ly9nYXJhZ2UubWFlbW8ub3JnL3By
-b2plY3RzL2VwaG9uZQoKIE1haWxpbmcgbGlzdDoKIGh0dHA6Ly9nYXJhZ2UubWFlbW8ub3JnL3Bp
-cGVybWFpbC9lcGhvbmUtZGlzY3Vzcy8KCiBEb3dubG9hZDoKIGh0dHBzOi8vZ2FyYWdlLm1hZW1v
-Lm9yZy9mcnMvP2dyb3VwX2lkKTcKIG9yIGRpcmVjdGx5IGZyb20KIGh0dHBzOi8vZ2FyYWdlLm1h
-ZW1vLm9yZy9mcnMvZG93bmxvYWQucGhwLzQyNTIvZ3N0LWRjY3AtMC42LnRhci5iejIKCiBIb3cg
-dG8gdXNlIGl0IHdpdGggZ3N0LWxhdW5jaCBjb21tYW5kIGxpbmU/CiA9PT09PT09PT09PT09PT09
-CiBBIGJhc2ljIGV4YW1wbGUgdG8gc3RyZWFtIGEgbXVsdGltZWRpYSBmaWxlIHVzaW5nIGNjaWQt
-MzoKCiAqIFNlcnZlcjoKIGdzdC1sYXVuY2ggLXYgZmlsZXNyYyBsb2NhdGlvbj1tdXNpYy5tcDMg
-ISBtcDNwYXJzZSAhIGRjY3BzZXJ2ZXJzaW5rCiBwb3J0kDExIGNjaWQ9MgoKICogQ2xpZW50Ogog
-Z3N0LWxhdW5jaCAtdiBkY2NwY2xpZW50c3JjIGhvc3Q9bG9jYWxob3N0IHBvcnSQMTEgISBkZWNv
-ZGViaW4gISBhbHNhc2luawoKIC0tIFdlIGFsc28gdGVzdGVkIHdpdGggbXBnMTIzLCB0byB1c2Ug
-aXQ6IG1wZzEyMyBkY2NwOi8vbG9jYWxob3N0OjkwMTEKCiBQbGVhc2UsIHJlZmVyIHRvIHRoZSBz
-cmMvZXhhbXBsZXNfYXBwL1JFQURNRSBmaWxlIGZvciBtb3JlIGV4YW1wbGVzLgoKIElzIHRoZXJl
-IGFueSBhcHBsaWNhdGlvbiBleGFtcGxlcz8KID09PT09PT09PT09PT09PT09CgogWWVzLCByZWZl
-ciB0byB0aGUgZXhhbXBsZXNfYXBwIGRpcmVjdG9yeSBvZiB0aGUgc291cmNlIGZpbGUuCgogUmVx
-dWlyZW1lbnRzCiA9PT09PT0KCiAtIExpbnV4IEtlcm5lbCB3aXRoIERDQ1AgZW5hYmxlZAogLSBH
-U3RyZWFtZXIKIC0gQWRkaXRpb25hbCBHU3RyZWFtZXIgUGx1Z2lucyB0byBtYWtlIHRoZSBleGFt
-cGxlIGFwcCB3b3JrcwoKIEJlc3QgcmVnYXJkcywKIExlYW5kcm8uCgogUmVmZXJlbmNlczoKIFsx
-XSBodHRwOi8vZ3N0cmVhbWVyLmZyZWVkZXNrdG9wLm9yZy8KIFsyXSBodHRwOi8vd3d3LnJlYWQu
-Y3MudWNsYS5lZHUvZGNjcC8KIFszXSBnaXQ6Ly9naXQua2VybmVsLm9yZy9wdWIvc2NtL2xpbnV4
-L2tlcm5lbC9naXQvYWNtZS9uZXQtMi42LjI1LmdpdAogWzRdIGdpdDovL2VkZW4tZmVlZC5lcmcu
-YWJkbi5hYy51ay9kY2NwX2V4cAogWzVdIGh0dHA6Ly90b29scy5pZXRmLm9yZy9odG1sL2RyYWZ0
-LWlldGYtZGNjcC1jY2lkNC0wMQoKLS0gCkxlYW5kcm8gTWVsbyBkZSBTYWxlcwpQZXJ2YXNpdmUg
-YW5kIEVtYmVkZGVkIENvbXB1dGluZyBMYWJvcmF0b3J5CkNvbXB1dGVyIFNjaWVuY2UgTVNjLgpC
-UmlzYSBhbmQgRS1QaG9uZSBQcm9qZWN0cyBNYW5hZ2VyCk5ldHdvcmsgQWRtaW4gQCBodHRwOi8v
-ZW1iZWRkZWQudWZjZy5lZHUuYnIvaW5kZXhlbi5odG1sCis1NSA4MyAzMzEwLTE0MDQgKGV4dGVu
-c2lvbiAyMDgpCgpodHRwOi8vd3d3LmxlYW5kcm9zYWxlcy5jb20vCi0tClRvIHVuc3Vic2NyaWJl
-IGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUg
-Ym9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9y
-ZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
+This improves the receiver RTT sampling algorithm so that it tries harder to get
+as many RTT samples as possible, using several optimisations.
+
+Applicability and background
+----------------------------
+The algorithm uses timestamps and differences of the CCval window counter to
+guess the RTT, using concepts presented in RFC 4340, 8.1.
+
+There exist 4 cases for the CCVal difference:
+ * = 0: less than RTT/4 passed since last packet -- unusable sample;
+ *  > 4: (much) more than 1 RTT has passed since last packet -- also unusable;
+ * = 4: "perfect" sample (exactly one RTT has passed since last packet);
+ * 1..3: sub-optimal sample (between RTT/4 and 3*RTT/4 has passed).
+
+In the last case the algorithm so far tried to optimise by storing away the
+candidate and then re-trying next time. This had the following problems:
+ * a large number of samples is needed to smooth out the given inaccuracies;
+ * the sender may not be sending enough packets to warrant a "next time";
+ * hence it is better to use suboptimal samples whenever possible.
+As a consequence, the algorithm now stores away the current sample only if the
+difference is 0.
+
+A realistic example to illustrate the failure of the (previous) algorithm is MP3
+streaming, where packets are sent at a rate of less than one packet per RTT.
+Which means that suitable samples may be absent for a very long time.
+
+The effectiveness of using suboptimal samples (with a delta between 1 and 4) was
+confirmed by instrumenting the algorithm with counters. The results of two 20
+second test runs were:
+ * With the old algorithm and a total of 38442 function calls, only 394 of these
+   calls resulted in usable RTT samples (about 1%), 378 out of these were
+   "perfect" samples, and 28013 (unused) samples had a delta of 1..3.
+ * With the new algorithm and a total of 37057 function calls, 1702 usable RTT
+   samples were retrieved (about 4.6%), 5 out of these were "perfect" samples.
+This means an almost five-fold increase in the number of samples.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/lib/packet_history.c |   83 ++++++++++-------------------------
+ 1 files changed, 24 insertions(+), 59 deletions(-)
+
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -428,31 +428,16 @@ int tfrc_rx_hist_init(struct tfrc_rx_hist *h, struct sock *sk)
+ EXPORT_SYMBOL_GPL(tfrc_rx_hist_init);
+ 
+ /**
+- * tfrc_rx_hist_rtt_last_s - reference entry to compute RTT samples against
+- */
+-static inline struct tfrc_rx_hist_entry *
+-			tfrc_rx_hist_rtt_last_s(const struct tfrc_rx_hist *h)
+-{
+-	return h->ring[0];
+-}
+-
+-/**
+- * tfrc_rx_hist_rtt_prev_s: previously suitable (wrt rtt_last_s) RTT-sampling entry
+- */
+-static inline struct tfrc_rx_hist_entry *
+-			tfrc_rx_hist_rtt_prev_s(const struct tfrc_rx_hist *h)
+-{
+-	return h->ring[h->rtt_sample_prev];
+-}
+-
+-/**
+  * tfrc_rx_hist_sample_rtt  -  Sample RTT from timestamp / CCVal
+- * Based on ideas presented in RFC 4342, 8.1. Returns 0 if it was not able
+- * to compute a sample with given data - calling function should check this.
++ * Based on ideas presented in RFC 4342, 8.1. This function expects that no loss
++ * is pending and uses the following history entries (via rtt_sample_prev):
++ * - h->ring[0]  contains the most recent history entry prior to @skb;
++ * - h->ring[1]  is an unused `dummy' entry when the current difference is 0;
+  */
+ void tfrc_rx_hist_sample_rtt(struct tfrc_rx_hist *h, const struct sk_buff *skb)
+ {
+-	u32 sample = 0, delta_v;
++	struct tfrc_rx_hist_entry *last = h->ring[0];
++	u32 sample, delta_v;
+ 
+ 	/*
+ 	 * When not to sample:
+@@ -466,47 +451,27 @@ void tfrc_rx_hist_sample_rtt(struct tfrc_rx_hist *h, const struct sk_buff *skb)
+ 	    tfrc_rx_hist_loss_pending(h))
+ 		return;
+ 
+-	delta_v = SUB16(dccp_hdr(skb)->dccph_ccval,
+-			tfrc_rx_hist_rtt_last_s(h)->tfrchrx_ccval);
+-
+-	if (delta_v < 1 || delta_v > 4) {	/* unsuitable CCVal delta */
+-		if (h->rtt_sample_prev = 2) {	/* previous candidate stored */
+-			sample = SUB16(tfrc_rx_hist_rtt_prev_s(h)->tfrchrx_ccval,
+-				       tfrc_rx_hist_rtt_last_s(h)->tfrchrx_ccval);
+-			if (sample)
+-				sample = 4 / sample *
+-				         ktime_us_delta(tfrc_rx_hist_rtt_prev_s(h)->tfrchrx_tstamp,
+-							tfrc_rx_hist_rtt_last_s(h)->tfrchrx_tstamp);
+-			else    /*
+-				 * FIXME: This condition is in principle not
+-				 * possible but occurs when CCID is used for
+-				 * two-way data traffic. I have tried to trace
+-				 * it, but the cause does not seem to be here.
+-				 */
+-				DCCP_BUG("please report to dccp@vger.kernel.org"
+-					 " => prev = %u, last = %u",
+-					 tfrc_rx_hist_rtt_prev_s(h)->tfrchrx_ccval,
+-					 tfrc_rx_hist_rtt_last_s(h)->tfrchrx_ccval);
+-		} else if (delta_v < 1) {
+-			h->rtt_sample_prev = 1;
+-			goto keep_ref_for_next_time;
+-		}
+-
+-	} else if (delta_v = 4) /* optimal match */
+-		sample = ktime_to_us(net_timedelta(tfrc_rx_hist_rtt_last_s(h)->tfrchrx_tstamp));
+-	else {			 /* suboptimal match */
+-		h->rtt_sample_prev = 2;
+-		goto keep_ref_for_next_time;
+-	}
++	h->rtt_sample_prev = 0;		/* reset previous candidate */
+ 
+-	if (unlikely(sample > DCCP_SANE_RTT_MAX)) {
+-		DCCP_WARN("RTT sample %u too large, using max\n", sample);
+-		sample = DCCP_SANE_RTT_MAX;
++	delta_v = SUB16(dccp_hdr(skb)->dccph_ccval, last->tfrchrx_ccval);
++	if (delta_v = 0) {		/* less than RTT/4 difference */
++		h->rtt_sample_prev = 1;
++		return;
+ 	}
++	sample = dccp_sane_rtt(ktime_to_us(net_timedelta(last->tfrchrx_tstamp)));
+ 
+-	h->rtt_sample_prev = 0;	       /* use current entry as next reference */
+-keep_ref_for_next_time:
++	if (delta_v <= 4)		/* between RTT/4 and RTT */
++		sample *= 4 / delta_v;
++	else if (!(sample < h->rtt_estimate && sample > h->rtt_estimate/2))
++		/*
++		* Optimisation: CCVal difference is greater than 1 RTT, yet the
++		* sample is less than the local RTT estimate; which means that
++		* the RTT estimate is too high.
++		* To avoid noise, it is not done if the sample is below RTT/2.
++		*/
++		return;
+ 
+-	h->rtt_estimate = tfrc_ewma(h->rtt_estimate, sample, 9);
++	/* Use a lower weight than usual to increase responsiveness */
++	h->rtt_estimate = tfrc_ewma(h->rtt_estimate, sample, 5);
+ }
+ EXPORT_SYMBOL_GPL(tfrc_rx_hist_sample_rtt);
