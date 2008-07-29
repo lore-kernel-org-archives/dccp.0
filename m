@@ -1,123 +1,163 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 25 Jul 2008 09:02:54 +0000
-Subject: [PATCH 2/6] dccp: Bug-Fix - AWL was never updated
-Message-Id: <1216976578-17767-3-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Tue, 29 Jul 2008 14:06:12 +0000
+Subject: [PATCH 5/6] dccp ccid-3: Preventing Oscillations
+Message-Id: <1217340373-12620-6-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch was triggered by finding the  following message in the syslog:
- "kernel: dccp_check_seqno: DCCP: Step 6 failed for DATAACK packet, [...]
-  P.ackno exists or LAWL(82947089) <= P.ackno(82948208)
-                                   <= S.AWH(82948728), sending SYNC..."
+This implements (RFC 3448, 4.5), which performs congestion avoidance by reducing
+the transmit rate as the queueing delay (measured in terms of long-term RTT
+changes) increases.
 
-Note the difference between AWH and AWL: it is 1639 packets - the Sequence
-Window was actually just 100. A closer look at the trace showed that
-LAWL = AWL = 82947089 equalled the ISS on the Response.
+Oscillation can be turned on/off via a module option (do_osc_prev) and via sysfs
+(using mode 0644). The default is off.
 
-The cause of the bug was that AWL was only ever set on the first packet - the
-DCCP-Request sent by dccp_v{4,6}_connect().
+Overflow analysis:
+------------------
+ * oscillation prevention is done after update_x(), so that t_ipi <= 64000;
+ * hence the multiplication "t_ipi * sqrt(R_sample)" needs 64 bits;
+ * done using u64 for sqrt_sample and explicit typecast of t_ipi;
+ * the divisor, R_sqmean, is non-zero because oscillation prevention is first
+   called when receiving the second feedback packet, and tfrc_scaled_rtt() > 0.
 
-The fix is to continually update AWL/AWH with each new packet (as GSS=AWH).
+A detailed discussion of the algorithm (with plots) is on
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/ccid3/sender_notes/oscillation_prevention/
 
-
-Notes:
-------
-icsk_retransmits is used to distinguish original and retransmitted packets
-(introduced in previous patch).
-
-AWL/AWH are now updated to enforce more stringent checks on the
-initial sequence numbers when connecting:
-
- * AWL is initialised to ISS and remains at this value;
- * AWH is always set to GSS (via dccp_update_gss());
- * so on the first Request: AWL =      AWH = ISS,
-   and on the n-th Request: AWL = ISS, AWH = ISS + n.
-
-As a consequence, only Response packets that refer to Requests sent by this
-host will pass, all others are discarded. This is the intention and in effect
-implements the initial adjustments for AWL as specified in RFC 4340, 7.5.1.
+Under the following conditions the algorithm will have negative side effects:
+ * when allowing to decrease t_ipi (leads to a large RTT) and
+ * when using it during slow-start.
+Both uses are therefore disabled.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/output.c |   33 +++++++++++++++------------------
- 1 files changed, 15 insertions(+), 18 deletions(-)
+ net/dccp/ccids/ccid3.c    |   40 ++++++++++++++++++++++++++++++++++++++++
+ net/dccp/ccids/ccid3.h    |    6 ++++--
+ net/dccp/ccids/lib/tfrc.h |   15 +++++++++++++++
+ 3 files changed, 59 insertions(+), 2 deletions(-)
 
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -53,8 +53,11 @@ static int dccp_transmit_skb(struct sock *sk, struct sk_buff *skb)
- 					  dccp_packet_hdr_len(dcb->dccpd_type);
- 		int err, set_ack = 1;
- 		u64 ackno = dp->dccps_gsr;
--
--		dccp_inc_seqno(&dp->dccps_gss);
+--- a/net/dccp/ccids/lib/tfrc.h
++++ b/net/dccp/ccids/lib/tfrc.h
+@@ -48,6 +48,21 @@ static inline u32 scaled_div32(u64 a, u64 b)
+ }
+ 
+ /**
++ * tfrc_scaled_sqrt  -  Compute scaled integer sqrt(x) for 0 < x < 2^22-1
++ * Uses scaling to improve accuracy of the integer approximation of sqrt(). The
++ * scaling factor of 2^10 limits the maximum @sample to 4e6; this is okay for
++ * clamped RTT samples (dccp_sample_rtt).
++ * Should best be used for expressions of type sqrt(x)/sqrt(y), since then the
++ * scaling factor is neutralised. For this purpose, it avoids returning zero.
++ */
++static inline u16 tfrc_scaled_sqrt(const u32 sample)
++{
++	const unsigned long non_zero_sample = sample ? : 1;
++
++	return int_sqrt(non_zero_sample << 10);
++}
++
++/**
+  * tfrc_ewma  -  Exponentially weighted moving average
+  * @weight: Weight to be used as damping factor, in units of 1/10
+  */
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -47,8 +47,8 @@
+ /* Two seconds as per RFC 3448 4.2 */
+ #define TFRC_INITIAL_TIMEOUT	   (2 * USEC_PER_SEC)
+ 
+-/* Parameter t_mbi from [RFC 3448, 4.3]: backoff interval in seconds */
+-#define TFRC_T_MBI		   64
++/* Maximum backoff interval t_mbi (RFC 3448, 4.3) */
++#define TFRC_T_MBI		   (64 * USEC_PER_SEC)
+ 
+ /*
+  * The t_delta parameter (RFC 3448, 4.6): delays of less than %USEC_PER_MSEC are
+@@ -76,6 +76,7 @@ enum ccid3_options {
+  * @x_recv - Receive rate    in 64 * bytes per second
+  * @x_calc - Calculated rate in bytes per second
+  * @rtt - Estimate of current round trip time in usecs
++ * @r_sqmean - Estimate of long-term RTT (RFC 3448, 4.5)
+  * @p - Current loss event rate (0-1) scaled by 1000000
+  * @s - Packet size in bytes
+  * @t_rto - Nofeedback Timer setting in usecs
+@@ -94,6 +95,7 @@ struct ccid3_hc_tx_sock {
+ 	u64				x_recv;
+ 	u32				x_calc;
+ 	u32				rtt;
++	u16				r_sqmean;
+ 	u32				p;
+ 	u32				t_rto;
+ 	u32				t_ipi;
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -49,6 +49,8 @@ static int ccid3_debug;
+ /*
+  *	Transmitter Half-Connection Routines
+  */
++/* Oscillation Prevention/Reduction: recommended by rfc3448bis, on by default */
++static int do_osc_prev = true;
+ 
+ /*
+  * Compute the initial sending rate X_init in the manner of RFC 3390:
+@@ -296,6 +298,9 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 		hctx->s = ccid3_hc_tx_measure_packet_size(sk, skb->len);
+ 		ccid3_update_send_interval(hctx);
+ 
++		/* Seed value for Oscillation Prevention (sec. 4.5) */
++		hctx->r_sqmean = tfrc_scaled_sqrt(hctx->rtt);
++
+ 	} else {
+ 		delay = ktime_us_delta(hctx->t_nom, now);
+ 		ccid3_pr_debug("delay=%ld\n", (long)delay);
+@@ -400,6 +405,38 @@ done_computing_x:
+ 			       hctx->s, hctx->p, hctx->x_calc,
+ 			       (unsigned)(hctx->x_recv >> 6),
+ 			       (unsigned)(hctx->x >> 6));
++	/*
++	 * Oscillation Reduction (RFC 3448, 4.5) - modifying t_ipi according to
++	 * RTT changes, multiplying by X/X_inst = sqrt(R_sample)/R_sqmean. This
++	 * can be useful if few connections share a link, avoiding that buffer
++	 * fill levels (RTT) oscillate as a result of frequent adjustments to X.
++	 * A useful presentation with background information is in
++	 *    Joerg Widmer, "Equation-Based Congestion Control",
++	 *    MSc Thesis, University of Mannheim, Germany, 2000
++	 * (sec. 3.6.4), who calls this ISM ("Inter-packet Space Modulation").
++	 */
++	if (do_osc_prev) {
++		r_sample = tfrc_scaled_sqrt(r_sample);
 +		/*
-+		 * Increment GSS here already in case the option code needs it.
-+		 * Update GSS for real only if option processing below succeeds.
++		 * The modulation can work in both ways: increase/decrease t_ipi
++		 * according to long-term increases/decreases of the RTT. The
++		 * former is a useful measure, since it works against queue
++		 * build-up. The latter temporarily increases the sending rate,
++		 * so that buffers fill up more quickly. This in turn causes
++		 * the RTT to increase, so that either later reduction becomes
++		 * necessary or the RTT stays at a very high level. Decreasing
++		 * t_ipi is therefore not supported.
++		 * Furthermore, during the initial slow-start phase the RTT
++		 * naturally increases, where using the algorithm would cause
++		 * delays. Hence it is disabled during the initial slow-start.
 +		 */
-+		dcb->dccpd_seq = ADD48(dp->dccps_gss, 1);
++		if (r_sample > hctx->r_sqmean && hctx->p > 0)
++			hctx->t_ipi = div_u64((u64)hctx->t_ipi * (u64)r_sample,
++					      hctx->r_sqmean);
++		hctx->t_ipi = min_t(u32, hctx->t_ipi, TFRC_T_MBI);
++		/* update R_sqmean _after_ computing the modulation factor */
++		hctx->r_sqmean = tfrc_ewma(hctx->r_sqmean, r_sample, 9);
++	}
  
- 		switch (dcb->dccpd_type) {
- 		case DCCP_PKT_DATA:
-@@ -66,6 +69,9 @@ static int dccp_transmit_skb(struct sock *sk, struct sk_buff *skb)
+ 	/* unschedule no feedback timer */
+ 	sk_stop_timer(sk, &hctx->no_feedback_timer);
+@@ -749,6 +786,9 @@ static struct ccid_operations ccid3 = {
+ 	.ccid_hc_tx_getsockopt	   = ccid3_hc_tx_getsockopt,
+ };
  
- 		case DCCP_PKT_REQUEST:
- 			set_ack = 0;
-+			/* Use ISS on the first (non-retransmitted) Request. */
-+			if (icsk->icsk_retransmits = 0)
-+				dcb->dccpd_seq = dp->dccps_iss;
- 			/* fall through */
- 
- 		case DCCP_PKT_SYNC:
-@@ -84,8 +90,6 @@ static int dccp_transmit_skb(struct sock *sk, struct sk_buff *skb)
- 			break;
- 		}
- 
--		dcb->dccpd_seq = dp->dccps_gss;
--
- 		if (dccp_insert_options(sk, skb)) {
- 			kfree_skb(skb);
- 			return -EPROTO;
-@@ -103,7 +107,7 @@ static int dccp_transmit_skb(struct sock *sk, struct sk_buff *skb)
- 		/* XXX For now we're using only 48 bits sequence numbers */
- 		dh->dccph_x	= 1;
- 
--		dp->dccps_awh = dp->dccps_gss;
-+		dccp_update_gss(sk, dcb->dccpd_seq);
- 		dccp_hdr_set_seq(dh, dp->dccps_gss);
- 		if (set_ack)
- 			dccp_hdr_set_ack(dccp_hdr_ack_bits(skb), ackno);
-@@ -112,6 +116,11 @@ static int dccp_transmit_skb(struct sock *sk, struct sk_buff *skb)
- 		case DCCP_PKT_REQUEST:
- 			dccp_hdr_request(skb)->dccph_req_service  							dp->dccps_service;
-+			/*
-+			 * Limit Ack window to ISS <= P.ackno <= GSS, so that
-+			 * only Responses to Requests we sent are considered.
-+			 */
-+			dp->dccps_awl = dp->dccps_iss;
- 			break;
- 		case DCCP_PKT_RESET:
- 			dccp_hdr_reset(skb)->dccph_reset_code @@ -449,19 +458,7 @@ static inline void dccp_connect_init(struct sock *sk)
- 
- 	dccp_sync_mss(sk, dst_mtu(dst));
- 
--	/*
--	 * SWL and AWL are initially adjusted so that they are not less than
--	 * the initial Sequence Numbers received and sent, respectively:
--	 *	SWL := max(GSR + 1 - floor(W/4), ISR),
--	 *	AWL := max(GSS - W' + 1, ISS).
--	 * These adjustments MUST be applied only at the beginning of the
--	 * connection.
--	 */
--	dccp_update_gss(sk, dp->dccps_iss);
--	dccp_set_seqno(&dp->dccps_awl, max48(dp->dccps_awl, dp->dccps_iss));
--
--	/* S.GAR - greatest valid acknowledgement number received on a non-Sync;
--	 *         initialized to S.ISS (sec. 8.5)                            */
-+	/* Initialise GAR as per 8.5; AWL/AWH are set in dccp_transmit_skb() */
- 	dp->dccps_gar = dp->dccps_iss;
- 
- 	icsk->icsk_retransmits = 0;
++module_param(do_osc_prev, bool, 0644);
++MODULE_PARM_DESC(do_osc_prev, "Use Oscillation Prevention (RFC 3448, 4.5)");
++
+ #ifdef CONFIG_IP_DCCP_CCID3_DEBUG
+ module_param(ccid3_debug, bool, 0444);
+ MODULE_PARM_DESC(ccid3_debug, "Enable debug messages");
