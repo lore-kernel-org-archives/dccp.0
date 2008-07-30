@@ -1,99 +1,150 @@
-From: Wei Yongjun <yjwei@cn.fujitsu.com>
-Date: Wed, 30 Jul 2008 04:50:44 +0000
-Subject: [PATCH] DCCP: Fix to handle invalid packets in REQUEST state
-Message-Id: <488FF324.6050706@cn.fujitsu.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 30 Jul 2008 16:51:41 +0000
+Subject: Re: [PATCH] DCCP: Fix to handle invalid packets in REQUEST state
+Message-Id: <20080730165141.GA10381@gerrit.erg.abdn.ac.uk>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="wac7ysb48OaltWcw"
 List-Id: <dccp.vger.kernel.org>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+References: <488FF324.6050706@cn.fujitsu.com>
+In-Reply-To: <488FF324.6050706@cn.fujitsu.com>
 To: dccp@vger.kernel.org
 
-VGhpcyBwYXRjaCBmaXggdHdvIHByb2JsZW0gaW4gUkVRVUVTVCBzdGF0ZSB3aGlsZSByZWNlaXZl
-ZCBpbnZhbGlkIHBhY2tldHMuCgoxLiBJZiBpbnZhbGlkIERjY3AtRGF0YUFjayBwYWNrZXRzIGlz
-IHJlY2VpdmVkIGluIHRoZSBSRVFVRVNUIHN0YXRlLCB0aGUgCnNvY2tldCBqdXN0IHNlbmQgYmFj
-ayBEY2NwLVJlc3Qgd2l0aCBpbnZhbGlkIHBhY2tldCBlcnJvciwgYnV0IHRoZSAKc29ja2V0IGlz
-IG5vdCByZXNldCwgRGNjcC1SZXF1ZXN0IHdpbGwgYmUgY29udGludWUgcmV0cmFubWl0dGVkLiBU
-aGUgCnByb2NlZHVyZSBpcyBsaWtlIHRoaXM6CgpFbmRwb2ludCBBICAgICAgICAgICAgICAgICAg
-IEVuZHBpbnQgQgogICAgICAgICA8LS0tLS0tLS0tLS0tLS0tLS0gIFJlcXVlc3QKRGF0YUFjayAg
-LS0tLS0tLS0tLS0tLS0tLS0+ICAKICAgICAgICAgPC0tLS0tLS0tLS0tLS0tLS0tICBSZXNldCAo
-aW52YWxpZCBwYWNrZXQpCiAgICAgICAgIDwtLS0tLS0tLS0tLS0tLS0tLSAgUmVxdWVzdCAocmV0
-cmFubWl0KQoKMi4gSWYgc2VxdWVuY2UtaW52YWxpZCBEY2NwLVJlc3BvbnNlIGlzIHJlY2VpdmVk
-IGluIHRoZSBSRVFVRVNUIHN0YXRlLCAKa2VybmVsIHdpbGwgcGFuaWMuIFRoaXMgaXMgYmVjYXVz
-ZSB0aGF0IGFmdGVyIHNlbmQgcmVzZXQgd2hlbiByZWNlaXZlZCAKc2VxdWVuY2UtaW52YWxpZCBE
-Y2NwLVJlc3BvbnNlLCB0aGUgc3RhdGUgb2Ygc29ja2V0IG5vdCBiZSBjaGFuZ2VkLiBUaGUgCnBy
-b2NlZHVyZSBpcyBsaWtlIHRoaXM6CgpFbmRwb2ludCBBICAgICAgICAgICAgICAgICAgIEVuZHBp
-bnQgQgogICAgICAgICA8LS0tLS0tLS0tLS0tLS0tLS0gIFJlcXVlc3QKUmVzcG9uc2UgLS0tLS0t
-LS0tLS0tLS0tLS0+ICAKKHNlcXVlbmNlLWludmFsaWQpCiAgICAgICAgIDwtLS0tLS0tLS0tLS0t
-LS0tLSAgUmVzZXQgKGludmFsaWQgcGFja2V0KQpSZXNwb25zZSAtLS0tLS0tLS0tLS0tLS0tLT4g
-IGtlcm5lbCBwYW5pYwoKUGlkOiAwLCBjb21tOiBzd2FwcGVyIE5vdCB0YWludGVkICgyLjYuMjYg
-IzEpCkVJUDogMDA2MDpbPGMwNWI0MjZkPl0gRUZMQUdTOiAwMDAxMDI4MiBDUFU6IDAKRUlQIGlz
-IGF0IHNrYl9yZWxlYXNlX2FsbCsweDYvMHg3ZQpFQVg6IDAwMDAwMDAwIEVCWDogMDAwMDAwMDAg
-RUNYOiAwMDAwMDA0NiBFRFg6IGM0ZmRkMDAwCkVTSTogYzc5YWFkODAgRURJOiBjNGZkZDAwMCBF
-QlA6IGMwNzdlZTBjIEVTUDogYzA3N2VlMDgKIERTOiAwMDdiIEVTOiAwMDdiIEZTOiAwMGQ4IEdT
-OiAwMDAwIFNTOiAwMDY4ClByb2Nlc3Mgc3dhcHBlciAocGlkOiAwLCB0acA3N2UwMDAgdGFza8A3
-MDAzNDAgdGFzay50acA3MzQwMDApClN0YWNrOiAwMDAwMDAwMCBjMDc3ZWUxOCBjMDViM2JmMyBj
-NzlhOTIzNCBjMDc3ZWU1OCBjOGFiMWRiNSBjNzlhYWQ4MCBjNGZkZDAwMAogICAgICAgMDIwMDAw
-MTUgYzc5YWFkYTAgMDAwMDBjM2MgMDAwMDA4NTQgYzc5YWFkODAgYzA3N2VlNTAgYzA0MjYwZGIg
-YzhhYzE3NmUKICAgICAgIDAwNTliMjBlIGM0ZmRkMDAwIGM3OWFhZDgwIGM0ZmRkMDAwIGMwNzdl
-ZTc4IGM4YWMwNmUzIDAwMDAwMDFjIGM3OWE5MjM0CkNhbGwgVHJhY2U6CiBbPGMwNWIzYmYzPl0g
-PyBfX2tmcmVlX3NrYisweGIvMHg2NgogWzxjOGFiMWRiNT5dID8gZGNjcF9yY3Zfc3RhdGVfcHJv
-Y2VzcysweDE5NS8weDRiMCBbZGNjcF0KIFs8YzA0MjYwZGI+XSA/IHByaW50aysweDE1LzB4MTcK
-IFs8YzhhYzA2ZTM+XSA/IGRjY3BfdjRfZG9fcmN2KzB4ZWQvMHgxMTIgW2RjY3BfaXB2NF0KIFs8
-YzA1YzI1N2Q+XSA/IHNrX2ZpbHRlcisweDY2LzB4NmQKIFs8YzA1YjIzYmY+XSA/IHNrX3JlY2Vp
-dmVfc2tiKzB4MzIvMHg3YwogWzxjOGFjMTRkND5dID8gZGNjcF92NF9yY3YrMHgzYjUvMHg0MmQg
-W2RjY3BfaXB2NF0KIFs8YzA1ZDQwMGE+XSA/IGlwX2xvY2FsX2RlbGl2ZXJfZmluaXNoKzB4YjUv
-MHgxNTEKIFs8YzA1ZDQzZjM+XSA/IGlwX2xvY2FsX2RlbGl2ZXIrMHg2MS8weDZhCiBbPGMwNWQz
-ZjM2Pl0gPyBpcF9yY3ZfZmluaXNoKzB4MjhlLzB4MmFkCiBbPGMwNWQ0MzY4Pl0gPyBpcF9yY3Yr
-MHgxZjIvMHgyMWMKIFs8YzA1Yjg1OTk+XSA/IG5ldGlmX3JlY2VpdmVfc2tiKzB4MmVhLzB4MzUy
-CiBbPGM4OGNlYTliPl0gPyBwY25ldDMyX3BvbGwrMHgzMmYvMHg2ODkgW3BjbmV0MzJdCiBbPGMw
-NDA0MjU3Pl0gPyBjb21tb25faW50ZXJydXB0KzB4MjMvMHgyOAogWzxjMDViYTBmMT5dID8gbmV0
-X3J4X2FjdGlvbisweDhmLzB4MTQ2CiBbPGMwNDI5YTk1Pl0gPyBfX2RvX3NvZnRpcnErMHg2NC8w
-eGNkCiBbPGMwNDI5YTMxPl0gPyBfX2RvX3NvZnRpcnErMHgwLzB4Y2QKIFs8YzA0MDU3ODg+XSA/
-IGRvX3NvZnRpcnErMHg1Yy8weDkyCiBbPGMwNDI5YTJmPl0gPyBpcnFfZXhpdCsweDM4LzB4M2EK
-IFs8YzA0MTJlZGE+XSA/IHNtcF9hcGljX3RpbWVyX2ludGVycnVwdCsweDcxLzB4N2YKIFs8YzA0
-MDQzNDQ+XSA/IGFwaWNfdGltZXJfaW50ZXJydXB0KzB4MjgvMHgzMAogWzxjMDQwODU4OD5dID8g
-ZGVmYXVsdF9pZGxlKzB4MmQvMHg0MgogWzxjMDQwMjU3ZD5dID8gY3B1X2lkbGUrMHhhYi8weGMz
-CiBbPGMwNjE0YmEyPl0gPyByZXN0X2luaXQrMHg0ZS8weDUwCiA9PT09PT09PT09PQoKU2lnbmVk
-LW9mZi1ieTogV2VpIFlvbmdqdW4gPHlqd2VpQGNuLmZ1aml0c3UuY29tPgotLS0KIG5ldC9kY2Nw
-L2lucHV0LmMgfCAgIDIxICsrKysrKysrKysrKy0tLS0tLS0tLQogMSBmaWxlcyBjaGFuZ2VkLCAx
-MiBpbnNlcnRpb25zKCspLCA5IGRlbGV0aW9ucygtKQoKZGlmZiAtLWdpdCBhL25ldC9kY2NwL2lu
-cHV0LmMgYi9uZXQvZGNjcC9pbnB1dC5jCmluZGV4IDBiZWIyOWUuLjdkN2I0ZjcKLS0tIGEvbmV0
-L2RjY3AvaW5wdXQuYworKysgYi9uZXQvZGNjcC9pbnB1dC5jCkBAIC0zODgsNiArMzg4LDE0IEBA
-IHN0YXRpYyBpbnQgZGNjcF9yY3ZfcmVxdWVzdF9zZW50X3N0YXRlX3Byb2Nlc3Moc3RydWN0IHNv
-Y2sgKnNrLAogCQkJCQkgICAgICAgY29uc3Qgc3RydWN0IGRjY3BfaGRyICpkaCwKIAkJCQkJICAg
-ICAgIGNvbnN0IHVuc2lnbmVkIGxlbikKIHsKKwljb25zdCBzdHJ1Y3QgaW5ldF9jb25uZWN0aW9u
-X3NvY2sgKmljc2sgPSBpbmV0X2Nzayhzayk7CisKKwkvKiBTdG9wIHRoZSBSRVFVRVNUIHRpbWVy
-ICovCisJaW5ldF9jc2tfY2xlYXJfeG1pdF90aW1lcihzaywgSUNTS19USU1FX1JFVFJBTlMpOwor
-CUJVR19UUkFQKHNrLT5za19zZW5kX2hlYWQgIT0gTlVMTCk7CisJX19rZnJlZV9za2Ioc2stPnNr
-X3NlbmRfaGVhZCk7CisJc2stPnNrX3NlbmRfaGVhZCA9IE5VTEw7CisKIAkvKgogCSAqICBTdGVw
-IDQ6IFByZXBhcmUgc2VxdWVuY2UgbnVtYmVycyBpbiBSRVFVRVNUCiAJICogICAgIElmIFMuc3Rh
-dGUgPSBSRVFVRVNULApAQCAtNDAwLDE2ICs0MDgsOSBAQCBzdGF0aWMgaW50IGRjY3BfcmN2X3Jl
-cXVlc3Rfc2VudF9zdGF0ZV9wcm9jZXNzKHN0cnVjdCBzb2NrICpzaywKIAkgKgkJcHJvY2Vzc2lu
-ZyBjb250aW51ZXMgaW4gU3RlcCA5ICogLwogCSovCiAJaWYgKGRoLT5kY2NwaF90eXBlID0gREND
-UF9QS1RfUkVTUE9OU0UpIHsKLQkJY29uc3Qgc3RydWN0IGluZXRfY29ubmVjdGlvbl9zb2NrICpp
-Y3NrID0gaW5ldF9jc2soc2spOwogCQlzdHJ1Y3QgZGNjcF9zb2NrICpkcCA9IGRjY3Bfc2soc2sp
-OwogCQlsb25nIHRzdGFtcCA9IGRjY3BfdGltZXN0YW1wKCk7CiAKLQkJLyogU3RvcCB0aGUgUkVR
-VUVTVCB0aW1lciAqLwotCQlpbmV0X2Nza19jbGVhcl94bWl0X3RpbWVyKHNrLCBJQ1NLX1RJTUVf
-UkVUUkFOUyk7Ci0JCUJVR19UUkFQKHNrLT5za19zZW5kX2hlYWQgIT0gTlVMTCk7Ci0JCV9fa2Zy
-ZWVfc2tiKHNrLT5za19zZW5kX2hlYWQpOwotCQlzay0+c2tfc2VuZF9oZWFkID0gTlVMTDsKLQog
-CQlpZiAoIWJldHdlZW40OChEQ0NQX1NLQl9DQihza2IpLT5kY2NwZF9hY2tfc2VxLAogCQkJICAg
-ICAgIGRwLT5kY2Nwc19hd2wsIGRwLT5kY2Nwc19hd2gpKSB7CiAJCQlkY2NwX3ByX2RlYnVnKCJp
-bnZhbGlkIGFja25vOiBTLkFXTD0lbGx1LCAiCkBAIC00MjYsNyArNDI3LDcgQEAgc3RhdGljIGlu
-dCBkY2NwX3Jjdl9yZXF1ZXN0X3NlbnRfc3RhdGVfcHJvY2VzcyhzdHJ1Y3Qgc29jayAqc2ssCiAJ
-CSAqIHRoZSBvcHRpb24gdHlwZSBhbmQgaXMgc2V0IGluIGRjY3BfcGFyc2Vfb3B0aW9ucygpLgog
-CQkgKi8KIAkJaWYgKGRjY3BfcGFyc2Vfb3B0aW9ucyhzaywgTlVMTCwgc2tiKSkKLQkJCXJldHVy
-biAxOworCQkJZ290byBvdXRfZXJyOwogCiAJCS8qIE9idGFpbiB1c2VjIFJUVCBzYW1wbGUgZnJv
-bSBTWU4gZXhjaGFuZ2UgKHVzZWQgYnkgQ0NJRCAzKSAqLwogCQlpZiAobGlrZWx5KGRwLT5kY2Nw
-c19vcHRpb25zX3JlY2VpdmVkLmRjY3Bvcl90aW1lc3RhbXBfZWNobykpCkBAIC01MDMsMTAgKzUw
-NCwxMiBAQCBzdGF0aWMgaW50IGRjY3BfcmN2X3JlcXVlc3Rfc2VudF9zdGF0ZV9wcm9jZXNzKHN0
-cnVjdCBzb2NrICpzaywKIG91dF9pbnZhbGlkX3BhY2tldDoKIAkvKiBkY2NwX3Y0X2RvX3JjdiB3
-aWxsIHNlbmQgYSByZXNldCAqLwogCURDQ1BfU0tCX0NCKHNrYiktPmRjY3BkX3Jlc2V0X2NvZGUg
-PSBEQ0NQX1JFU0VUX0NPREVfUEFDS0VUX0VSUk9SOwotCXJldHVybiAxOworCWdvdG8gb3V0X2Vy
-cjsKIAogdW5hYmxlX3RvX3Byb2NlZWQ6CiAJRENDUF9TS0JfQ0Ioc2tiKS0+ZGNjcGRfcmVzZXRf
-Y29kZSA9IERDQ1BfUkVTRVRfQ09ERV9BQk9SVEVEOworCitvdXRfZXJyOgogCS8qCiAJICogV2Ug
-bWFyayB0aGlzIHNvY2tldCBhcyBubyBsb25nZXIgdXNhYmxlLCBzbyB0aGF0IHRoZSBsb29wIGlu
-CiAJICogZGNjcF9zZW5kbXNnKCkgdGVybWluYXRlcyBhbmQgdGhlIGFwcGxpY2F0aW9uIGdldHMg
-bm90aWZpZWQuCi0tIAoxLjUuMy44CgoKCi0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0
-OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3Nh
-Z2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBo
-dHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
+
+--wac7ysb48OaltWcw
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
+
+Wei,
+
+thank you for reporting this. There is a differentiation here.
+
+> This patch fix two problem in REQUEST state while received invalid packets.
+>
+> 1. If invalid Dccp-DataAck packets is received in the REQUEST state, the  
+> socket just send back Dccp-Rest with invalid packet error, but the  
+> socket is not reset, Dccp-Request will be continue retranmitted. The  
+> procedure is like this:
+>
+> Endpoint A                   Endpint B
+>         <-----------------  Request
+> DataAck  ----------------->          <-----------------  Reset (invalid 
+> packet)
+>         <-----------------  Request (retranmit)
+>
+This is not a bug but as far as I know correct behaviour. The DataAck
+could be from a previous incarnation of the same connection, or it could
+be an erratic packet. RFC 4340, 5.6 says about this error code
+ "Packet Error"
+   A valid packet arrived with unexpected type.  For example, a
+   DCCP-Data packet with valid header checksum and sequence numbers
+   arrived at a connection in the REQUEST state. 
+
+The client keeps on retransmitting the Request since this is a
+requirement from 8.1.3; the number of retransmissions is limited
+by net.dccp.default.request_retries.
+
+Hence this case is in principle correct.
+
+> 2. If sequence-invalid Dccp-Response is received in the REQUEST state,  
+> kernel will panic. This is because that after send reset when received  
+> sequence-invalid Dccp-Response, the state of socket not be changed. The  
+> procedure is like this:
+>
+> Endpoint A                   Endpint B
+>         <-----------------  Request
+> Response ----------------->  (sequence-invalid)
+>         <-----------------  Reset (invalid packet)
+> Response ----------------->  kernel panic
+>
+> Pid: 0, comm: swapper Not tainted (2.6.26 #1)
+> EIP: 0060:[<c05b426d>] EFLAGS: 00010282 CPU: 0
+> EIP is at skb_release_all+0x6/0x7e
+> EAX: 00000000 EBX: 00000000 ECX: 00000046 EDX: c4fdd000
+> ESI: c79aad80 EDI: c4fdd000 EBP: c077ee0c ESP: c077ee08
+> DS: 007b ES: 007b FS: 00d8 GS: 0000 SS: 0068
+> Process swapper (pid: 0, ti=c077e000 task=c0700340 task.ti=c0734000)
+> Stack: 00000000 c077ee18 c05b3bf3 c79a9234 c077ee58 c8ab1db5 c79aad80 c4fdd000
+>       02000015 c79aada0 00000c3c 00000854 c79aad80 c077ee50 c04260db c8ac176e
+>       0059b20e c4fdd000 c79aad80 c4fdd000 c077ee78 c8ac06e3 0000001c c79a9234
+> Call Trace:
+> [<c05b3bf3>] ? __kfree_skb+0xb/0x66
+<snip>
+This is clearly a bug. From your analysis above and from looking at the code
+the cause is in all likelihood:
+ 1. sequence-invalid Response arrives;
+ 2. retransmit timer is stopped and sk->sk_send_head is freed;
+ 3. Reset (Packet Error) is sent as per the above diagram;
+ 4. Next Response (valid or invalid) arrives
+ 5. dccp_rcv_request_sent_state_process tries to __kfree_skb() the
+    sk_send_head (which had already been freed in (2))
+    ==> panic
+
+In your approach the socket is closed for each error case. This seems to
+work, but there is a problem with it. 
+
+First, invalid or unexpected packets may arrive (as in the first
+scenario). It is even possible that for example a DataAck stems from a
+previous incarnation of the same connection. Closing the socket here
+will kill the new connection.
+
+Secondly, it also opens the door to an easy denial-of-service attack:
+all an attacker needs to do is to send an unexpected packet type to the
+client in state REQUEST, whereupon the client closes its socket.
+
+The `unable_to_proceed' jump label was intended for the following
+(single) purpose: if feature negotiation fails between endpoints (e.g.
+if a CCID-3 only sender tries to connect to a CCID-2 only receiver). 
+
+Thus, I would like to suggest a different strategy: rather than closing
+the socket whenever a (valid or invalid) packet is received in the
+client-state REQUEST(ING), to move the chunk of code which
+ * stops the retransmit timer for the DCCP-Request and
+ * frees the sk_send_head containing the original skb
+further below, after the error checking has been done.
+
+This will ensure that this code is only executed when a valid Response
+arrives. If no valid Response arrives within the time budget set by the
+request_retries, the retransmit timer and send_head will eventually 
+be cleared via the timer code (dccp_write_err()).
+
+I attach a sketch which I think will fix the bug. Could you give this a
+try please? During the next two weeks it will be difficult for me to 
+do actual testing (writing this while travelling), but I will do my
+best to respond.
+
+
+
+--wac7ysb48OaltWcw
+Content-Type: text/x-diff; charset=us-ascii
+Content-Disposition: attachment; filename="sketch_for_retransmitted_request_bug.diff"
+
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -404,12 +404,6 @@ static int dccp_rcv_request_sent_state_process(struct sock *sk,
+ 		struct dccp_sock *dp = dccp_sk(sk);
+ 		long tstamp = dccp_timestamp();
+ 
+-		/* Stop the REQUEST timer */
+-		inet_csk_clear_xmit_timer(sk, ICSK_TIME_RETRANS);
+-		WARN_ON(sk->sk_send_head == NULL);
+-		__kfree_skb(sk->sk_send_head);
+-		sk->sk_send_head = NULL;
+-
+ 		if (!between48(DCCP_SKB_CB(skb)->dccpd_ack_seq,
+ 			       dp->dccps_awl, dp->dccps_awh)) {
+ 			dccp_pr_debug("invalid ackno: S.AWL=%llu, "
+@@ -428,6 +422,12 @@ static int dccp_rcv_request_sent_state_process(struct sock *sk,
+ 		if (dccp_parse_options(sk, NULL, skb))
+ 			return 1;
+ 
++		/* Stop the REQUEST timer */
++		inet_csk_clear_xmit_timer(sk, ICSK_TIME_RETRANS);
++		WARN_ON(sk->sk_send_head == NULL);
++		__kfree_skb(sk->sk_send_head);
++		sk->sk_send_head = NULL;
++
+ 		/* Obtain usec RTT sample from SYN exchange (used by CCID 3) */
+ 		if (likely(dp->dccps_options_received.dccpor_timestamp_echo))
+ 			dp->dccps_syn_rtt = dccp_sample_rtt(sk, 10 * (tstamp -
+
+--wac7ysb48OaltWcw--
