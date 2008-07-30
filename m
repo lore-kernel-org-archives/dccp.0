@@ -1,80 +1,99 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 30 Jul 2008 17:23:15 +0000
-Subject: Re: [PATCH 1/7] dccp ccid-3: Runtime verification of timer
-Message-Id: <20080730172315.GB10381@gerrit.erg.abdn.ac.uk>
+From: Wei Yongjun <yjwei@cn.fujitsu.com>
+Date: Wed, 30 Jul 2008 04:50:44 +0000
+Subject: [PATCH] DCCP: Fix to handle invalid packets in REQUEST state
+Message-Id: <488FF324.6050706@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1217268843-19667-2-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1217268843-19667-2-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-| >
-| > This prevents module loading when the timer resolution is too low
-| > (e.g. when using jiffies as a clocksource or when disabling high
-| > resolution timers on sparc64).
-| >
-| > Rationale:
-| > ----------
-| > The DCCP base time resolution is 10 microseconds (RFC 4340, 13.1...3). Using a
-| > timer with a lower resolution than that was found to trigger the following bug
-| > warnings/problems on high-speed networks (e.g. local loopback):
-| >
-| >  * small RTT samples are rounded down to 0
-| >  (in some cases, even negative RTT samples occurred);
-| >  * the CCID-3 feedback timer complains that the feedback interval is 0,
-| >   since the coarse-grained resolution rounds RTT-wise intervals down.
-| >
-| > The following syslog messages were observed with a low resolution:
-| >  11:24:00 kernel: BUG: delta (0) <= 0 at ccid3_hc_rx_send_feedback()
-| >  11:26:12 kernel: BUG: delta (0) <= 0 at ccid3_hc_rx_send_feedback()
-| >  11:26:30 kernel: dccp_sample_rtt: unusable RTT sample 0, using min
-| >  11:26:30 last message repeated 5 times
-<snip>
-| 
-| I don't think this is the right direction to head. I think it is
-| acceptable to have not perfect performance if HR timers aren't loaded
-| (and I'm sure ways could be made to improve this) but to disable CCID3
-| altogether is quite drastic. Where will CCID3 be used - think embedded
-| multimedia home devices. These may not have HR timers....
-| 
-| So I disagree with this one.
-| 
-I think we need to continue this discussion on two levels
- 1. what should/could be done
- 2. what the code currently supports.
-
-With regard to the first point I fully agree with you. If it would be
-possible to use a jiffy-based timer basis for the TFRC (CCID-3/4) code
-it would make things easier. The code changes that this requires are
-however too big. It will take a lot of time to find something usable.
-
-In this regard, here is one of the most urgent ToDos: developing an
-RFC1323-style algorithm for use with DCCP timestamps and elapsed time
-option. This would kill several birds with one stone, since the CCID-2
-RTT estimation code is currently below par (not even as good as the 
-TCP code). But RTT sampling is just one part of the problem, the other
-problem is the interval between feedback packets. If you look at the
-patch which computes X_recv - when the interval is too small/large, the
-reported value of X_recv becomes too large/small, respectively.
-
-The second question under point (1) is whether the embedded devices
-actually lack high-resolution timer support. I am CC:-ing this to
-Leandro, who I hope will be able to provide some information about 
-whether this will cause problems on the Maemo platform. 
-
-Or hopefully some knowledgeable embedded-systems people on this list will
-shed some light regarding availability of high-res. (<= 10 usec) timers.
-
-Regarding point (2): the code implicitly depends on a time resolution 
-in the order of 10s of microseconds. The most recent example was the 
-bug reported by Tomasz, which resulted from a loopback RTT of less than
-4 microseconds. Many people now use virtualisation and will want DCCP
-to still work even with extremely low RTTs.		     
-
-Even if embedded systems do not have high resolution timers, I think it
-is not good to remove this protection, since frankly the code does not
-work without a fine-grained timer resolution. The protection is there
-to ensure that the code gets the conditions it implicitly requires.
-
+VGhpcyBwYXRjaCBmaXggdHdvIHByb2JsZW0gaW4gUkVRVUVTVCBzdGF0ZSB3aGlsZSByZWNlaXZl
+ZCBpbnZhbGlkIHBhY2tldHMuCgoxLiBJZiBpbnZhbGlkIERjY3AtRGF0YUFjayBwYWNrZXRzIGlz
+IHJlY2VpdmVkIGluIHRoZSBSRVFVRVNUIHN0YXRlLCB0aGUgCnNvY2tldCBqdXN0IHNlbmQgYmFj
+ayBEY2NwLVJlc3Qgd2l0aCBpbnZhbGlkIHBhY2tldCBlcnJvciwgYnV0IHRoZSAKc29ja2V0IGlz
+IG5vdCByZXNldCwgRGNjcC1SZXF1ZXN0IHdpbGwgYmUgY29udGludWUgcmV0cmFubWl0dGVkLiBU
+aGUgCnByb2NlZHVyZSBpcyBsaWtlIHRoaXM6CgpFbmRwb2ludCBBICAgICAgICAgICAgICAgICAg
+IEVuZHBpbnQgQgogICAgICAgICA8LS0tLS0tLS0tLS0tLS0tLS0gIFJlcXVlc3QKRGF0YUFjayAg
+LS0tLS0tLS0tLS0tLS0tLS0+ICAKICAgICAgICAgPC0tLS0tLS0tLS0tLS0tLS0tICBSZXNldCAo
+aW52YWxpZCBwYWNrZXQpCiAgICAgICAgIDwtLS0tLS0tLS0tLS0tLS0tLSAgUmVxdWVzdCAocmV0
+cmFubWl0KQoKMi4gSWYgc2VxdWVuY2UtaW52YWxpZCBEY2NwLVJlc3BvbnNlIGlzIHJlY2VpdmVk
+IGluIHRoZSBSRVFVRVNUIHN0YXRlLCAKa2VybmVsIHdpbGwgcGFuaWMuIFRoaXMgaXMgYmVjYXVz
+ZSB0aGF0IGFmdGVyIHNlbmQgcmVzZXQgd2hlbiByZWNlaXZlZCAKc2VxdWVuY2UtaW52YWxpZCBE
+Y2NwLVJlc3BvbnNlLCB0aGUgc3RhdGUgb2Ygc29ja2V0IG5vdCBiZSBjaGFuZ2VkLiBUaGUgCnBy
+b2NlZHVyZSBpcyBsaWtlIHRoaXM6CgpFbmRwb2ludCBBICAgICAgICAgICAgICAgICAgIEVuZHBp
+bnQgQgogICAgICAgICA8LS0tLS0tLS0tLS0tLS0tLS0gIFJlcXVlc3QKUmVzcG9uc2UgLS0tLS0t
+LS0tLS0tLS0tLS0+ICAKKHNlcXVlbmNlLWludmFsaWQpCiAgICAgICAgIDwtLS0tLS0tLS0tLS0t
+LS0tLSAgUmVzZXQgKGludmFsaWQgcGFja2V0KQpSZXNwb25zZSAtLS0tLS0tLS0tLS0tLS0tLT4g
+IGtlcm5lbCBwYW5pYwoKUGlkOiAwLCBjb21tOiBzd2FwcGVyIE5vdCB0YWludGVkICgyLjYuMjYg
+IzEpCkVJUDogMDA2MDpbPGMwNWI0MjZkPl0gRUZMQUdTOiAwMDAxMDI4MiBDUFU6IDAKRUlQIGlz
+IGF0IHNrYl9yZWxlYXNlX2FsbCsweDYvMHg3ZQpFQVg6IDAwMDAwMDAwIEVCWDogMDAwMDAwMDAg
+RUNYOiAwMDAwMDA0NiBFRFg6IGM0ZmRkMDAwCkVTSTogYzc5YWFkODAgRURJOiBjNGZkZDAwMCBF
+QlA6IGMwNzdlZTBjIEVTUDogYzA3N2VlMDgKIERTOiAwMDdiIEVTOiAwMDdiIEZTOiAwMGQ4IEdT
+OiAwMDAwIFNTOiAwMDY4ClByb2Nlc3Mgc3dhcHBlciAocGlkOiAwLCB0acA3N2UwMDAgdGFza8A3
+MDAzNDAgdGFzay50acA3MzQwMDApClN0YWNrOiAwMDAwMDAwMCBjMDc3ZWUxOCBjMDViM2JmMyBj
+NzlhOTIzNCBjMDc3ZWU1OCBjOGFiMWRiNSBjNzlhYWQ4MCBjNGZkZDAwMAogICAgICAgMDIwMDAw
+MTUgYzc5YWFkYTAgMDAwMDBjM2MgMDAwMDA4NTQgYzc5YWFkODAgYzA3N2VlNTAgYzA0MjYwZGIg
+YzhhYzE3NmUKICAgICAgIDAwNTliMjBlIGM0ZmRkMDAwIGM3OWFhZDgwIGM0ZmRkMDAwIGMwNzdl
+ZTc4IGM4YWMwNmUzIDAwMDAwMDFjIGM3OWE5MjM0CkNhbGwgVHJhY2U6CiBbPGMwNWIzYmYzPl0g
+PyBfX2tmcmVlX3NrYisweGIvMHg2NgogWzxjOGFiMWRiNT5dID8gZGNjcF9yY3Zfc3RhdGVfcHJv
+Y2VzcysweDE5NS8weDRiMCBbZGNjcF0KIFs8YzA0MjYwZGI+XSA/IHByaW50aysweDE1LzB4MTcK
+IFs8YzhhYzA2ZTM+XSA/IGRjY3BfdjRfZG9fcmN2KzB4ZWQvMHgxMTIgW2RjY3BfaXB2NF0KIFs8
+YzA1YzI1N2Q+XSA/IHNrX2ZpbHRlcisweDY2LzB4NmQKIFs8YzA1YjIzYmY+XSA/IHNrX3JlY2Vp
+dmVfc2tiKzB4MzIvMHg3YwogWzxjOGFjMTRkND5dID8gZGNjcF92NF9yY3YrMHgzYjUvMHg0MmQg
+W2RjY3BfaXB2NF0KIFs8YzA1ZDQwMGE+XSA/IGlwX2xvY2FsX2RlbGl2ZXJfZmluaXNoKzB4YjUv
+MHgxNTEKIFs8YzA1ZDQzZjM+XSA/IGlwX2xvY2FsX2RlbGl2ZXIrMHg2MS8weDZhCiBbPGMwNWQz
+ZjM2Pl0gPyBpcF9yY3ZfZmluaXNoKzB4MjhlLzB4MmFkCiBbPGMwNWQ0MzY4Pl0gPyBpcF9yY3Yr
+MHgxZjIvMHgyMWMKIFs8YzA1Yjg1OTk+XSA/IG5ldGlmX3JlY2VpdmVfc2tiKzB4MmVhLzB4MzUy
+CiBbPGM4OGNlYTliPl0gPyBwY25ldDMyX3BvbGwrMHgzMmYvMHg2ODkgW3BjbmV0MzJdCiBbPGMw
+NDA0MjU3Pl0gPyBjb21tb25faW50ZXJydXB0KzB4MjMvMHgyOAogWzxjMDViYTBmMT5dID8gbmV0
+X3J4X2FjdGlvbisweDhmLzB4MTQ2CiBbPGMwNDI5YTk1Pl0gPyBfX2RvX3NvZnRpcnErMHg2NC8w
+eGNkCiBbPGMwNDI5YTMxPl0gPyBfX2RvX3NvZnRpcnErMHgwLzB4Y2QKIFs8YzA0MDU3ODg+XSA/
+IGRvX3NvZnRpcnErMHg1Yy8weDkyCiBbPGMwNDI5YTJmPl0gPyBpcnFfZXhpdCsweDM4LzB4M2EK
+IFs8YzA0MTJlZGE+XSA/IHNtcF9hcGljX3RpbWVyX2ludGVycnVwdCsweDcxLzB4N2YKIFs8YzA0
+MDQzNDQ+XSA/IGFwaWNfdGltZXJfaW50ZXJydXB0KzB4MjgvMHgzMAogWzxjMDQwODU4OD5dID8g
+ZGVmYXVsdF9pZGxlKzB4MmQvMHg0MgogWzxjMDQwMjU3ZD5dID8gY3B1X2lkbGUrMHhhYi8weGMz
+CiBbPGMwNjE0YmEyPl0gPyByZXN0X2luaXQrMHg0ZS8weDUwCiA9PT09PT09PT09PQoKU2lnbmVk
+LW9mZi1ieTogV2VpIFlvbmdqdW4gPHlqd2VpQGNuLmZ1aml0c3UuY29tPgotLS0KIG5ldC9kY2Nw
+L2lucHV0LmMgfCAgIDIxICsrKysrKysrKysrKy0tLS0tLS0tLQogMSBmaWxlcyBjaGFuZ2VkLCAx
+MiBpbnNlcnRpb25zKCspLCA5IGRlbGV0aW9ucygtKQoKZGlmZiAtLWdpdCBhL25ldC9kY2NwL2lu
+cHV0LmMgYi9uZXQvZGNjcC9pbnB1dC5jCmluZGV4IDBiZWIyOWUuLjdkN2I0ZjcKLS0tIGEvbmV0
+L2RjY3AvaW5wdXQuYworKysgYi9uZXQvZGNjcC9pbnB1dC5jCkBAIC0zODgsNiArMzg4LDE0IEBA
+IHN0YXRpYyBpbnQgZGNjcF9yY3ZfcmVxdWVzdF9zZW50X3N0YXRlX3Byb2Nlc3Moc3RydWN0IHNv
+Y2sgKnNrLAogCQkJCQkgICAgICAgY29uc3Qgc3RydWN0IGRjY3BfaGRyICpkaCwKIAkJCQkJICAg
+ICAgIGNvbnN0IHVuc2lnbmVkIGxlbikKIHsKKwljb25zdCBzdHJ1Y3QgaW5ldF9jb25uZWN0aW9u
+X3NvY2sgKmljc2sgPSBpbmV0X2Nzayhzayk7CisKKwkvKiBTdG9wIHRoZSBSRVFVRVNUIHRpbWVy
+ICovCisJaW5ldF9jc2tfY2xlYXJfeG1pdF90aW1lcihzaywgSUNTS19USU1FX1JFVFJBTlMpOwor
+CUJVR19UUkFQKHNrLT5za19zZW5kX2hlYWQgIT0gTlVMTCk7CisJX19rZnJlZV9za2Ioc2stPnNr
+X3NlbmRfaGVhZCk7CisJc2stPnNrX3NlbmRfaGVhZCA9IE5VTEw7CisKIAkvKgogCSAqICBTdGVw
+IDQ6IFByZXBhcmUgc2VxdWVuY2UgbnVtYmVycyBpbiBSRVFVRVNUCiAJICogICAgIElmIFMuc3Rh
+dGUgPSBSRVFVRVNULApAQCAtNDAwLDE2ICs0MDgsOSBAQCBzdGF0aWMgaW50IGRjY3BfcmN2X3Jl
+cXVlc3Rfc2VudF9zdGF0ZV9wcm9jZXNzKHN0cnVjdCBzb2NrICpzaywKIAkgKgkJcHJvY2Vzc2lu
+ZyBjb250aW51ZXMgaW4gU3RlcCA5ICogLwogCSovCiAJaWYgKGRoLT5kY2NwaF90eXBlID0gREND
+UF9QS1RfUkVTUE9OU0UpIHsKLQkJY29uc3Qgc3RydWN0IGluZXRfY29ubmVjdGlvbl9zb2NrICpp
+Y3NrID0gaW5ldF9jc2soc2spOwogCQlzdHJ1Y3QgZGNjcF9zb2NrICpkcCA9IGRjY3Bfc2soc2sp
+OwogCQlsb25nIHRzdGFtcCA9IGRjY3BfdGltZXN0YW1wKCk7CiAKLQkJLyogU3RvcCB0aGUgUkVR
+VUVTVCB0aW1lciAqLwotCQlpbmV0X2Nza19jbGVhcl94bWl0X3RpbWVyKHNrLCBJQ1NLX1RJTUVf
+UkVUUkFOUyk7Ci0JCUJVR19UUkFQKHNrLT5za19zZW5kX2hlYWQgIT0gTlVMTCk7Ci0JCV9fa2Zy
+ZWVfc2tiKHNrLT5za19zZW5kX2hlYWQpOwotCQlzay0+c2tfc2VuZF9oZWFkID0gTlVMTDsKLQog
+CQlpZiAoIWJldHdlZW40OChEQ0NQX1NLQl9DQihza2IpLT5kY2NwZF9hY2tfc2VxLAogCQkJICAg
+ICAgIGRwLT5kY2Nwc19hd2wsIGRwLT5kY2Nwc19hd2gpKSB7CiAJCQlkY2NwX3ByX2RlYnVnKCJp
+bnZhbGlkIGFja25vOiBTLkFXTD0lbGx1LCAiCkBAIC00MjYsNyArNDI3LDcgQEAgc3RhdGljIGlu
+dCBkY2NwX3Jjdl9yZXF1ZXN0X3NlbnRfc3RhdGVfcHJvY2VzcyhzdHJ1Y3Qgc29jayAqc2ssCiAJ
+CSAqIHRoZSBvcHRpb24gdHlwZSBhbmQgaXMgc2V0IGluIGRjY3BfcGFyc2Vfb3B0aW9ucygpLgog
+CQkgKi8KIAkJaWYgKGRjY3BfcGFyc2Vfb3B0aW9ucyhzaywgTlVMTCwgc2tiKSkKLQkJCXJldHVy
+biAxOworCQkJZ290byBvdXRfZXJyOwogCiAJCS8qIE9idGFpbiB1c2VjIFJUVCBzYW1wbGUgZnJv
+bSBTWU4gZXhjaGFuZ2UgKHVzZWQgYnkgQ0NJRCAzKSAqLwogCQlpZiAobGlrZWx5KGRwLT5kY2Nw
+c19vcHRpb25zX3JlY2VpdmVkLmRjY3Bvcl90aW1lc3RhbXBfZWNobykpCkBAIC01MDMsMTAgKzUw
+NCwxMiBAQCBzdGF0aWMgaW50IGRjY3BfcmN2X3JlcXVlc3Rfc2VudF9zdGF0ZV9wcm9jZXNzKHN0
+cnVjdCBzb2NrICpzaywKIG91dF9pbnZhbGlkX3BhY2tldDoKIAkvKiBkY2NwX3Y0X2RvX3JjdiB3
+aWxsIHNlbmQgYSByZXNldCAqLwogCURDQ1BfU0tCX0NCKHNrYiktPmRjY3BkX3Jlc2V0X2NvZGUg
+PSBEQ0NQX1JFU0VUX0NPREVfUEFDS0VUX0VSUk9SOwotCXJldHVybiAxOworCWdvdG8gb3V0X2Vy
+cjsKIAogdW5hYmxlX3RvX3Byb2NlZWQ6CiAJRENDUF9TS0JfQ0Ioc2tiKS0+ZGNjcGRfcmVzZXRf
+Y29kZSA9IERDQ1BfUkVTRVRfQ09ERV9BQk9SVEVEOworCitvdXRfZXJyOgogCS8qCiAJICogV2Ug
+bWFyayB0aGlzIHNvY2tldCBhcyBubyBsb25nZXIgdXNhYmxlLCBzbyB0aGF0IHRoZSBsb29wIGlu
+CiAJICogZGNjcF9zZW5kbXNnKCkgdGVybWluYXRlcyBhbmQgdGhlIGFwcGxpY2F0aW9uIGdldHMg
+bm90aWZpZWQuCi0tIAoxLjUuMy44CgoKCi0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0
+OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3Nh
+Z2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBo
+dHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
