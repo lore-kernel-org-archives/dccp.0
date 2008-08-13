@@ -1,42 +1,34 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Wed, 13 Aug 2008 12:55:32 +0000
-Subject: [PATCH] dccp: change L/R must have at least one byte in the
-Message-Id: <20080813125532.GD12888@ghostprotocols.net>
+From: gerrit@erg.abdn.ac.uk
+Date: Wed, 13 Aug 2008 15:04:03 +0000
+Subject: Re: [PATCH] dccp: change L/R must have at least one byte in the
+Message-Id: <44269.148.187.160.35.1218639843.squirrel@148.187.160.35>
 List-Id: <dccp.vger.kernel.org>
+References: <20080813125532.GD12888@ghostprotocols.net>
+In-Reply-To: <20080813125532.GD12888@ghostprotocols.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-Hi David, Gerrit,
+> dccp: change L/R must have at least one byte in the dccpsf_val field
+>
+> Thanks to Eugene Teo for reporting this problem.
+>
+> Signed-off-by: Eugene Teo <eugenete@kernel.sg>
+> Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-	Please consider applying.
+Dave, can you please apply -- this patch is for mainline only.
 
-- Arnaldo
+The dccp_setsockopt_change() function has been fully removed in the
+test tree (
+http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dcommi=
+tdiff;h=F1b8d02c7cb03e22037e1590d04f9ec8ab2423eb),
+due to problems it caused.
 
-dccp: change L/R must have at least one byte in the dccpsf_val field
-    
-Thanks to Eugene Teo for reporting this problem.
-    
-Signed-off-by: Eugene Teo <eugenete@kernel.sg>
-Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Will be in contact regarding this soon.
 
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index b622d97..1ca3b26 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -474,6 +474,11 @@ static int dccp_setsockopt_change(struct sock *sk, int type,
- 
- 	if (copy_from_user(&opt, optval, sizeof(opt)))
- 		return -EFAULT;
-+	/*
-+	 * rfc4340: 6.1. Change Options
-+	 */
-+	if (opt.dccpsf_len < 1)
-+		return -EINVAL;
- 
- 	val = kmalloc(opt.dccpsf_len, GFP_KERNEL);
- 	if (!val)
+Gerrit
 
 
 
