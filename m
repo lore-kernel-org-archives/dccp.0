@@ -1,111 +1,84 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Aug 2008 17:45:03 +0000
-Subject: [PATCH 28/37] dccp: Integration of dynamic feature activation - part 3 (client side)
-Message-Id: <1219945512-7723-29-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Wei Yongjun <yjwei@cn.fujitsu.com>
+Date: Mon, 18 Aug 2008 05:57:04 +0000
+Subject: [PATCH] dccp: Do not send Dccp-Sync after received sequence-invalid
+Message-Id: <48A90F30.9060203@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This integrates feature-activation in the client, with these details:
+RFC4340 said:
 
- 1. When dccp_parse_options() fails, the reset code is already set, request_sent
-    _state_process() currently overrides this with `Packet Error', which is not
-    intended - so changed to use the reset code set in dccp_parse_options();
+7.5.4.  Handling Sequence-Invalid Packets
 
- 2. There was a FIXME to change the error code when dccp_ackvec_add() fails.
-    I have looked this up and found that:
-    * the check whether ackno < ISN is already made earlier,
-    * this Response is likely the 1st packet with an Ackno that the client gets,
-    * so when dccp_ackvec_add() fails, the reason is likely not a packet error.
+o  A sequence-invalid DCCP-Reset packet MUST elicit a DCCP-Sync
+   packet in response (subject to a possible rate limit).  This
+   response packet MUST use a new Sequence Number, and thus will
+   increase GSS; GSR will not change, however, since the received
+   packet was sequence-invalid.  The response packet's
+   Acknowledgement Number MUST equal GSR.
 
- 3. When feature negotiation fails, the socket should be marked as not usable,
-    so that the application is notified that an error occurs. This is achieved
-    by a new label, which uses an error code of `Aborted' and which sets the
-    socket state to CLOSED, as well as sk_err.
+But reponse to a sequence-invalid DCCP-Reset with acknowledgement
+number equal to GSR will help to attack for sequence number. The
+attack method as the following:
 
- 4. Avoids parsing the Ack twice in Respond state by not doing option processing
-    again in dccp_rcv_respond_partopen_state_process (as option processing has
-    already been done on the request_sock in dccp_check_req).
+Endpoint A                                 Endpoint B
+                                           (OPEN)
+Dccp-Request      ---------------->
+(SEQ=X)
+                  <----------------        SYNC
+                                           (SEQ=GSS+1, ACK=X)
+Dccp-Reset        ---------------->
+(SEQ=X+1, ACK=GSS+1)
+                  <----------------        SYNC
+                                           (SEQ=GSS+2, ACK=GSR)
 
-Since this addresses congestion-control initialisation, a corresponding
-FIXME has been removed.
+X = invalid sequence number
+GSS = sequence number of endpoint B
+GSR = sequence number of endpoint A
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+After we received SYNC from endpoint B, we known the sequence number
+of both side.
+
+The best way to avoid this is not send Dccp-Sync after received
+sequence-invalid Dccp-Reset.
+
+Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
 ---
- net/dccp/input.c |   30 ++++++++++++++++++++++++++----
- 1 files changed, 26 insertions(+), 4 deletions(-)
+ net/dccp/input.c |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
 
+diff --git a/net/dccp/input.c b/net/dccp/input.c
+index 71b24d4..fdb3c2c 100644
 --- a/net/dccp/input.c
 +++ b/net/dccp/input.c
-@@ -421,8 +421,13 @@ static int dccp_rcv_request_sent_state_process(struct sock *sk,
- 			goto out_invalid_packet;
- 		}
- 
+@@ -242,6 +242,12 @@ static int dccp_check_seqno(struct sock *sk, struct sk_buff *skb)
+ 		if (dh->dccph_type != DCCP_PKT_SYNC &&
+ 		    (ackno != DCCP_PKT_WITHOUT_ACK_SEQ))
+ 			dp->dccps_gar = ackno;
++	} else if (dh->dccph_type = DCCP_PKT_RESET) {
 +		/*
-+		 * If option processing (Step 8) failed, return 1 here so that
-+		 * dccp_v4_do_rcv() sends a Reset. The Reset code depends on
-+		 * the option type and is set in dccp_parse_options().
++		 * Ignore sequence-invalid Dccp-Reset to avoid sequence numbers
++		 * attack. 
 +		 */
- 		if (dccp_parse_options(sk, NULL, skb))
--			goto out_invalid_packet;
-+			return 1;
++		return -1;
+ 	} else {
+ 		unsigned long now = jiffies;
+ 		/*
+@@ -273,8 +279,6 @@ static int dccp_check_seqno(struct sock *sk, struct sk_buff *skb)
  
- 		/* Obtain usec RTT sample from SYN exchange (used by CCID 3) */
- 		if (likely(dp->dccps_options_received.dccpor_timestamp_echo))
-@@ -475,6 +480,15 @@ static int dccp_rcv_request_sent_state_process(struct sock *sk,
- 		 */
- 		dccp_set_state(sk, DCCP_PARTOPEN);
+ 		dp->dccps_rate_last = now;
  
-+		/*
-+		 * If feature negotiation was successful, activate features now;
-+		 * an activation failure means that this host could not activate
-+		 * one ore more features (e.g. insufficient memory), which would
-+		 * leave at least one feature in an undefined state.
-+		 */
-+		if (dccp_feat_activate_values(sk, &dp->dccps_featneg))
-+			goto unable_to_proceed;
-+
- 		/* Make sure socket is routed, for correct metrics. */
- 		icsk->icsk_af_ops->rebuild_header(sk);
- 
-@@ -509,6 +523,16 @@ out_invalid_packet:
- 	/* dccp_v4_do_rcv will send a reset */
- 	DCCP_SKB_CB(skb)->dccpd_reset_code = DCCP_RESET_CODE_PACKET_ERROR;
- 	return 1;
-+
-+unable_to_proceed:
-+	DCCP_SKB_CB(skb)->dccpd_reset_code = DCCP_RESET_CODE_ABORTED;
-+	/*
-+	 * We mark this socket as no longer usable, so that the loop in
-+	 * dccp_sendmsg() terminates and the application gets notified.
-+	 */
-+	dccp_set_state(sk, DCCP_CLOSED);
-+	sk->sk_err = ECOMM;
-+	return 1;
- }
- 
- static int dccp_rcv_respond_partopen_state_process(struct sock *sk,
-@@ -600,7 +624,7 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
- 		return 1;
+-		if (dh->dccph_type = DCCP_PKT_RESET)
+-			seqno = dp->dccps_gsr;
+ 		dccp_send_sync(sk, seqno, DCCP_PKT_SYNC);
+ 		return -1;
  	}
- 
--	if (sk->sk_state != DCCP_REQUESTING) {
-+	if (sk->sk_state != DCCP_REQUESTING && sk->sk_state != DCCP_RESPOND) {
- 		if (dccp_check_seqno(sk, skb))
- 			goto discard;
- 
-@@ -665,8 +689,6 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
- 		return 1;
- 
- 	case DCCP_REQUESTING:
--		/* FIXME: do congestion control initialization */
--
- 		queued = dccp_rcv_request_sent_state_process(sk, skb, dh, len);
- 		if (queued >= 0)
- 			return queued;
 -- 
-1.6.0.rc2
+1.5.3.8
+
+
+
+
 
