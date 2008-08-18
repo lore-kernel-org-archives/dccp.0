@@ -1,104 +1,82 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 29 Aug 2008 05:54:36 +0000
-Subject: Re: [PATCH 06/37] dccp: Limit feature negotiation to connection
-Message-Id: <20080829055436.GC3557@gerrit.erg.abdn.ac.uk>
+From: Wei Yongjun <yjwei@cn.fujitsu.com>
+Date: Mon, 18 Aug 2008 06:00:51 +0000
+Subject: [PATCHv2] dccp: Do not send Dccp-Sync after received sequence-invalid
+Message-Id: <48A91013.2010300@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1219945512-7723-7-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1219945512-7723-7-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-| > This patch starts the new implementation of feature negotiation:
-| >  1. Although it is theoretically possible to perform feature negotiation at any
-| >     time (and RFC 4340 supports this), in practice this is prohibitively complex,
-| >     as it requires to put traffic on hold for each new negotiation.
-| >  2. As a byproduct of restricting feature negotiation to connection setup, the
-| >     feature-negotiation retransmit timer is no longer required. This part is now
-| >     mapped onto the protocol-level retransmission.
-| >     Details indicating why timers are no longer needed can be found on
-| >     http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/feature_negotiation/\
-| > 	                                      implementation_notes.html
-| > 
-| > This patch disables anytime negotiation, subsequent patches work out full
-| > feature negotiation support for connection setup.
-| 
-| While I agree that its better to initially support only negotiation at
-| connection startup, I wonder if the response to feature negotiation
-| after connection startup should be plainly ignore the request or if we
-| should reset the connection, telling the other side that what it wants
-| to do is not implemented currently.
-| 
-The implementation will ignore any peer-attempt at feature negotiation
-as soon as the connection has reached established (OPEN/PARTOPEN) state.
+RFC4340 said:
 
-This is done in dccp_feat_parse_options() which is shown for reference below.
+7.5.4.  Handling Sequence-Invalid Packets
 
-Considering doing a reset is something we could consider when it comes
-to Interoperability tests; it may be that the current policy of ignoring
-is sufficient.
+o  A sequence-invalid DCCP-Reset packet MUST elicit a DCCP-Sync
+   packet in response (subject to a possible rate limit).  This
+   response packet MUST use a new Sequence Number, and thus will
+   increase GSS; GSR will not change, however, since the received
+   packet was sequence-invalid.  The response packet's
+   Acknowledgement Number MUST equal GSR.
 
-There are two main points that I think are important here:
- 1. At the begin of the connection, both endpoints really negotiate their
-    capabilities, i.e. A says to B "I want to do X, but could do Y" and
-    B says to A "can't do X, so will settle for Y".
-    Doing the same in the middle of an established connection seems mad
-    to me - for example changing the CCID in mid-connection.
- 2. There is an actual need for exchanging feature negotiation options
-    even when the connection is established. But this is past the
-    checking-capabilities phase and the only known uses require NN
-    (non-negotiable) options. In this case, if the peer does not
-    understand, the reset will happen as a consequence of receiving an
-    empty Confirm. However, in a well-behaved connection this will not
-    occur, since both peers have negotiated their capabilities in (1).
+But reponse to a sequence-invalid DCCP-Reset with acknowledgement
+number equal to GSR will help to attack for sequence number. The
+attack method as the following:
 
-The second point is actually not part of this patch set, it is in the
-second set which I wanted to send after this one. 
+Endpoint A                                 Endpoint B
+                                           (OPEN)
+Dccp-Request      ---------------->
+(SEQ=X)
+                  <----------------        SYNC
+                                           (SEQ=GSS+1, ACK=X)
+Dccp-Reset        ---------------->
+(SEQ=X+1, ACK=GSS+1)
+                  <----------------        SYNC
+                                           (SEQ=GSS+2, ACK=GSR)
 
-Here is the parse routine as it is currently in the test git tree:
+X = invalid sequence number
+GSS = sequence number of endpoint B
+GSR = sequence number of endpoint A
 
-int dccp_feat_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
-                            u8 mandatory, u8 opt, u8 feat, u8 *val, u8 len)
-{
-        struct dccp_sock *dp = dccp_sk(sk);
-        struct list_head *fn = dreq ? &dreq->dreq_featneg : &dp->dccps_featneg;
-        bool server = false;
+After we received SYNC from endpoint B, we known the sequence number
+of both side.
 
-        switch (sk->sk_state) {
-        /*
-         *      Negotiation during connection setup
-         */
-        case DCCP_LISTEN:
-                server = true;                  /* fall through */
-        case DCCP_REQUESTING:
-                switch (opt) {
-                case DCCPO_CHANGE_L:
-                case DCCPO_CHANGE_R:
-                        return dccp_feat_change_recv(fn, mandatory, opt, feat,
-                                                     val, len, server);
-                case DCCPO_CONFIRM_R:
-                case DCCPO_CONFIRM_L:
-                        return dccp_feat_confirm_recv(fn, mandatory, opt, feat,
-                                                      val, len, server);
-                }
-                break;
-        /*
-         *      Support for exchanging NN options on an established connection
-         *      This is currently restricted to Ack Ratio (RFC 4341, 6.1.2)
-         */
-        case DCCP_OPEN:
-        case DCCP_PARTOPEN:
-                return dccp_feat_handle_nn_established(sk, mandatory, opt, feat,
-                                                       val, len);
-        }
-        return 0;       /* ignore FN options in all other states */
-}
+The best way to avoid this is not send Dccp-Sync after received
+sequence-invalid Dccp-Reset.
 
-==> The first two cases are for the initial phase and allow
-     full/unrestricted negotiation.
-     The dccp_feat_handle_nn_established() is part of the second patch
-     set and basically allows dynamic updates of NN (Sequence Window and 
-     Ack Ratio).
-     In all other cases, 0 is returned to dccp_parse_options(), which means
-     that the option is merely eaten up, but not reacted on.
+Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
+---
+ net/dccp/input.c |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/net/dccp/input.c b/net/dccp/input.c
+index 71b24d4..fdb3c2c 100644
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -242,6 +242,12 @@ static int dccp_check_seqno(struct sock *sk, struct sk_buff *skb)
+ 		if (dh->dccph_type != DCCP_PKT_SYNC &&
+ 		    (ackno != DCCP_PKT_WITHOUT_ACK_SEQ))
+ 			dp->dccps_gar = ackno;
++	} else if (dh->dccph_type = DCCP_PKT_RESET) {
++		/*
++		 * Ignore sequence-invalid Dccp-Reset to avoid sequence numbers
++		 * attack.
++		 */
++		return -1;
+ 	} else {
+ 		unsigned long now = jiffies;
+ 		/*
+@@ -273,8 +279,6 @@ static int dccp_check_seqno(struct sock *sk, struct sk_buff *skb)
+ 
+ 		dp->dccps_rate_last = now;
+ 
+-		if (dh->dccph_type = DCCP_PKT_RESET)
+-			seqno = dp->dccps_gsr;
+ 		dccp_send_sync(sk, seqno, DCCP_PKT_SYNC);
+ 		return -1;
+ 	}
+-- 
+1.5.3.8
+
+
+
