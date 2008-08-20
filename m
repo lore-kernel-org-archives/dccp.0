@@ -1,7 +1,7 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Wed, 20 Aug 2008 14:01:16 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 20 Aug 2008 17:34:04 +0000
 Subject: Re: [PATCH] dccp: Reponsed with Reset when packet is received with
-Message-Id: <20080820140116.GL8075@ghostprotocols.net>
+Message-Id: <20080820173404.GA3502@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <48AB7147.2010003@cn.fujitsu.com>
 In-Reply-To: <48AB7147.2010003@cn.fujitsu.com>
@@ -10,79 +10,29 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Wed, Aug 20, 2008 at 09:20:07AM +0800, Wei Yongjun escreveu:
+Thanks a lot for this patch -- I will integrate it into the test tree
+and upload the updated version (include Acked-by's) tomorrow morning.
+
 > RFC4340 said that if a packet is received with invalid option(such as Mandatory
-> Option as the last byte of the option list), endpoint should reponsed with
-> Reset. In LISTIN state and RESPOND state, the endpoint reponsed with reset
-> correctly, but in REQUEST state and OPEN state, the endpoint just ignored
-> the packet. The packet sequence is as the following:
->
-> Case 1:
->
->  Endpoint A                           Endpoint B
->  (CLOSED)                             (CLOSED)
->
->               <----------------       REQUEST
->
->  RESPONSE     ----------------->      (*1)
->  (with invalid option)
->               <----------------       RESET
->                                       (with Reset Code 5, "Option Error")
->
->  (*1) it just be ignored currently, no reset is sent
->
-> Case 2:
->
->  Endpoint A                           Endpoint B
->  (OPEN)                               (OPEN)
->
->  DATA-ACK     ----------------->      (*2)
->  (with invalid option)
->               <----------------       RESET
->                                       (with Reset Code 5, "Option Error")
->
->  (*2) it just be ignored currently, no reset is sent
->
-> This patch fixed the problem by reponsed with Reset instead of ignore packet.
->
-> Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
+> Option as the last byte of the option list),
+While looking at dccp_parse_options, it seems to me that this case
+(Mandatory as the last option, or a one or more OK-options followed by
+ a faulty one) may use the wrong Reset code, since the `rc' variable
+is assigned different values while looping through the header options.
+Did you notice such a case?
 
-God catch! Please also keep netdev@vger.kernel.org on the CC list.
+In any case, I will be adding 
 
-Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -243,6 +243,7 @@ ignore_option:
+ 	}
+ 
+ 	/* mandatory was the last byte in option list -> reset connection */
++	rc = DCCP_RESET_CODE_OPTION_ERROR;
+ 	if (mandatory)
+ 		goto out_invalid_option;
+ 
+to make sure that previous assignments to `rc' do not override the reset code.
 
-> ---
-> net/dccp/input.c |    4 ++--
-> 1 files changed, 2 insertions(+), 2 deletions(-)
->
-> diff --git a/net/dccp/input.c b/net/dccp/input.c
-> index dab4cc9..df0e671 100644
-> --- a/net/dccp/input.c
-> +++ b/net/dccp/input.c
-> @@ -370,7 +370,7 @@ int dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
-> 		goto discard;
->
-> 	if (dccp_parse_options(sk, NULL, skb))
-> -		goto discard;
-> +		return 1;
->
-> 	dccp_handle_ackvec_processing(sk, skb);
-> 	dccp_deliver_input_to_ccids(sk, skb);
-> @@ -631,7 +631,7 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
->
-> 	/*  Step 8: Process options */
-> 	if (dccp_parse_options(sk, NULL, skb))
-> -		goto discard;
-> +		return 1;
->
-> 	/*
-> 	 *  Step 9: Process Reset
-> -- 
-> 1.5.3.8
->
->
->
-> --
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
+Gerrit
