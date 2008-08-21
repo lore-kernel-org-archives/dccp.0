@@ -1,43 +1,31 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 27 Aug 2008 05:35:23 +0000
-Subject: [PATCH 4/6] dccp: Empty the write queue when disconnecting
-Message-Id: <1219815325-13778-5-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 21 Aug 2008 17:19:47 +0000
+Subject: [PATCH 2/3] dccp: Fill in the Data fields when option processing encounters option errors
+Message-Id: <1219339188-31873-3-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-dccp_disconnect() can be called due to several reasons:
-
- 1. when the connection setup failed (inet_stream_connect());
- 2. when shutting down (inet_shutdown(), inet_csk_listen_stop());
- 3. when aborting the connection (dccp_close() with 0 linger time).
-
-In case (1) the write queue is empty. This patch empties the write queue,
-if in case (2) or (3) it was not yet empty.
-
-This avoids triggering the write-queue BUG_TRAP in sk_stream_kill_queues()
-later on.
-
-It also seems natural to do: when breaking an association, to delete all
-packets that were originally intended for the soon-disconnected end (compare
-with call to tcp_write_queue_purge in tcp_disconnect()).
+This updates the use of the `out_invalid_option' label, which produces a
+Reset (code 5, "Option Error"), to fill in the  Data1...Data3 fields as
+specified in RFC 4340, 5.6.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/proto.c |    2 ++
- 1 files changed, 2 insertions(+), 0 deletions(-)
+ net/dccp/options.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -309,7 +309,9 @@ int dccp_disconnect(struct sock *sk, int flags)
- 		sk->sk_err = ECONNRESET;
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -291,6 +291,9 @@ out_invalid_option:
+ 	DCCP_INC_STATS_BH(DCCP_MIB_INVALIDOPT);
+ 	DCCP_SKB_CB(skb)->dccpd_reset_code = DCCP_RESET_CODE_OPTION_ERROR;
+ 	DCCP_WARN("DCCP(%p): invalid option %d, len=%d", sk, opt, len);
++	DCCP_SKB_CB(skb)->dccpd_reset_data[0] = opt;
++	DCCP_SKB_CB(skb)->dccpd_reset_data[1] = len > 0 ? value[0] : 0;
++	DCCP_SKB_CB(skb)->dccpd_reset_data[2] = len > 1 ? value[1] : 0;
+ 	return -1;
+ }
  
- 	dccp_clear_xmit_timers(sk);
-+
- 	__skb_queue_purge(&sk->sk_receive_queue);
-+	__skb_queue_purge(&sk->sk_write_queue);
- 	if (sk->sk_send_head != NULL) {
- 		__kfree_skb(sk->sk_send_head);
- 		sk->sk_send_head = NULL;
