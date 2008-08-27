@@ -1,152 +1,65 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 30 Aug 2008 13:51:13 +0000
-Subject: v2 [PATCH 03/37] dccp: List management for new feature negotiation
-Message-Id: <20080830135113.GA17190@gerrit.erg.abdn.ac.uk>
+Date: Wed, 27 Aug 2008 05:35:21 +0000
+Subject: [PATCH 2/6] dccp: Silently ignore options with nonsensical lengths
+Message-Id: <1219815325-13778-3-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-dccp: List management for new feature negotiation
+This updates the option-parsing code with regard to RFC 4340, 5.8:
+ "[..] options with nonsensical lengths (length byte less than two or more
+  than the remaining space in the options portion of the header) MUST be
+  ignored, and any option space following an option with nonsensical length
+  MUST likewise be ignored."
 
-This adds list fields and list management functions for the new feature
-negotiation implementation. The new code is kept in parallel to the old
-code, until removed at the end of the patch set.
-
-Thanks to Arnaldo for suggestions to improve the code.
+Hence in the following cases erratic options will be ignored:
+ 1. The type byte of a multi-byte option is the last byte of the header
+    options (i.e. effective option length of 1).
+ 2. The value of the length byte is less than the minimum 2. This has been
+    changed from previously 3: although no multi-byte option with a length
+    less than 3 yet exists (cf. table 3 in 5.8), a length of 2 is valid.
+    (The switch-statement in dccp_parse has further per-option length checks.)
+ 3. The option length exceeds the length of the remaining option space.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/feat.c |  119 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 119 insertions(+)
+ net/dccp/options.c |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
 
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -150,6 +150,125 @@ static void dccp_feat_entry_destructor(s
- 	}
- }
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -81,11 +81,11 @@ int dccp_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
+ 		/* Check if this isn't a single byte option */
+ 		if (opt > DCCPO_MAX_RESERVED) {
+ 			if (opt_ptr = opt_end)
+-				goto out_invalid_option;
++				goto out_nonsensical_length;
  
-+/*
-+ * List management functions
-+ *
-+ * Feature negotiation lists rely on and maintain the following invariants:
-+ * - each feat_num in the list is known, i.e. we know its type and default value
-+ * - each feat_num/is_local combination is unique (old entries are overwritten)
-+ * - SP values are always freshly allocated
-+ * - list is sorted in increasing order of feature number (faster lookup)
-+ */
-+static struct dccp_feat_entry *dccp_feat_list_lookup(struct list_head *fn_list,
-+						     u8 feat_num, bool is_local)
-+{
-+	struct dccp_feat_entry *entry;
-+
-+	list_for_each_entry(entry, fn_list, node)
-+		if (entry->feat_num = feat_num && entry->is_local = is_local)
-+			return entry;
-+		else if (entry->feat_num > feat_num)
-+			break;
-+	return NULL;
-+}
-+
-+/**
-+ * dccp_feat_entry_new  -  Central list update routine (called by all others)
-+ * @head:  list to add to
-+ * @feat:  feature number
-+ * @local: whether the local (1) or remote feature with number @feat is meant
-+ * This is the only constructor and serves to ensure the above invariants.
-+ */
-+static struct dccp_feat_entry *
-+	      dccp_feat_entry_new(struct list_head *head, u8 feat, bool local)
-+{
-+	struct dccp_feat_entry *entry;
-+
-+	list_for_each_entry(entry, head, node)
-+		if (entry->feat_num = feat && entry->is_local = local) {
-+			dccp_feat_val_destructor(entry->feat_num, &entry->val);
-+			return entry;
-+		} else if (entry->feat_num > feat) {
-+			head = &entry->node;
-+			break;
-+		}
-+
-+	entry = kmalloc(sizeof(*entry), gfp_any());
-+	if (entry != NULL) {
-+		entry->feat_num = feat;
-+		entry->is_local = local;
-+		list_add_tail(&entry->node, head);
-+	}
-+	return entry;
-+}
-+
-+/**
-+ * dccp_feat_push_change  -  Add/overwrite a Change option in the list
-+ * @fn_list: feature-negotiation list to update
-+ * @feat: one of %dccp_feature_numbers
-+ * @local: whether local (1) or remote (0) @feat_num is meant
-+ * @needs_mandatory: whether to use Mandatory feature negotiation options
-+ * @fval: pointer to NN/SP value to be inserted (will be copied)
-+ */
-+static int dccp_feat_push_change(struct list_head *fn_list, u8 feat, u8 local,
-+				 u8 mandatory, dccp_feat_val *fval)
-+{
-+	struct dccp_feat_entry *new = dccp_feat_entry_new(fn_list, feat, local);
-+
-+	if (new = NULL)
-+		return -ENOMEM;
-+
-+	new->feat_num	     = feat;
-+	new->is_local	     = local;
-+	new->state	     = FEAT_INITIALISING;
-+	new->needs_confirm   = 0;
-+	new->empty_confirm   = 0;
-+	new->val	     = *fval;
-+	new->needs_mandatory = mandatory;
-+
-+	return 0;
-+}
-+
-+/**
-+ * dccp_feat_push_confirm  -  Add a Confirm entry to the FN list
-+ * @fn_list: feature-negotiation list to add to
-+ * @feat: one of %dccp_feature_numbers
-+ * @local: whether local (1) or remote (0) @feat_num is being confirmed
-+ * @fval: pointer to NN/SP value to be inserted or NULL
-+ * Returns 0 on success, a Reset code for further processing otherwise.
-+ */
-+static int dccp_feat_push_confirm(struct list_head *fn_list, u8 feat, u8 local,
-+				  dccp_feat_val *fval)
-+{
-+	struct dccp_feat_entry *new = dccp_feat_entry_new(fn_list, feat, local);
-+
-+	if (new = NULL)
-+		return DCCP_RESET_CODE_TOO_BUSY;
-+
-+	new->feat_num	     = feat;
-+	new->is_local	     = local;
-+	new->state	     = FEAT_STABLE;	/* transition in 6.6.2 */
-+	new->needs_confirm   = 1;
-+	new->empty_confirm   = (fval = NULL);
-+	new->val.nn	     = 0;		/* zeroes the whole structure */
-+	if (!new->empty_confirm)
-+		new->val     = *fval;
-+	new->needs_mandatory = 0;
-+
-+	return 0;
-+}
-+
-+static int dccp_push_empty_confirm(struct list_head *fn_list, u8 feat, u8 local)
-+{
-+	return dccp_feat_push_confirm(fn_list, feat, local, NULL);
-+}
-+
-+static inline void dccp_feat_list_pop(struct dccp_feat_entry *entry)
-+{
-+	list_del(&entry->node);
-+	dccp_feat_entry_destructor(entry);
-+}
-+
- int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
- 		     u8 *val, u8 len, gfp_t gfp)
- {
+ 			len = *opt_ptr++;
+-			if (len < 3)
+-				goto out_invalid_option;
++			if (len < 2)
++				goto out_nonsensical_length;
+ 			/*
+ 			 * Remove the type and len fields, leaving
+ 			 * just the value size
+@@ -95,7 +95,7 @@ int dccp_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
+ 			opt_ptr += len;
+ 
+ 			if (opt_ptr > opt_end)
+-				goto out_invalid_option;
++				goto out_nonsensical_length;
+ 		}
+ 
+ 		/*
+@@ -283,6 +283,8 @@ ignore_option:
+ 	if (mandatory)
+ 		goto out_invalid_option;
+ 
++out_nonsensical_length:
++	/* RFC 4340, 5.8: ignore option and all remaining option space */
+ 	return 0;
+ 
+ out_invalid_option:
