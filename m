@@ -1,78 +1,41 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 27 Aug 2008 05:35:20 +0000
-Subject: [PATCH 1/6] dccp: Always generate a Reset in response to option errors
-Message-Id: <1219815325-13778-2-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Wed, 27 Aug 2008 05:35:25 +0000
+Subject: [PATCH 6/6] dccp ccid-3: Replace lazy BUG_ON with condition
+Message-Id: <1219815325-13778-7-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Wei Yongjun <yjwei@cn.fujitsu.com>
+The BUG_ON(w_tot = 0) only holds if there is no more than 1 loss interval in
+the loss history. If there is only a single loss interval, the calc_i_mean()
+routine need in fact not be called (RFC 3448, 6.3.1).
 
-RFC4340 states that if a packet is received with an option error (such as a
-Mandatory Option as the last byte of the option list), the endpoint should
-repond with a Reset.
-
-In the LISTEN and RESPOND states, the endpoint correctly reponds with Reset,
-while in the REQUEST/OPEN states, packets with option errors are just ignored.
-
-The packet sequence is as follows:
-
-Case 1:
-
-  Endpoint A                           Endpoint B
-  (CLOSED)                             (CLOSED)
-
-               <----------------       REQUEST
-
-  RESPONSE     ----------------->      (*1)
-  (with invalid option)
-               <----------------       RESET
-                                       (with Reset Code 5, "Option Error")
-
-  (*1) currently just ignored, no Reset is sent
-
-Case 2:
-
-  Endpoint A                           Endpoint B
-  (OPEN)                               (OPEN)
-
-  DATA-ACK     ----------------->      (*2)
-  (with invalid option)
-               <----------------       RESET
-                                       (with Reset Code 5, "Option Error")
-
-  (*2) currently just ignored, no Reset is sent
-
-This patch fixes the problem, by generating a Reset instead of silently
-ignoring option errors.
-
-Signed-off-by: Wei Yongjun <yjwei@cn.fujitsu.com>
-Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
-Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/input.c |    4 ++--
- 1 files changed, 2 insertions(+), 2 deletions(-)
+ net/dccp/ccids/lib/loss_interval.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
 
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -370,7 +370,7 @@ int dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
- 		goto discard;
+--- a/net/dccp/ccids/lib/loss_interval.c
++++ b/net/dccp/ccids/lib/loss_interval.c
+@@ -67,7 +67,10 @@ static void tfrc_lh_calc_i_mean(struct tfrc_loss_hist *lh)
+ 	u32 i_i, i_tot0 = 0, i_tot1 = 0, w_tot = 0;
+ 	int i, k = tfrc_lh_length(lh) - 1; /* k is as in rfc3448bis, 5.4 */
  
- 	if (dccp_parse_options(sk, NULL, skb))
--		goto discard;
-+		return 1;
+-	for (i=0; i <= k; i++) {
++	if (k <= 0)
++		return;
++
++	for (i = 0; i <= k; i++) {
+ 		i_i = tfrc_lh_get_interval(lh, i);
  
- 	if (DCCP_SKB_CB(skb)->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
- 		dccp_event_ack_recv(sk, skb);
-@@ -610,7 +610,7 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
- 		 * Step 8: Process options and mark acknowledgeable
- 		 */
- 		if (dccp_parse_options(sk, NULL, skb))
--			goto discard;
-+			return 1;
+ 		if (i < k) {
+@@ -78,7 +81,6 @@ static void tfrc_lh_calc_i_mean(struct tfrc_loss_hist *lh)
+ 			i_tot1 += i_i * tfrc_lh_weights[i-1];
+ 	}
  
- 		if (dcb->dccpd_ack_seq != DCCP_PKT_WITHOUT_ACK_SEQ)
- 			dccp_event_ack_recv(sk, skb);
-
+-	BUG_ON(w_tot = 0);
+ 	lh->i_mean = max(i_tot0, i_tot1) / w_tot;
+ }
+ 
