@@ -1,211 +1,259 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Aug 2008 17:44:54 +0000
-Subject: [PATCH 19/37] dccp: Header option insertion routine for feature-negotiation
-Message-Id: <1219945512-7723-20-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 28 Aug 2008 17:44:44 +0000
+Subject: [PATCH 09/37] dccp: Resolve dependencies of features on choice of CCID
+Message-Id: <1219945512-7723-10-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-The patch extends existing code:
- * Confirm options divide into the confirmed value plus an optional preference
-   list for SP values. Previously only the preference list was echoed for SP
-   values, now the confirmed value is added as per RFC 4340, 6.1;
- * length and sanity checks are added to avoid illegal memory (or NULL) access;
- * clarified the use of TLV length constant, which does not have anything to do
-   with ECN, but with the fact that Type-Length-Value options whose length is
-   determined by an u8 field provide Value space for at most 255 - 2 = 253 bytes
-   due to the Type/Length fields.
+This provides a missing link in the code chain, as several features implicitly
+depend and/or rely on the choice of CCID. Most notably, this is the Send Ack Vector
+feature, but also Ack Ratio and Send Loss Event Rate (also taken care of).
+
+For Send Ack Vector, the situation is as follows:
+ * since CCID2 mandates the use of Ack Vectors, there is no point in allowing
+   endpoints which use CCID2 to disable Ack Vector features such a connection;
+
+ * a peer with a TX CCID of CCID2 will always expect Ack Vectors, and a peer
+   with a RX CCID of CCID2 must always send Ack Vectors (RFC 4341, sec. 4);
+
+ * for all other CCIDs, the use of (Send) Ack Vector is optional and thus
+   negotiable. However, this implies that the code negotiating the use of Ack
+   Vectors also supports it (i.e. is able to supply and to either parse or
+   ignore received Ack Vectors). Since this is not the case (CCID-3 has no Ack
+   Vector support), the use of Ack Vectors is here disabled, with a comment
+   in the source code.
+
+An analogous consideration arises for the Send Loss Event Rate feature,
+since the CCID-3 implementation does not support the loss interval options
+of RFC 4342. To make such use explicit, corresponding feature-negotiation
+options are inserted which signal the use of the loss event rate option,
+as it is used by the CCID3 code.
+
+Lastly, the values of the Ack Ratio feature are matched to the choice of CCID.
+
+The patch implements this as a function which is called after the user has
+made all other registrations for changing default values of features.
+
+The table is variable-length, the reserved (and hence for feature-negotiation
+invalid, confirmed by considering section 19.4 of RFC 4340) feature number `0'
+is used to mark the end of the table.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/ackvec.c  |    8 ++--
- net/dccp/ackvec.h  |    6 ++--
- net/dccp/feat.h    |    2 +
- net/dccp/options.c |   91 ++++++++++++++++++----------------------------------
- 4 files changed, 40 insertions(+), 67 deletions(-)
+ net/dccp/dccp.h   |    1 +
+ net/dccp/feat.c   |  160 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ net/dccp/output.c |    4 +
+ net/dccp/proto.c  |    3 +
+ 4 files changed, 168 insertions(+), 0 deletions(-)
 
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -68,7 +68,7 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
- 	/* Figure out how many options do we need to represent the ackvec */
--	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_MAX_ACKVEC_OPT_LEN);
-+	const u8 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
- 	u16 len = av->av_vec_len + 2 * nr_opts, i;
- 	u32 elapsed_time;
- 	const unsigned char *tail, *from;
-@@ -100,8 +100,8 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
- 	for (i = 0; i < nr_opts; ++i) {
- 		int copylen = len;
- 
--		if (len > DCCP_MAX_ACKVEC_OPT_LEN)
--			copylen = DCCP_MAX_ACKVEC_OPT_LEN;
-+		if (len > DCCP_SINGLE_OPT_MAXLEN)
-+			copylen = DCCP_SINGLE_OPT_MAXLEN;
- 
- 		*to++ = DCCPO_ACK_VECTOR_0;
- 		*to++ = copylen + 2;
-@@ -432,7 +432,7 @@ found:
- int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
- 		      u64 *ackno, const u8 opt, const u8 *value, const u8 len)
- {
--	if (len > DCCP_MAX_ACKVEC_OPT_LEN)
-+	if (len > DCCP_SINGLE_OPT_MAXLEN)
- 		return -1;
- 
- 	/* dccp_ackvector_print(DCCP_SKB_CB(skb)->dccpd_ack_seq, value, len); */
---- a/net/dccp/ackvec.h
-+++ b/net/dccp/ackvec.h
-@@ -16,10 +16,10 @@
- #include <linux/list.h>
- #include <linux/types.h>
- 
--/* Read about the ECN nonce to see why it is 253 */
--#define DCCP_MAX_ACKVEC_OPT_LEN 253
-+/* maximum size of a single TLV-encoded option (sans type/len bytes) */
-+#define DCCP_SINGLE_OPT_MAXLEN	253
- /* We can spread an ack vector across multiple options */
--#define DCCP_MAX_ACKVEC_LEN (DCCP_MAX_ACKVEC_OPT_LEN * 2)
-+#define DCCP_MAX_ACKVEC_LEN (DCCP_SINGLE_OPT_MAXLEN * 2)
- 
- #define DCCP_ACKVEC_STATE_RECEIVED	0
- #define DCCP_ACKVEC_STATE_ECN_MARKED	(1 << 6)
---- a/net/dccp/feat.h
-+++ b/net/dccp/feat.h
-@@ -138,4 +138,6 @@ extern void dccp_encode_value_var(const u64 value, u8 *to, const u8 len);
- extern u64  dccp_decode_value_var(const u8 *bf, const u8 len);
- 
- extern int  dccp_insert_option_mandatory(struct sk_buff *skb);
-+extern int  dccp_insert_fn_opt(struct sk_buff *skb, u8 type, u8 feat,
-+			       u8 *val, u8 len, bool repeat_first);
- #endif /* _DCCP_FEAT_H */
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -482,23 +482,46 @@ int dccp_insert_option_mandatory(struct sk_buff *skb)
- 	return 0;
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -442,6 +442,7 @@ static inline int dccp_ack_pending(const struct sock *sk)
+ 	       inet_csk_ack_scheduled(sk);
  }
  
--static int dccp_insert_feat_opt(struct sk_buff *skb, u8 type, u8 feat,
--				u8 *val, u8 len)
-+/**
-+ * dccp_insert_fn_opt  -  Insert single Feature-Negotiation option into @skb
-+ * @type: %DCCPO_CHANGE_L, %DCCPO_CHANGE_R, %DCCPO_CONFIRM_L, %DCCPO_CONFIRM_R
-+ * @feat: one out of %dccp_feature_numbers
-+ * @val: NN value or SP array (preferred element first) to copy
-+ * @len: true length of @val in bytes (excluding first element repetition)
-+ * @repeat_first: whether to copy the first element of @val twice
-+ * The last argument is used to construct Confirm options, where the preferred
-+ * value and the preference list appear separately (RFC 4340, 6.3.1). Preference
-+ * lists are kept such that the preferred entry is always first, so we only need
-+ * to copy twice, and avoid the overhead of cloning into a bigger array.
++extern int  dccp_feat_finalise_settings(struct dccp_sock *dp);
+ extern void dccp_feat_list_purge(struct list_head *fn_list);
+ 
+ extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -438,6 +438,166 @@ int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
+ 
+ EXPORT_SYMBOL_GPL(dccp_feat_change);
+ 
++/*
++ *	Tracking features whose value depend on the choice of CCID
++ *
++ * This is designed with an extension in mind so that a list walk could be done
++ * before activating any features. However, the existing framework was found to
++ * work satisfactorily up until now, the automatic verification is left open.
++ * When adding new CCIDs, add a corresponding dependency table here.
 + */
-+int dccp_insert_fn_opt(struct sk_buff *skb, u8 type, u8 feat,
-+		       u8 *val, u8 len, bool repeat_first)
- {
--	u8 *to;
-+	u8 tot_len, *to;
- 
--	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len + 3 > DCCP_MAX_OPT_LEN) {
--		DCCP_WARN("packet too small for feature %d option!\n", feat);
-+	/* take the `Feature' field and possible repetition into account */
-+	if (len > (DCCP_SINGLE_OPT_MAXLEN - 2)) {
-+		DCCP_WARN("length %u for feature %u too large\n", len, feat);
- 		return -1;
- 	}
- 
--	DCCP_SKB_CB(skb)->dccpd_opt_len += len + 3;
-+	if (unlikely(val = NULL || len = 0))
-+		len = repeat_first = 0;
-+	tot_len = 3 + repeat_first + len;
-+
-+	if (DCCP_SKB_CB(skb)->dccpd_opt_len + tot_len > DCCP_MAX_OPT_LEN) {
-+		DCCP_WARN("packet too small for feature %d option!\n", feat);
-+		return -1;
++static const struct ccid_dependency *dccp_feat_ccid_deps(u8 ccid, bool is_local)
++{
++	static const struct ccid_dependency ccid2_dependencies[2][2] = {
++		/*
++		 * CCID2 mandates Ack Vectors (RFC 4341, 4.): as CCID is a TX
++		 * feature and Send Ack Vector is an RX feature, `is_local'
++		 * needs to be reversed.
++		 */
++		{	/* Dependencies of the receiver-side (remote) CCID2 */
++			{
++				.dependent_feat	= DCCPF_SEND_ACK_VECTOR,
++				.is_local	= true,
++				.is_mandatory	= true,
++				.val		= 1
++			},
++			{ 0, 0, 0, 0 }
++		},
++		{	/* Dependencies of the sender-side (local) CCID2 */
++			{
++				.dependent_feat	= DCCPF_SEND_ACK_VECTOR,
++				.is_local	= false,
++				.is_mandatory	= true,
++				.val		= 1
++			},
++			{ 0, 0, 0, 0 }
++		}
++	};
++	static const struct ccid_dependency ccid3_dependencies[2][5] = {
++		{	/*
++			 * Dependencies of the receiver-side CCID3
++			 */
++			{	/* locally disable Ack Vectors */
++				.dependent_feat	= DCCPF_SEND_ACK_VECTOR,
++				.is_local	= true,
++				.is_mandatory	= false,
++				.val		= 0
++			},
++			{	/* see below why Send Loss Event Rate is on */
++				.dependent_feat	= DCCPF_SEND_LEV_RATE,
++				.is_local	= true,
++				.is_mandatory	= true,
++				.val		= 1
++			},
++			{	/* NDP Count is needed as per RFC 4342, 6.1.1 */
++				.dependent_feat	= DCCPF_SEND_NDP_COUNT,
++				.is_local	= false,
++				.is_mandatory	= true,
++				.val		= 1
++			},
++			{ 0, 0, 0, 0 },
++		},
++		{	/*
++			 * CCID3 at the TX side: we request that the HC-receiver
++			 * will not send Ack Vectors (they will be ignored, so
++			 * Mandatory is not set); we enable Send Loss Event Rate
++			 * (Mandatory since the implementation does not support
++			 * the Loss Intervals option of RFC 4342, 8.6).
++			 * The last two options are for peer's information only.
++			*/
++			{
++				.dependent_feat	= DCCPF_SEND_ACK_VECTOR,
++				.is_local	= false,
++				.is_mandatory	= false,
++				.val		= 0
++			},
++			{
++				.dependent_feat	= DCCPF_SEND_LEV_RATE,
++				.is_local	= false,
++				.is_mandatory	= true,
++				.val		= 1
++			},
++			{	/* this CCID does not support Ack Ratio */
++				.dependent_feat	= DCCPF_ACK_RATIO,
++				.is_local	= true,
++				.is_mandatory	= false,
++				.val		= 0
++			},
++			{	/* tell receiver we are sending NDP counts */
++				.dependent_feat	= DCCPF_SEND_NDP_COUNT,
++				.is_local	= true,
++				.is_mandatory	= false,
++				.val		= 1
++			},
++			{ 0, 0, 0, 0 }
++		}
++	};
++	switch (ccid) {
++	case DCCPC_CCID2:
++		return ccid2_dependencies[is_local];
++	case DCCPC_CCID3:
++		return ccid3_dependencies[is_local];
++	default:
++		return NULL;
 +	}
-+	DCCP_SKB_CB(skb)->dccpd_opt_len += tot_len;
++}
++
++/**
++ * dccp_feat_propagate_ccid - Resolve dependencies of features on choice of CCID
++ * @fn: feature-negotiation list to update
++ * @id: CCID number to track
++ * @is_local: whether TX CCID (1) or RX CCID (0) is meant
++ * This function needs to be called after registering all other features.
++ */
++static int dccp_feat_propagate_ccid(struct list_head *fn, u8 id, bool is_local)
++{
++	const struct ccid_dependency *table = dccp_feat_ccid_deps(id, is_local);
++	int i, rc = (table = NULL);
++
++	for (i = 0; rc = 0 && table[i].dependent_feat != DCCPF_RESERVED; i++)
++		if (dccp_feat_type(table[i].dependent_feat) = FEAT_SP)
++			rc = __feat_register_sp(fn, table[i].dependent_feat,
++						    table[i].is_local,
++						    table[i].is_mandatory,
++						    &table[i].val, 1);
++		else
++			rc = __feat_register_nn(fn, table[i].dependent_feat,
++						    table[i].is_mandatory,
++						    table[i].val);
++	return rc;
++}
++
++/**
++ * dccp_feat_finalise_settings  -  Finalise settings before starting negotiation
++ * @dp: client or listening socket (settings will be inherited)
++ * This is called after all registrations (socket initialisation, sysctls, and
++ * sockopt calls), and before sending the first packet containing Change options
++ * (ie. client-Request or server-Response), to ensure internal consistency.
++ */
++int dccp_feat_finalise_settings(struct dccp_sock *dp)
++{
++	struct list_head *fn = &dp->dccps_featneg;
++	struct dccp_feat_entry *entry;
++	int i = 2, ccids[2] = { -1, -1 };
++
++	/*
++	 * Propagating CCIDs:
++	 * 1) not useful to propagate CCID settings if this host advertises more
++	 *    than one CCID: the choice of CCID  may still change - if this is
++	 *    the client, or if this is the server and the client sends
++	 *    singleton CCID values.
++	 * 2) since is that propagate_ccid changes the list, we defer changing
++	 *    the sorted list until after the traversal.
++	 */
++	list_for_each_entry(entry, fn, node)
++		if (entry->feat_num = DCCPF_CCID && entry->val.sp.len = 1)
++			ccids[entry->is_local] = entry->val.sp.vec[0];
++	while (i--)
++		if (ccids[i] > 0 && dccp_feat_propagate_ccid(fn, ccids[i], i))
++			return -1;
++	return 0;
++}
++
+ static int dccp_feat_update_ccid(struct sock *sk, u8 type, u8 new_ccid_nr)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -469,6 +469,10 @@ int dccp_connect(struct sock *sk)
+ 	struct sk_buff *skb;
+ 	struct inet_connection_sock *icsk = inet_csk(sk);
  
--	to    = skb_push(skb, len + 3);
-+	to    = skb_push(skb, tot_len);
- 	*to++ = type;
--	*to++ = len + 3;
-+	*to++ = tot_len;
- 	*to++ = feat;
++	/* do not connect if feature negotiation setup fails */
++	if (dccp_feat_finalise_settings(dccp_sk(sk)))
++		return -EPROTO;
++
+ 	dccp_connect_init(sk);
  
-+	if (repeat_first)
-+		*to++ = *val;
- 	if (len)
- 		memcpy(to, val, len);
+ 	skb = alloc_skb(sk->sk_prot->max_header, sk->sk_allocation);
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -278,6 +278,9 @@ static inline int dccp_listen_start(struct sock *sk, int backlog)
+ 	struct dccp_sock *dp = dccp_sk(sk);
  
-@@ -508,51 +531,6 @@ static int dccp_insert_feat_opt(struct sk_buff *skb, u8 type, u8 feat,
- 	return 0;
+ 	dp->dccps_role = DCCP_ROLE_LISTEN;
++	/* do not start to listen if feature negotiation setup fails */
++	if (dccp_feat_finalise_settings(dp))
++		return -EPROTO;
+ 	return inet_csk_listen_start(sk, backlog);
  }
  
--static int dccp_insert_options_feat(struct sock *sk, struct sk_buff *skb)
--{
--	struct dccp_minisock *dmsk = dccp_msk(sk);
--	struct dccp_opt_pend *opt, *next;
--	int change = 0;
--
--	/* confirm any options [NN opts] */
--	list_for_each_entry_safe(opt, next, &dmsk->dccpms_conf, dccpop_node) {
--		dccp_insert_feat_opt(skb, opt->dccpop_type,
--				     opt->dccpop_feat, opt->dccpop_val,
--				     opt->dccpop_len);
--		/* fear empty confirms */
--		if (opt->dccpop_val)
--			kfree(opt->dccpop_val);
--		kfree(opt);
--	}
--	INIT_LIST_HEAD(&dmsk->dccpms_conf);
--
--	/* see which features we need to send */
--	list_for_each_entry(opt, &dmsk->dccpms_pending, dccpop_node) {
--		/* see if we need to send any confirm */
--		if (opt->dccpop_sc) {
--			dccp_insert_feat_opt(skb, opt->dccpop_type + 1,
--					     opt->dccpop_feat,
--					     opt->dccpop_sc->dccpoc_val,
--					     opt->dccpop_sc->dccpoc_len);
--
--			BUG_ON(!opt->dccpop_sc->dccpoc_val);
--			kfree(opt->dccpop_sc->dccpoc_val);
--			kfree(opt->dccpop_sc);
--			opt->dccpop_sc = NULL;
--		}
--
--		/* any option not confirmed, re-send it */
--		if (!opt->dccpop_conf) {
--			dccp_insert_feat_opt(skb, opt->dccpop_type,
--					     opt->dccpop_feat, opt->dccpop_val,
--					     opt->dccpop_len);
--			change++;
--		}
--	}
--
--	return 0;
--}
--
- /* The length of all options needs to be a multiple of 4 (5.8) */
- static void dccp_insert_option_padding(struct sk_buff *skb)
- {
-@@ -589,13 +567,6 @@ int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
- 		dp->dccps_hc_rx_insert_options = 0;
- 	}
- 
--	/* Feature negotiation */
--	/* Data packets can't do feat negotiation */
--	if (DCCP_SKB_CB(skb)->dccpd_type != DCCP_PKT_DATA &&
--	    DCCP_SKB_CB(skb)->dccpd_type != DCCP_PKT_DATAACK &&
--	    dccp_insert_options_feat(sk, skb))
--		return -1;
--
- 	/*
- 	 * Obtain RTT sample from Request/Response exchange.
- 	 * This is currently used in CCID 3 initialisation.
 -- 
 1.6.0.rc2
 
