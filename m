@@ -1,155 +1,158 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Aug 2008 17:45:06 +0000
-Subject: [PATCH 31/37] dccp: Remove manual influence on NDP Count feature
-Message-Id: <1219945512-7723-32-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 28 Aug 2008 17:45:08 +0000
+Subject: [PATCH 33/37] dccp: Initialisation framework for feature negotiation
+Message-Id: <1219945512-7723-34-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Updating the NDP count feature is handled automatically now:
- * for CCID-2 it is disabled, since the code does not use NDP counts;
- * for CCID-3 it is enabled, as NDP counts are used to determine loss lengths.
+This initialises feature negotiation from two tables, which are initialised
+from sysctls.
 
-Allowing the user to change NDP values leads to unpredictable and failing
-behaviour, since it is then possible to disable NDP counts even when they
-are needed (e.g. in CCID-3).
-
-This means that only those user settings are sensible that agree with the
-values for Send NDP Count implied by the choice of CCID. But those settings
-are already activated by the feature negotiation (CCID dependency tracking),
-hence this form of support is redundant.
-
-At startup the initialisation of the NDP count feature is with the default
-value of 0, which is done implicitly by the zeroing-out of the socket when
-it is allocated. If the choice of CCID or feature negotiation enables NDP
-count, this will then be updated via the NDP activation handler.
+As a novel feature, specifics of the implementation (e.g. currently short
+seqnos and ECN are not supported) are advertised for robustness.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- Documentation/networking/dccp.txt |    3 ---
- include/linux/dccp.h              |    4 ++--
- net/dccp/dccp.h                   |    1 -
- net/dccp/feat.c                   |    2 +-
- net/dccp/minisocks.c              |    1 -
- net/dccp/options.c                |    4 +---
- net/dccp/sysctl.c                 |    7 -------
- 7 files changed, 4 insertions(+), 18 deletions(-)
+ include/linux/dccp.h |   19 --------------
+ net/dccp/feat.c      |   66 ++++++++++++++++++++++++++++++++++++++++++-------
+ net/dccp/feat.h      |    2 +-
+ 3 files changed, 57 insertions(+), 30 deletions(-)
 
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -133,9 +133,6 @@ retries2
- 	importance for retransmitted acknowledgments and feature negotiation,
- 	data packets are never retransmitted. Analogue of tcp_retries2.
- 
--send_ndp = 1
--	Whether or not to send NDP count options (sec. 7.7.2).
--
- send_ackvec = 1
- 	Whether or not to send Ack Vector options (sec. 11.5).
- 
 --- a/include/linux/dccp.h
 +++ b/include/linux/dccp.h
-@@ -371,14 +371,12 @@ static inline unsigned int dccp_hdr_len(const struct sk_buff *skb)
+@@ -369,28 +369,9 @@ static inline unsigned int dccp_hdr_len(const struct sk_buff *skb)
+   * Will be used to pass the state from dccp_request_sock to dccp_sock.
    *
    * @dccpms_sequence_window - Sequence Window Feature (section 7.5.2)
-   * @dccpms_send_ack_vector - Send Ack Vector Feature (section 11.5)
--  * @dccpms_send_ndp_count - Send NDP Count Feature (7.7.2)
-   * @dccpms_pending - List of features being negotiated
-   * @dccpms_conf -
+-  * @dccpms_pending - List of features being negotiated
+-  * @dccpms_conf -
    */
  struct dccp_minisock {
  	__u64			dccpms_sequence_window;
- 	__u8			dccpms_send_ack_vector;
--	__u8			dccpms_send_ndp_count;
- 	struct list_head	dccpms_pending;
- 	struct list_head	dccpms_conf;
+-	struct list_head	dccpms_pending;
+-	struct list_head	dccpms_conf;
+-};
+-
+-struct dccp_opt_conf {
+-	__u8			*dccpoc_val;
+-	__u8			dccpoc_len;
+-};
+-
+-struct dccp_opt_pend {
+-	struct list_head	dccpop_node;
+-	__u8			dccpop_type;
+-	__u8			dccpop_feat;
+-	__u8		        *dccpop_val;
+-	__u8			dccpop_len;
+-	int			dccpop_conf;
+-	struct dccp_opt_conf    *dccpop_sc;
  };
-@@ -490,6 +488,7 @@ struct dccp_ackvec;
-  * @dccps_r_ack_ratio - feature-remote Ack Ratio
-  * @dccps_pcslen - sender   partial checksum coverage (via sockopt)
-  * @dccps_pcrlen - receiver partial checksum coverage (via sockopt)
-+ * @dccps_send_ndp_count - local Send NDP Count feature (7.7.2)
-  * @dccps_ndp_count - number of Non Data Packets since last data packet
-  * @dccps_mss_cache - current value of MSS (path MTU minus header sizes)
-  * @dccps_rate_last - timestamp for rate-limiting DCCP-Sync (RFC 4340, 7.5.4)
-@@ -529,6 +528,7 @@ struct dccp_sock {
- 	__u16				dccps_r_ack_ratio;
- 	__u8				dccps_pcslen:4;
- 	__u8				dccps_pcrlen:4;
-+	__u8				dccps_send_ndp_count:1;
- 	__u64				dccps_ndp_count:48;
- 	unsigned long			dccps_rate_last;
- 	struct dccp_minisock		dccps_minisock;
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -99,7 +99,6 @@ extern int  sysctl_dccp_feat_sequence_window;
- extern int  sysctl_dccp_feat_rx_ccid;
- extern int  sysctl_dccp_feat_tx_ccid;
- extern int  sysctl_dccp_feat_send_ack_vector;
--extern int  sysctl_dccp_feat_send_ndp_count;
- extern int  sysctl_dccp_tx_qlen;
- extern int  sysctl_dccp_sync_ratelimit;
  
+ extern void dccp_minisock_init(struct dccp_minisock *dmsk);
 --- a/net/dccp/feat.c
 +++ b/net/dccp/feat.c
-@@ -86,7 +86,7 @@ static int dccp_hdlr_ackvec(struct sock *sk, u64 enable, bool rx)
- static int dccp_hdlr_ndp(struct sock *sk, u64 enable, bool rx)
- {
- 	if (!rx)
--		dccp_msk(sk)->dccpms_send_ndp_count = (enable > 0);
-+		dccp_sk(sk)->dccps_send_ndp_count = (enable > 0);
- 	return 0;
+@@ -1122,24 +1122,70 @@ int dccp_feat_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
+ 	return 0;	/* ignore FN options in all other states */
  }
  
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -46,7 +46,6 @@ void dccp_minisock_init(struct dccp_minisock *dmsk)
++/**
++ * dccp_feat_init  -  Seed feature negotiation with host-specific defaults
++ * This initialises global defaults, depending on the value of the sysctls.
++ * These can later be overridden by registering changes via setsockopt calls.
++ * The last link in the chain is finalise_settings, to make sure that between
++ * here and the start of actual feature negotiation no inconsistencies enter.
++ *
++ * All features not appearing below use either defaults or are otherwise
++ * later adjusted through dccp_feat_finalise_settings().
++ */
+ int dccp_feat_init(struct sock *sk)
  {
- 	dmsk->dccpms_sequence_window = sysctl_dccp_feat_sequence_window;
- 	dmsk->dccpms_send_ack_vector = sysctl_dccp_feat_send_ack_vector;
--	dmsk->dccpms_send_ndp_count  = sysctl_dccp_feat_send_ndp_count;
+-	struct dccp_sock *dp = dccp_sk(sk);
+-	struct dccp_minisock *dmsk = dccp_msk(sk);
++	struct list_head *fn = &dccp_sk(sk)->dccps_featneg;
++	u8 on = 1, off = 0;
+ 	int rc;
++	struct {
++		u8 *val;
++		u8 len;
++	} tx, rx;
++
++	/* Non-negotiable (NN) features */
++	rc = __feat_register_nn(fn, DCCPF_SEQUENCE_WINDOW, 0,
++				    sysctl_dccp_feat_sequence_window);
++	if (rc)
++		return rc;
++
++	/* Server-priority (SP) features */
++
++	/* Advertise that short seqnos are not supported (7.6.1) */
++	rc = __feat_register_sp(fn, DCCPF_SHORT_SEQNOS, true, true, &off, 1);
++	if (rc)
++		return rc;
+ 
+-	INIT_LIST_HEAD(&dmsk->dccpms_pending);	/* XXX no longer used */
+-	INIT_LIST_HEAD(&dmsk->dccpms_conf);	/* XXX no longer used */
++	/* RFC 4340 12.1: "If a DCCP is not ECN capable, ..." */
++	rc = __feat_register_sp(fn, DCCPF_ECN_INCAPABLE, true, true, &on, 1);
++	if (rc)
++		return rc;
++
++	/*
++	 * We advertise the available list of CCIDs and reorder according to
++	 * preferences, to avoid failure resulting from negotiating different
++	 * singleton values (which always leads to failure).
++	 * These settings can still (later) be overridden via sockopts.
++	 */
++	if (ccid_get_builtin_ccids(&tx.val, &tx.len) ||
++	    ccid_get_builtin_ccids(&rx.val, &rx.len))
++		return -ENOBUFS;
+ 
+-	/* Ack ratio */
+-	rc = __feat_register_nn(&dp->dccps_featneg, DCCPF_ACK_RATIO, 0,
+-				dp->dccps_l_ack_ratio);
+-out:
++	if (!dccp_feat_prefer(sysctl_dccp_feat_tx_ccid, tx.val, tx.len) ||
++	    !dccp_feat_prefer(sysctl_dccp_feat_rx_ccid, rx.val, rx.len))
++		goto free_ccid_lists;
++
++	rc = __feat_register_sp(fn, DCCPF_CCID, true, false, tx.val, tx.len);
++	if (rc)
++		goto free_ccid_lists;
++
++	rc = __feat_register_sp(fn, DCCPF_CCID, false, false, rx.val, rx.len);
++
++free_ccid_lists:
++	kfree(tx.val);
++	kfree(rx.val);
+ 	return rc;
  }
  
- void dccp_time_wait(struct sock *sk, int state, int timeo)
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -27,7 +27,6 @@ int sysctl_dccp_feat_sequence_window = DCCPF_INITIAL_SEQUENCE_WINDOW;
- int sysctl_dccp_feat_rx_ccid	      = DCCPF_INITIAL_CCID;
- int sysctl_dccp_feat_tx_ccid	      = DCCPF_INITIAL_CCID;
- int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
--int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
- 
- u64 dccp_decode_value_var(const u8 *bf, const u8 len)
+-EXPORT_SYMBOL_GPL(dccp_feat_init);
+-
+ int dccp_feat_activate_values(struct sock *sk, struct list_head *fn_list)
  {
-@@ -531,8 +530,7 @@ int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
+ 	struct dccp_sock *dp = dccp_sk(sk);
+--- a/net/dccp/feat.h
++++ b/net/dccp/feat.h
+@@ -110,13 +110,13 @@ static inline void dccp_feat_debug(const u8 type, const u8 feat, const u8 val)
+ #define dccp_feat_debug(type, feat, val)
+ #endif /* CONFIG_IP_DCCP_DEBUG */
  
- 	DCCP_SKB_CB(skb)->dccpd_opt_len = 0;
++extern int  dccp_feat_init(struct sock *sk);
+ extern int  dccp_feat_register_sp(struct sock *sk, u8 feat, u8 is_local,
+ 				  u8 const *list, u8 len);
+ extern int  dccp_feat_register_nn(struct sock *sk, u8 feat, u64 val);
+ extern int  dccp_feat_parse_options(struct sock *, struct dccp_request_sock *,
+ 				    u8 mand, u8 opt, u8 feat, u8 *val, u8 len);
+ extern int  dccp_feat_clone_list(struct list_head const *, struct list_head *);
+-extern int  dccp_feat_init(struct sock *sk);
  
--	if (dmsk->dccpms_send_ndp_count &&
--	    dccp_insert_option_ndp(sk, skb))
-+	if (dp->dccps_send_ndp_count && dccp_insert_option_ndp(sk, skb))
- 		return -1;
- 
- 	if (DCCP_SKB_CB(skb)->dccpd_type != DCCP_PKT_DATA) {
---- a/net/dccp/sysctl.c
-+++ b/net/dccp/sysctl.c
-@@ -48,13 +48,6 @@ static struct ctl_table dccp_default_table[] = {
- 		.proc_handler	= proc_dointvec,
- 	},
- 	{
--		.procname	= "send_ndp",
--		.data		= &sysctl_dccp_feat_send_ndp_count,
--		.maxlen		= sizeof(sysctl_dccp_feat_send_ndp_count),
--		.mode		= 0644,
--		.proc_handler	= proc_dointvec,
--	},
--	{
- 		.procname	= "request_retries",
- 		.data		= &sysctl_dccp_request_retries,
- 		.maxlen		= sizeof(sysctl_dccp_request_retries),
+ /*
+  * Encoding variable-length options and their maximum length.
 -- 
 1.6.0.rc2
 
