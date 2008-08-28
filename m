@@ -1,86 +1,90 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 29 Aug 2008 07:26:03 +0000
-Subject: Re: [PATCH 16/37] dccp: API to query the current TX/RX CCID
-Message-Id: <20080829072603.GA7311@gerrit.erg.abdn.ac.uk>
+Date: Thu, 28 Aug 2008 17:44:52 +0000
+Subject: [PATCH 17/37] dccp: Increase the scope of variable-length htonl/ntohl functions
+Message-Id: <1219945512-7723-18-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1219945512-7723-17-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1219945512-7723-17-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting Arnaldo:
-| Em Thu, Aug 28, 2008 at 07:44:51PM +0200, Gerrit Renker escreveu:
-| > This provides function to query the current TX/RX CCID dynamically, without
-| > reliance on the minisock value, using dynamic information available in the
-| > currently loaded CCID module.
-| > 
-| > This query function is then used to
-| >  (a) provide the getsockopt part for getting/setting CCIDs via sockopts;
-| >  (b) replace the current test for "which CCID is in use" in probe.c.
-| > 
-| > Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-| > Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-| > ---
-| >  net/dccp/ccid.h  |    9 +++++++++
-| >  net/dccp/probe.c |    7 ++-----
-| >  net/dccp/proto.c |    6 ++++++
-| >  3 files changed, 17 insertions(+), 5 deletions(-)
-| > 
-| > --- a/net/dccp/ccid.h
-| > +++ b/net/dccp/ccid.h
-| > @@ -116,6 +116,15 @@ extern struct ccid *ccid_hc_rx_new(unsigned char id, struct sock *sk,
-| >  extern struct ccid *ccid_hc_tx_new(unsigned char id, struct sock *sk,
-| >  				   gfp_t gfp);
-| >  
-| > +static inline int ccid_get_current_id(struct dccp_sock *dp, bool rx)
-| > +{
-| > +	struct ccid *ccid = rx ? dp->dccps_hc_rx_ccid : dp->dccps_hc_tx_ccid;
-| > +
-| > +	if (ccid = NULL || ccid->ccid_ops = NULL)
-| > +		return -1;
-| > +	return ccid->ccid_ops->ccid_id;
-| > +}
-| > +
-| >  extern void ccid_hc_rx_delete(struct ccid *ccid, struct sock *sk);
-| >  extern void ccid_hc_tx_delete(struct ccid *ccid, struct sock *sk);
-| >  
-| > --- a/net/dccp/probe.c
-| > +++ b/net/dccp/probe.c
-| > @@ -74,14 +74,11 @@ static void printl(const char *fmt, ...)
-| >  static int jdccp_sendmsg(struct kiocb *iocb, struct sock *sk,
-| >  			 struct msghdr *msg, size_t size)
-| >  {
-| > -	const struct dccp_minisock *dmsk = dccp_msk(sk);
-| >  	const struct inet_sock *inet = inet_sk(sk);
-| > -	const struct ccid3_hc_tx_sock *hctx;
-| > +	struct ccid3_hc_tx_sock *hctx = NULL;
-| >  
-| > -	if (dmsk->dccpms_tx_ccid = DCCPC_CCID3)
-| > +	if (ccid_get_current_id(dccp_sk(sk), false) = DCCPC_CCID3)
-| 
-| The use of boolean here also hurts the brain, I guess we could have
-| ccid_get_current_rx_id or something along these lines?
-| 
-The only other place where ccid_get_current_id is called is in
-do_dccp_getsockopt.
+This extends the scope of two available functions, encode|decode_value_var,
+to work up to 6 (8) bytes, to match maximum requirements in the RFC.
 
-Rather than a yes/no, I think a third alternative is possible here:
-it should actually not be necessary to have CCID-dependent code in
-net/dccp/probe.c, i.e. in jdccp_write_xmit() we could have something like
+These functions are going to be used both by general option processing and
+feature negotiation code, hence declarations have been put into feat.h.
 
-f (!port || ntohs(inet->dport) = port || ntohs(inet->sport) = port) {
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ net/dccp/feat.h    |   14 ++++++++++++++
+ net/dccp/options.c |   21 ++++++++++++++-------
+ 2 files changed, 28 insertions(+), 7 deletions(-)
 
-                tv  = ktime_to_timespec(ktime_sub(ktime_get(), dccpw.start));
-                len = sprintf(buf, "%lu.%09lu %d.%d.%d.%d:%u %d.%d.%d.%d:%u %d",
-                               (unsigned long)tv.tv_sec,
-                               (unsigned long)tv.tv_nsec,
-                               NIPQUAD(inet->saddr), ntohs(inet->sport),
-                               NIPQUAD(inet->daddr), ntohs(inet->dport), ccid);
-
-                len += ccid_hc_tx_print_sock_state(sk);
-		/*     ^ new CCID-dependent function for printing */
-
-		// ...
+--- a/net/dccp/feat.h
++++ b/net/dccp/feat.h
+@@ -122,4 +122,18 @@ extern int  dccp_feat_clone(struct sock *oldsk, struct sock *newsk);
+ extern int  dccp_feat_clone_list(struct list_head const *, struct list_head *);
+ extern int  dccp_feat_init(struct sock *sk);
+ 
++/*
++ * Encoding variable-length options and their maximum length.
++ *
++ * This affects NN options (SP options are all u8) and other variable-length
++ * options (see table 3 in RFC 4340). The limit is currently given the Sequence
++ * Window NN value (sec. 7.5.2) and the NDP count (sec. 7.7) option, all other
++ * options consume less than 6 bytes (timestamps are 4 bytes).
++ * When updating this constant (e.g. due to new internet drafts / RFCs), make
++ * sure that you also update all code which refers to it.
++ */
++#define DCCP_OPTVAL_MAXLEN	6
++
++extern void dccp_encode_value_var(const u64 value, u8 *to, const u8 len);
++extern u64  dccp_decode_value_var(const u8 *bf, const u8 len);
+ #endif /* _DCCP_FEAT_H */
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -29,16 +29,20 @@ int sysctl_dccp_feat_tx_ccid	      = DCCPF_INITIAL_CCID;
+ int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
+ int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
+ 
+-static u32 dccp_decode_value_var(const unsigned char *bf, const u8 len)
++u64 dccp_decode_value_var(const u8 *bf, const u8 len)
+ {
+-	u32 value = 0;
++	u64 value = 0;
+ 
++	if (len >= DCCP_OPTVAL_MAXLEN)
++		value += ((u64)*bf++) << 40;
++	if (len > 4)
++		value += ((u64)*bf++) << 32;
+ 	if (len > 3)
+-		value += *bf++ << 24;
++		value += ((u64)*bf++) << 24;
+ 	if (len > 2)
+-		value += *bf++ << 16;
++		value += ((u64)*bf++) << 16;
+ 	if (len > 1)
+-		value += *bf++ << 8;
++		value += ((u64)*bf++) << 8;
+ 	if (len > 0)
+ 		value += *bf;
+ 
+@@ -298,9 +302,12 @@ out_invalid_option:
+ 
+ EXPORT_SYMBOL_GPL(dccp_parse_options);
+ 
+-static void dccp_encode_value_var(const u32 value, unsigned char *to,
+-				  const unsigned int len)
++void dccp_encode_value_var(const u64 value, u8 *to, const u8 len)
+ {
++	if (len >= DCCP_OPTVAL_MAXLEN)
++		*to++ = (value & 0xFF0000000000ull) >> 40;
++	if (len > 4)
++		*to++ = (value & 0xFF00000000ull) >> 32;
+ 	if (len > 3)
+ 		*to++ = (value & 0xFF000000) >> 24;
+ 	if (len > 2)
+-- 
+1.6.0.rc2
 
