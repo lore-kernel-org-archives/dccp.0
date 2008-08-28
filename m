@@ -1,82 +1,56 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 30 Aug 2008 13:51:52 +0000
-Subject: Re: [PATCH 03/37] dccp: List management for new feature negotiation
-Message-Id: <20080830135152.GB17190@gerrit.erg.abdn.ac.uk>
+Date: Thu, 28 Aug 2008 17:44:53 +0000
+Subject: [PATCH 18/37] dccp: Support for Mandatory options
+Message-Id: <1219945512-7723-19-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1219945512-7723-4-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1219945512-7723-4-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-| > +static struct dccp_feat_entry *
-| > +	      dccp_feat_entry_new(struct list_head *fn, u8 feat, u8 is_local)
-| > +{
-| > +	struct dccp_feat_entry *entry;
-| > +	struct list_head *pos_head = fn;
-| > +
-| > +	list_for_each(pos_head, fn) {
-| > +		entry = list_entry(pos_head, struct dccp_feat_entry, node);
-| > +		if (feat < entry->feat_num)
-| > +			break;
-| 
-| Why not use list_for_each_entry()?
-| 
-I know now why list_for_each() was chosen - if the list does not contain
-a feat/is_local entry yet, the pos_head is used later for the 
-		list_add_tail(&entry->node, pos_head);
-statement. I have rewritten the function now with list_for_each_entry
-and will resubmit the new version.
+Support for Mandatory options is provided by this patch, which will
+be used by subsequent feature-negotiation patches.
 
-| > +		if (entry->feat_num = feat && entry->is_local = is_local) {
-| > +			dccp_feat_val_destructor(entry->feat_num, &entry->val);
-| 
-| <first reaction>
-| You call dccp_feat_val_destructor on entry->val, that kfrees a field and
-| then return it? I havent checked, but would it be safer to set the field
-| kfree'ed in dccp_feat_val_destructor to NULL since
-| dccp_feat_val_destructor is not a destructor (i.e. its not the last
-| function in the life of dccp_feat_val)?
-|
-Yes that is correct. As far as I can see, my own use of these functions is
-consistent, but it does not allow someone else to use the functions in a
-different setting. But the place to fix it was Patch 2/37, which has been
-changed as follows:
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ net/dccp/feat.h    |    2 ++
+ net/dccp/options.c |   15 +++++++++++++++
+ 2 files changed, 17 insertions(+), 0 deletions(-)
 
- static void dccp_feat_val_destructor(u8 feat_num, dccp_feat_val *val)
- {
--	if (val && dccp_feat_type(feat_num) = FEAT_SP)
-+	if (unlikely(val = NULL))
-+		return;
-+	if (dccp_feat_type(feat_num) = FEAT_SP)
- 		kfree(val->sp.vec);
-+	memset(val, 0, sizeof(*val));
+--- a/net/dccp/feat.h
++++ b/net/dccp/feat.h
+@@ -136,4 +136,6 @@ extern int  dccp_feat_init(struct sock *sk);
+ 
+ extern void dccp_encode_value_var(const u64 value, u8 *to, const u8 len);
+ extern u64  dccp_decode_value_var(const u8 *bf, const u8 len);
++
++extern int  dccp_insert_option_mandatory(struct sk_buff *skb);
+ #endif /* _DCCP_FEAT_H */
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -467,6 +467,21 @@ static int dccp_insert_option_timestamp_echo(struct dccp_sock *dp,
+ 	return 0;
  }
+ 
++/**
++ * dccp_insert_option_mandatory  -  Mandatory option (5.8.2)
++ * Note that since we are using skb_push, this function needs to be called
++ * _after_ inserting the option it is supposed to influence (stack order).
++ */
++int dccp_insert_option_mandatory(struct sk_buff *skb)
++{
++	if (DCCP_SKB_CB(skb)->dccpd_opt_len >= DCCP_MAX_OPT_LEN)
++		return -1;
++
++	DCCP_SKB_CB(skb)->dccpd_opt_len++;
++	*skb_push(skb, 1) = DCCPO_MANDATORY;
++	return 0;
++}
++
+ static int dccp_insert_feat_opt(struct sk_buff *skb, u8 type, u8 feat,
+ 				u8 *val, u8 len)
+ {
+-- 
+1.6.0.rc2
 
-
-| I got confused with a _new routine that ends up not being a constructor
-| and _destructor being called on an object, then not setting what it
-| frees to NULL and then reusing it somehow
-| 
-Suggestions for better names are welcome. I thought it over, and _new
-was the best I could come up with. But I have rewritten the documentation
-and added more text. Hopefully this will make things clearer.
-
-I also thought about the two other suggestions
- (a) Whether to use dccp_feat_list_lookup() in the _new constructor to
-     reduce code duplication:
-     The constructor also keeps the list always sorted. So when the
-     lookup function returns NULL, the search becomes O(2*n) instead
-     of n. I tried it with a routine `dccp_feat_lookup_nearest' which
-     returns the next list_head before which to insert. But then one
-     would need to repeat the test
-	if (entry->feat_num = feat && entry->is_local = is_local) {
-     I think this is ugly.
- (b) Whether to use hlist instead:
-     This is an optimisation. It seems in principle possible. However,
-     as I am doing DCCP in my (limited) spare time and since there are
-     many other things to fix - missing functionality or causes of
-     failure - I'd suggest to enqueue this at the end of the todo list.
-
-Gerrit
