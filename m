@@ -1,31 +1,104 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 27 Aug 2008 05:35:22 +0000
-Subject: [PATCH 3/6] dccp: Fill in the Data fields for "Option Error" Resets
-Message-Id: <1219815325-13778-4-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 28 Aug 2008 17:44:45 +0000
+Subject: [PATCH 10/37] dccp: Mechanism to resolve CCID dependencies
+Message-Id: <1219945512-7723-11-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This updates the use of the `out_invalid_option' label, which produces a
-Reset (code 5, "Option Error"), to fill in the  Data1...Data3 fields as
-specified in RFC 4340, 5.6.
+This adds a hook to resolve features whose value depends on the choice of
+CCID. It is done at the server since it can only be done after the CCID
+values have been negotiated; i.e. the client will add its CCID preference
+list on the Change options sent in the Request, which will be reconciled
+with the local preference list of the server.
+
+The concept is documented on
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/feature_negotiation/\
+				implementation_notes.html#ccid_dependencies
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/options.c |    3 +++
- 1 files changed, 3 insertions(+), 0 deletions(-)
+ net/dccp/dccp.h   |    1 +
+ net/dccp/feat.c   |   25 +++++++++++++++++++++++++
+ net/dccp/output.c |   13 +++++++++----
+ 3 files changed, 35 insertions(+), 4 deletions(-)
 
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -291,6 +291,9 @@ out_invalid_option:
- 	DCCP_INC_STATS_BH(DCCP_MIB_INVALIDOPT);
- 	DCCP_SKB_CB(skb)->dccpd_reset_code = DCCP_RESET_CODE_OPTION_ERROR;
- 	DCCP_WARN("DCCP(%p): invalid option %d, len=%d", sk, opt, len);
-+	DCCP_SKB_CB(skb)->dccpd_reset_data[0] = opt;
-+	DCCP_SKB_CB(skb)->dccpd_reset_data[1] = len > 0 ? value[0] : 0;
-+	DCCP_SKB_CB(skb)->dccpd_reset_data[2] = len > 1 ? value[1] : 0;
- 	return -1;
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -443,6 +443,7 @@ static inline int dccp_ack_pending(const struct sock *sk)
  }
  
+ extern int  dccp_feat_finalise_settings(struct dccp_sock *dp);
++extern int  dccp_feat_server_ccid_dependencies(struct dccp_request_sock *dreq);
+ extern void dccp_feat_list_purge(struct list_head *fn_list);
+ 
+ extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -598,6 +598,31 @@ int dccp_feat_finalise_settings(struct dccp_sock *dp)
+ 	return 0;
+ }
+ 
++/**
++ * dccp_feat_server_ccid_dependencies  -  Resolve CCID-dependent features
++ * It is the server which resolves the dependencies once the CCID has been
++ * fully negotiated. If no CCID has been negotiated, it uses the default CCID.
++ */
++int dccp_feat_server_ccid_dependencies(struct dccp_request_sock *dreq)
++{
++	struct list_head *fn = &dreq->dreq_featneg;
++	struct dccp_feat_entry *entry;
++	u8 is_local, ccid;
++
++	for (is_local = 0; is_local <= 1; is_local++) {
++		entry = dccp_feat_list_lookup(fn, DCCPF_CCID, is_local);
++
++		if (entry != NULL && !entry->empty_confirm)
++			ccid = entry->val.sp.vec[0];
++		else
++			ccid = dccp_feat_default_value(DCCPF_CCID);
++
++		if (dccp_feat_propagate_ccid(fn, ccid, is_local))
++			return -1;
++	}
++	return 0;
++}
++
+ static int dccp_feat_update_ccid(struct sock *sk, u8 type, u8 new_ccid_nr)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -339,10 +339,12 @@ struct sk_buff *dccp_make_response(struct sock *sk, struct dst_entry *dst,
+ 	DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_RESPONSE;
+ 	DCCP_SKB_CB(skb)->dccpd_seq  = dreq->dreq_iss;
+ 
+-	if (dccp_insert_options_rsk(dreq, skb)) {
+-		kfree_skb(skb);
+-		return NULL;
+-	}
++	/* Resolve feature dependencies resulting from choice of CCID */
++	if (dccp_feat_server_ccid_dependencies(dreq))
++		goto response_failed;
++
++	if (dccp_insert_options_rsk(dreq, skb))
++		goto response_failed;
+ 
+ 	/* Build and checksum header */
+ 	dh = dccp_zeroed_hdr(skb, dccp_header_size);
+@@ -363,6 +365,9 @@ struct sk_buff *dccp_make_response(struct sock *sk, struct dst_entry *dst,
+ 	inet_rsk(req)->acked = 1;
+ 	DCCP_INC_STATS(DCCP_MIB_OUTSEGS);
+ 	return skb;
++response_failed:
++	kfree_skb(skb);
++	return NULL;
+ }
+ 
+ EXPORT_SYMBOL_GPL(dccp_make_response);
+-- 
+1.6.0.rc2
+
