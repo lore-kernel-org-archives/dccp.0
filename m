@@ -1,96 +1,81 @@
-From: "Leandro Sales" <leandroal@gmail.com>
-Date: Thu, 07 Aug 2008 22:04:09 +0000
-Subject: [Announce] Release of the DCCP Plugin 0.7 for GStreamer
-Message-Id: <5bc4c4570808071504m5b588bb8v2c366a5c171c921d@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 28 Aug 2008 17:44:51 +0000
+Subject: [PATCH 16/37] dccp: API to query the current TX/RX CCID
+Message-Id: <1219945512-7723-17-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <5bc4c4570802270510r563ad586qa74eaf6ef59b68e0@mail.gmail.com>
-In-Reply-To: <5bc4c4570802270510r563ad586qa74eaf6ef59b68e0@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-SGVsbG8gbGlzdCEKCiBJJ20gcGxlYXNlZCB0byBhbm5vdW5jZSB0aGUgdmVyc2lvbiB2MC43IG9m
-IHRoZSBEQ0NQIEdTdHJlYW1lcgpQbHVnaW4uIFBsZWFzZSwgbGV0IG1lIGtub3cgaWYgeW91IGhh
-dmUgYW55IHByb2JsZW0gb24gcnVubmluZwp0aGUgcGx1Z2luLCBzdWdnZXN0aW9ucyBhbmQgaW1w
-cm92ZW1lbnRzIHRoYXQgeW91IHByb3ZpZGVkIGZvciBpdC4KVGhlIG1haW4gbmV3cyBmb3IgdGhp
-cyByZWxlYXNlIGlzIHRoYXQgdGhlIHBsdWdpbiBjYW4gbm93IHN1cHBvcnQKbXVsdGlwbGUgY29u
-bmVjdGlvbiBpbiB0aGUgc2VydmVyIGVsZW1lbnQgYW5kIHNoYXJlIHRoZSBzYW1lIHNvY2tpZApi
-ZXR3ZWVuIHRvIEdTdHJlYW1lciBlbGVtZW50cy4KCiBXaGF0IGlzIEdTdHJlYW1lcj8KID09PT09
-PT09PQoKIEdTdHJlYW1lciBbMV0gaXMgYSBsaWJyYXJ5IHRoYXQgYWxsb3dzIHRoZSBjb25zdHJ1
-Y3Rpb24gb2YgZ3JhcGhzIG9mCm1lZGlhLWhhbmRsaW5nIGNvbXBvbmVudHMsIHJhbmdpbmcgZnJv
-bSBzaW1wbGUgT2dnL1ZvcmJpcyBwbGF5YmFjayB0bwpjb21wbGV4IGF1ZGlvIChtaXhpbmcpIGFu
-ZCB2aWRlbyAobm9uLWxpbmVhciBlZGl0aW5nKSBwcm9jZXNzaW5nLgpBcHBsaWNhdGlvbnMgY2Fu
-IHRha2UgYWR2YW50YWdlIG9mIGFkdmFuY2VzIGluIGNvZGVjIGFuZCBmaWx0ZXIKdGVjaG5vbG9n
-eSB0cmFuc3BhcmVudGx5LiBEZXZlbG9wZXJzIGNhbiBhZGQgbmV3IGNvZGVjcyBhbmQgZmlsdGVy
-cyBieQp3cml0aW5nIGEgc2ltcGxlIHBsdWdpbiB3aXRoIGEgY2xlYW4sIGdlbmVyaWMgaW50ZXJm
-YWNlLiBHU3RyZWFtZXIgaXMKcmVsZWFzZWQgdW5kZXIgdGhlIExHUEwuCgogV2hhdCBpcyBEQ0NQ
-PwogPT09PT09CiBUaGUgRGF0YWdyYW0gQ29uZ2VzdGlvbiBDb250cm9sIFByb3RvY29sIChEQ0NQ
-KSBbMl0gaXMgYSB0cmFuc3BvcnQKcHJvdG9jb2wgdGhhdCBwcm92aWRlcyBiaWRpcmVjdGlvbmFs
-IHVuaWNhc3QgY29ubmVjdGlvbnMgb2YKY29uZ2VzdGlvbi1jb250cm9sbGVkIHVucmVsaWFibGUg
-ZGF0YWdyYW1zLiBEQ0NQIGlzIHN1aXRhYmxlIGZvcgphcHBsaWNhdGlvbnMgdGhhdCB0cmFuc2Zl
-ciBmYWlybHkgbGFyZ2UgYW1vdW50cyBvZiBkYXRhIGFuZCB0aGF0IGNhbgpiZW5lZml0IGZyb20g
-Y29udHJvbCBvdmVyIHRoZSB0cmFkZW9mZiBiZXR3ZWVuIHRpbWVsaW5lc3MgYW5kCnJlbGlhYmls
-aXR5LgoKIEl0IGlzIGEgbWVzc2FnZS1vcmllbnRlZCB0cmFuc3BvcnQgbGF5ZXIgcHJvdG9jb2wg
-dGhhdCBpbXBsZW1lbnRzCnJlbGlhYmxlIGNvbm5lY3Rpb24gc2V0dXAsIHRlYXJkb3duLCBFQ04s
-IGNvbmdlc3Rpb24gY29udHJvbCwgYW5kCmZlYXR1cmUgbmVnb3RpYXRpb24uIEl0IHdhcyBwdWJs
-aXNoZWQgYXMgUkZDIDQzNDAgIGJ5IElFVEYgaW4gTWFyY2gsCjIwMDYuIExpbnV4IGhhZCBhbiBp
-bXBsZW1lbnRhdGlvbiBvZiBEQ0NQIHNpbmNlIHZlcnNpb24gMi42LjE0IGFuZAp0aGlzIGNvbnRp
-bnVlcyB0byBpbXByb3ZlIHdpdGggZWFjaCByZWxlYXNlLiBUaGUgbGF0ZXN0IG9mZmljaWFsCnZl
-cnNpb24gb2YgdGhlIERDQ1AgY29kZSBjYW4gYmUgZm91bmQgYXQgWzNdIGFuZCBhdCBbNF0uCgog
-V2hhdCBpcyBEQ0NQIFBsdWdpbiBmb3IgR1N0cmVhbWVyPwogPT09PT09PT09PT09PT09PT0KCiBJ
-dCBpcyBhIHBsdWdpbiB0aGF0IGFsbG93cyB0cmFuc2ZlciBkYXRhIG92ZXIgdGhlIG5ldHdvcmsg
-dmlhIERDQ1AKZm9yIEdTdHJlYW1lci4gQWNjb3JkaW5nIHRvIGFsbCB0aGUgdGVzdHMgdGhhdCB3
-ZSBwcm9jZWVkZWQsIHRoZQpwbHVnaW4gaXMgYWJsZSB0byBzdHJlYW0gYXVkaW8gZmlsZXMsIHN1
-Y2ggYXMgbXAzLCBhdWRpbyBjYXB0dXJlZCBmcm9tCnRoZSBtaWNyb3Bob25lIGFuZCByYXcgZGF0
-YSBmaWxlcy4KCiBDSEFOR0VMT0cKID09PT0KIC0gU2V0dGluZyB0aGUgZGVmYXVsdCBmb3JtYXQg
-b2YgdGhlIHNvdXJjZSBlbGVtZW50cyAoZGNjcGNsaWVudHNyYwphbmQgZGNjcHNlcnZlcnNyYykg
-dG8gR1NUX0ZPUk1BVF9USU1FLiBXZSB1c2UgdGhlIGZ1bmN0aW9uCmdzdF9iYXNlX3NyY19zZXRf
-Zm9ybWF0LgogLSBDb25maWd1cmUgc291cmNlIGVsZW1lbnRzIHRvIGF1dG9tYXRpY2FsbHkgdGlt
-ZXN0YW1wIG91dGdvaW5nCmJ1ZmZlcnMgYmFzZWQgb24gdGhlIGN1cnJlbnQgcnVubmluZ190aW1l
-IG9mIHRoZSBwaXBlbGluZS4gV2UgdXNlIHRoZQpmdW5jdGlvbiBnc3RfYmFzZV9zcmNfc2V0X2Rv
-X3RpbWVzdGFtcC4gV2UgdGVzdCBpZiB0aGUgZ3N0cmVhbWVyCmluc3RhbGxlZCBpcyAwLjEwLjE1
-IG9yIG1vcmUgdG8gdXNlIHRoaXMgZnVuY3Rpb24uCiAtIENvZGUgcmVmYWN0b3IKIC0gQWRkaW5n
-IGd0ay1kb2MgdG8gdGhlIGVsZW1lbnRzCgogVE9ETyBMaXN0CiA9PT09CiAtIEltcHJvdmUgdGhl
-IGltcGxlbWVudGF0aW9uIG9mIHRoZSBzZW5kIG1lY2hhbmlzbSBhZGRpbmcgdGhlClBhcmFzbGFz
-aCBzb2x1dGlvbiBiYXNlZCBvbiBxdWV1ZQogLSBJbXByb3ZlIHRoZSBzZW5kIG1lY2hhbmlzbSB0
-byBzdXBwb3J0IHRoZSBuZXcgZmVhdHVyZSBvZiBkY2NwIGluCnRoZSBsaW51eCBrZXJuZWwgdGhh
-dCBhbGxvd3MgYXBwbGljYXRpb24gdG8gZ2V0IHRoZSBwYWNrZXQgc2VxdWVuY2UKbnVtYmVyLgoK
-IEhvdyB0byBjb250cmlidXRlPwogPT09PT09PT09CgogUGxlYXNlLCBjb250YWN0IG1lIGF0IGxl
-YW5kcm9hbCBbYXRdIGdtYWlsIFtkb3RdIGNvbQoKIFdoZXJlIGlzIERDQ1AgUGx1Z2luPwogPT09
-PT09PT09PQogVGhlIERDQ1AgcGx1Z2luIGZvciBHU3RyZWFtZXIgaXMgdW5kZXIgdmVyc2lvbiBj
-b250cm9sIG9mIHRoZQpFLVBob25lLiBUaGUgRS1QaG9uZSAoRW1iZWRkZWQtUGhvbmUpIHByb2pl
-Y3QgYWltcyB0byBkZXZlbG9wIGEgVm9JUApjbGllbnQgZm9yIE1hZW1vIHBsYXRmb3JtIGJhc2Vk
-IG9uIERDQ1AgdHJhbnNwb3J0IHByb3RvY29sLiBJbiB0aGlzCnByb2plY3Qgd2UgYXJlIGFsc28g
-aW1wbGVtZW50aW5nIHRoZSBDQ0lELTQgWzVdIElFVEYgZHJhZnRzIG9uIHRoZQpsaW51eCBrZXJu
-ZWwuCgogRGV2ZWxvcG1lbnQ6CiBodHRwOi8vZ2FyYWdlLm1hZW1vLm9yZy9wcm9qZWN0cy9lcGhv
-bmUKCiBNYWlsaW5nIGxpc3Q6CiBodHRwOi8vZ2FyYWdlLm1hZW1vLm9yZy9waXBlcm1haWwvZXBo
-b25lLWRpc2N1c3MvCgogRG93bmxvYWQ6CiBodHRwczovL2dhcmFnZS5tYWVtby5vcmcvZnJzLz9n
-cm91cF9pZCk3CiBvciBkaXJlY3RseSBmcm9tCiBodHRwczovL2dhcmFnZS5tYWVtby5vcmcvZnJz
-L2Rvd25sb2FkLnBocC80NDE1L2dzdC1kY2NwLTAuNy50YXIuYnoyCgogSG93IHRvIHVzZSBpdCB3
-aXRoIGdzdC1sYXVuY2ggY29tbWFuZCBsaW5lPwogPT09PT09PT09PT09PT09PQogQSBiYXNpYyBl
-eGFtcGxlIHRvIHN0cmVhbSBhIG11bHRpbWVkaWEgZmlsZSB1c2luZyBjY2lkLTM6CgogKiBTZXJ2
-ZXI6CiBnc3QtbGF1bmNoIC12IGZpbGVzcmMgbG9jYXRpb249bXVzaWMubXAzICEgbXAzcGFyc2Ug
-ISBkY2Nwc2VydmVyc2luawogcG9ydJAxMSBjY2lkPTIKCiAqIENsaWVudDoKIGdzdC1sYXVuY2gg
-LXYgZGNjcGNsaWVudHNyYyBob3N0PWxvY2FsaG9zdCBwb3J0kDExICEgZGVjb2RlYmluICEgYWxz
-YXNpbmsKCiAtLSBXZSBhbHNvIHRlc3RlZCB3aXRoIG1wZzEyMywgdG8gdXNlIGl0OiBtcGcxMjMg
-ZGNjcDovL2xvY2FsaG9zdDo5MDExCgogUGxlYXNlLCByZWZlciB0byB0aGUgc3JjL2V4YW1wbGVz
-X2FwcC9SRUFETUUgZmlsZSBmb3IgbW9yZSBleGFtcGxlcy4KCiBJcyB0aGVyZSBhbnkgYXBwbGlj
-YXRpb24gZXhhbXBsZXM/CiA9PT09PT09PT09PT09PT09PQoKIFllcywgcmVmZXIgdG8gdGhlIGV4
-YW1wbGVzX2FwcCBkaXJlY3Rvcnkgb2YgdGhlIHNvdXJjZSBmaWxlLgoKIFJlcXVpcmVtZW50cwog
-PT09PT09CgogLSBMaW51eCBLZXJuZWwgd2l0aCBEQ0NQIGVuYWJsZWQgKHNlZSBbNl0pCiAtIEdT
-dHJlYW1lcgogLSBBZGRpdGlvbmFsIEdTdHJlYW1lciBQbHVnaW5zIHRvIG1ha2UgdGhlIGV4YW1w
-bGUgYXBwIHdvcmtzCgogQmVzdCByZWdhcmRzLAogTGVhbmRyby4KCiBSZWZlcmVuY2VzOgogWzFd
-IGh0dHA6Ly9nc3RyZWFtZXIuZnJlZWRlc2t0b3Aub3JnLwogWzJdIGh0dHA6Ly93d3cucmVhZC5j
-cy51Y2xhLmVkdS9kY2NwLwogWzNdIGdpdDovL2dpdC5rZXJuZWwub3JnL3B1Yi9zY20vbGludXgv
-a2VybmVsL2dpdC9hY21lL25ldC0yLjYuMjUuZ2l0CiBbNF0gZ2l0Oi8vZWRlbi1mZWVkLmVyZy5h
-YmRuLmFjLnVrL2RjY3BfZXhwCiBbNV0gaHR0cDovL3Rvb2xzLmlldGYub3JnL2h0bWwvZHJhZnQt
-aWV0Zi1kY2NwLWNjaWQ0LTAxCiBbNl0gaHR0cDovL3d3dy5saW51eGZvdW5kYXRpb24ub3JnL2Vu
-L05ldDpEQ0NQCgotLSAKTGVhbmRybyBNZWxvIGRlIFNhbGVzClBlcnZhc2l2ZSBhbmQgRW1iZWRk
-ZWQgQ29tcHV0aW5nIExhYm9yYXRvcnkKQ29tcHV0ZXIgU2NpZW5jZSBNU2MuCkJSaXNhIGFuZCBF
-LVBob25lIFByb2plY3RzIE1hbmFnZXIKTmV0d29yayBBZG1pbiBAIGh0dHA6Ly9lbWJlZGRlZC51
-ZmNnLmVkdS5ici9pbmRleGVuLmh0bWwKKzU1IDgzIDMzMTAtMTQwNCAoZXh0ZW5zaW9uIDIwOCkK
-Cmh0dHA6Ly93d3cubGVhbmRyb3NhbGVzLmNvbS8KLS0KVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlz
-IGxpc3Q6IHNlbmQgdGhlIGxpbmUgInVuc3Vic2NyaWJlIGRjY3AiIGluCnRoZSBib2R5IG9mIGEg
-bWVzc2FnZSB0byBtYWpvcmRvbW9Admdlci5rZXJuZWwub3JnCk1vcmUgbWFqb3Jkb21vIGluZm8g
-YXQgIGh0dHA6Ly92Z2VyLmtlcm5lbC5vcmcvbWFqb3Jkb21vLWluZm8uaHRtbA==
+This provides function to query the current TX/RX CCID dynamically, without
+reliance on the minisock value, using dynamic information available in the
+currently loaded CCID module.
+
+This query function is then used to
+ (a) provide the getsockopt part for getting/setting CCIDs via sockopts;
+ (b) replace the current test for "which CCID is in use" in probe.c.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ net/dccp/ccid.h  |    9 +++++++++
+ net/dccp/probe.c |    7 ++-----
+ net/dccp/proto.c |    6 ++++++
+ 3 files changed, 17 insertions(+), 5 deletions(-)
+
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -116,6 +116,15 @@ extern struct ccid *ccid_hc_rx_new(unsigned char id, struct sock *sk,
+ extern struct ccid *ccid_hc_tx_new(unsigned char id, struct sock *sk,
+ 				   gfp_t gfp);
+ 
++static inline int ccid_get_current_id(struct dccp_sock *dp, bool rx)
++{
++	struct ccid *ccid = rx ? dp->dccps_hc_rx_ccid : dp->dccps_hc_tx_ccid;
++
++	if (ccid = NULL || ccid->ccid_ops = NULL)
++		return -1;
++	return ccid->ccid_ops->ccid_id;
++}
++
+ extern void ccid_hc_rx_delete(struct ccid *ccid, struct sock *sk);
+ extern void ccid_hc_tx_delete(struct ccid *ccid, struct sock *sk);
+ 
+--- a/net/dccp/probe.c
++++ b/net/dccp/probe.c
+@@ -74,14 +74,11 @@ static void printl(const char *fmt, ...)
+ static int jdccp_sendmsg(struct kiocb *iocb, struct sock *sk,
+ 			 struct msghdr *msg, size_t size)
+ {
+-	const struct dccp_minisock *dmsk = dccp_msk(sk);
+ 	const struct inet_sock *inet = inet_sk(sk);
+-	const struct ccid3_hc_tx_sock *hctx;
++	struct ccid3_hc_tx_sock *hctx = NULL;
+ 
+-	if (dmsk->dccpms_tx_ccid = DCCPC_CCID3)
++	if (ccid_get_current_id(dccp_sk(sk), false) = DCCPC_CCID3)
+ 		hctx = ccid3_hc_tx_sk(sk);
+-	else
+-		hctx = NULL;
+ 
+ 	if (port = 0 || ntohs(inet->dport) = port ||
+ 	    ntohs(inet->sport) = port) {
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -664,6 +664,12 @@ static int do_dccp_getsockopt(struct sock *sk, int level, int optname,
+ 		break;
+ 	case DCCP_SOCKOPT_AVAILABLE_CCIDS:
+ 		return ccid_getsockopt_builtin_ccids(sk, len, optval, optlen);
++	case DCCP_SOCKOPT_TX_CCID:
++	case DCCP_SOCKOPT_RX_CCID:
++		val = ccid_get_current_id(dp, optname = DCCP_SOCKOPT_RX_CCID);
++		if (val < 0)
++			return -ENOPROTOOPT;
++		break;
+ 	case DCCP_SOCKOPT_SERVER_TIMEWAIT:
+ 		val = dp->dccps_server_timewait;
+ 		break;
+-- 
+1.6.0.rc2
+
