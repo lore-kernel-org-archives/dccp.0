@@ -1,135 +1,100 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Aug 2008 17:44:36 +0000
-Subject: [PATCH 01/37] dccp: Basic data structure for feature negotiation
-Message-Id: <1219945512-7723-2-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 28 Aug 2008 17:44:35 +0000
+Subject: [PATCH 0/37] dccp: Feature negotiation - last call for comments
+Message-Id: <1219945512-7723-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch prepares for the new and extended feature-negotiation routines.
+This is a last call for comments and review for the DCCP feature negotiation set,
+before sending a pull request.
 
-The following feature-negotiation data structures are provided:
-	* a container for the various (SP or NN) values,
-	* symbolic state names to track feature states,
-	* an entry struct which holds all current information together,
-	* elementary functions to fill in and process these structures.
+This set replaces the initial implementation of feature negotiation with a fairly 
+complete set of routines to support negotiation between endpoints. 
 
-Entry structs are arranged as FIFO for the following reason: RFC 4340 specifies
-that if multiple options of the same type are present, they are processed in the
-order of their appearance in the packet; which means that this order needs to be
-preserved in the local data structure (the later insertion code also respects
-this order).
+It fixes the (known) problems with the old infrastructure, which was an initial
+implementation that apparently never was developed further.
 
-The struct list_head has been chosen for the following reasons: the most
-frequent operations are
- * add new entry at tail (when receiving Change or setting socket options);
- * delete entry (when Confirm has been received);
- * deep copy of entire list (cloning from listening socket onto request socket).
+The patches have been publicly available in the test tree for about a year
+and were widely tested.
 
-The NN value has been set to 64 bit, which is a currently sufficient upper limit
-(Sequence Window feature has 48 bit).
+Since several applications are using this API and since there is already at
+least one publicly available application (gstreamer) based on the new API,
+it would be good to have this available in mainline.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
----
- net/dccp/feat.c |   14 ++++++++++++
- net/dccp/feat.h |   60 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 74 insertions(+), 0 deletions(-)
+This set deals with the negotiation of capabilities, before a connection is
+established. There is also support for dynamically updating feature values,
+this will follow in a second set -- a much smaller set since it builds upon
+the new basis.
 
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -23,6 +23,20 @@
- 
- #define DCCP_FEAT_SP_NOAGREE (-123)
- 
-+/* copy constructor, fval must not already contain allocated memory */
-+static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
-+{
-+	fval->sp.len = len;
-+	if (fval->sp.len > 0) {
-+		fval->sp.vec = kmemdup(val, len, gfp_any());
-+		if (fval->sp.vec = NULL) {
-+			fval->sp.len = 0;
-+			return -ENOBUFS;
-+		}
-+	}
-+	return 0;
-+}
-+
- int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
- 		     u8 *val, u8 len, gfp_t gfp)
- {
---- a/net/dccp/feat.h
-+++ b/net/dccp/feat.h
-@@ -14,6 +14,66 @@
- #include <linux/types.h>
- #include "dccp.h"
- 
-+enum dccp_feat_type {
-+	FEAT_AT_RX   = 1,	/* located at RX side of half-connection  */
-+	FEAT_AT_TX   = 2,	/* located at TX side of half-connection  */
-+	FEAT_SP      = 4,	/* server-priority reconciliation (6.3.1) */
-+	FEAT_NN	     = 8,	/* non-negotiable reconciliation (6.3.2)  */
-+	FEAT_UNKNOWN = 0xFF	/* not understood or invalid feature	  */
-+};
-+
-+enum dccp_feat_state {
-+	FEAT_DEFAULT = 0,	/* using default values from 6.4 */
-+	FEAT_INITIALISING,	/* feature is being initialised  */
-+	FEAT_CHANGING,		/* Change sent but not confirmed yet */
-+	FEAT_UNSTABLE,		/* local modification in state CHANGING */
-+	FEAT_STABLE		/* both ends (think they) agree */
-+};
-+
-+/**
-+ * dccp_feat_val  -  Container for SP or NN feature values
-+ * @nn:     single NN value
-+ * @sp.vec: single SP value plus optional preference list
-+ * @sp.len: length of @sp.vec in bytes
-+ */
-+typedef union {
-+	u64 nn;
-+	struct {
-+		u8	*vec;
-+		u8	len;
-+	}   sp;
-+} dccp_feat_val;
-+
-+/**
-+ * struct feat_entry  -  Data structure to perform feature negotiation
-+ * @feat_num: one of %dccp_feature_numbers
-+ * @val: feature's current value (SP features may have preference list)
-+ * @state: feature's current state
-+ * @needs_mandatory: whether Mandatory options should be sent
-+ * @needs_confirm: whether to send a Confirm instead of a Change
-+ * @empty_confirm: whether to send an empty Confirm (depends on @needs_confirm)
-+ * @is_local: feature location (1) or feature-remote (0)
-+ * @node: list pointers, entries arranged in FIFO order
-+ */
-+struct dccp_feat_entry {
-+	u8                      feat_num;
-+	dccp_feat_val           val;
-+	enum dccp_feat_state    state:8;
-+	bool			needs_mandatory:1,
-+				needs_confirm:1,
-+				empty_confirm:1,
-+				is_local:1;
-+
-+	struct list_head	node;
-+};
-+
-+static inline u8 dccp_feat_genopt(struct dccp_feat_entry *entry)
-+{
-+	if (entry->needs_confirm)
-+		return entry->is_local ? DCCPO_CONFIRM_L : DCCPO_CONFIRM_R;
-+	return entry->is_local ? DCCPO_CHANGE_L : DCCPO_CHANGE_R;
-+}
-+
- #ifdef CONFIG_IP_DCCP_DEBUG
- extern const char *dccp_feat_typename(const u8 type);
- extern const char *dccp_feat_name(const u8 feat);
--- 
-1.6.0.rc2
+Please send any comments or issues you find with the code before the end of the
+week. I will then prepare a second submission / pull request.
+
+
+Part I - Basis
+---------------
+Patch #1: Provides the basic datastructure for feature negotiation. It gets 
+          around the problem that feature-negotiation values have no uniform
+	  type - they can be 48-bit numbers, single characters, 2-byte integers
+	  or a list of unsigned chars.
+Patch #2: Provides a lookup-table for the different negotiable features.
+Patch #3: Adds list management for the list keeping the negotiation-options.
+Patch #4: Initialisation routines (for request sockets and normal sockets).
+Patch #5: Analogous to #4, this provides the cleanup routines.	  
+Patch #6: Changes the existing policy to allow anytime changes as that lead
+          to unpredictable results.
+Patch #7: Adds registration routines. These form part of the user interface
+          and are later used by the socket API to set individual preferences.
+Patch #8: CCIDs are a negotiable feature. This patch adds support to query the
+          supported CCIDs, so as to advertise only the locally supported ones.
+Patch #9: The choice of CCID in turn creates new feature dependencies. The patch
+          adds automatic tracking of such dependencies to avoid later failure.
+
+Part II - Core	  
+--------------
+Patch #10: Provides a mechanism to then resolve CCID-dependent features. Since
+           CCIDs are a server-priority feature, this is done by the server.
+Patch #11: Deprecates old featneg API, as it was dangerous/clumsy.
+Patch #12: Support to negotiate checksum-coverage values (as in UDP-Lite).
+Patch #13: Deprecates Ack Ratio sysctl, to enable automatic updating.
+Patch #14: Tidies up the setsockopt interface for new additions.
+Patch #15: Set/getsockopt support to negotiate CCIDs with the peer.
+Patch #16: Socket API to query the current CCID from userspace.
+Patch #17: Prepares the variable-length htonl/ntohl functions for 48 bits.
+           Such a length is needed by e.g. the Sequence Window feature.
+Patch #18: Support for DCCP `Mandatory' type options (RFC 4340, 5.8.2).
+Patch #19: Routine to insert feature-negotiation header options.
+Patch #20: Complements #19, to add feature-negotiation options onto the skb.
+Patch #21: Complements #20 and completes the insertion of featneg options.
+Patch #22: Logic/algorithm to actually reconcile negotiation options.
+Patch #23: Receiver support to process incoming Change L/R options. 
+Patch #24: Receiver support to process incoming Confirm R/L options.
+Patch #25: Handlers for activating successfully negotiated features.
+
+Part III - Integration and cleanup
+----------------------------------
+Patch #26: Integration of dynamic negotiation, part I (socket setup).
+Patch #27: Integration of dynamic negotiation, part II (server side).
+Patch #28: Integration of dynamic negotiation, part III (client side).
+
+Patch #29: Cleans up the older infrastructure.
+Patch #30: Removes obsolete parts of the old CCID interface.
+Patch #31: Removes manual intervention on NDP count (now automatic).
+Patch #32: Removes Ack Vector sysctl (handled automatically now).
+
+Patch #33: Initialisation framework for the supported features.
+Patch #34: Auto-loading of CCID modules so that the modules are available
+           when the negotiation is completed.
+Patch #35: Adds full support for local/remote Sequence Window.
+Patch #36: Initialisation and type-checking of involved sysctls.
+Patch #37: A set of (useful) debugging/printing helper functions.
+
+
+As always, patches are available on 
+
+	git://eden-feed.erg.abdn.ac.uk/dccp_exp		[subtree `dccp']
+
+There is also a gitweb view on the server.
 
