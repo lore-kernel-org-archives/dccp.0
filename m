@@ -1,91 +1,68 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Aug 2008 17:45:02 +0000
-Subject: [PATCH 27/37] dccp: Integration of dynamic feature activation - part 2 (server side)
-Message-Id: <1219945512-7723-28-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 28 Aug 2008 17:44:40 +0000
+Subject: [PATCH 05/37] dccp: Cleanup routines for feature negotiation
+Message-Id: <1219945512-7723-6-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch integrates the activation of features at the end of negotiation
-into the server-side code.
-
-Note:
-  In dccp_create_openreq_child the request_sock argument is no longer constant,
-  since dccp_activate_values() uses the feature-negotiation list on dreq to sort
-  out the initialisation values for the different features of the child socket;
-  and purges this queue after use (but the `req' argument to openreq_child
-  can and does still remain constant).
+This inserts the required de-allocation routines for memory allocated by
+feature negotiation in the socket destructors, replacing dccp_feat_clean()
+in one instance.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/minisocks.c |   42 ++++++++++++------------------------------
- 1 files changed, 12 insertions(+), 30 deletions(-)
+ net/dccp/dccp.h  |    2 ++
+ net/dccp/ipv4.c  |    1 +
+ net/dccp/ipv6.c  |    1 +
+ net/dccp/proto.c |    2 +-
+ 4 files changed, 5 insertions(+), 1 deletions(-)
 
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -111,7 +111,7 @@ struct sock *dccp_create_openreq_child(struct sock *sk,
- 	struct sock *newsk = inet_csk_clone(sk, req, GFP_ATOMIC);
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -442,6 +442,8 @@ static inline int dccp_ack_pending(const struct sock *sk)
+ 	       inet_csk_ack_scheduled(sk);
+ }
  
- 	if (newsk != NULL) {
--		const struct dccp_request_sock *dreq = dccp_rsk(req);
-+		struct dccp_request_sock *dreq = dccp_rsk(req);
- 		struct inet_connection_sock *newicsk = inet_csk(newsk);
- 		struct dccp_sock *newdp = dccp_sk(newsk);
- 		struct dccp_minisock *newdmsk = dccp_msk(newsk);
-@@ -125,35 +125,6 @@ struct sock *dccp_create_openreq_child(struct sock *sk,
- 		newicsk->icsk_rto	    = DCCP_TIMEOUT_INIT;
++extern void dccp_feat_list_purge(struct list_head *fn_list);
++
+ extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
+ extern int dccp_insert_options_rsk(struct dccp_request_sock*, struct sk_buff*);
+ extern int dccp_insert_option_elapsed_time(struct sock *sk,
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -545,6 +545,7 @@ out:
  
- 		INIT_LIST_HEAD(&newdp->dccps_featneg);
--		if (dccp_feat_clone(sk, newsk))
--			goto out_free;
--
--		if (newdmsk->dccpms_send_ack_vector) {
--			newdp->dccps_hc_rx_ackvec -						dccp_ackvec_alloc(GFP_ATOMIC);
--			if (unlikely(newdp->dccps_hc_rx_ackvec = NULL))
--				goto out_free;
--		}
--
--		newdp->dccps_hc_rx_ccid -			    ccid_hc_rx_new(newdmsk->dccpms_rx_ccid,
--					   newsk, GFP_ATOMIC);
--		newdp->dccps_hc_tx_ccid -			    ccid_hc_tx_new(newdmsk->dccpms_tx_ccid,
--					   newsk, GFP_ATOMIC);
--		if (unlikely(newdp->dccps_hc_rx_ccid = NULL ||
--			     newdp->dccps_hc_tx_ccid = NULL)) {
--			dccp_ackvec_free(newdp->dccps_hc_rx_ackvec);
--			ccid_hc_rx_delete(newdp->dccps_hc_rx_ccid, newsk);
--			ccid_hc_tx_delete(newdp->dccps_hc_tx_ccid, newsk);
--out_free:
--			/* It is still raw copy of parent, so invalidate
--			 * destructor and make plain sk_free() */
--			newsk->sk_destruct = NULL;
--			sk_free(newsk);
--			return NULL;
--		}
--
- 		/*
- 		 * Step 3: Process LISTEN state
- 		 *
-@@ -184,6 +155,17 @@ out_free:
- 		dccp_set_seqno(&newdp->dccps_awl,
- 			       max48(newdp->dccps_awl, newdp->dccps_iss));
+ static void dccp_v4_reqsk_destructor(struct request_sock *req)
+ {
++	dccp_feat_list_purge(&dccp_rsk(req)->dreq_featneg);
+ 	kfree(inet_rsk(req)->opt);
+ }
  
-+		/*
-+		 * Activate features after initialising the sequence numbers,
-+		 * since CCID initialisation may depend on GSS, ISR, ISS etc.
-+		 */
-+		if (dccp_feat_activate_values(newsk, &dreq->dreq_featneg)) {
-+			/* It is still raw copy of parent, so invalidate
-+			 * destructor and make plain sk_free() */
-+			newsk->sk_destruct = NULL;
-+			sk_free(newsk);
-+			return NULL;
-+		}
- 		dccp_init_xmit_timers(newsk);
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -302,6 +302,7 @@ done:
  
- 		DCCP_INC_STATS_BH(DCCP_MIB_PASSIVEOPENS);
+ static void dccp_v6_reqsk_destructor(struct request_sock *req)
+ {
++	dccp_feat_list_purge(&dccp_rsk(req)->dreq_featneg);
+ 	if (inet6_rsk(req)->pktopts != NULL)
+ 		kfree_skb(inet6_rsk(req)->pktopts);
+ }
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -268,7 +268,7 @@ void dccp_destroy_sock(struct sock *sk)
+ 	dp->dccps_hc_rx_ccid = dp->dccps_hc_tx_ccid = NULL;
+ 
+ 	/* clean up feature negotiation state */
+-	dccp_feat_clean(dmsk);
++	dccp_feat_list_purge(&dp->dccps_featneg);
+ }
+ 
+ EXPORT_SYMBOL_GPL(dccp_destroy_sock);
 -- 
 1.6.0.rc2
 
