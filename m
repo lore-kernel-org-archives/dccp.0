@@ -1,215 +1,111 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 30 Aug 2008 13:52:28 +0000
-Subject: v2 [PATCH 15/37] dccp: Set per-connection CCIDs via socket options
-Message-Id: <20080830135228.GE17190@gerrit.erg.abdn.ac.uk>
+Date: Thu, 28 Aug 2008 17:45:03 +0000
+Subject: [PATCH 28/37] dccp: Integration of dynamic feature activation - part 3 (client side)
+Message-Id: <1219945512-7723-29-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is a revised version which reflects both comments made by Arnaldo.
-With regard to the option length, the patch has been combined with a
-chunk from a later patch of the same set, where the problem of "maximum
-size of a TLV option" reappears: 
+This integrates feature-activation in the client, with these details:
 
-  --- a/include/linux/dccp.h
-  +++ b/include/linux/dccp.h
-  @@ -209,10 +209,12 @@ enum dccp_feature_numbers {
-   #define DCCP_SOCKOPT_CCID_RX_INFO	128
-   #define DCCP_SOCKOPT_CCID_TX_INFO	192
-   
-  +/* maximum size of a single TLV-encoded option (sans type/len bytes) */
-  +#define DCCP_SINGLE_OPT_MAXLEN         253
-  +/* maximum number of CCID preferences that can be registered at one time */
-  +#define DCCP_CCID_LIST_MAX_LEN         (DCCP_SINGLE_OPT_MAXLEN - 2)
-   /* maximum number of services provided on the same listening port */
-   #define DCCP_SERVICE_LIST_MAX_LEN      32
-  -/* maximum number of CCID preferences that can be registered at one time */
-  -#define DCCP_CCID_LIST_MAX_LEN	    16
- 
-Documentation has been added below why the maximum number of CCIDs is 253 - 2.
+ 1. When dccp_parse_options() fails, the reset code is already set, request_sent
+    _state_process() currently overrides this with `Packet Error', which is not
+    intended - so changed to use the reset code set in dccp_parse_options();
 
->>>>>>>>>>>>>>>>>>>>>>>>>>> Patch v2  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-dccp: Set per-connection CCIDs via socket options
+ 2. There was a FIXME to change the error code when dccp_ackvec_add() fails.
+    I have looked this up and found that:
+    * the check whether ackno < ISN is already made earlier,
+    * this Response is likely the 1st packet with an Ackno that the client gets,
+    * so when dccp_ackvec_add() fails, the reason is likely not a packet error.
 
-With this patch, TX/RX CCIDs can now be changed on a per-connection basis, which
-overrides the defaults set by the global sysctl variables for TX/RX CCIDs.
+ 3. When feature negotiation fails, the socket should be marked as not usable,
+    so that the application is notified that an error occurs. This is achieved
+    by a new label, which uses an error code of `Aborted' and which sets the
+    socket state to CLOSED, as well as sk_err.
 
-To make full use of this facility, the remaining patches of this patch set are
-needed, which track dependencies and activate negotiated feature values.
+ 4. Avoids parsing the Ack twice in Respond state by not doing option processing
+    again in dccp_rcv_respond_partopen_state_process (as option processing has
+    already been done on the request_sock in dccp_check_req).
 
-Note on the maximum number of CCIDs that can be registered:
------------------------------------------------------------
-The maximum number of CCIDs that can be registered on the socket is constrained
-by the space in a Confirm/Change feature negotiation option. 
-
-The space in these in turn depends on the size of header options as defined
-in RFC 4340, 5.8. Since this is a recurring constant, it has been moved from
-ackvec.h into linux/dccp.h, clarifying its purpose.
-
-Relative to this size, the maximum number of CCID identifiers that can be 
-present in a Confirm option (which always consumes 1 byte more than a Change
-option, cf. 6.1) is 2 bytes less than the maximum TLV size: one for the
-CCID-feature-type and one for the selected value.
+Since this addresses congestion-control initialisation, a corresponding
+FIXME has been removed.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- Documentation/networking/dccp.txt |   14 ++++++++++++++
- include/linux/dccp.h              |    7 +++++++
- net/dccp/ackvec.c                 |    9 ++++-----
- net/dccp/ackvec.h                 |    5 ++---
- net/dccp/proto.c                  |   34 ++++++++++++++++++++++++++++++++++
- 5 files changed, 61 insertions(+), 8 deletions(-)
+ net/dccp/input.c |   30 ++++++++++++++++++++++++++----
+ 1 files changed, 26 insertions(+), 4 deletions(-)
 
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -61,6 +61,20 @@ DCCP_SOCKOPT_AVAILABLE_CCIDS is also rea
- supported by the endpoint (see include/linux/dccp.h for symbolic constants).
- The caller needs to provide a sufficiently large (> 2) array of type uint8_t.
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -421,8 +421,13 @@ static int dccp_rcv_request_sent_state_process(struct sock *sk,
+ 			goto out_invalid_packet;
+ 		}
  
-+DCCP_SOCKOPT_CCID is write-only and sets both the TX and RX CCIDs at the same
-+time, combining the operation of the next two socket options. This option is
-+preferrable over the latter two, since often applications will use the same
-+type of CCID for both directions; and mixed use of CCIDs is not currently well
-+understood. This socket option takes as argument at least one uint8_t value, or
-+an array of uint8_t values, which must match available CCIDS (see above). CCIDs
-+must be registered on the socket before calling connect() or listen().
-+
-+DCCP_SOCKOPT_TX_CCID is read/write. It returns the current CCID (if set) or sets
-+the preference list for the TX CCID, using the same format as DCCP_SOCKOPT_CCID.
-+Please note that the getsockopt argument type here is `int', not uint8_t.
-+
-+DCCP_SOCKOPT_RX_CCID is analogous to DCCP_SOCKOPT_TX_CCID, but for the RX CCID.
-+
- DCCP_SOCKOPT_SERVER_TIMEWAIT enables the server (listening socket) to hold
- timewait state when closing the connection (RFC 4340, 8.3). The usual case is
- that the closing server sends a CloseReq, whereupon the client holds timewait
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -203,9 +203,16 @@ enum dccp_feature_numbers {
- #define DCCP_SOCKOPT_SEND_CSCOV		10
- #define DCCP_SOCKOPT_RECV_CSCOV		11
- #define DCCP_SOCKOPT_AVAILABLE_CCIDS	12
-+#define DCCP_SOCKOPT_CCID		13
-+#define DCCP_SOCKOPT_TX_CCID		14
-+#define DCCP_SOCKOPT_RX_CCID		15
- #define DCCP_SOCKOPT_CCID_RX_INFO	128
- #define DCCP_SOCKOPT_CCID_TX_INFO	192
++		/*
++		 * If option processing (Step 8) failed, return 1 here so that
++		 * dccp_v4_do_rcv() sends a Reset. The Reset code depends on
++		 * the option type and is set in dccp_parse_options().
++		 */
+ 		if (dccp_parse_options(sk, NULL, skb))
+-			goto out_invalid_packet;
++			return 1;
  
-+/* maximum size of a single TLV-encoded option (sans type/len bytes) */
-+#define DCCP_SINGLE_OPT_MAXLEN         253
-+/* maximum number of CCID preferences that can be registered at one time */
-+#define DCCP_CCID_LIST_MAX_LEN         (DCCP_SINGLE_OPT_MAXLEN - 2)
- /* maximum number of services provided on the same listening port */
- #define DCCP_SERVICE_LIST_MAX_LEN      32
+ 		/* Obtain usec RTT sample from SYN exchange (used by CCID 3) */
+ 		if (likely(dp->dccps_options_received.dccpor_timestamp_echo))
+@@ -475,6 +480,15 @@ static int dccp_rcv_request_sent_state_process(struct sock *sk,
+ 		 */
+ 		dccp_set_state(sk, DCCP_PARTOPEN);
  
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -506,6 +506,36 @@ static int dccp_setsockopt_cscov(struct 
- 	return rc;
++		/*
++		 * If feature negotiation was successful, activate features now;
++		 * an activation failure means that this host could not activate
++		 * one ore more features (e.g. insufficient memory), which would
++		 * leave at least one feature in an undefined state.
++		 */
++		if (dccp_feat_activate_values(sk, &dp->dccps_featneg))
++			goto unable_to_proceed;
++
+ 		/* Make sure socket is routed, for correct metrics. */
+ 		icsk->icsk_af_ops->rebuild_header(sk);
+ 
+@@ -509,6 +523,16 @@ out_invalid_packet:
+ 	/* dccp_v4_do_rcv will send a reset */
+ 	DCCP_SKB_CB(skb)->dccpd_reset_code = DCCP_RESET_CODE_PACKET_ERROR;
+ 	return 1;
++
++unable_to_proceed:
++	DCCP_SKB_CB(skb)->dccpd_reset_code = DCCP_RESET_CODE_ABORTED;
++	/*
++	 * We mark this socket as no longer usable, so that the loop in
++	 * dccp_sendmsg() terminates and the application gets notified.
++	 */
++	dccp_set_state(sk, DCCP_CLOSED);
++	sk->sk_err = ECOMM;
++	return 1;
  }
  
-+static int dccp_setsockopt_ccid(struct sock *sk, int type,
-+				char __user *optval, int optlen)
-+{
-+	u8 *val;
-+	int rc = 0;
-+
-+	if (optlen < 1 || optlen > DCCP_CCID_LIST_MAX_LEN)
-+		return -EINVAL;
-+
-+	val = kmalloc(optlen, GFP_KERNEL);
-+	if (val = NULL)
-+		return -ENOMEM;
-+
-+	if (copy_from_user(val, optval, optlen)) {
-+		kfree(val);
-+		return -EFAULT;
-+	}
-+
-+	lock_sock(sk);
-+	if (type = DCCP_SOCKOPT_TX_CCID || type = DCCP_SOCKOPT_CCID)
-+		rc = dccp_feat_register_sp(sk, DCCPF_CCID, 1, val, optlen);
-+
-+	if (!rc && (type = DCCP_SOCKOPT_RX_CCID || type = DCCP_SOCKOPT_CCID))
-+		rc = dccp_feat_register_sp(sk, DCCPF_CCID, 0, val, optlen);
-+	release_sock(sk);
-+
-+	kfree(val);
-+	return rc;
-+}
-+
- static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
- 		char __user *optval, int optlen)
- {
-@@ -520,6 +550,10 @@ static int do_dccp_setsockopt(struct soc
- 	case DCCP_SOCKOPT_CHANGE_R:
- 		DCCP_WARN("sockopt(CHANGE_L/R) is deprecated: fix your app\n");
- 		return 0;
-+	case DCCP_SOCKOPT_CCID:
-+	case DCCP_SOCKOPT_RX_CCID:
-+	case DCCP_SOCKOPT_TX_CCID:
-+		return dccp_setsockopt_ccid(sk, optname, optval, optlen);
+ static int dccp_rcv_respond_partopen_state_process(struct sock *sk,
+@@ -600,7 +624,7 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+ 		return 1;
  	}
  
- 	if (optlen < (int)sizeof(int))
---- a/net/dccp/ackvec.h
-+++ b/net/dccp/ackvec.h
-@@ -11,15 +11,14 @@
-  *	published by the Free Software Foundation.
-  */
+-	if (sk->sk_state != DCCP_REQUESTING) {
++	if (sk->sk_state != DCCP_REQUESTING && sk->sk_state != DCCP_RESPOND) {
+ 		if (dccp_check_seqno(sk, skb))
+ 			goto discard;
  
-+#include <linux/dccp.h>
- #include <linux/compiler.h>
- #include <linux/ktime.h>
- #include <linux/list.h>
- #include <linux/types.h>
+@@ -665,8 +689,6 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+ 		return 1;
  
--/* Read about the ECN nonce to see why it is 253 */
--#define DCCP_MAX_ACKVEC_OPT_LEN 253
- /* We can spread an ack vector across multiple options */
--#define DCCP_MAX_ACKVEC_LEN (DCCP_MAX_ACKVEC_OPT_LEN * 2)
-+#define DCCP_MAX_ACKVEC_LEN (DCCP_SINGLE_OPT_MAXLEN * 2)
- 
- #define DCCP_ACKVEC_STATE_RECEIVED	0
- #define DCCP_ACKVEC_STATE_ECN_MARKED	(1 << 6)
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -12,7 +12,6 @@
- #include "ackvec.h"
- #include "dccp.h"
- 
--#include <linux/dccp.h>
- #include <linux/init.h>
- #include <linux/errno.h>
- #include <linux/kernel.h>
-@@ -68,7 +67,7 @@ int dccp_insert_option_ackvec(struct soc
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
- 	/* Figure out how many options do we need to represent the ackvec */
--	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_MAX_ACKVEC_OPT_LEN);
-+	const u8 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
- 	u16 len = av->av_vec_len + 2 * nr_opts, i;
- 	u32 elapsed_time;
- 	const unsigned char *tail, *from;
-@@ -100,8 +99,8 @@ int dccp_insert_option_ackvec(struct soc
- 	for (i = 0; i < nr_opts; ++i) {
- 		int copylen = len;
- 
--		if (len > DCCP_MAX_ACKVEC_OPT_LEN)
--			copylen = DCCP_MAX_ACKVEC_OPT_LEN;
-+		if (len > DCCP_SINGLE_OPT_MAXLEN)
-+			copylen = DCCP_SINGLE_OPT_MAXLEN;
- 
- 		*to++ = DCCPO_ACK_VECTOR_0;
- 		*to++ = copylen + 2;
-@@ -432,7 +431,7 @@ found:
- int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
- 		      u64 *ackno, const u8 opt, const u8 *value, const u8 len)
- {
--	if (len > DCCP_MAX_ACKVEC_OPT_LEN)
-+	if (len > DCCP_SINGLE_OPT_MAXLEN)
- 		return -1;
- 
- 	/* dccp_ackvector_print(DCCP_SKB_CB(skb)->dccpd_ack_seq, value, len); */
+ 	case DCCP_REQUESTING:
+-		/* FIXME: do congestion control initialization */
+-
+ 		queued = dccp_rcv_request_sent_state_process(sk, skb, dh, len);
+ 		if (queued >= 0)
+ 			return queued;
+-- 
+1.6.0.rc2
+
