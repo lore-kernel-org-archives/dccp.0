@@ -1,35 +1,43 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Thu, 28 Aug 2008 21:00:31 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 29 Aug 2008 06:17:04 +0000
 Subject: Re: [PATCH 08/37] dccp: Query supported CCIDs
-Message-Id: <20080828210031.GO9193@ghostprotocols.net>
+Message-Id: <20080829061704.GE3557@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1219945512-7723-9-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1219945512-7723-9-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-Em Thu, Aug 28, 2008 at 07:44:43PM +0200, Gerrit Renker escreveu:
-> This provides a data structure to record which CCIDs are locally supported
-> and three accessor functions:
->  - a test function for internal use which is used to validate CCID requests
->    made by the user;
->  - a copy function so that the list can be used for feature-negotiation;
->  - documented getsockopt() support so that the user can query capabilities.
-> 
-> The data structure is a table which is filled in at compile-time with the
-> list of available CCIDs (which in turn depends on the Kconfig choices).
-> 
-> Using the copy function for cloning the list of supported CCIDs is useful for
-> feature negotiation, since the negotiation is now with the full list of available
-> CCIDs (e.g. {2, 3}) instead of the default value {2}. This means negotiation
-> will not fail if the peer requests to use CCID3 instead of CCID2.
-
-But this limits us to the CCIDs at kernel build time, what if I want to
-test CCID4? I guess we could have something like a bitmap and check if
-the bit for that CCID is set, and it would be set at ccid_register time.
-
-Perhaps using include/linux/bitmap.h :-)
-
-- Arnaldo
+UXVvdGluZyBBcm5hbGRvOgp8IEVtIFRodSwgQXVnIDI4LCAyMDA4IGF0IDA3OjQ0OjQzUE0gKzAy
+MDAsIEdlcnJpdCBSZW5rZXIgZXNjcmV2ZXU6CnwgPiBUaGlzIHByb3ZpZGVzIGEgZGF0YSBzdHJ1
+Y3R1cmUgdG8gcmVjb3JkIHdoaWNoIENDSURzIGFyZSBsb2NhbGx5IHN1cHBvcnRlZAp8ID4gYW5k
+IHRocmVlIGFjY2Vzc29yIGZ1bmN0aW9uczoKfCA+ICAtIGEgdGVzdCBmdW5jdGlvbiBmb3IgaW50
+ZXJuYWwgdXNlIHdoaWNoIGlzIHVzZWQgdG8gdmFsaWRhdGUgQ0NJRCByZXF1ZXN0cwp8ID4gICAg
+bWFkZSBieSB0aGUgdXNlcjsKfCA+ICAtIGEgY29weSBmdW5jdGlvbiBzbyB0aGF0IHRoZSBsaXN0
+IGNhbiBiZSB1c2VkIGZvciBmZWF0dXJlLW5lZ290aWF0aW9uOwp8ID4gIC0gZG9jdW1lbnRlZCBn
+ZXRzb2Nrb3B0KCkgc3VwcG9ydCBzbyB0aGF0IHRoZSB1c2VyIGNhbiBxdWVyeSBjYXBhYmlsaXRp
+ZXMuCnwgPiAKfCA+IFRoZSBkYXRhIHN0cnVjdHVyZSBpcyBhIHRhYmxlIHdoaWNoIGlzIGZpbGxl
+ZCBpbiBhdCBjb21waWxlLXRpbWUgd2l0aCB0aGUKfCA+IGxpc3Qgb2YgYXZhaWxhYmxlIENDSURz
+ICh3aGljaCBpbiB0dXJuIGRlcGVuZHMgb24gdGhlIEtjb25maWcgY2hvaWNlcykuCnwgPiAKfCA+
+IFVzaW5nIHRoZSBjb3B5IGZ1bmN0aW9uIGZvciBjbG9uaW5nIHRoZSBsaXN0IG9mIHN1cHBvcnRl
+ZCBDQ0lEcyBpcyB1c2VmdWwgZm9yCnwgPiBmZWF0dXJlIG5lZ290aWF0aW9uLCBzaW5jZSB0aGUg
+bmVnb3RpYXRpb24gaXMgbm93IHdpdGggdGhlIGZ1bGwgbGlzdCBvZiBhdmFpbGFibGUKfCA+IEND
+SURzIChlLmcuIHsyLCAzfSkgaW5zdGVhZCBvZiB0aGUgZGVmYXVsdCB2YWx1ZSB7Mn0uIFRoaXMg
+bWVhbnMgbmVnb3RpYXRpb24KfCA+IHdpbGwgbm90IGZhaWwgaWYgdGhlIHBlZXIgcmVxdWVzdHMg
+dG8gdXNlIENDSUQzIGluc3RlYWQgb2YgQ0NJRDIuCnwgCnwgQnV0IHRoaXMgbGltaXRzIHVzIHRv
+IHRoZSBDQ0lEcyBhdCBrZXJuZWwgYnVpbGQgdGltZSwgd2hhdCBpZiBJIHdhbnQgdG8KfCB0ZXN0
+IENDSUQ0PyBJIGd1ZXNzIHdlIGNvdWxkIGhhdmUgc29tZXRoaW5nIGxpa2UgYSBiaXRtYXAgYW5k
+IGNoZWNrIGlmCnwgdGhlIGJpdCBmb3IgdGhhdCBDQ0lEIGlzIHNldCwgYW5kIGl0IHdvdWxkIGJl
+IHNldCBhdCBjY2lkX3JlZ2lzdGVyIHRpbWUuCnwgCnwgUGVyaGFwcyB1c2luZyBpbmNsdWRlL2xp
+bnV4L2JpdG1hcC5oIDotKQp8IApPciBoYXZlIGEgbG9vayBhdCBob3cgaXQgaGFzIGJlZW4gZG9u
+ZSBpbiB0aGUgQ0NJRC00IHN1YnRyZWUgZm9yIGFib3V0IGEgeWVhcj8KUGxlYXNlIHRha2UgYSBs
+b29rIGF0Cmh0dHA6Ly9lZGVuLWZlZWQuZXJnLmFiZG4uYWMudWsvY2dpLWJpbi9naXR3ZWIuY2dp
+P3DcY3BfZXhwLmdpdDthPWNvbW1pdGRpZmY7aNg4ZjZkNTUwNWY4M2Y0YzE5YTM0MTdmYmYzZWU4
+ODc0Yzg3ZDIyNwoKQW5kIGFsc28gKHNob3dzIGFnZSBvZiB0aGUgcGF0Y2hlcyk6Cmh0dHA6Ly93
+d3cubWFpbC1hcmNoaXZlLmNvbS9kY2NwQHZnZXIua2VybmVsLm9yZy9tc2cwMjYxMy5odG1sCQoK
+LS0KVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxpc3Q6IHNlbmQgdGhlIGxpbmUgInVuc3Vic2Ny
+aWJlIGRjY3AiIGluCnRoZSBib2R5IG9mIGEgbWVzc2FnZSB0byBtYWpvcmRvbW9Admdlci5rZXJu
+ZWwub3JnCk1vcmUgbWFqb3Jkb21vIGluZm8gYXQgIGh0dHA6Ly92Z2VyLmtlcm5lbC5vcmcvbWFq
+b3Jkb21vLWluZm8uaHRtbA==
