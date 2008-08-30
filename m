@@ -1,228 +1,288 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Aug 2008 17:45:10 +0000
-Subject: [PATCH 35/37] dccp: Implement both feature-local and feature-remote Sequence Window feature
-Message-Id: <1219945512-7723-36-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sat, 30 Aug 2008 17:25:01 +0000
+Subject: Re: [PATCH 0/37] --- Summary of revision changes so far
+Message-Id: <20080830172501.GB26846@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This adds full support for local/remote Sequence Window feature, from which the
-  * sequence-number-validity (W) and
-  * acknowledgment-number-validity (W') windows
-derive as specified in RFC 4340, 7.5.3.
+Below is the summary of changes after the revision.
+Thanks to everyone who sent comments and suggestions.
 
-Specifically, the following changes are introduced:
-  * integrated new socket fields into dccp_sk;
-  * updated the update_gsr/gss routines with regard to these fields;
-  * updated handler code: the Sequence Window feature is located at the TX side,
-    so the local feature is meant if the handler-rx flag is false;
-  * the initialisation of `rcv_wnd' in reqsk is removed, since
-    - rcv_wnd is not used by the code anywhere;
-    - sequence number checks are not done in the LISTEN state (cf. 7.5.3);
-    - dccp_check_req checks the Ack number validity more rigorously;
-  * the `struct dccp_minisock' became empty and is now removed.
+I will wait a few more days for further comments and then
+prepare a pull request. 
 
-Until the handshake completes with activating negotiated values, the local/remote
-Sequence-Window values are undefined and thus can not reliably be estimated.
-This issue is addressed in a separate patch.
+It is not a problem to send comments, patches and suggestions afterwards.
+Changes can then go into the test tree or, in case there are any errors,
+be added.
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
----
- Documentation/networking/dccp.txt |    3 ++-
- include/linux/dccp.h              |   24 ++++--------------------
- net/dccp/dccp.h                   |   16 +++++++---------
- net/dccp/feat.c                   |   13 +++++++++++--
- net/dccp/minisocks.c              |   11 -----------
- net/dccp/proto.c                  |    2 --
- 6 files changed, 24 insertions(+), 45 deletions(-)
 
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -141,7 +141,8 @@ rx_ccid = 2
- 	Default CCID for the receiver-sender half-connection; see tx_ccid.
- 
- seq_window = 100
--	The initial sequence window (sec. 7.5.2).
-+	The initial sequence window (sec. 7.5.2) of the sender. This influences
-+	the local ackno validity and the remote seqno validity windows (7.5.1).
- 
- tx_qlen = 5
- 	The size of the transmit buffer in packets. A value of 0 corresponds
+The statistics are:
+-------------------
+ include/linux/dccp.h |    6 ++--
+ net/dccp/ackvec.h    |    3 --
+ net/dccp/ccid.h      |   13 +++++++--
+ net/dccp/feat.c      |   71 ++++++++++++++++++++++++++-------------------------
+ net/dccp/probe.c     |    2 -
+ net/dccp/proto.c     |   41 +++++++++++++++++------------
+ 6 files changed, 78 insertions(+), 58 deletions(-)
+
+
 --- a/include/linux/dccp.h
 +++ b/include/linux/dccp.h
-@@ -364,19 +364,6 @@ static inline unsigned int dccp_hdr_len(const struct sk_buff *skb)
- #define DCCPF_INITIAL_SEND_NDP_COUNT		1
+@@ -228,10 +228,12 @@ enum dccp_packet_dequeueing_policy {
+ #define DCCP_SOCKOPT_CCID_RX_INFO	128
+ #define DCCP_SOCKOPT_CCID_TX_INFO	192
  
- /**
--  * struct dccp_minisock - Minimal DCCP connection representation
--  *
--  * Will be used to pass the state from dccp_request_sock to dccp_sock.
--  *
--  * @dccpms_sequence_window - Sequence Window Feature (section 7.5.2)
--  */
--struct dccp_minisock {
--	__u64			dccpms_sequence_window;
--};
--
--extern void dccp_minisock_init(struct dccp_minisock *dmsk);
--
--/**
-  * struct dccp_request_sock  -  represent DCCP-specific connection request
-  * @dreq_inet_rsk: structure inherited from
-  * @dreq_iss: initial sequence number sent on the Response (RFC 4340, 7.1)
-@@ -464,13 +451,14 @@ struct dccp_ackvec;
-  * @dccps_timestamp_time - time of receiving latest @dccps_timestamp_echo
-  * @dccps_l_ack_ratio - feature-local Ack Ratio
-  * @dccps_r_ack_ratio - feature-remote Ack Ratio
-+ * @dccps_l_seq_win - local Sequence Window (influences ack number validity)
-+ * @dccps_r_seq_win - remote Sequence Window (influences seq number validity)
-  * @dccps_pcslen - sender   partial checksum coverage (via sockopt)
-  * @dccps_pcrlen - receiver partial checksum coverage (via sockopt)
-  * @dccps_send_ndp_count - local Send NDP Count feature (7.7.2)
-  * @dccps_ndp_count - number of Non Data Packets since last data packet
-  * @dccps_mss_cache - current value of MSS (path MTU minus header sizes)
-  * @dccps_rate_last - timestamp for rate-limiting DCCP-Sync (RFC 4340, 7.5.4)
-- * @dccps_minisock - associated minisock (accessed via dccp_msk)
-  * @dccps_featneg - tracks feature-negotiation state (mostly during handshake)
-  * @dccps_hc_rx_ackvec - rx half connection ack vector
-  * @dccps_hc_rx_ccid - CCID used for the receiver (or receiving half-connection)
-@@ -504,12 +492,13 @@ struct dccp_sock {
- 	__u32				dccps_timestamp_time;
- 	__u16				dccps_l_ack_ratio;
- 	__u16				dccps_r_ack_ratio;
-+	__u64				dccps_l_seq_win:48;
-+	__u64				dccps_r_seq_win:48;
- 	__u8				dccps_pcslen:4;
- 	__u8				dccps_pcrlen:4;
- 	__u8				dccps_send_ndp_count:1;
- 	__u64				dccps_ndp_count:48;
- 	unsigned long			dccps_rate_last;
--	struct dccp_minisock		dccps_minisock;
- 	struct list_head		dccps_featneg;
- 	struct dccp_ackvec		*dccps_hc_rx_ackvec;
- 	struct ccid			*dccps_hc_rx_ccid;
-@@ -527,11 +516,6 @@ static inline struct dccp_sock *dccp_sk(const struct sock *sk)
- 	return (struct dccp_sock *)sk;
- }
++/* maximum size of a single TLV-encoded option (sans type/len bytes) */
++#define DCCP_SINGLE_OPT_MAXLEN         253
++/* maximum number of CCID preferences that can be registered at one time */
++#define DCCP_CCID_LIST_MAX_LEN         (DCCP_SINGLE_OPT_MAXLEN - 2)
+ /* maximum number of services provided on the same listening port */
+ #define DCCP_SERVICE_LIST_MAX_LEN      32
+-/* maximum number of CCID preferences that can be registered at one time */
+-#define DCCP_CCID_LIST_MAX_LEN	       16
  
--static inline struct dccp_minisock *dccp_msk(const struct sock *sk)
--{
--	return (struct dccp_minisock *)&dccp_sk(sk)->dccps_minisock;
--}
--
- static inline const char *dccp_role(const struct sock *sk)
+ #ifdef __KERNEL__
+ 
+--- a/net/dccp/ackvec.h
++++ b/net/dccp/ackvec.h
+@@ -11,12 +11,11 @@
+  *	published by the Free Software Foundation.
+  */
+ 
++#include <linux/dccp.h>
+ #include <linux/compiler.h>
+ #include <linux/list.h>
+ #include <linux/types.h>
+ 
+-/* maximum size of a single TLV-encoded option (sans type/len bytes) */
+-#define DCCP_SINGLE_OPT_MAXLEN	253
+ /*
+  * Ack Vector buffer space is static, in multiples of %DCCP_SINGLE_OPT_MAXLEN,
+  * the maximum size of a single Ack Vector. Setting %DCCPAV_NUM_ACKVECS to 1
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -108,9 +108,18 @@ extern int    ccid_request_modules(u8 const *ccid_array, u8 array_len);
+ extern struct ccid *ccid_new(unsigned char id, struct sock *sk, int rx,
+ 			     gfp_t gfp);
+ 
+-static inline int ccid_get_current_id(struct dccp_sock *dp, bool rx)
++static inline int ccid_get_current_rx_ccid(struct dccp_sock *dp)
  {
- 	switch (dccp_sk(sk)->dccps_role) {
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -409,23 +409,21 @@ static inline void dccp_hdr_set_ack(struct dccp_hdr_ack_bits *dhack,
- static inline void dccp_update_gsr(struct sock *sk, u64 seq)
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
--	const struct dccp_minisock *dmsk = dccp_msk(sk);
+-	struct ccid *ccid = rx ? dp->dccps_hc_rx_ccid : dp->dccps_hc_tx_ccid;
++	struct ccid *ccid = dp->dccps_hc_rx_ccid;
++
++	if (ccid = NULL || ccid->ccid_ops = NULL)
++		return -1;
++	return ccid->ccid_ops->ccid_id;
++}
++
++static inline int ccid_get_current_tx_ccid(struct dccp_sock *dp)
++{
++	struct ccid *ccid = dp->dccps_hc_tx_ccid;
  
- 	dp->dccps_gsr = seq;
--	dccp_set_seqno(&dp->dccps_swl,
--		       dp->dccps_gsr + 1 - (dmsk->dccpms_sequence_window / 4));
--	dccp_set_seqno(&dp->dccps_swh,
--		       dp->dccps_gsr + (3 * dmsk->dccpms_sequence_window) / 4);
-+	/* Sequence validity window depends on remote Sequence Window (7.5.1) */
-+	dp->dccps_swl = SUB48(ADD48(dp->dccps_gsr, 1), dp->dccps_r_seq_win / 4);
-+	dp->dccps_swh = ADD48(dp->dccps_gsr, (3 * dp->dccps_r_seq_win) / 4);
- }
- 
- static inline void dccp_update_gss(struct sock *sk, u64 seq)
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
- 
--	dp->dccps_awh = dp->dccps_gss = seq;
--	dccp_set_seqno(&dp->dccps_awl,
--		       (dp->dccps_gss -
--			dccp_msk(sk)->dccpms_sequence_window + 1));
-+	dp->dccps_gss = seq;
-+	/* Ack validity window depends on local Sequence Window value (7.5.1) */
-+	dp->dccps_awl = SUB48(ADD48(dp->dccps_gss, 1), dp->dccps_l_seq_win);
-+	dp->dccps_awh = dp->dccps_gss;
- }
- 
- static inline int dccp_ack_pending(const struct sock *sk)
+ 	if (ccid = NULL || ccid->ccid_ops = NULL)
+ 		return -1;
 --- a/net/dccp/feat.c
 +++ b/net/dccp/feat.c
-@@ -52,8 +52,17 @@ static int dccp_hdlr_ccid(struct sock *sk, u64 ccid, bool rx)
+@@ -387,8 +387,11 @@ static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
  
- static int dccp_hdlr_seq_win(struct sock *sk, u64 seq_win, bool rx)
+ static void dccp_feat_val_destructor(u8 feat_num, dccp_feat_val *val)
  {
--	if (!rx)
--		dccp_msk(sk)->dccpms_sequence_window = seq_win;
-+	struct dccp_sock *dp = dccp_sk(sk);
-+
-+	if (rx) {
-+		dp->dccps_r_seq_win = seq_win;
-+		/* propagate changes to update SWL/SWH */
-+		dccp_update_gsr(sk, dp->dccps_gsr);
-+	} else {
-+		dp->dccps_l_seq_win = seq_win;
-+		/* propagate changes to update AWL */
-+		dccp_update_gss(sk, dp->dccps_gss);
-+	}
- 	return 0;
+-	if (val && dccp_feat_type(feat_num) = FEAT_SP)
++	if (unlikely(val = NULL))
++		return;
++	if (dccp_feat_type(feat_num) = FEAT_SP)
+ 		kfree(val->sp.vec);
++	memset(val, 0, sizeof(*val));
  }
  
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -42,11 +42,6 @@ struct inet_timewait_death_row dccp_death_row = {
+ static struct dccp_feat_entry *
+@@ -422,57 +425,57 @@ static void dccp_feat_entry_destructor(struct dccp_feat_entry *entry)
+ }
  
- EXPORT_SYMBOL_GPL(dccp_death_row);
+ /*
+- *	List management functions
++ * List management functions
++ *
++ * Feature negotiation lists rely on and maintain the following invariants:
++ * - each feat_num in the list is known, i.e. we know its type and default value
++ * - each feat_num/is_local combination is unique (old entries are overwritten)
++ * - SP values are always freshly allocated
++ * - list is sorted in increasing order of feature number (faster lookup)
+  */
++static struct dccp_feat_entry *dccp_feat_list_lookup(struct list_head *fn_list,
++						     u8 feat_num, bool is_local)
++{
++	struct dccp_feat_entry *entry;
++
++	list_for_each_entry(entry, fn_list, node)
++		if (entry->feat_num = feat_num && entry->is_local = is_local)
++			return entry;
++		else if (entry->feat_num > feat_num)
++			break;
++	return NULL;
++}
  
--void dccp_minisock_init(struct dccp_minisock *dmsk)
+ /**
+  * dccp_feat_entry_new  -  Central list update routine (called by all others)
+- * @fn: list to add to
+- * @feat: feature number
+- * @is_local: whether the local (1) or remote feature with number @feat is meant
+- * The function maintains and relies on the following invariants:
+- *  - each feat_num in the list is known, ie. we know its type and default value
+- *  - each feat_num/is_local combination is unique (old entries are overwritten)
+- *  - SP values are always freshly allocated
+- *  - list is sorted in increasing order of feature number (faster lookup)
++ * @head:  list to add to
++ * @feat:  feature number
++ * @local: whether the local (1) or remote feature with number @feat is meant
++ * This is the only constructor and serves to ensure the above invariants.
+  */
+ static struct dccp_feat_entry *
+-	      dccp_feat_entry_new(struct list_head *fn, u8 feat, u8 is_local)
++	      dccp_feat_entry_new(struct list_head *head, u8 feat, bool local)
+ {
+ 	struct dccp_feat_entry *entry;
+-	struct list_head *pos_head = fn;
+ 
+-	list_for_each(pos_head, fn) {
+-		entry = list_entry(pos_head, struct dccp_feat_entry, node);
+-		if (feat < entry->feat_num)
+-			break;
+-		if (entry->feat_num = feat && entry->is_local = is_local) {
++	list_for_each_entry(entry, head, node)
++		if (entry->feat_num = feat && entry->is_local = local) {
+ 			dccp_feat_val_destructor(entry->feat_num, &entry->val);
+ 			return entry;
++		} else if (entry->feat_num > feat) {
++			head = &entry->node;
++			break;
+ 		}
+-	}
+-	entry = kmalloc(sizeof(struct dccp_feat_entry), gfp_any());
++
++	entry = kmalloc(sizeof(*entry), gfp_any());
+ 	if (entry != NULL) {
+ 		entry->feat_num = feat;
+-		entry->is_local = is_local;
+-		list_add_tail(&entry->node, pos_head);
++		entry->is_local = local;
++		list_add_tail(&entry->node, head);
+ 	}
+ 	return entry;
+ }
+ 
+-static struct dccp_feat_entry *dccp_feat_list_lookup(struct list_head *fn_list,
+-						     u8 feat_num, u8 is_local)
 -{
--	dmsk->dccpms_sequence_window = sysctl_dccp_feat_sequence_window;
+-	struct dccp_feat_entry *entry;
+-
+-	list_for_each_entry(entry, fn_list, node)
+-		if (entry->feat_num = feat_num && entry->is_local = is_local)
+-			return entry;
+-		else if (entry->feat_num > feat_num)
+-			break;
+-	return NULL;
 -}
 -
- void dccp_time_wait(struct sock *sk, int state, int timeo)
- {
- 	struct inet_timewait_sock *tw = NULL;
-@@ -110,7 +105,6 @@ struct sock *dccp_create_openreq_child(struct sock *sk,
- 		struct dccp_request_sock *dreq = dccp_rsk(req);
- 		struct inet_connection_sock *newicsk = inet_csk(newsk);
- 		struct dccp_sock *newdp = dccp_sk(newsk);
--		struct dccp_minisock *newdmsk = dccp_msk(newsk);
+ /**
+  * dccp_feat_push_change  -  Add/overwrite a Change option in the list
+  * @fn_list: feature-negotiation list to update
+--- a/net/dccp/probe.c
++++ b/net/dccp/probe.c
+@@ -55,7 +55,7 @@ static void jdccp_write_xmit(struct sock *sk)
+ 	struct ccid3_hc_tx_sock *hctx = NULL;
+ 	struct timespec tv;
+ 	char buf[256];
+-	int len, ccid = ccid_get_current_id(dccp_sk(sk), false);
++	int len, ccid = ccid_get_current_tx_ccid(dccp_sk(sk));
  
- 		newdp->dccps_role	    = DCCP_ROLE_SERVER;
- 		newdp->dccps_hc_rx_ackvec   = NULL;
-@@ -128,10 +122,6 @@ struct sock *dccp_create_openreq_child(struct sock *sk,
- 		 *    Initialize S.GAR := S.ISS
- 		 *    Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
- 		 */
--
--		/* See dccp_v4_conn_request */
--		newdmsk->dccpms_sequence_window = req->rcv_wnd;
--
- 		newdp->dccps_gar = newdp->dccps_iss = dreq->dreq_iss;
- 		dccp_update_gss(newsk, dreq->dreq_iss);
- 
-@@ -289,7 +279,6 @@ int dccp_reqsk_init(struct request_sock *req,
- 
- 	inet_rsk(req)->rmt_port	  = dccp_hdr(skb)->dccph_sport;
- 	inet_rsk(req)->acked	  = 0;
--	req->rcv_wnd		  = sysctl_dccp_feat_sequence_window;
- 	dreq->dreq_timestamp_echo = 0;
- 
- 	/* inherit feature negotiation options from listening socket */
+ 	if (ccid = DCCPC_CCID3)
+ 		hctx = ccid3_hc_tx_sk(sk);
 --- a/net/dccp/proto.c
 +++ b/net/dccp/proto.c
-@@ -180,8 +180,6 @@ int dccp_init_sock(struct sock *sk, const __u8 ctl_sock_initialized)
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	struct inet_connection_sock *icsk = inet_csk(sk);
+@@ -440,11 +440,6 @@ static int dccp_setsockopt_cscov(struct sock *sk, int cscov, bool rx)
  
--	dccp_minisock_init(&dp->dccps_minisock);
+ 	if (cscov < 0 || cscov > 15)
+ 		return -EINVAL;
 -
- 	icsk->icsk_rto		= DCCP_TIMEOUT_INIT;
- 	icsk->icsk_syn_retries	= sysctl_dccp_request_retries;
- 	sk->sk_state		= DCCP_CLOSED;
--- 
-1.6.0.rc2
-
+-	if (rx)
+-		dccp_sk(sk)->dccps_pcrlen = cscov;
+-	else
+-		dccp_sk(sk)->dccps_pcslen = cscov;
+ 	/*
+ 	 * Populate a list of permissible values, in the range cscov...15. This
+ 	 * is necessary since feature negotiation of single values only works if
+@@ -464,6 +459,12 @@ static int dccp_setsockopt_cscov(struct sock *sk, int cscov, bool rx)
+ 
+ 	rc = dccp_feat_register_sp(sk, DCCPF_MIN_CSUM_COVER, rx, list, len);
+ 
++	if (rc = 0) {
++		if (rx)
++			dccp_sk(sk)->dccps_pcrlen = cscov;
++		else
++			dccp_sk(sk)->dccps_pcslen = cscov;
++	}
+ 	kfree(list);
+ 	return rc;
+ }
+@@ -481,11 +482,13 @@ static int dccp_setsockopt_ccid(struct sock *sk, int type,
+ 	if (val = NULL)
+ 		return -ENOMEM;
+ 
+-	if (copy_from_user(val, optval, optlen))
+-		rc = -EFAULT;
++	if (copy_from_user(val, optval, optlen)) {
++		kfree(val);
++		return -EFAULT;
++	}
+ 
+ 	lock_sock(sk);
+-	if (!rc && (type = DCCP_SOCKOPT_TX_CCID || type = DCCP_SOCKOPT_CCID))
++	if (type = DCCP_SOCKOPT_TX_CCID || type = DCCP_SOCKOPT_CCID)
+ 		rc = dccp_feat_register_sp(sk, DCCPF_CCID, 1, val, optlen);
+ 
+ 	if (!rc && (type = DCCP_SOCKOPT_RX_CCID || type = DCCP_SOCKOPT_CCID))
+@@ -514,16 +517,16 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
+ 	case DCCP_SOCKOPT_RX_CCID:
+ 	case DCCP_SOCKOPT_TX_CCID:
+ 		return dccp_setsockopt_ccid(sk, optname, optval, optlen);
+-	default:
+-		if (optlen < sizeof(int))
+-			return -EINVAL;
++	}
+ 
+-		if (get_user(val, (int __user *)optval))
+-			return -EFAULT;
++	if (optlen < (int)sizeof(int))
++		return -EINVAL;
+ 
+-		if (optname = DCCP_SOCKOPT_SERVICE)
+-			return dccp_setsockopt_service(sk, val, optval, optlen);
+-	}
++	if (get_user(val, (int __user *)optval))
++		return -EFAULT;
++
++	if (optname = DCCP_SOCKOPT_SERVICE)
++		return dccp_setsockopt_service(sk, val, optval, optlen);
+ 
+ 	lock_sock(sk);
+ 	switch (optname) {
+@@ -642,8 +645,12 @@ static int do_dccp_getsockopt(struct sock *sk, int level, int optname,
+ 	case DCCP_SOCKOPT_AVAILABLE_CCIDS:
+ 		return ccid_getsockopt_builtin_ccids(sk, len, optval, optlen);
+ 	case DCCP_SOCKOPT_TX_CCID:
++		val = ccid_get_current_tx_ccid(dp);
++		if (val < 0)
++			return -ENOPROTOOPT;
++		break;
+ 	case DCCP_SOCKOPT_RX_CCID:
+-		val = ccid_get_current_id(dp, optname = DCCP_SOCKOPT_RX_CCID);
++		val = ccid_get_current_rx_ccid(dp);
+ 		if (val < 0)
+ 			return -ENOPROTOOPT;
+ 		break;
