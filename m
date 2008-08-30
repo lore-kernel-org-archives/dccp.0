@@ -1,43 +1,34 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 29 Aug 2008 06:17:04 +0000
+Date: Sat, 30 Aug 2008 13:52:01 +0000
 Subject: Re: [PATCH 08/37] dccp: Query supported CCIDs
-Message-Id: <20080829061704.GE3557@gerrit.erg.abdn.ac.uk>
+Message-Id: <20080830135201.GC17190@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1219945512-7723-9-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1219945512-7723-9-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-UXVvdGluZyBBcm5hbGRvOgp8IEVtIFRodSwgQXVnIDI4LCAyMDA4IGF0IDA3OjQ0OjQzUE0gKzAy
-MDAsIEdlcnJpdCBSZW5rZXIgZXNjcmV2ZXU6CnwgPiBUaGlzIHByb3ZpZGVzIGEgZGF0YSBzdHJ1
-Y3R1cmUgdG8gcmVjb3JkIHdoaWNoIENDSURzIGFyZSBsb2NhbGx5IHN1cHBvcnRlZAp8ID4gYW5k
-IHRocmVlIGFjY2Vzc29yIGZ1bmN0aW9uczoKfCA+ICAtIGEgdGVzdCBmdW5jdGlvbiBmb3IgaW50
-ZXJuYWwgdXNlIHdoaWNoIGlzIHVzZWQgdG8gdmFsaWRhdGUgQ0NJRCByZXF1ZXN0cwp8ID4gICAg
-bWFkZSBieSB0aGUgdXNlcjsKfCA+ICAtIGEgY29weSBmdW5jdGlvbiBzbyB0aGF0IHRoZSBsaXN0
-IGNhbiBiZSB1c2VkIGZvciBmZWF0dXJlLW5lZ290aWF0aW9uOwp8ID4gIC0gZG9jdW1lbnRlZCBn
-ZXRzb2Nrb3B0KCkgc3VwcG9ydCBzbyB0aGF0IHRoZSB1c2VyIGNhbiBxdWVyeSBjYXBhYmlsaXRp
-ZXMuCnwgPiAKfCA+IFRoZSBkYXRhIHN0cnVjdHVyZSBpcyBhIHRhYmxlIHdoaWNoIGlzIGZpbGxl
-ZCBpbiBhdCBjb21waWxlLXRpbWUgd2l0aCB0aGUKfCA+IGxpc3Qgb2YgYXZhaWxhYmxlIENDSURz
-ICh3aGljaCBpbiB0dXJuIGRlcGVuZHMgb24gdGhlIEtjb25maWcgY2hvaWNlcykuCnwgPiAKfCA+
-IFVzaW5nIHRoZSBjb3B5IGZ1bmN0aW9uIGZvciBjbG9uaW5nIHRoZSBsaXN0IG9mIHN1cHBvcnRl
-ZCBDQ0lEcyBpcyB1c2VmdWwgZm9yCnwgPiBmZWF0dXJlIG5lZ290aWF0aW9uLCBzaW5jZSB0aGUg
-bmVnb3RpYXRpb24gaXMgbm93IHdpdGggdGhlIGZ1bGwgbGlzdCBvZiBhdmFpbGFibGUKfCA+IEND
-SURzIChlLmcuIHsyLCAzfSkgaW5zdGVhZCBvZiB0aGUgZGVmYXVsdCB2YWx1ZSB7Mn0uIFRoaXMg
-bWVhbnMgbmVnb3RpYXRpb24KfCA+IHdpbGwgbm90IGZhaWwgaWYgdGhlIHBlZXIgcmVxdWVzdHMg
-dG8gdXNlIENDSUQzIGluc3RlYWQgb2YgQ0NJRDIuCnwgCnwgQnV0IHRoaXMgbGltaXRzIHVzIHRv
-IHRoZSBDQ0lEcyBhdCBrZXJuZWwgYnVpbGQgdGltZSwgd2hhdCBpZiBJIHdhbnQgdG8KfCB0ZXN0
-IENDSUQ0PyBJIGd1ZXNzIHdlIGNvdWxkIGhhdmUgc29tZXRoaW5nIGxpa2UgYSBiaXRtYXAgYW5k
-IGNoZWNrIGlmCnwgdGhlIGJpdCBmb3IgdGhhdCBDQ0lEIGlzIHNldCwgYW5kIGl0IHdvdWxkIGJl
-IHNldCBhdCBjY2lkX3JlZ2lzdGVyIHRpbWUuCnwgCnwgUGVyaGFwcyB1c2luZyBpbmNsdWRlL2xp
-bnV4L2JpdG1hcC5oIDotKQp8IApPciBoYXZlIGEgbG9vayBhdCBob3cgaXQgaGFzIGJlZW4gZG9u
-ZSBpbiB0aGUgQ0NJRC00IHN1YnRyZWUgZm9yIGFib3V0IGEgeWVhcj8KUGxlYXNlIHRha2UgYSBs
-b29rIGF0Cmh0dHA6Ly9lZGVuLWZlZWQuZXJnLmFiZG4uYWMudWsvY2dpLWJpbi9naXR3ZWIuY2dp
-P3DcY3BfZXhwLmdpdDthPWNvbW1pdGRpZmY7aNg4ZjZkNTUwNWY4M2Y0YzE5YTM0MTdmYmYzZWU4
-ODc0Yzg3ZDIyNwoKQW5kIGFsc28gKHNob3dzIGFnZSBvZiB0aGUgcGF0Y2hlcyk6Cmh0dHA6Ly93
-d3cubWFpbC1hcmNoaXZlLmNvbS9kY2NwQHZnZXIua2VybmVsLm9yZy9tc2cwMjYxMy5odG1sCQoK
-LS0KVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxpc3Q6IHNlbmQgdGhlIGxpbmUgInVuc3Vic2Ny
-aWJlIGRjY3AiIGluCnRoZSBib2R5IG9mIGEgbWVzc2FnZSB0byBtYWpvcmRvbW9Admdlci5rZXJu
-ZWwub3JnCk1vcmUgbWFqb3Jkb21vIGluZm8gYXQgIGh0dHA6Ly92Z2VyLmtlcm5lbC5vcmcvbWFq
-b3Jkb21vLWluZm8uaHRtbA==
+| > This provides a data structure to record which CCIDs are locally supported
+| > and three accessor functions:
+<snip> 
+| But this limits us to the CCIDs at kernel build time, what if I want to
+| test CCID4? I guess we could have something like a bitmap and check if
+| the bit for that CCID is set, and it would be set at ccid_register time.
+| 
+| Perhaps using include/linux/bitmap.h :-)
+| 
+I looked at it and it actually seems an attractive idea. I have the
+following suggestion: the key point of this patch set to improve the
+present (mainline) interface for feature negotiation.
+
+People have complained earlier about crashes when trying to negotiate
+different CCIDs with the present mechanism. I think this happened with D-ITG.
+
+For the present patch set I would like to keep it as it is, since the
+existing CCIDs are buggy/incomplete enough to delay work on entirely new
+CCIDs.
+
+But the test tree has still empty disk space for lots of patches, so
+this is an invitation to contribute.
