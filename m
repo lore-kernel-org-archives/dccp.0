@@ -1,100 +1,96 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Aug 2008 17:44:35 +0000
-Subject: [PATCH 0/37] dccp: Feature negotiation - last call for comments
-Message-Id: <1219945512-7723-1-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sat, 30 Aug 2008 13:52:33 +0000
+Subject: v2 [PATCH 16/37] dccp: API to query the current TX/RX CCID
+Message-Id: <20080830135233.GF17190@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is a last call for comments and review for the DCCP feature negotiation set,
-before sending a pull request.
+Revised, sent for reference after incorporating suggestions by Arnaldo.
 
-This set replaces the initial implementation of feature negotiation with a fairly 
-complete set of routines to support negotiation between endpoints. 
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Patch v2 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+dccp: API to query the current TX/RX CCID
 
-It fixes the (known) problems with the old infrastructure, which was an initial
-implementation that apparently never was developed further.
+This provides function to query the current TX/RX CCID dynamically, without
+reliance on the minisock value, using dynamic information available in the
+currently loaded CCID module.
 
-The patches have been publicly available in the test tree for about a year
-and were widely tested.
+This query function is then used to 
+ (a) provide the getsockopt part for getting/setting CCIDs via sockopts;
+ (b) replace the current test for "which CCID is in use" in probe.c.
 
-Since several applications are using this API and since there is already at
-least one publicly available application (gstreamer) based on the new API,
-it would be good to have this available in mainline.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ net/dccp/ccid.h  |   18 ++++++++++++++++++
+ net/dccp/probe.c |    7 ++-----
+ net/dccp/proto.c |   10 ++++++++++
+ 3 files changed, 30 insertions(+), 5 deletions(-)
 
-This set deals with the negotiation of capabilities, before a connection is
-established. There is also support for dynamically updating feature values,
-this will follow in a second set -- a much smaller set since it builds upon
-the new basis.
-
-Please send any comments or issues you find with the code before the end of the
-week. I will then prepare a second submission / pull request.
-
-
-Part I - Basis
----------------
-Patch #1: Provides the basic datastructure for feature negotiation. It gets 
-          around the problem that feature-negotiation values have no uniform
-	  type - they can be 48-bit numbers, single characters, 2-byte integers
-	  or a list of unsigned chars.
-Patch #2: Provides a lookup-table for the different negotiable features.
-Patch #3: Adds list management for the list keeping the negotiation-options.
-Patch #4: Initialisation routines (for request sockets and normal sockets).
-Patch #5: Analogous to #4, this provides the cleanup routines.	  
-Patch #6: Changes the existing policy to allow anytime changes as that lead
-          to unpredictable results.
-Patch #7: Adds registration routines. These form part of the user interface
-          and are later used by the socket API to set individual preferences.
-Patch #8: CCIDs are a negotiable feature. This patch adds support to query the
-          supported CCIDs, so as to advertise only the locally supported ones.
-Patch #9: The choice of CCID in turn creates new feature dependencies. The patch
-          adds automatic tracking of such dependencies to avoid later failure.
-
-Part II - Core	  
---------------
-Patch #10: Provides a mechanism to then resolve CCID-dependent features. Since
-           CCIDs are a server-priority feature, this is done by the server.
-Patch #11: Deprecates old featneg API, as it was dangerous/clumsy.
-Patch #12: Support to negotiate checksum-coverage values (as in UDP-Lite).
-Patch #13: Deprecates Ack Ratio sysctl, to enable automatic updating.
-Patch #14: Tidies up the setsockopt interface for new additions.
-Patch #15: Set/getsockopt support to negotiate CCIDs with the peer.
-Patch #16: Socket API to query the current CCID from userspace.
-Patch #17: Prepares the variable-length htonl/ntohl functions for 48 bits.
-           Such a length is needed by e.g. the Sequence Window feature.
-Patch #18: Support for DCCP `Mandatory' type options (RFC 4340, 5.8.2).
-Patch #19: Routine to insert feature-negotiation header options.
-Patch #20: Complements #19, to add feature-negotiation options onto the skb.
-Patch #21: Complements #20 and completes the insertion of featneg options.
-Patch #22: Logic/algorithm to actually reconcile negotiation options.
-Patch #23: Receiver support to process incoming Change L/R options. 
-Patch #24: Receiver support to process incoming Confirm R/L options.
-Patch #25: Handlers for activating successfully negotiated features.
-
-Part III - Integration and cleanup
-----------------------------------
-Patch #26: Integration of dynamic negotiation, part I (socket setup).
-Patch #27: Integration of dynamic negotiation, part II (server side).
-Patch #28: Integration of dynamic negotiation, part III (client side).
-
-Patch #29: Cleans up the older infrastructure.
-Patch #30: Removes obsolete parts of the old CCID interface.
-Patch #31: Removes manual intervention on NDP count (now automatic).
-Patch #32: Removes Ack Vector sysctl (handled automatically now).
-
-Patch #33: Initialisation framework for the supported features.
-Patch #34: Auto-loading of CCID modules so that the modules are available
-           when the negotiation is completed.
-Patch #35: Adds full support for local/remote Sequence Window.
-Patch #36: Initialisation and type-checking of involved sysctls.
-Patch #37: A set of (useful) debugging/printing helper functions.
-
-
-As always, patches are available on 
-
-	git://eden-feed.erg.abdn.ac.uk/dccp_exp		[subtree `dccp']
-
-There is also a gitweb view on the server.
-
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -116,6 +116,24 @@ extern struct ccid *ccid_hc_rx_new(unsig
+ extern struct ccid *ccid_hc_tx_new(unsigned char id, struct sock *sk,
+ 				   gfp_t gfp);
+ 
++static inline int ccid_get_current_rx_ccid(struct dccp_sock *dp)
++{
++	struct ccid *ccid = dp->dccps_hc_rx_ccid;
++
++	if (ccid = NULL || ccid->ccid_ops = NULL)
++		return -1;
++	return ccid->ccid_ops->ccid_id;
++}
++
++static inline int ccid_get_current_tx_ccid(struct dccp_sock *dp)
++{
++	struct ccid *ccid = dp->dccps_hc_tx_ccid;
++
++	if (ccid = NULL || ccid->ccid_ops = NULL)
++		return -1;
++	return ccid->ccid_ops->ccid_id;
++}
++
+ extern void ccid_hc_rx_delete(struct ccid *ccid, struct sock *sk);
+ extern void ccid_hc_tx_delete(struct ccid *ccid, struct sock *sk);
+ 
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -667,6 +667,16 @@ static int do_dccp_getsockopt(struct soc
+ 		break;
+ 	case DCCP_SOCKOPT_AVAILABLE_CCIDS:
+ 		return ccid_getsockopt_builtin_ccids(sk, len, optval, optlen);
++	case DCCP_SOCKOPT_TX_CCID:
++		val = ccid_get_current_tx_ccid(dp);
++		if (val < 0)
++			return -ENOPROTOOPT;
++		break;
++	case DCCP_SOCKOPT_RX_CCID:
++		val = ccid_get_current_rx_ccid(dp);
++		if (val < 0)
++			return -ENOPROTOOPT;
++		break;
+ 	case DCCP_SOCKOPT_SERVER_TIMEWAIT:
+ 		val = dp->dccps_server_timewait;
+ 		break;
+--- a/net/dccp/probe.c
++++ b/net/dccp/probe.c
+@@ -74,14 +74,11 @@ static void printl(const char *fmt, ...)
+ static int jdccp_sendmsg(struct kiocb *iocb, struct sock *sk,
+ 			 struct msghdr *msg, size_t size)
+ {
+-	const struct dccp_minisock *dmsk = dccp_msk(sk);
+ 	const struct inet_sock *inet = inet_sk(sk);
+-	const struct ccid3_hc_tx_sock *hctx;
++	struct ccid3_hc_tx_sock *hctx = NULL;
+ 
+-	if (dmsk->dccpms_tx_ccid = DCCPC_CCID3)
++	if (ccid_get_current_tx_ccid(dccp_sk(sk)) = DCCPC_CCID3)
+ 		hctx = ccid3_hc_tx_sk(sk);
+-	else
+-		hctx = NULL;
+ 
+ 	if (port = 0 || ntohs(inet->dport) = port ||
+ 	    ntohs(inet->sport) = port) {
