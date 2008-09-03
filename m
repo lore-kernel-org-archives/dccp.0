@@ -1,73 +1,64 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 03 Sep 2008 04:40:06 +0000
-Subject: Re: [PATCH 19/37] dccp: Header option insertion routine for
-Message-Id: <20080903044006.GD4105@gerrit.erg.abdn.ac.uk>
+Date: Wed, 03 Sep 2008 04:51:52 +0000
+Subject: Re: [PATCH 09/37] dccp: Resolve dependencies of features on choice
+Message-Id: <20080903045152.GF4105@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1219945512-7723-20-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1219945512-7723-20-git-send-email-gerrit@erg.abdn.ac.uk>
+References: <1219945512-7723-10-git-send-email-gerrit@erg.abdn.ac.uk>
+In-Reply-To: <1219945512-7723-10-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-| > +/**
-| > + * dccp_insert_fn_opt  -  Insert single Feature-Negotiation option into @skb
-| > + * @type: %DCCPO_CHANGE_L, %DCCPO_CHANGE_R, %DCCPO_CONFIRM_L, %DCCPO_CONFIRM_R
-| > + * @feat: one out of %dccp_feature_numbers
-| > + * @val: NN value or SP array (preferred element first) to copy
-| > + * @len: true length of @val in bytes (excluding first element repetition)
-| > + * @repeat_first: whether to copy the first element of @val twice
-| > + * The last argument is used to construct Confirm options, where the preferred
-| > + * value and the preference list appear separately (RFC 4340, 6.3.1). Preference
-| > + * lists are kept such that the preferred entry is always first, so we only need
-| > + * to copy twice, and avoid the overhead of cloning into a bigger array.
-| > + */
-| > +int dccp_insert_fn_opt(struct sk_buff *skb, u8 type, u8 feat,
-| > +		       u8 *val, u8 len, bool repeat_first)
-| >  {
-| > -	u8 *to;
-| > +	u8 tot_len, *to;
-| >  
-| > -	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len + 3 > DCCP_MAX_OPT_LEN) {
-| > -		DCCP_WARN("packet too small for feature %d option!\n", feat);
-| > +	/* take the `Feature' field and possible repetition into account */
-| > +	if (len > (DCCP_SINGLE_OPT_MAXLEN - 2)) {
-| > +		DCCP_WARN("length %u for feature %u too large\n", len, feat);
-| >  		return -1;
-| >  	}
-| >   
+| > This provides a missing link in the code chain, as several features implicitly
+| > depend and/or rely on the choice of CCID. Most notably, this is the Send Ack Vector
+| > feature, but also Ack Ratio and Send Loss Event Rate (also taken care of).
+| > 
+<snip>
 | 
-| Here, should check (len > DCCP_SINGLE_OPT_MAXLEN - 3 - repeat_first)?
+| Doesn't this belongs into struct ccid_operations? Why has the core feature
+| negotiation have knowledge of any specific CCID? When people want to
+| merge CCID 4, 5, etc will we need to change net/dccp/feat.c?
 | 
-| if len = DCCP_SINGLE_OPT_MAXLEN - 2, then
+| I think that this needs thus to go to struct ccid_operations, and then the feature
+| negotiation code can just use use the ccid number to access:
 | 
-| tot_len = 3 + repeat_first + len = (DCCP_SINGLE_OPT_MAXLEN + 1 +
-| repeat_first)
+| struct ccid_operations *ccids[CCID_MAX]
 | 
-| The total length of this option will larger than DCCP_SINGLE_OPT_MAXLEN.
-| 
-in linux/dccp.h
-/* maximum size of a single TLV-encoded option (sans type/len bytes) */
-#define DCCP_SINGLE_OPT_MAXLEN         253
+| ccids[ccid_number]->deps
+|  
+I am answering this again as you raised the point in your answer to Dave.
 
-So if we assume that len = DCCP_SINGLE_OPT_MAXLEN - 2 = 251, then
-tot_len = 3 + 251 + repeat_first, which is
-  * 254 if repeat_first = 0
-  * 255 if repeat_first = 1
-	
-So it is correct. 
+The above is a sketch, I sat down and thought through how this might
+actually be implemented.
 
-But your input is useful, since it relates to another question, one line
-below in linux/dccp.h:
+For each CCID there are two dependencies - one for the RX and one for
+the TX CCID.
 
-#define DCCP_CCID_LIST_MAX_LEN         (DCCP_SINGLE_OPT_MAXLEN - 2)
+Dependency lists are variable-length (CCID-2 has 1/1 and CCID-3 as well as
+CCID-4 both have 3/4 for the RX/TX sides).
 
-this value is the same as in the above test, so will revise to use
-something like
+Using struct ccid_operations to query the CCID dependencies means that 
+ * the CCID read lock needs to be taken;
+ * protection against failed module-load is needed.
 
-#define DCCP_FEAT_MAX_SP_VALS	       (DCCP_SINGLE_OPT_MAXLEN - 2)
+The second point should in principle not be a problem since the feature code
+tries to request the modules before the negotiation begins. Implementing this
+however would at the very least require to test for failure in these cases.
 
-to limit the maximum number of server-priority values, in feat.h.
+I don't know whether the fact that one module needs to traverse a memory
+region of another module causes issues.
 
-Thanks,
+The biggest issue that I see is that there is an indirection now: instead 
+of looking up the dependencies directly, one now needs to first go through
+struct ccid_operations, from there to individual CCID modules, and then
+back to the main dccp.ko module.
+
+What we have here at the moment may not be the last word, but its virtue
+is that it is simple, it works, and does not require an indirection via the
+CCID sub-unit.
+
+In principle I agree with you, what I am asking for is to defer this code
+optimisation until later.
+
 Gerrit
