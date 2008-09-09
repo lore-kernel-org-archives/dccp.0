@@ -1,97 +1,51 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 04 Sep 2008 06:15:11 +0000
+From: David Miller <davem@davemloft.net>
+Date: Tue, 09 Sep 2008 00:32:50 +0000
 Subject: Re: net-next-2.6 [pull-request] [PATCH 0/37] dccp: Revised set of
-Message-Id: <20080904061511.GA30756@gerrit.erg.abdn.ac.uk>
+Message-Id: <20080908.173250.204419507.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
 References: <20080901164633.GA6456@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20080901164633.GA6456@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-9"
+Content-Type: text/plain; charset="iso-8859-1"
 Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-This is an update with regard to Wei's comments. I have re-synched=20
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 4 Sep 2008 08:15:11 +0200
 
-	git://eden-feed.erg.abdn.ac.uk/dccp_exp		[subtree `dccp']
-	http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dshor=
-tlog;h=DCcp
+> This is an update with regard to Wei's comments. I have re-synched=20
+>=20
+> 	git://eden-feed.erg.abdn.ac.uk/dccp_exp		[subtree `dccp']
+> 	http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dsh=
+ortlog;h=DCcp
+>=20
+> Also did some testing with a client that only supports CCID 2/3 talking t=
+o a client supporting
+> CCID 2/3/4. They could still negotiate and settle for a common CCID.
 
-Also did some testing with a client that only supports CCID 2/3 talking to =
-a client supporting
-CCID 2/3/4. They could still negotiate and settle for a common CCID.
+I pulled and resolved all of the conflicts, but this build warning I'm
+now getting from ccid3.h has got to go:
 
-Change-Log:
------------
-	1. relaxed the requirement of checking each and every SP value in change_r=
-ecv
-	   to checking only the value that will actually be used/activated;
-	2. fixed an error in yesterdays's update:
-	   dccp_feat_is_valid_sp_val() takes an u8 value, not an u8 *pointer;
-	3. added Wei's suggestion to skip over empty Confirms when activating the
-	   negotiated features in dccp_feat_activate_values().
+/*
+ * The t_delta parameter (RFC 3448, 4.6): delays of less than %USEC_PER_MSE=
+C are
+ * rounded down to 0, since sk_reset_timer() here uses millisecond granular=
+ity.
+ * Hence we can use a constant t_delta =3D %USEC_PER_MSEC when HZ >=3D 500.=
+ A coarse
+ * resolution of HZ < 500 means that the error is below one timer tick (t_g=
+ran)
+ * when using the constant t_delta  =3D  t_gran / 2  =3D  %USEC_PER_SEC / (=
+2 * HZ).
+ */
+#if (HZ >=3D 500)
+# define TFRC_T_DELTA		   USEC_PER_MSEC
+#else
+# define TFRC_T_DELTA		   (USEC_PER_SEC / (2 * HZ))
+#warning Coarse CONFIG_HZ resolution -- higher value recommended for TFRC.
+#endif
 
----------------------------------------------------------------------------=
------------------	  =20
-List of patches that were updated:
-----------------------------------
-v3 [PATCH 1/1] dccp: Process incoming Change feature-negotiation options=20
-http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dcommi=
-tdiff;hZ146b97d5e93db2df075c0d820f492bb996d0e3
+Don't warn about crap like this, instead convert the code over to hrtimers.
 
-[PATCH 25/37] dccp: Feature activation handlers
-http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dcommi=
-tdiff;h=C926c6aed3e444e8c88a768f063b2de8fd6ae760
-
----------------------------------------------------------------------------=
------------------	  =20
-Interdiff of the submitted changeset relative to yesterday's state:
----------------------------------------------------------------------------=
------------------
- 		1 file changed, 11 insertions(+), 3 deletions(-)
---- b/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -1102,8 +1102,6 @@ static u8 dccp_feat_change_recv(struct list_head *fn,=
- u8=20
- 	 */
- 	entry =3D dccp_feat_list_lookup(fn, feat, local);
- 	if (entry =3D NULL) {
--		if (!dccp_feat_sp_list_ok(feat, val, len))
--			goto unknown_feature_or_value;
- 		/*
- 		 * No particular preferences have been registered. We deal with
- 		 * this situation by assuming that all valid values are equally
-@@ -1121,6 +1119,9 @@ static u8 dccp_feat_change_recv(struct list_head *fn,=
- u8=20
- 			defval =3D dccp_feat_default_value(feat);
- 			if (dccp_feat_preflist_match(&defval, 1, val, len) > -1)
- 				fval.sp.vec[0] =3D defval;
-+		} else if (!dccp_feat_is_valid_sp_val(feat, fval.sp.vec[0])) {
-+			kfree(fval.sp.vec);
-+			goto unknown_feature_or_value;
- 		}
-=20
- 		/* Treat unsupported CCIDs like invalid values */
-@@ -1229,7 +1230,7 @@ static u8 dccp_feat_confirm_recv(struct list_head *fn=
-, u8=20
- 	 * SP value which the peer confirms, the remainder depends on @len.
- 	 * Note that only the confirmed value need to be a valid SP value.
- 	 */
--	if (!dccp_feat_is_valid_sp_val(feat, val))
-+	if (!dccp_feat_is_valid_sp_val(feat, *val))
- 		goto confirmation_failed;
-=20
- 	if (len =3D 1) {		/* peer didn't supply a preference list */
-@@ -1471,6 +1472,13 @@ int dccp_feat_activate_values(struct sock *sk, struct
- 	};
-=20
- 	list_for_each_entry(cur, fn_list, node) {
-+		/*
-+		 * An empty Confirm means that either an unknown feature type
-+		 * or an invalid value was present. In the first case there is
-+		 * nothing to activate, in the other the default value is used.
-+		 */
-+		if (cur->empty_confirm)
-+			continue;
-=20
- 		idx =3D dccp_feat_index(cur->feat_num);
- 		if (idx < 0) {
+This kernel being built, even with HZ=100, can do nanosecond timers on
+my systems, but that's only if you would make proper use of them.
