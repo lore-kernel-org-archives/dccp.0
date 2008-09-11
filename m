@@ -1,7 +1,7 @@
-From: David Miller <davem@davemloft.net>
-Date: Wed, 10 Sep 2008 05:19:14 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 11 Sep 2008 05:41:04 +0000
 Subject: Re: net-next-2.6 [pull-request] [PATCH 0/37] dccp: Revised set of
-Message-Id: <20080909.221914.193697907.davem@davemloft.net>
+Message-Id: <20080911054104.GA3707@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <20080901164633.GA6456@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20080901164633.GA6456@gerrit.erg.abdn.ac.uk>
@@ -10,39 +10,42 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 10 Sep 2008 07:01:15 +0200
+| > Not only are you lacking the courage to admit that it was your own fault
+| > to pull a tree no one had asked you to pull, now you are trying to make 
+| > me look foolish to cover your own mistake. 
+| 
+| Your subject line said, and it's still being used in this thread:
+| "net-next-2.6 [pull-request]"
+| 
+| What the heck should I take that to mean exactly?
+| 
+Yes, it takes two to make a misunderstanding. And maybe it was me who
+misunderstood you, or maybe vice versa. Here is my understanding - this
+thread started as a pull request, after sending a call for last comments
+about two weeks ago. Your first reply in this thread was to extend the
+last call for comments, which went on all over last week.
 
-> Not only are you lacking the courage to admit that it was your own fault
-> to pull a tree no one had asked you to pull, now you are trying to make 
-> me look foolish to cover your own mistake. 
+Meanwhile I had contacted you and Arnaldo privately to ask what to do
+with DCCP in general. I had emailed you twice, there was no reply,
+instead the tree was pulled without further discussion. 
 
-Your subject line said, and it's still being used in this thread:
-"net-next-2.6 [pull-request]"
+That would probably have been ok if only it had been the right tree.
 
-What the heck should I take that to mean exactly?
+Since you chose not to reply, I assumed that you were taking responsibility
+for your own choices.
 
-> It further did not even occur to you to check the provided gitweb link, nor
-> did you recognise that you had pulled about 100 instead of 37 patches. And
-> you seem not to have looked at the diffstats either - what has a change in
-> tcp_input.c got to do with a DCCP-only patch set?
->
-> Not to mention the conflicts which you silently fixed instead of looking at
-> their cause.
+By saying that you trusted me in light of what happened, you seem to 
+imply that all I had intended was to pull a bad trick on you.
 
-I did look at the merge conflicts I fixed up, code moved from one place
-to another or got handled by new helper routines which were being
-called, so I picked the appropriate hunk and validated the build.
+I am not sure I want to believe this. It is not fair to ignore a private
+request asking what to do with DCCP and then broadcasting around in
+public "I want someone else to get the DCCP changes through".
 
-If I wasn't all that sure of the result I would have replied to you
-instead saying "this tree is messed up, I'm not pulling"  And I do
-that all the time.
+That will only solve a part of the problem, unfortunately it is not an
+insurance against mistakes.
 
-The shorter answer is I did my best and I TRUSTED YOU to only point
-a GIT URL my way that was explicitly ready.  Else, you'd say "don't
-pull this" rather than have "net-next-2.6 pull request" in the subject
-line.
+Since you chose not to reply in private regarding what to to with DCCP,
+I suggest that we continue/finish this discussion here - yes, probably
+after renaming this thread :)
 
-> What you are saying here has little authority. It is just foolish vanity.
-
-Gerrit, it's over.  The only one in vain is you.
+Gerrit
