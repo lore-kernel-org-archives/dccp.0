@@ -1,44 +1,65 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Wed, 24 Sep 2008 13:58:22 +0000
-Subject: Re: [PATCH 2/5] dccp: Implement lookup table for
-Message-Id: <20080924135822.GI9588@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 22 Sep 2008 07:21:57 +0000
+Subject: [PATCH 5/5] dccp: Cleanup routines for feature negotiation
+Message-Id: <1222068117-13401-6-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1222068117-13401-3-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1222068117-13401-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-RW0gV2VkLCBTZXAgMjQsIDIwMDggYXQgMDY6NDE6MjBBTSArMDIwMCwgR2Vycml0IFJlbmtlciBl
-c2NyZXZldToKPiB8ID4gfCA+IC0tLSBhL2luY2x1ZGUvbGludXgvZGNjcC5oCj4gfCA+IHwgPiAr
-KysgYi9pbmNsdWRlL2xpbnV4L2RjY3AuaAo+IHwgPiB8ID4gIAo+IHwgPiB8ID4gKwo+IHwgPiB8
-ID4gK3N0YXRpYyBpbnQgZGNjcF9mZWF0X2RlZmF1bHRfdmFsdWUodTggZmVhdF9udW0pCj4gfCA+
-IHwgPiArewo+IHwgPiB8ID4gKwlpbnQgaWR4ID0gZGNjcF9mZWF0X2luZGV4KGZlYXRfbnVtKTsK
-PiB8ID4gfCA+ICsKPiB8ID4gfCA+ICsJcmV0dXJuIGlkeCA8IDAgPyA6IGRjY3BfZmVhdF90YWJs
-ZVtpZHhdLmRlZmF1bHRfdmFsdWU7Cj4gfCA+IHwgPiArfQo+IDxzbmlwPgo+IHwgPiB8IAo+IHwg
-PiBJdCBpcyB0aGUgZmlyc3QgdmFsdWUuIFRoZSB0ZXN0IGlzIG9ubHkgdGhlcmUgdG8gYXZvaWQg
-YWNjZXNzaW5nIHRoZQo+IHwgPiBhcnJheSB3aXRoIGFuIGludmFsaWQgaW5kZXgsIHdoaWNoIHdv
-dWxkIGhhcHBlbiBpZiBhbiB1bmtub3duIGBmZWF0X251bScKPiB8ID4gaXMgcGFzc2VkIC0gYXMg
-Zm9yIHVua25vd24gZmVhdHVyZXMgdGhlcmUgaXMgbm8gZGVmYXVsdCB2YWx1ZS4KPiB8IAo+IHwg
-VGhlIGFib3ZlIGV4cGxhbmF0aW9uIHdvdWxkIGJlIGdvb2QgdG8gaGF2ZSBhcyBhIGNvbW1lbnQs
-IGFzIGl0IHdhcyBub3QKPiB8IHNvIG9idmlvdXMgZnJvbSBhIGZpcnN0IHNpZ2h0LiBJIHRoaW5r
-IHRoYXQgZXZlbiBoYXZpbmcgaXQgZXhwbGljaXQKPiB8IHdvdWxkIGJlIGNsZWFyZXI6Cj4gfCAK
-PiB8IHJldHVybiBpZHggPCAwID8gMSA6IGRjY3BfZmVhdF90YWJsZVtpZHhdLmRlZmF1bHRfdmFs
-dWU7Cj4gfCAKPiB8IEJ1dCB0aGVuLCBpZiBhbiB1bmtub3duIGZlYXQgbnVtIGlzIHBhc3NlZCBz
-aG91bGRuJ3QgdGhlIGNvZGUgYmFpbG91dCBpbgo+IHwgc29tZSBvdGhlciBmYXNoaW9uIHRoYW4g
-cmV0dXJuaW5nIHRoZSByZXN1bHQgb2YgYSBib29sZWFuIGV4cHJlc3Npb24gYW5kCj4gfCBub3Qg
-YWNjZXNzaW5nIHRoZSBkZWZhdWx0cyB0YWJsZT8KPiB8IAo+IFllcyB0aGFuayB5b3UuIEl0IGlz
-IG5lY2Vzc2FyeSB0byBjaGVjayB0aGlzLCBzaW5jZSBvbmx5IGluIHRoZSBjdXJyZW50Cj4gc3Rh
-dGUgb2YgY29kZSB0aGUgdXNlIG9mIHRoZSBmdW5jdGlvbiBpcyBjb25zaXN0ZW50LiAgSWYgdGhl
-IGNvZGUgZ2V0cwo+IGNoYW5nZWQgbGF0ZXIgb24gdGhlbiB0aGVyZSB3aWxsIGJlIG5vIHdhcm5p
-bmcuCj4gCj4gSSBoYXZlIHdvcmtlZCBvbiB0aGlzIGZ1bmN0aW9uIHllc3RlcmRheSBldmVuaW5n
-IHdpdGggcmVnYXJkIHRvIGFib3ZlCj4gZmVlZGJhY2suIElmIHlvdSBjb3VsZCBlaXRoZXIgY2hl
-Y2sgYWdhaW4gd2hlbiB0aGUgcGF0Y2ggaXMgc3VibWl0dGVkCj4gbGF0ZXIsIG9yIGhhdmUgYSBs
-b29rIGF0IHRoZSBvbmxpbmUgdmVyc2lvbiBpbiB0aGUgdGVzdCB0cmVlIG9uCj4gaHR0cDovL2Vk
-ZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9jZ2ktYmluL2dpdHdlYi5jZ2k/cNxjcF9leHAuZ2l0O2E9
-Y29tbWl0ZGlmZjtosDcwODEyMWJmZWIzMDlkYjg4ZTFiM2E5N2NmODUxMDY5YmNhZmUxCgpMb29r
-cyBvayBub3csIHRoYW5rcy4KCi0gQXJuYWxkbwotLQpUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMg
-bGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJvZHkgb2YgYSBt
-ZXNzYWdlIHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRvbW8gaW5mbyBh
-dCAgaHR0cDovL3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5odG1s
+This inserts the required de-allocation routines for memory allocated by
+feature negotiation in the socket destructors, replacing dccp_feat_clean()
+in one instance.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ net/dccp/dccp.h  |    2 ++
+ net/dccp/ipv4.c  |    1 +
+ net/dccp/ipv6.c  |    1 +
+ net/dccp/proto.c |    2 +-
+ 4 files changed, 5 insertions(+), 1 deletions(-)
+
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -442,6 +442,8 @@ static inline int dccp_ack_pending(const struct sock *sk)
+ 	       inet_csk_ack_scheduled(sk);
+ }
+ 
++extern void dccp_feat_list_purge(struct list_head *fn_list);
++
+ extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
+ extern int dccp_insert_options_rsk(struct dccp_request_sock*, struct sk_buff*);
+ extern int dccp_insert_option_elapsed_time(struct sock *sk,
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -545,6 +545,7 @@ out:
+ 
+ static void dccp_v4_reqsk_destructor(struct request_sock *req)
+ {
++	dccp_feat_list_purge(&dccp_rsk(req)->dreq_featneg);
+ 	kfree(inet_rsk(req)->opt);
+ }
+ 
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -302,6 +302,7 @@ done:
+ 
+ static void dccp_v6_reqsk_destructor(struct request_sock *req)
+ {
++	dccp_feat_list_purge(&dccp_rsk(req)->dreq_featneg);
+ 	if (inet6_rsk(req)->pktopts != NULL)
+ 		kfree_skb(inet6_rsk(req)->pktopts);
+ }
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -268,7 +268,7 @@ void dccp_destroy_sock(struct sock *sk)
+ 	dp->dccps_hc_rx_ccid = dp->dccps_hc_tx_ccid = NULL;
+ 
+ 	/* clean up feature negotiation state */
+-	dccp_feat_clean(dmsk);
++	dccp_feat_list_purge(&dp->dccps_featneg);
+ }
+ 
+ EXPORT_SYMBOL_GPL(dccp_destroy_sock);
