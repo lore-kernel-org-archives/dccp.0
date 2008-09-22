@@ -1,7 +1,7 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Mon, 22 Sep 2008 16:49:00 +0000
+Date: Mon, 22 Sep 2008 17:00:13 +0000
 Subject: Re: [PATCH 2/5] dccp: Implement lookup table for
-Message-Id: <20080922164900.GD16625@ghostprotocols.net>
+Message-Id: <20080922170013.GF16625@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 References: <1222068117-13401-3-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1222068117-13401-3-git-send-email-gerrit@erg.abdn.ac.uk>
@@ -44,19 +44,15 @@ Em Mon, Sep 22, 2008 at 05:45:54PM +0200, Gerrit Renker escreveu:
 > It is the first value. The test is only there to avoid accessing the
 > array with an invalid index, which would happen if an unknown `feat_num'
 > is passed - as for unknown features there is no default value.
-> 
-> | I tried to check on the other 4 patches on this series to check if usage
-> | clarified if it was correct, but there is no use of
-> | dccp_feat_default_value() on this 5 patches, perhaps it could be
-> | deferred to when it actually gets used?
-> | 
-> Yes thanks, while I have ensured that all patches are bisectable, a few
-> functions may be declared where the logical fit was better. I will place
-> it where it is first used, in the patch entitled "dccp: Registration
-> routines for changing feature values"
-> 
-> I am waiting before resubmitting - please take a look at patches 3-5 as well.
 
-I looked at the other patches, should be OK.
+The above explanation would be good to have as a comment, as it was not
+so obvious from a first sight. I think that even having it explicit
+would be clearer:
+
+return idx < 0 ? 1 : dccp_feat_table[idx].default_value;
+
+But then, if an unknown feat num is passed shouldn't the code bailout in
+some other fashion than returning the result of a boolean expression and
+not accessing the defaults table?
 
 - Arnaldo
