@@ -1,7 +1,7 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 22 Sep 2008 06:28:07 +0000
+From: David Miller <davem@davemloft.net>
+Date: Mon, 22 Sep 2008 06:58:53 +0000
 Subject: Re: net-next-2.6 [pull-request] [PATCH 0/37] dccp: Revised set of
-Message-Id: <20080922062807.GA12068@gerrit.erg.abdn.ac.uk>
+Message-Id: <20080921.235853.223987556.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
 References: <20080901164633.GA6456@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20080901164633.GA6456@gerrit.erg.abdn.ac.uk>
@@ -10,23 +10,29 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-| There are two paths forward at the current point in time.
-| 
-| 1) You submit a very small group of patches at a time to me.
-|    I'm talking like 5 or 6 patches at a time, maximum.
-| 
-|    And I'm going to give extra amounts of personal review to
-|    these, so it will take even more time than usual.
-| 
-Further review can never harm, so I am sure this will be good.
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 22 Sep 2008 08:28:07 +0200
 
-I have a question regarding granularity - the current granularity is
-meant to be logical, but is low.
-It is easy to get distracted by the details since at the end of
-the day the 37 patches achieve a rewriting of feat.c in small steps.
+> | There are two paths forward at the current point in time.
+> | 
+> | 1) You submit a very small group of patches at a time to me.
+> |    I'm talking like 5 or 6 patches at a time, maximum.
+> | 
+> |    And I'm going to give extra amounts of personal review to
+> |    these, so it will take even more time than usual.
+> | 
+> Further review can never harm, so I am sure this will be good.
+> 
+> I have a question regarding granularity - the current granularity is
+> meant to be logical, but is low.
+> It is easy to get distracted by the details since at the end of
+> the day the 37 patches achieve a rewriting of feat.c in small steps.
+> 
+> Would you therefore be ok with me combining some of the patches or would
+> you prefer to review the set at its current granularity?
 
-Would you therefore be ok with me combining some of the patches or would
-you prefer to review the set at its current granularity?
+Current granularity.
 
-Thanks
-Gerrit
+So, submit about 5 pieces at a time, you can say at the beginning of
+the series (in the [PATCH 0/X]: email) something like "this is phase N
+in the rewriting of feat.c which will achieve X Y and Z"
