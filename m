@@ -1,32 +1,132 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Wed, 24 Sep 2008 14:01:21 +0000
-Subject: Re: v2 [PATCH 2/5] dccp: Implement lookup table for
-Message-Id: <20080924140121.GK9588@ghostprotocols.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 22 Sep 2008 07:21:53 +0000
+Subject: [PATCH 1/5] dccp: Basic data structure for feature negotiation
+Message-Id: <1222068117-13401-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <20080924051823.GB4944@gerrit.erg.abdn.ac.uk>
-In-Reply-To: <20080924051823.GB4944@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Wed, Sep 24, 2008 at 07:18:23AM +0200, Gerrit Renker escreveu:
-> This is the first revised patch, the second follows subsequently.
-> 
-> Changes relative to v1: 
-> migrated function `dccp_default_value' moved to where it is first used 
-> 
-> >>>>>>>>>>>>>>>>>>>>>>>>>>>>> Patch v2 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-> dccp: Implement lookup table for feature-negotiation information
-> 
-> A lookup table for feature-negotiation information, extracted from RFC 4340/42,
-> is provided by this patch. All currently known features can be found in this 
-> table, along with their feature location, their default value, and type.
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+This patch prepares for the new and extended feature-negotiation routines.
 
-Lets make progress, in the future lets try and remove hardcoded specific CCID
-tests.
+The following feature-negotiation data structures are provided:
+	* a container for the various (SP or NN) values,
+	* symbolic state names to track feature states,
+	* an entry struct which holds all current information together,
+	* elementary functions to fill in and process these structures.
 
-Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Entry structs are arranged as FIFO for the following reason: RFC 4340 specifies
+that if multiple options of the same type are present, they are processed in the
+order of their appearance in the packet; which means that this order needs to be
+preserved in the local data structure (the later insertion code also respects
+this order).
+
+The struct list_head has been chosen for the following reasons: the most
+frequent operations are
+ * add new entry at tail (when receiving Change or setting socket options);
+ * delete entry (when Confirm has been received);
+ * deep copy of entire list (cloning from listening socket onto request socket).
+
+The NN value has been set to 64 bit, which is a currently sufficient upper limit
+(Sequence Window feature has 48 bit).
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ net/dccp/feat.c |   14 ++++++++++++
+ net/dccp/feat.h |   60 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 74 insertions(+), 0 deletions(-)
+
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -23,6 +23,20 @@
+ 
+ #define DCCP_FEAT_SP_NOAGREE (-123)
+ 
++/* copy constructor, fval must not already contain allocated memory */
++static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
++{
++	fval->sp.len = len;
++	if (fval->sp.len > 0) {
++		fval->sp.vec = kmemdup(val, len, gfp_any());
++		if (fval->sp.vec = NULL) {
++			fval->sp.len = 0;
++			return -ENOBUFS;
++		}
++	}
++	return 0;
++}
++
+ int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
+ 		     u8 *val, u8 len, gfp_t gfp)
+ {
+--- a/net/dccp/feat.h
++++ b/net/dccp/feat.h
+@@ -14,6 +14,66 @@
+ #include <linux/types.h>
+ #include "dccp.h"
+ 
++enum dccp_feat_type {
++	FEAT_AT_RX   = 1,	/* located at RX side of half-connection  */
++	FEAT_AT_TX   = 2,	/* located at TX side of half-connection  */
++	FEAT_SP      = 4,	/* server-priority reconciliation (6.3.1) */
++	FEAT_NN	     = 8,	/* non-negotiable reconciliation (6.3.2)  */
++	FEAT_UNKNOWN = 0xFF	/* not understood or invalid feature	  */
++};
++
++enum dccp_feat_state {
++	FEAT_DEFAULT = 0,	/* using default values from 6.4 */
++	FEAT_INITIALISING,	/* feature is being initialised  */
++	FEAT_CHANGING,		/* Change sent but not confirmed yet */
++	FEAT_UNSTABLE,		/* local modification in state CHANGING */
++	FEAT_STABLE		/* both ends (think they) agree */
++};
++
++/**
++ * dccp_feat_val  -  Container for SP or NN feature values
++ * @nn:     single NN value
++ * @sp.vec: single SP value plus optional preference list
++ * @sp.len: length of @sp.vec in bytes
++ */
++typedef union {
++	u64 nn;
++	struct {
++		u8	*vec;
++		u8	len;
++	}   sp;
++} dccp_feat_val;
++
++/**
++ * struct feat_entry  -  Data structure to perform feature negotiation
++ * @feat_num: one of %dccp_feature_numbers
++ * @val: feature's current value (SP features may have preference list)
++ * @state: feature's current state
++ * @needs_mandatory: whether Mandatory options should be sent
++ * @needs_confirm: whether to send a Confirm instead of a Change
++ * @empty_confirm: whether to send an empty Confirm (depends on @needs_confirm)
++ * @is_local: feature location (1) or feature-remote (0)
++ * @node: list pointers, entries arranged in FIFO order
++ */
++struct dccp_feat_entry {
++	u8                      feat_num;
++	dccp_feat_val           val;
++	enum dccp_feat_state    state:8;
++	bool			needs_mandatory:1,
++				needs_confirm:1,
++				empty_confirm:1,
++				is_local:1;
++
++	struct list_head	node;
++};
++
++static inline u8 dccp_feat_genopt(struct dccp_feat_entry *entry)
++{
++	if (entry->needs_confirm)
++		return entry->is_local ? DCCPO_CONFIRM_L : DCCPO_CONFIRM_R;
++	return entry->is_local ? DCCPO_CHANGE_L : DCCPO_CHANGE_R;
++}
++
+ #ifdef CONFIG_IP_DCCP_DEBUG
+ extern const char *dccp_feat_typename(const u8 type);
+ extern const char *dccp_feat_name(const u8 feat);
