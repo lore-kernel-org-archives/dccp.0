@@ -1,48 +1,44 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 24 Sep 2008 04:41:20 +0000
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Wed, 24 Sep 2008 13:58:22 +0000
 Subject: Re: [PATCH 2/5] dccp: Implement lookup table for
-Message-Id: <20080924044120.GA4944@gerrit.erg.abdn.ac.uk>
+Message-Id: <20080924135822.GI9588@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 References: <1222068117-13401-3-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1222068117-13401-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-| > | > --- a/include/linux/dccp.h
-| > | > +++ b/include/linux/dccp.h
-| > | > =20
-| > | > +
-| > | > +static int dccp_feat_default_value(u8 feat_num)
-| > | > +{
-| > | > +	int idx =3D dccp_feat_index(feat_num);
-| > | > +
-| > | > +	return idx < 0 ? : dccp_feat_table[idx].default_value;
-| > | > +}
-<snip>
-| > |=20
-| > It is the first value. The test is only there to avoid accessing the
-| > array with an invalid index, which would happen if an unknown `feat_num'
-| > is passed - as for unknown features there is no default value.
-|=20
-| The above explanation would be good to have as a comment, as it was not
-| so obvious from a first sight. I think that even having it explicit
-| would be clearer:
-|=20
-| return idx < 0 ? 1 : dccp_feat_table[idx].default_value;
-|=20
-| But then, if an unknown feat num is passed shouldn't the code bailout in
-| some other fashion than returning the result of a boolean expression and
-| not accessing the defaults table?
-|=20
-Yes thank you. It is necessary to check this, since only in the current
-state of code the use of the function is consistent.  If the code gets
-changed later on then there will be no warning.
-
-I have worked on this function yesterday evening with regard to above
-feedback. If you could either check again when the patch is submitted
-later, or have a look at the online version in the test tree on
-http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dcommi=
-tdiff;h=B0708121bfeb309db88e1b3a97cf851069bcafe1
-
+RW0gV2VkLCBTZXAgMjQsIDIwMDggYXQgMDY6NDE6MjBBTSArMDIwMCwgR2Vycml0IFJlbmtlciBl
+c2NyZXZldToKPiB8ID4gfCA+IC0tLSBhL2luY2x1ZGUvbGludXgvZGNjcC5oCj4gfCA+IHwgPiAr
+KysgYi9pbmNsdWRlL2xpbnV4L2RjY3AuaAo+IHwgPiB8ID4gIAo+IHwgPiB8ID4gKwo+IHwgPiB8
+ID4gK3N0YXRpYyBpbnQgZGNjcF9mZWF0X2RlZmF1bHRfdmFsdWUodTggZmVhdF9udW0pCj4gfCA+
+IHwgPiArewo+IHwgPiB8ID4gKwlpbnQgaWR4ID0gZGNjcF9mZWF0X2luZGV4KGZlYXRfbnVtKTsK
+PiB8ID4gfCA+ICsKPiB8ID4gfCA+ICsJcmV0dXJuIGlkeCA8IDAgPyA6IGRjY3BfZmVhdF90YWJs
+ZVtpZHhdLmRlZmF1bHRfdmFsdWU7Cj4gfCA+IHwgPiArfQo+IDxzbmlwPgo+IHwgPiB8IAo+IHwg
+PiBJdCBpcyB0aGUgZmlyc3QgdmFsdWUuIFRoZSB0ZXN0IGlzIG9ubHkgdGhlcmUgdG8gYXZvaWQg
+YWNjZXNzaW5nIHRoZQo+IHwgPiBhcnJheSB3aXRoIGFuIGludmFsaWQgaW5kZXgsIHdoaWNoIHdv
+dWxkIGhhcHBlbiBpZiBhbiB1bmtub3duIGBmZWF0X251bScKPiB8ID4gaXMgcGFzc2VkIC0gYXMg
+Zm9yIHVua25vd24gZmVhdHVyZXMgdGhlcmUgaXMgbm8gZGVmYXVsdCB2YWx1ZS4KPiB8IAo+IHwg
+VGhlIGFib3ZlIGV4cGxhbmF0aW9uIHdvdWxkIGJlIGdvb2QgdG8gaGF2ZSBhcyBhIGNvbW1lbnQs
+IGFzIGl0IHdhcyBub3QKPiB8IHNvIG9idmlvdXMgZnJvbSBhIGZpcnN0IHNpZ2h0LiBJIHRoaW5r
+IHRoYXQgZXZlbiBoYXZpbmcgaXQgZXhwbGljaXQKPiB8IHdvdWxkIGJlIGNsZWFyZXI6Cj4gfCAK
+PiB8IHJldHVybiBpZHggPCAwID8gMSA6IGRjY3BfZmVhdF90YWJsZVtpZHhdLmRlZmF1bHRfdmFs
+dWU7Cj4gfCAKPiB8IEJ1dCB0aGVuLCBpZiBhbiB1bmtub3duIGZlYXQgbnVtIGlzIHBhc3NlZCBz
+aG91bGRuJ3QgdGhlIGNvZGUgYmFpbG91dCBpbgo+IHwgc29tZSBvdGhlciBmYXNoaW9uIHRoYW4g
+cmV0dXJuaW5nIHRoZSByZXN1bHQgb2YgYSBib29sZWFuIGV4cHJlc3Npb24gYW5kCj4gfCBub3Qg
+YWNjZXNzaW5nIHRoZSBkZWZhdWx0cyB0YWJsZT8KPiB8IAo+IFllcyB0aGFuayB5b3UuIEl0IGlz
+IG5lY2Vzc2FyeSB0byBjaGVjayB0aGlzLCBzaW5jZSBvbmx5IGluIHRoZSBjdXJyZW50Cj4gc3Rh
+dGUgb2YgY29kZSB0aGUgdXNlIG9mIHRoZSBmdW5jdGlvbiBpcyBjb25zaXN0ZW50LiAgSWYgdGhl
+IGNvZGUgZ2V0cwo+IGNoYW5nZWQgbGF0ZXIgb24gdGhlbiB0aGVyZSB3aWxsIGJlIG5vIHdhcm5p
+bmcuCj4gCj4gSSBoYXZlIHdvcmtlZCBvbiB0aGlzIGZ1bmN0aW9uIHllc3RlcmRheSBldmVuaW5n
+IHdpdGggcmVnYXJkIHRvIGFib3ZlCj4gZmVlZGJhY2suIElmIHlvdSBjb3VsZCBlaXRoZXIgY2hl
+Y2sgYWdhaW4gd2hlbiB0aGUgcGF0Y2ggaXMgc3VibWl0dGVkCj4gbGF0ZXIsIG9yIGhhdmUgYSBs
+b29rIGF0IHRoZSBvbmxpbmUgdmVyc2lvbiBpbiB0aGUgdGVzdCB0cmVlIG9uCj4gaHR0cDovL2Vk
+ZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9jZ2ktYmluL2dpdHdlYi5jZ2k/cNxjcF9leHAuZ2l0O2E9
+Y29tbWl0ZGlmZjtosDcwODEyMWJmZWIzMDlkYjg4ZTFiM2E5N2NmODUxMDY5YmNhZmUxCgpMb29r
+cyBvayBub3csIHRoYW5rcy4KCi0gQXJuYWxkbwotLQpUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMg
+bGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJvZHkgb2YgYSBt
+ZXNzYWdlIHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRvbW8gaW5mbyBh
+dCAgaHR0cDovL3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5odG1s
