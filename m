@@ -1,160 +1,187 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 22 Sep 2008 07:21:55 +0000
-Subject: [PATCH 3/5] dccp: List management for new feature negotiation
-Message-Id: <1222068117-13401-4-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Wed, 24 Sep 2008 05:18:23 +0000
+Subject: v2 [PATCH 2/5] dccp: Implement lookup table for
+Message-Id: <20080924051823.GB4944@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This adds list fields and list management functions for the new feature
-negotiation implementation. The new code is kept in parallel to the old
-code, until removed at the end of the patch set.
+This is the first revised patch, the second follows subsequently.
 
-Thanks to Arnaldo for suggestions to improve the code.
+Changes relative to v1: 
+migrated function `dccp_default_value' moved to where it is first used 
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Patch v2 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+dccp: Implement lookup table for feature-negotiation information
+
+A lookup table for feature-negotiation information, extracted from RFC 4340/42,
+is provided by this patch. All currently known features can be found in this 
+table, along with their feature location, their default value, and type.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/feat.c |  129 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 129 insertions(+), 0 deletions(-)
+ include/linux/dccp.h |    9 ++--
+ net/dccp/feat.c      |  108 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 113 insertions(+), 4 deletions(-)
 
 --- a/net/dccp/feat.c
 +++ b/net/dccp/feat.c
-@@ -150,6 +150,135 @@ static void dccp_feat_entry_destructor(struct dccp_feat_entry *entry)
- 	}
+@@ -23,6 +23,73 @@
+ 
+ #define DCCP_FEAT_SP_NOAGREE (-123)
+ 
++static const struct {
++	u8			feat_num;		/* DCCPF_xxx */
++	enum dccp_feat_type	rxtx;			/* RX or TX  */
++	enum dccp_feat_type	reconciliation;		/* SP or NN  */
++	u8			default_value;		/* as in 6.4 */
++/*
++ *    Lookup table for location and type of features (from RFC 4340/4342)
++ *  +--------------------------+----+-----+----+----+---------+-----------+
++ *  | Feature                  | Location | Reconc. | Initial |  Section  |
++ *  |                          | RX | TX  | SP | NN |  Value  | Reference |
++ *  +--------------------------+----+-----+----+----+---------+-----------+
++ *  | DCCPF_CCID               |    |  X  | X  |    |   2     | 10        |
++ *  | DCCPF_SHORT_SEQNOS       |    |  X  | X  |    |   0     |  7.6.1    |
++ *  | DCCPF_SEQUENCE_WINDOW    |    |  X  |    | X  | 100     |  7.5.2    |
++ *  | DCCPF_ECN_INCAPABLE      | X  |     | X  |    |   0     | 12.1      |
++ *  | DCCPF_ACK_RATIO          |    |  X  |    | X  |   2     | 11.3      |
++ *  | DCCPF_SEND_ACK_VECTOR    | X  |     | X  |    |   0     | 11.5      |
++ *  | DCCPF_SEND_NDP_COUNT     |    |  X  | X  |    |   0     |  7.7.2    |
++ *  | DCCPF_MIN_CSUM_COVER     | X  |     | X  |    |   0     |  9.2.1    |
++ *  | DCCPF_DATA_CHECKSUM      | X  |     | X  |    |   0     |  9.3.1    |
++ *  | DCCPF_SEND_LEV_RATE      | X  |     | X  |    |   0     | 4342/8.4  |
++ *  +--------------------------+----+-----+----+----+---------+-----------+
++ */
++} dccp_feat_table[] = {
++	{ DCCPF_CCID,		 FEAT_AT_TX, FEAT_SP, 2 },
++	{ DCCPF_SHORT_SEQNOS,	 FEAT_AT_TX, FEAT_SP, 0 },
++	{ DCCPF_SEQUENCE_WINDOW, FEAT_AT_TX, FEAT_NN, 100 },
++	{ DCCPF_ECN_INCAPABLE,	 FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_ACK_RATIO,	 FEAT_AT_TX, FEAT_NN, 2 },
++	{ DCCPF_SEND_ACK_VECTOR, FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_SEND_NDP_COUNT,  FEAT_AT_TX, FEAT_SP, 0 },
++	{ DCCPF_MIN_CSUM_COVER,  FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_DATA_CHECKSUM,	 FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_SEND_LEV_RATE,	 FEAT_AT_RX, FEAT_SP, 0 },
++};
++#define DCCP_FEAT_SUPPORTED_MAX		ARRAY_SIZE(dccp_feat_table)
++
++/**
++ * dccp_feat_index  -  Hash function to map feature number into array position
++ * Returns consecutive array index or -1 if the feature is not understood.
++ */
++static int dccp_feat_index(u8 feat_num)
++{
++	/* The first 9 entries are occupied by the types from RFC 4340, 6.4 */
++	if (feat_num > DCCPF_RESERVED && feat_num <= DCCPF_DATA_CHECKSUM)
++		return feat_num - 1;
++
++	/*
++	 * Other features: add cases for new feature types here after adding
++	 * them to the above table.
++	 */
++	switch (feat_num) {
++	case DCCPF_SEND_LEV_RATE:
++			return DCCP_FEAT_SUPPORTED_MAX - 1;
++	}
++	return -1;
++}
++
++static u8 dccp_feat_type(u8 feat_num)
++{
++	int idx = dccp_feat_index(feat_num);
++
++	if (idx < 0)
++		return FEAT_UNKNOWN;
++	return dccp_feat_table[idx].reconciliation;
++}
++
+ /* copy constructor, fval must not already contain allocated memory */
+ static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
+ {
+@@ -37,6 +104,45 @@ static int dccp_feat_clone_sp_val(dccp_f
+ 	return 0;
  }
  
-+/*
-+ * List management functions
-+ *
-+ * Feature negotiation lists rely on and maintain the following invariants:
-+ * - each feat_num in the list is known, i.e. we know its type and default value
-+ * - each feat_num/is_local combination is unique (old entries are overwritten)
-+ * - SP values are always freshly allocated
-+ * - list is sorted in increasing order of feature number (faster lookup)
-+ */
-+static struct dccp_feat_entry *dccp_feat_list_lookup(struct list_head *fn_list,
-+						     u8 feat_num, bool is_local)
++static void dccp_feat_val_destructor(u8 feat_num, dccp_feat_val *val)
 +{
-+	struct dccp_feat_entry *entry;
-+
-+	list_for_each_entry(entry, fn_list, node)
-+		if (entry->feat_num = feat_num && entry->is_local = is_local)
-+			return entry;
-+		else if (entry->feat_num > feat_num)
-+			break;
-+	return NULL;
++	if (unlikely(val = NULL))
++		return;
++	if (dccp_feat_type(feat_num) = FEAT_SP)
++		kfree(val->sp.vec);
++	memset(val, 0, sizeof(*val));
 +}
 +
-+/**
-+ * dccp_feat_entry_new  -  Central list update routine (called by all others)
-+ * @head:  list to add to
-+ * @feat:  feature number
-+ * @local: whether the local (1) or remote feature with number @feat is meant
-+ * This is the only constructor and serves to ensure the above invariants.
-+ */
 +static struct dccp_feat_entry *
-+	      dccp_feat_entry_new(struct list_head *head, u8 feat, bool local)
++	      dccp_feat_clone_entry(struct dccp_feat_entry const *original)
 +{
-+	struct dccp_feat_entry *entry;
++	struct dccp_feat_entry *new;
++	u8 type = dccp_feat_type(original->feat_num);
 +
-+	list_for_each_entry(entry, head, node)
-+		if (entry->feat_num = feat && entry->is_local = local) {
-+			dccp_feat_val_destructor(entry->feat_num, &entry->val);
-+			return entry;
-+		} else if (entry->feat_num > feat) {
-+			head = &entry->node;
-+			break;
-+		}
++	if (type = FEAT_UNKNOWN)
++		return NULL;
 +
-+	entry = kmalloc(sizeof(*entry), gfp_any());
-+	if (entry != NULL) {
-+		entry->feat_num = feat;
-+		entry->is_local = local;
-+		list_add_tail(&entry->node, head);
++	new = kmemdup(original, sizeof(struct dccp_feat_entry), gfp_any());
++	if (new = NULL)
++		return NULL;
++
++	if (type = FEAT_SP && dccp_feat_clone_sp_val(&new->val,
++						      original->val.sp.vec,
++						      original->val.sp.len)) {
++		kfree(new);
++		return NULL;
 +	}
-+	return entry;
++	return new;
 +}
 +
-+/**
-+ * dccp_feat_push_change  -  Add/overwrite a Change option in the list
-+ * @fn_list: feature-negotiation list to update
-+ * @feat: one of %dccp_feature_numbers
-+ * @local: whether local (1) or remote (0) @feat_num is meant
-+ * @needs_mandatory: whether to use Mandatory feature negotiation options
-+ * @fval: pointer to NN/SP value to be inserted (will be copied)
-+ */
-+static int dccp_feat_push_change(struct list_head *fn_list, u8 feat, u8 local,
-+				 u8 mandatory, dccp_feat_val *fval)
++static void dccp_feat_entry_destructor(struct dccp_feat_entry *entry)
 +{
-+	struct dccp_feat_entry *new = dccp_feat_entry_new(fn_list, feat, local);
-+
-+	if (new = NULL)
-+		return -ENOMEM;
-+
-+	new->feat_num	     = feat;
-+	new->is_local	     = local;
-+	new->state	     = FEAT_INITIALISING;
-+	new->needs_confirm   = 0;
-+	new->empty_confirm   = 0;
-+	new->val	     = *fval;
-+	new->needs_mandatory = mandatory;
-+
-+	return 0;
++	if (entry != NULL) {
++		dccp_feat_val_destructor(entry->feat_num, &entry->val);
++		kfree(entry);
++	}
 +}
-+
-+/**
-+ * dccp_feat_push_confirm  -  Add a Confirm entry to the FN list
-+ * @fn_list: feature-negotiation list to add to
-+ * @feat: one of %dccp_feature_numbers
-+ * @local: whether local (1) or remote (0) @feat_num is being confirmed
-+ * @fval: pointer to NN/SP value to be inserted or NULL
-+ * Returns 0 on success, a Reset code for further processing otherwise.
-+ */
-+static int dccp_feat_push_confirm(struct list_head *fn_list, u8 feat, u8 local,
-+				  dccp_feat_val *fval)
-+{
-+	struct dccp_feat_entry *new = dccp_feat_entry_new(fn_list, feat, local);
-+
-+	if (new = NULL)
-+		return DCCP_RESET_CODE_TOO_BUSY;
-+
-+	new->feat_num	     = feat;
-+	new->is_local	     = local;
-+	new->state	     = FEAT_STABLE;	/* transition in 6.6.2 */
-+	new->needs_confirm   = 1;
-+	new->empty_confirm   = (fval = NULL);
-+	new->val.nn	     = 0;		/* zeroes the whole structure */
-+	if (!new->empty_confirm)
-+		new->val     = *fval;
-+	new->needs_mandatory = 0;
-+
-+	return 0;
-+}
-+
-+static int dccp_push_empty_confirm(struct list_head *fn_list, u8 feat, u8 local)
-+{
-+	return dccp_feat_push_confirm(fn_list, feat, local, NULL);
-+}
-+
-+static inline void dccp_feat_list_pop(struct dccp_feat_entry *entry)
-+{
-+	list_del(&entry->node);
-+	dccp_feat_entry_destructor(entry);
-+}
-+
-+void dccp_feat_list_purge(struct list_head *fn_list)
-+{
-+	struct dccp_feat_entry *entry, *next;
-+
-+	list_for_each_entry_safe(entry, next, fn_list, node)
-+		dccp_feat_entry_destructor(entry);
-+	INIT_LIST_HEAD(fn_list);
-+}
-+EXPORT_SYMBOL_GPL(dccp_feat_list_purge);
 +
  int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
  		     u8 *val, u8 len, gfp_t gfp)
  {
+@@ -653,6 +759,8 @@ const char *dccp_feat_name(const u8 feat
+ 	if (feat > DCCPF_DATA_CHECKSUM && feat < DCCPF_MIN_CCID_SPECIFIC)
+ 		return feature_names[DCCPF_RESERVED];
+ 
++	if (feat =  DCCPF_SEND_LEV_RATE)
++		return "Send Loss Event Rate";
+ 	if (feat >= DCCPF_MIN_CCID_SPECIFIC)
+ 		return "CCID-specific";
+ 
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -176,19 +176,20 @@ enum {
+ };
+ 
+ /* DCCP features (RFC 4340 section 6.4) */
+-enum {
++enum dccp_feature_numbers {
+ 	DCCPF_RESERVED = 0,
+ 	DCCPF_CCID = 1,
+-	DCCPF_SHORT_SEQNOS = 2,		/* XXX: not yet implemented */
++	DCCPF_SHORT_SEQNOS = 2,
+ 	DCCPF_SEQUENCE_WINDOW = 3,
+-	DCCPF_ECN_INCAPABLE = 4,	/* XXX: not yet implemented */
++	DCCPF_ECN_INCAPABLE = 4,
+ 	DCCPF_ACK_RATIO = 5,
+ 	DCCPF_SEND_ACK_VECTOR = 6,
+ 	DCCPF_SEND_NDP_COUNT = 7,
+ 	DCCPF_MIN_CSUM_COVER = 8,
+-	DCCPF_DATA_CHECKSUM = 9,	/* XXX: not yet implemented */
++	DCCPF_DATA_CHECKSUM = 9,
+ 	/* 10-127 reserved */
+ 	DCCPF_MIN_CCID_SPECIFIC = 128,
++	DCCPF_SEND_LEV_RATE = 192,	/* RFC 4342, sec. 8.4 */
+ 	DCCPF_MAX_CCID_SPECIFIC = 255,
+ };
+ 
