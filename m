@@ -1,63 +1,182 @@
-From: gerrit@erg.abdn.ac.uk
-Date: Fri, 31 Oct 2008 15:51:13 +0000
-Subject: Re: [PATCH 1/1] [QPOLICY]: Ignore packets with specific priority
-Message-Id: <56979.148.187.160.35.1225468273.squirrel@148.187.160.35>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 04 Oct 2008 09:13:23 +0000
+Subject: [PATCH 2/5] dccp: Implement lookup table for feature-negotiation information
+Message-Id: <1223111606-5308-3-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <200810262233.54649.tomasz@grobelny.oswiecenia.net>
-In-Reply-To: <200810262233.54649.tomasz@grobelny.oswiecenia.net>
+References: <1222068117-13401-3-git-send-email-gerrit@erg.abdn.ac.uk>
+In-Reply-To: <1222068117-13401-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
->> One difficulty that I see is what to do when the send socket is
->> non-blocking.
->>
-> But socket doesn't get into non-blocking mode until specifically
-> requested by fcntl(soc, F_SETFL, O_NONBLOCK) call, does it?
->
-Yes - the problem is that the code does not stop the user from
-setting non-blocking mode on the socket.
+A lookup table for feature-negotiation information, extracted from RFC 4340/42,
+is provided by this patch. All currently known features can be found in this
+table, along with their feature location, their default value, and type.
 
->> Maybe purists will not like this since the complexity is now shifted to
->> the
->> user-kernel interface. But it may well be a start to develop some kind
->> of
->> new interface which achieves the same in a cleaner way.
->>
-> I think that much of the previously written qpolicy code could be
-> removed from the kernel so the interface would be really simple. No
-> policy switching, no fancy parameters, etc. The only difference from
-> standard interface would be that a packet could have a 'drop me' flag
-> (priority 65 in my code). Ok, I agree some may consider it tricky but I
-> wouldn't call it complicated. The complicated part is meant to be on the
-> userspace side. And that in my opinion has many advantages: easier
-> debugging, easier to add new (possibly complex) queuing policies.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+ include/linux/dccp.h |    9 ++--
+ net/dccp/feat.c      |  108 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 113 insertions(+), 4 deletions(-)
 
-I fully agree with the idea, it is the realisation that causes me
-some headaches. It would be great if the code need not call send() twice
-to send a single packet, and if an skb need not be allocated in order to
-create a "waiting effect" in userspace.
-
-The other alternative that I see is to come up with completely new
-system calls - as done in SCTP for instance. But this would only make snse
-if with the present means things get too ugly; i.e. if the
-new semantics can not be expressed with the given system calls.
-
-So there is agreement on the idea, I hope is that realisation
-can be refined - without overloading existing calls too much.
-
-
->> Can you please narrow down what is happening with CCID-3.  CCID-3 is
->> very
->> complicated and sensitive, so it is possible that the problem is within
->> CCID-3 and not the qpolicy code - need more detailed information.
->>
-> On one test it seemed not to work at all in my setup: ccid3 seems not to
-> limit traffic at all. But that was just one test so it may well be my
-> fault.
->
-If you notice anything odd, please do report it on the mailing list.
-
-Gerrit
-
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -176,19 +176,20 @@ enum {
+ };
+ 
+ /* DCCP features (RFC 4340 section 6.4) */
+-enum {
++enum dccp_feature_numbers {
+ 	DCCPF_RESERVED = 0,
+ 	DCCPF_CCID = 1,
+-	DCCPF_SHORT_SEQNOS = 2,		/* XXX: not yet implemented */
++	DCCPF_SHORT_SEQNOS = 2,
+ 	DCCPF_SEQUENCE_WINDOW = 3,
+-	DCCPF_ECN_INCAPABLE = 4,	/* XXX: not yet implemented */
++	DCCPF_ECN_INCAPABLE = 4,
+ 	DCCPF_ACK_RATIO = 5,
+ 	DCCPF_SEND_ACK_VECTOR = 6,
+ 	DCCPF_SEND_NDP_COUNT = 7,
+ 	DCCPF_MIN_CSUM_COVER = 8,
+-	DCCPF_DATA_CHECKSUM = 9,	/* XXX: not yet implemented */
++	DCCPF_DATA_CHECKSUM = 9,
+ 	/* 10-127 reserved */
+ 	DCCPF_MIN_CCID_SPECIFIC = 128,
++	DCCPF_SEND_LEV_RATE = 192,	/* RFC 4342, sec. 8.4 */
+ 	DCCPF_MAX_CCID_SPECIFIC = 255,
+ };
+ 
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -23,6 +23,73 @@
+ 
+ #define DCCP_FEAT_SP_NOAGREE (-123)
+ 
++static const struct {
++	u8			feat_num;		/* DCCPF_xxx */
++	enum dccp_feat_type	rxtx;			/* RX or TX  */
++	enum dccp_feat_type	reconciliation;		/* SP or NN  */
++	u8			default_value;		/* as in 6.4 */
++/*
++ *    Lookup table for location and type of features (from RFC 4340/4342)
++ *  +--------------------------+----+-----+----+----+---------+-----------+
++ *  | Feature                  | Location | Reconc. | Initial |  Section  |
++ *  |                          | RX | TX  | SP | NN |  Value  | Reference |
++ *  +--------------------------+----+-----+----+----+---------+-----------+
++ *  | DCCPF_CCID               |    |  X  | X  |    |   2     | 10        |
++ *  | DCCPF_SHORT_SEQNOS       |    |  X  | X  |    |   0     |  7.6.1    |
++ *  | DCCPF_SEQUENCE_WINDOW    |    |  X  |    | X  | 100     |  7.5.2    |
++ *  | DCCPF_ECN_INCAPABLE      | X  |     | X  |    |   0     | 12.1      |
++ *  | DCCPF_ACK_RATIO          |    |  X  |    | X  |   2     | 11.3      |
++ *  | DCCPF_SEND_ACK_VECTOR    | X  |     | X  |    |   0     | 11.5      |
++ *  | DCCPF_SEND_NDP_COUNT     |    |  X  | X  |    |   0     |  7.7.2    |
++ *  | DCCPF_MIN_CSUM_COVER     | X  |     | X  |    |   0     |  9.2.1    |
++ *  | DCCPF_DATA_CHECKSUM      | X  |     | X  |    |   0     |  9.3.1    |
++ *  | DCCPF_SEND_LEV_RATE      | X  |     | X  |    |   0     | 4342/8.4  |
++ *  +--------------------------+----+-----+----+----+---------+-----------+
++ */
++} dccp_feat_table[] = {
++	{ DCCPF_CCID,		 FEAT_AT_TX, FEAT_SP, 2 },
++	{ DCCPF_SHORT_SEQNOS,	 FEAT_AT_TX, FEAT_SP, 0 },
++	{ DCCPF_SEQUENCE_WINDOW, FEAT_AT_TX, FEAT_NN, 100 },
++	{ DCCPF_ECN_INCAPABLE,	 FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_ACK_RATIO,	 FEAT_AT_TX, FEAT_NN, 2 },
++	{ DCCPF_SEND_ACK_VECTOR, FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_SEND_NDP_COUNT,  FEAT_AT_TX, FEAT_SP, 0 },
++	{ DCCPF_MIN_CSUM_COVER,  FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_DATA_CHECKSUM,	 FEAT_AT_RX, FEAT_SP, 0 },
++	{ DCCPF_SEND_LEV_RATE,	 FEAT_AT_RX, FEAT_SP, 0 },
++};
++#define DCCP_FEAT_SUPPORTED_MAX		ARRAY_SIZE(dccp_feat_table)
++
++/**
++ * dccp_feat_index  -  Hash function to map feature number into array position
++ * Returns consecutive array index or -1 if the feature is not understood.
++ */
++static int dccp_feat_index(u8 feat_num)
++{
++	/* The first 9 entries are occupied by the types from RFC 4340, 6.4 */
++	if (feat_num > DCCPF_RESERVED && feat_num <= DCCPF_DATA_CHECKSUM)
++		return feat_num - 1;
++
++	/*
++	 * Other features: add cases for new feature types here after adding
++	 * them to the above table.
++	 */
++	switch (feat_num) {
++	case DCCPF_SEND_LEV_RATE:
++			return DCCP_FEAT_SUPPORTED_MAX - 1;
++	}
++	return -1;
++}
++
++static u8 dccp_feat_type(u8 feat_num)
++{
++	int idx = dccp_feat_index(feat_num);
++
++	if (idx < 0)
++		return FEAT_UNKNOWN;
++	return dccp_feat_table[idx].reconciliation;
++}
++
+ /* copy constructor, fval must not already contain allocated memory */
+ static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
+ {
+@@ -37,6 +104,45 @@ static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
+ 	return 0;
+ }
+ 
++static void dccp_feat_val_destructor(u8 feat_num, dccp_feat_val *val)
++{
++	if (unlikely(val = NULL))
++		return;
++	if (dccp_feat_type(feat_num) = FEAT_SP)
++		kfree(val->sp.vec);
++	memset(val, 0, sizeof(*val));
++}
++
++static struct dccp_feat_entry *
++	      dccp_feat_clone_entry(struct dccp_feat_entry const *original)
++{
++	struct dccp_feat_entry *new;
++	u8 type = dccp_feat_type(original->feat_num);
++
++	if (type = FEAT_UNKNOWN)
++		return NULL;
++
++	new = kmemdup(original, sizeof(struct dccp_feat_entry), gfp_any());
++	if (new = NULL)
++		return NULL;
++
++	if (type = FEAT_SP && dccp_feat_clone_sp_val(&new->val,
++						      original->val.sp.vec,
++						      original->val.sp.len)) {
++		kfree(new);
++		return NULL;
++	}
++	return new;
++}
++
++static void dccp_feat_entry_destructor(struct dccp_feat_entry *entry)
++{
++	if (entry != NULL) {
++		dccp_feat_val_destructor(entry->feat_num, &entry->val);
++		kfree(entry);
++	}
++}
++
+ int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
+ 		     u8 *val, u8 len, gfp_t gfp)
+ {
+@@ -653,6 +759,8 @@ const char *dccp_feat_name(const u8 feat)
+ 	if (feat > DCCPF_DATA_CHECKSUM && feat < DCCPF_MIN_CCID_SPECIFIC)
+ 		return feature_names[DCCPF_RESERVED];
+ 
++	if (feat =  DCCPF_SEND_LEV_RATE)
++		return "Send Loss Event Rate";
+ 	if (feat >= DCCPF_MIN_CCID_SPECIFIC)
+ 		return "CCID-specific";
+ 
