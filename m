@@ -1,39 +1,17 @@
-From: David Miller <davem@davemloft.net>
-Date: Sun, 05 Oct 2008 16:13:34 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 06 Oct 2008 04:14:13 +0000
 Subject: Re: v2 [PATCH 0/5] dccp: Feature negotiation, Part I - Underlying
-Message-Id: <20081005.091334.208715265.davem@davemloft.net>
+Message-Id: <20081006041413.GA3762@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1223111606-5308-1-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1223111606-5308-1-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="windows-1254"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-RnJvbTogR2Vycml0IFJlbmtlciA8Z2Vycml0QGVyZy5hYmRuLmFjLnVrPgpEYXRlOiBTYXQsICA0
-IE9jdCAyMDA4IDExOjEzOjIxICswMjAwCgo+IFBsZWFzZSBmaW5kIGJlbG93IHRoZSByZXZpc2Vk
-IHBhdGNoIHNldCwgYWRkcmVzc2luZyBlYXJsaWVyIHJldmlldy4KCkFmdGVyIHBhdGNoIDE6Cgog
-IENDIFtNXSAgbmV0L2RjY3AvZmVhdC5vCm5ldC9kY2NwL2ZlYXQuYzoyODogd2FybmluZzog4oCY
-ZGNjcF9mZWF0X2Nsb25lX3NwX3ZhbOKAmSBkZWZpbmVkIGJ1dCBub3QgdXNlZAoKQWZ0ZXIgcGF0
-Y2ggMjoKCiAgQ0MgW01dICBuZXQvZGNjcC9mZWF0Lm8KbmV0L2RjY3AvZmVhdC5jOjExODogd2Fy
-bmluZzog4oCYZGNjcF9mZWF0X2Nsb25lX2VudHJ54oCZIGRlZmluZWQgYnV0IG5vdCB1c2VkCm5l
-dC9kY2NwL2ZlYXQuYzoxMzk6IHdhcm5pbmc6IOKAmGRjY3BfZmVhdF9lbnRyeV9kZXN0cnVjdG9y
-4oCZIGRlZmluZWQgYnV0IG5vdCB1c2VkCgpBZnRlciBwYXRjaCAzOgoKICBDQyBbTV0gIG5ldC9k
-Y2NwL2ZlYXQubwpuZXQvZGNjcC9mZWF0LmM6MTE4OiB3YXJuaW5nOiDigJhkY2NwX2ZlYXRfY2xv
-bmVfZW50cnnigJkgZGVmaW5lZCBidXQgbm90IHVzZWQKbmV0L2RjY3AvZmVhdC5jOjE1Nzogd2Fy
-bmluZzog4oCYZGNjcF9mZWF0X2xpc3RfbG9va3Vw4oCZIGRlZmluZWQgYnV0IG5vdCB1c2VkCm5l
-dC9kY2NwL2ZlYXQuYzoyMDg6IHdhcm5pbmc6IOKAmGRjY3BfZmVhdF9wdXNoX2NoYW5nZeKAmSBk
-ZWZpbmVkIGJ1dCBub3QgdXNlZApuZXQvZGNjcC9mZWF0LmM6MjU1OiB3YXJuaW5nOiDigJhkY2Nw
-X3B1c2hfZW1wdHlfY29uZmlybeKAmSBkZWZpbmVkIGJ1dCBub3QgdXNlZAoKQWZ0ZXIgcGF0Y2gg
-NDoKCiAgQ0MgW01dICBuZXQvZGNjcC9mZWF0Lm8KbmV0L2RjY3AvZmVhdC5jOjE1Nzogd2Fybmlu
-Zzog4oCYZGNjcF9mZWF0X2xpc3RfbG9va3Vw4oCZIGRlZmluZWQgYnV0IG5vdCB1c2VkCm5ldC9k
-Y2NwL2ZlYXQuYzoyMDg6IHdhcm5pbmc6IOKAmGRjY3BfZmVhdF9wdXNoX2NoYW5nZeKAmSBkZWZp
-bmVkIGJ1dCBub3QgdXNlZApuZXQvZGNjcC9mZWF0LmM6MjU1OiB3YXJuaW5nOiDigJhkY2NwX3B1
-c2hfZW1wdHlfY29uZmlybeKAmSBkZWZpbmVkIGJ1dCBub3QgdXNlZAoKQW5kIHBhdGNoIDUgbWFr
-ZXMgbm8gbW9kaWZpY2F0aW9ucyB0byBmZWF0LmMgc28gdGhpbmdzIGRvbid0IGltcHJvdmUuCgpU
-aGlzIGNhbid0IGhhcHBlbi4KCllvdSBoYXZlIHRvIHNwbGl0IHVwIHlvdXIgcGF0Y2hlcyBtb3Jl
-IGludGVsbGlnZW50bHksIHN1Y2ggdGhhdCB0aGV5CmFyZSBmdWxseSBiaXNlY3RhYmxlIGFuZCBh
-dCBlYWNoIHBhdGNoIHBvaW50IHRoZXJlIGFyZSBubyBuZXcgd2FybmluZ3MKb3Iga25vd24gYnVn
-cyBhZGRlZC4K//Tounsubscribefromthislisv/sendthelinf/unsubscribedccr/inthebod
-yofamessagetomajordomo/vger/kernel/orgMoremajordomoinfoathttp///vger/kernen/
-org/majordomo/info/hCg==
+| You have to split up your patches more intelligently, such that they
+| are fully bisectable and at each patch point there are no new warnings
+| or known bugs added.
+| 
+OK will do. I understand that this means resubmitting the full set.
