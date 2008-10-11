@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 04 Oct 2008 09:13:26 +0000
+Date: Sat, 11 Oct 2008 07:32:00 +0000
 Subject: [PATCH 5/5] dccp: Cleanup routines for feature negotiation
-Message-Id: <1223111606-5308-6-git-send-email-gerrit@erg.abdn.ac.uk>
+Message-Id: <20081011073200.GF9205@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1222068117-13401-6-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1222068117-13401-6-git-send-email-gerrit@erg.abdn.ac.uk>
@@ -17,23 +17,11 @@ in one instance.
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/dccp.h  |    2 ++
  net/dccp/ipv4.c  |    1 +
  net/dccp/ipv6.c  |    1 +
  net/dccp/proto.c |    2 +-
- 4 files changed, 5 insertions(+), 1 deletions(-)
+ 3 files changed, 3 insertions(+), 1 deletions(-)
 
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -442,6 +442,8 @@ static inline int dccp_ack_pending(const struct sock *sk)
- 	       inet_csk_ack_scheduled(sk);
- }
- 
-+extern void dccp_feat_list_purge(struct list_head *fn_list);
-+
- extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
- extern int dccp_insert_options_rsk(struct dccp_request_sock*, struct sk_buff*);
- extern int dccp_insert_option_elapsed_time(struct sock *sk,
 --- a/net/dccp/ipv4.c
 +++ b/net/dccp/ipv4.c
 @@ -545,6 +545,7 @@ out:
@@ -65,3 +53,4 @@ Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
  }
  
  EXPORT_SYMBOL_GPL(dccp_destroy_sock);
+
