@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 04 Oct 2008 09:13:22 +0000
+Date: Sat, 11 Oct 2008 07:31:20 +0000
 Subject: [PATCH 1/5] dccp: Basic data structure for feature negotiation
-Message-Id: <1223111606-5308-2-git-send-email-gerrit@erg.abdn.ac.uk>
+Message-Id: <20081011073120.GB9205@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1222068117-13401-2-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1222068117-13401-2-git-send-email-gerrit@erg.abdn.ac.uk>
@@ -39,8 +39,7 @@ Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
  net/dccp/feat.h |   61 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- net/dccp/feat.c |   14 ++++++++++++
- 2 files changed, 75 insertions(+), 0 deletions(-)
+ 1 files changed, 61 insertions(+), 0 deletions(-)
 
 --- a/net/dccp/feat.h
 +++ b/net/dccp/feat.h
@@ -112,26 +111,4 @@ Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
  #ifdef CONFIG_IP_DCCP_DEBUG
  extern const char *dccp_feat_typename(const u8 type);
  extern const char *dccp_feat_name(const u8 feat);
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -23,6 +23,20 @@
- 
- #define DCCP_FEAT_SP_NOAGREE (-123)
- 
-+/* copy constructor, fval must not already contain allocated memory */
-+static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
-+{
-+	fval->sp.len = len;
-+	if (fval->sp.len > 0) {
-+		fval->sp.vec = kmemdup(val, len, gfp_any());
-+		if (fval->sp.vec = NULL) {
-+			fval->sp.len = 0;
-+			return -ENOBUFS;
-+		}
-+	}
-+	return 0;
-+}
-+
- int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
- 		     u8 *val, u8 len, gfp_t gfp)
- {
+
