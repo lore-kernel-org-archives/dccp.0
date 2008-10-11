@@ -1,7 +1,7 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Fri, 03 Oct 2008 14:18:42 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 11 Oct 2008 07:35:33 +0000
 Subject: Re: Protocol not attached
-Message-Id: <20081003141842.GA11242@ghostprotocols.net>
+Message-Id: <20081011073533.GA9480@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570809291133k3f5841b1qde962bd3b4882439@mail.gmail.com>
 In-Reply-To: <5bc4c4570809291133k3f5841b1qde962bd3b4882439@mail.gmail.com>
@@ -10,28 +10,15 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Forwarded to leandro/mailing list.
-
-Em Fri, Oct 03, 2008 at 03:01:18PM +0100, gerrit@erg.abdn.ac.uk escreveu:
-> >> # modprobe -l
-> >> /lib/modules/2.6.27-rc4-44301-g8269be1/kernel/net/dccp/ccids/dccp_ccid2.ko
-> >> /lib/modules/2.6.27-rc4-44301-g8269be1/kernel/net/dccp/ccids/dccp_ccid3.ko
-> 
-> <snip>
-> 
-> >> The module did not start in the boot (expected!). I then ran
-> >>
-> <snip>
-> 
-> > Go ahead and load it manually, to check if the problem goes away when
-> > dccp_ccid2 is loaded.
-> >
-> > If it is, its narrowed down to the autoloading of CCID modules.
-> >
-> Yes can you please confirm if that is the case.
-> 
-> I wonder if this can be influenced by a configuration setting. I tried
-> the same, with -rc7 and -rc8, on a Sempron 3700 64 bit and a Dual Core,
-> worked without problem.
-
-- Arnaldo
+Leandro -
+| # lsmod
+| Module                  Size  Used by
+| dccp_tfrc_lib          17868  0
+| dccp_ipv6              14916  2
+| dccp_ipv4              14596  3 dccp_ipv6
+| dccp                   58176  2 dccp_ipv6,dccp_ipv4
+| 
+| DCCP did not load the dccp_ccid2 module. Is this the problem?
+| 
+are there any news regarding this issue? If there is a problem I would
+like to address it since I am submitting this patch set.
