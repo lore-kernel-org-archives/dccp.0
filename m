@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 04 Oct 2008 09:13:23 +0000
-Subject: [PATCH 2/5] dccp: Implement lookup table for feature-negotiation information
-Message-Id: <1223111606-5308-3-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sat, 11 Oct 2008 07:31:30 +0000
+Subject: [PATCH 2/5] dccp: Implement lookup table for feature-negotiation
+Message-Id: <20081011073130.GC9205@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1222068117-13401-3-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1222068117-13401-3-git-send-email-gerrit@erg.abdn.ac.uk>
@@ -18,9 +18,9 @@ Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 ---
- include/linux/dccp.h |    9 ++--
- net/dccp/feat.c      |  108 ++++++++++++++++++++++++++++++++++++++++++++++++++
- 2 files changed, 113 insertions(+), 4 deletions(-)
+ include/linux/dccp.h |    9 +++++----
+ net/dccp/feat.c      |   39 +++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 44 insertions(+), 4 deletions(-)
 
 --- a/include/linux/dccp.h
 +++ b/include/linux/dccp.h
@@ -51,7 +51,7 @@ Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
  
 --- a/net/dccp/feat.c
 +++ b/net/dccp/feat.c
-@@ -23,6 +23,73 @@
+@@ -23,6 +23,43 @@
  
  #define DCCP_FEAT_SP_NOAGREE (-123)
  
@@ -92,86 +92,10 @@ Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 +};
 +#define DCCP_FEAT_SUPPORTED_MAX		ARRAY_SIZE(dccp_feat_table)
 +
-+/**
-+ * dccp_feat_index  -  Hash function to map feature number into array position
-+ * Returns consecutive array index or -1 if the feature is not understood.
-+ */
-+static int dccp_feat_index(u8 feat_num)
-+{
-+	/* The first 9 entries are occupied by the types from RFC 4340, 6.4 */
-+	if (feat_num > DCCPF_RESERVED && feat_num <= DCCPF_DATA_CHECKSUM)
-+		return feat_num - 1;
-+
-+	/*
-+	 * Other features: add cases for new feature types here after adding
-+	 * them to the above table.
-+	 */
-+	switch (feat_num) {
-+	case DCCPF_SEND_LEV_RATE:
-+			return DCCP_FEAT_SUPPORTED_MAX - 1;
-+	}
-+	return -1;
-+}
-+
-+static u8 dccp_feat_type(u8 feat_num)
-+{
-+	int idx = dccp_feat_index(feat_num);
-+
-+	if (idx < 0)
-+		return FEAT_UNKNOWN;
-+	return dccp_feat_table[idx].reconciliation;
-+}
-+
- /* copy constructor, fval must not already contain allocated memory */
- static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
- {
-@@ -37,6 +104,45 @@ static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
- 	return 0;
- }
- 
-+static void dccp_feat_val_destructor(u8 feat_num, dccp_feat_val *val)
-+{
-+	if (unlikely(val = NULL))
-+		return;
-+	if (dccp_feat_type(feat_num) = FEAT_SP)
-+		kfree(val->sp.vec);
-+	memset(val, 0, sizeof(*val));
-+}
-+
-+static struct dccp_feat_entry *
-+	      dccp_feat_clone_entry(struct dccp_feat_entry const *original)
-+{
-+	struct dccp_feat_entry *new;
-+	u8 type = dccp_feat_type(original->feat_num);
-+
-+	if (type = FEAT_UNKNOWN)
-+		return NULL;
-+
-+	new = kmemdup(original, sizeof(struct dccp_feat_entry), gfp_any());
-+	if (new = NULL)
-+		return NULL;
-+
-+	if (type = FEAT_SP && dccp_feat_clone_sp_val(&new->val,
-+						      original->val.sp.vec,
-+						      original->val.sp.len)) {
-+		kfree(new);
-+		return NULL;
-+	}
-+	return new;
-+}
-+
-+static void dccp_feat_entry_destructor(struct dccp_feat_entry *entry)
-+{
-+	if (entry != NULL) {
-+		dccp_feat_val_destructor(entry->feat_num, &entry->val);
-+		kfree(entry);
-+	}
-+}
-+
  int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
  		     u8 *val, u8 len, gfp_t gfp)
  {
-@@ -653,6 +759,8 @@ const char *dccp_feat_name(const u8 feat)
+@@ -639,6 +676,8 @@ const char *dccp_feat_name(const u8 feat)
  	if (feat > DCCPF_DATA_CHECKSUM && feat < DCCPF_MIN_CCID_SPECIFIC)
  		return feature_names[DCCPF_RESERVED];
  
@@ -180,3 +104,4 @@ Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
  	if (feat >= DCCPF_MIN_CCID_SPECIFIC)
  		return "CCID-specific";
  
+
