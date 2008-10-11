@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 04 Oct 2008 09:13:24 +0000
+Date: Sat, 11 Oct 2008 07:31:46 +0000
 Subject: [PATCH 3/5] dccp: List management for new feature negotiation
-Message-Id: <1223111606-5308-4-git-send-email-gerrit@erg.abdn.ac.uk>
+Message-Id: <20081011073146.GD9205@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1222068117-13401-4-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1222068117-13401-4-git-send-email-gerrit@erg.abdn.ac.uk>
@@ -10,24 +10,82 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This adds list fields and list management functions for the new feature
-negotiation implementation. The new code is kept in parallel to the old
-code, until removed at the end of the patch set.
+This adds list initial fields and list management functions for the new
+feature negotiation implementation.
 
-Thanks to Arnaldo for suggestions to improve the code.
+Thanks to Arnaldo for suggestions and improvements.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/feat.c |  129 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 129 insertions(+), 0 deletions(-)
+ net/dccp/dccp.h |    2 +
+ net/dccp/feat.c |   73 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 75 insertions(+), 0 deletions(-)
 
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -143,6 +143,135 @@ static void dccp_feat_entry_destructor(struct dccp_feat_entry *entry)
- 	}
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -441,6 +441,8 @@ static inline int dccp_ack_pending(const struct sock *sk)
+ 	       inet_csk_ack_scheduled(sk);
  }
  
++extern void dccp_feat_list_purge(struct list_head *fn_list);
++
+ extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
+ extern int dccp_insert_options_rsk(struct dccp_request_sock*, struct sk_buff*);
+ extern int dccp_insert_option_elapsed_time(struct sock *sk,
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -60,6 +60,79 @@ static const struct {
+ };
+ #define DCCP_FEAT_SUPPORTED_MAX		ARRAY_SIZE(dccp_feat_table)
+ 
++/**
++ * dccp_feat_index  -  Hash function to map feature number into array position
++ * Returns consecutive array index or -1 if the feature is not understood.
++ */
++static int dccp_feat_index(u8 feat_num)
++{
++	/* The first 9 entries are occupied by the types from RFC 4340, 6.4 */
++	if (feat_num > DCCPF_RESERVED && feat_num <= DCCPF_DATA_CHECKSUM)
++		return feat_num - 1;
++
++	/*
++	 * Other features: add cases for new feature types here after adding
++	 * them to the above table.
++	 */
++	switch (feat_num) {
++	case DCCPF_SEND_LEV_RATE:
++			return DCCP_FEAT_SUPPORTED_MAX - 1;
++	}
++	return -1;
++}
++
++static u8 dccp_feat_type(u8 feat_num)
++{
++	int idx = dccp_feat_index(feat_num);
++
++	if (idx < 0)
++		return FEAT_UNKNOWN;
++	return dccp_feat_table[idx].reconciliation;
++}
++
++static void dccp_feat_val_destructor(u8 feat_num, dccp_feat_val *val)
++{
++	if (unlikely(val = NULL))
++		return;
++	if (dccp_feat_type(feat_num) = FEAT_SP)
++		kfree(val->sp.vec);
++	memset(val, 0, sizeof(*val));
++}
++
++static void dccp_feat_entry_destructor(struct dccp_feat_entry *entry)
++{
++	if (entry != NULL) {
++		dccp_feat_val_destructor(entry->feat_num, &entry->val);
++		kfree(entry);
++	}
++}
++
 +/*
 + * List management functions
 + *
@@ -37,109 +95,6 @@ Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 + * - SP values are always freshly allocated
 + * - list is sorted in increasing order of feature number (faster lookup)
 + */
-+static struct dccp_feat_entry *dccp_feat_list_lookup(struct list_head *fn_list,
-+						     u8 feat_num, bool is_local)
-+{
-+	struct dccp_feat_entry *entry;
-+
-+	list_for_each_entry(entry, fn_list, node)
-+		if (entry->feat_num = feat_num && entry->is_local = is_local)
-+			return entry;
-+		else if (entry->feat_num > feat_num)
-+			break;
-+	return NULL;
-+}
-+
-+/**
-+ * dccp_feat_entry_new  -  Central list update routine (called by all others)
-+ * @head:  list to add to
-+ * @feat:  feature number
-+ * @local: whether the local (1) or remote feature with number @feat is meant
-+ * This is the only constructor and serves to ensure the above invariants.
-+ */
-+static struct dccp_feat_entry *
-+	      dccp_feat_entry_new(struct list_head *head, u8 feat, bool local)
-+{
-+	struct dccp_feat_entry *entry;
-+
-+	list_for_each_entry(entry, head, node)
-+		if (entry->feat_num = feat && entry->is_local = local) {
-+			dccp_feat_val_destructor(entry->feat_num, &entry->val);
-+			return entry;
-+		} else if (entry->feat_num > feat) {
-+			head = &entry->node;
-+			break;
-+		}
-+
-+	entry = kmalloc(sizeof(*entry), gfp_any());
-+	if (entry != NULL) {
-+		entry->feat_num = feat;
-+		entry->is_local = local;
-+		list_add_tail(&entry->node, head);
-+	}
-+	return entry;
-+}
-+
-+/**
-+ * dccp_feat_push_change  -  Add/overwrite a Change option in the list
-+ * @fn_list: feature-negotiation list to update
-+ * @feat: one of %dccp_feature_numbers
-+ * @local: whether local (1) or remote (0) @feat_num is meant
-+ * @needs_mandatory: whether to use Mandatory feature negotiation options
-+ * @fval: pointer to NN/SP value to be inserted (will be copied)
-+ */
-+static int dccp_feat_push_change(struct list_head *fn_list, u8 feat, u8 local,
-+				 u8 mandatory, dccp_feat_val *fval)
-+{
-+	struct dccp_feat_entry *new = dccp_feat_entry_new(fn_list, feat, local);
-+
-+	if (new = NULL)
-+		return -ENOMEM;
-+
-+	new->feat_num	     = feat;
-+	new->is_local	     = local;
-+	new->state	     = FEAT_INITIALISING;
-+	new->needs_confirm   = 0;
-+	new->empty_confirm   = 0;
-+	new->val	     = *fval;
-+	new->needs_mandatory = mandatory;
-+
-+	return 0;
-+}
-+
-+/**
-+ * dccp_feat_push_confirm  -  Add a Confirm entry to the FN list
-+ * @fn_list: feature-negotiation list to add to
-+ * @feat: one of %dccp_feature_numbers
-+ * @local: whether local (1) or remote (0) @feat_num is being confirmed
-+ * @fval: pointer to NN/SP value to be inserted or NULL
-+ * Returns 0 on success, a Reset code for further processing otherwise.
-+ */
-+static int dccp_feat_push_confirm(struct list_head *fn_list, u8 feat, u8 local,
-+				  dccp_feat_val *fval)
-+{
-+	struct dccp_feat_entry *new = dccp_feat_entry_new(fn_list, feat, local);
-+
-+	if (new = NULL)
-+		return DCCP_RESET_CODE_TOO_BUSY;
-+
-+	new->feat_num	     = feat;
-+	new->is_local	     = local;
-+	new->state	     = FEAT_STABLE;	/* transition in 6.6.2 */
-+	new->needs_confirm   = 1;
-+	new->empty_confirm   = (fval = NULL);
-+	new->val.nn	     = 0;		/* zeroes the whole structure */
-+	if (!new->empty_confirm)
-+		new->val     = *fval;
-+	new->needs_mandatory = 0;
-+
-+	return 0;
-+}
-+
-+static int dccp_push_empty_confirm(struct list_head *fn_list, u8 feat, u8 local)
-+{
-+	return dccp_feat_push_confirm(fn_list, feat, local, NULL);
-+}
 +
 +static inline void dccp_feat_list_pop(struct dccp_feat_entry *entry)
 +{
@@ -160,3 +115,4 @@ Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
  int dccp_feat_change(struct dccp_minisock *dmsk, u8 type, u8 feature,
  		     u8 *val, u8 len, gfp_t gfp)
  {
+
