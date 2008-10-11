@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 04 Oct 2008 09:13:25 +0000
+Date: Sat, 11 Oct 2008 07:31:54 +0000
 Subject: [PATCH 4/5] dccp: Per-socket initialisation of feature negotiation
-Message-Id: <1223111606-5308-5-git-send-email-gerrit@erg.abdn.ac.uk>
+Message-Id: <20081011073154.GE9205@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1222068117-13401-5-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1222068117-13401-5-git-send-email-gerrit@erg.abdn.ac.uk>
@@ -20,16 +20,16 @@ Thanks to Wei Yongjun for help with the IPv6 side of this patch.
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- include/linux/dccp.h |    4 ++++
- net/dccp/dccp.h      |    3 ++-
- net/dccp/feat.c      |   19 +++++++++++++++++++
+ include/linux/dccp.h |    4 +++
+ net/dccp/dccp.h      |    3 +-
+ net/dccp/feat.c      |   55 ++++++++++++++++++++++++++++++++++++++++++++++++++
  net/dccp/feat.h      |    1 +
- net/dccp/input.c     |    2 --
- net/dccp/ipv4.c      |    3 ++-
- net/dccp/ipv6.c      |    3 ++-
- net/dccp/minisocks.c |    7 ++++++-
+ net/dccp/input.c     |    2 -
+ net/dccp/ipv4.c      |    3 +-
+ net/dccp/ipv6.c      |    3 +-
+ net/dccp/minisocks.c |    7 +++++-
  net/dccp/proto.c     |    1 +
- 9 files changed, 37 insertions(+), 6 deletions(-)
+ 9 files changed, 73 insertions(+), 6 deletions(-)
 
 --- a/include/linux/dccp.h
 +++ b/include/linux/dccp.h
@@ -79,7 +79,57 @@ Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
  
 --- a/net/dccp/feat.c
 +++ b/net/dccp/feat.c
-@@ -272,6 +272,25 @@ void dccp_feat_list_purge(struct list_head *fn_list)
+@@ -90,6 +90,20 @@ static u8 dccp_feat_type(u8 feat_num)
+ 	return dccp_feat_table[idx].reconciliation;
+ }
+ 
++/* copy constructor, fval must not already contain allocated memory */
++static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
++{
++	fval->sp.len = len;
++	if (fval->sp.len > 0) {
++		fval->sp.vec = kmemdup(val, len, gfp_any());
++		if (fval->sp.vec = NULL) {
++			fval->sp.len = 0;
++			return -ENOBUFS;
++		}
++	}
++	return 0;
++}
++
+ static void dccp_feat_val_destructor(u8 feat_num, dccp_feat_val *val)
+ {
+ 	if (unlikely(val = NULL))
+@@ -99,6 +113,28 @@ static void dccp_feat_val_destructor(u8 feat_num, dccp_feat_val *val)
+ 	memset(val, 0, sizeof(*val));
+ }
+ 
++static struct dccp_feat_entry *
++	      dccp_feat_clone_entry(struct dccp_feat_entry const *original)
++{
++	struct dccp_feat_entry *new;
++	u8 type = dccp_feat_type(original->feat_num);
++
++	if (type = FEAT_UNKNOWN)
++		return NULL;
++
++	new = kmemdup(original, sizeof(struct dccp_feat_entry), gfp_any());
++	if (new = NULL)
++		return NULL;
++
++	if (type = FEAT_SP && dccp_feat_clone_sp_val(&new->val,
++						      original->val.sp.vec,
++						      original->val.sp.len)) {
++		kfree(new);
++		return NULL;
++	}
++	return new;
++}
++
+ static void dccp_feat_entry_destructor(struct dccp_feat_entry *entry)
+ {
+ 	if (entry != NULL) {
+@@ -133,6 +169,25 @@ void dccp_feat_list_purge(struct list_head *fn_list)
  }
  EXPORT_SYMBOL_GPL(dccp_feat_list_purge);
  
@@ -190,3 +240,4 @@ Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
  	/*
  	 * FIXME: We're hardcoding the CCID, and doing this at this point makes
  	 * the listening (master) sock get CCID control blocks, which is not
+
