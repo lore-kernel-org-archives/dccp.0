@@ -1,47 +1,45 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 18 Oct 2008 11:06:28 +0000
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Mon, 20 Oct 2008 13:13:55 +0000
 Subject: Re: Protocol not attached
-Message-Id: <20081018110628.GA3636@gerrit.erg.abdn.ac.uk>
+Message-Id: <20081020131355.GK19353@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570809291133k3f5841b1qde962bd3b4882439@mail.gmail.com>
 In-Reply-To: <5bc4c4570809291133k3f5841b1qde962bd3b4882439@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-fCA+IHwgUGxlYXNlIGxldCBtZSBrbm93IGluIGNhc2UgdGhhdCB5b3Ugd2FudCBtZSB0byBzZW5k
-IHlvdSB0aGUgY29uZmlncyBhbmQgc3RyYWNlIGxvZyBmaWxlcy4KfCA+IFllcywgcGxlYXNlIGRv
-IC0tIG9uIHRoZSBjb21wdXRlcnMgSSBoYXZlIHRyaWVkICgzMi82NCBiaXQpIGl0IHdvcmtzLgp8
-ID4KfCA+IEdlcnJpdAp8ID4KfCAKfCBIZWxsbyBHZXJyaXQsCnwgICBoZXJlIHRoZXkgYXJlIQpU
-aGFua3MgdmVyeSBtdWNoLiAKCkluIHRoZSBlcnJvciBsb2cgdGhlIEVVTkFUQ0ggYXBwZWFycyB3
-aXRoaW4gdGhlIGNhbGwgdG8gc29ja2V0LCBiZWZvcmUgYW55Cm90aGVyIGNhbGwgKGNvbm5lY3Qs
-IGxpc3RlbikuIFRoaXMgbWVhbnMgdGhhdCBEQ0NQIGlzIG5vdCBhYmxlIHRvIGxvYWQgdGhlCkND
-SUQgbW9kdWxlcyBhdCBpbml0aWFsaXNhdGlvbiB0aW1lLgoKSSBoYXZlIGNvbXBhcmVkIHRoZSB0
-d28gLmNvbmZpZyBmaWxlcywgYmVsb3cgYXJlIGEgZmV3IGlkZWFzLiBJIHRlc3RlZApieSBhZGRp
-bmcvZGlzYWJsaW5nIGNvbmZpZ3VyYXRpb24gb3B0aW9ucywgdGhlbiB1bmxvYWRpbmcgYWxsIG1v
-ZHVsZXMgYW5kCnN0YXJ0aW5nICdpcGRmIC1zZCcuIElmIHRoaXMgbG9hZHMgdGhlIENDSUQgbW9k
-dWxlcywgdGhlbiBldmVyeXRoaW5nIGlzIG9rLgoKIDEuIHRoZSBQZW50aXVtNCBoYXMgbm8gQ09O
-RklHX0hJQkVSTkFUSU9OIHNldCwgd2hpbGUgdGhlIEs4ICh3aGljaCBoYXMKICAgIHRoZSBtb2R1
-bGUgbG9hZCBlcnJvcikgaGFzIGl0IHNldDsgYWRkaW5nIHRoaXMgZmVhdHVyZSBkaWQgbm90IGNh
-dXNlCiAgICBhbiBlcnJvciB0byBhcHBlYXI7CiAyLiB0aGUgSzggaGFzIG5vIElQdjYgc3VwcG9y
-dCBlbmFibGVkIC0tIEkgYnVpbHQgYSBrZXJuZWwgd2l0aG91dCBJUHY2CiAgICBhbmQgaXQgc3Rp
-bGwgd29ya2VkIG9rOwogMy4gY291bGQgaXQgaGF2ZSB0byBkbyB3aXRoIHNlY3VyaXR5ID86LSB0
-aGUgUGVudGl1bSAod2hpY2ggd29ya3MpCiAgICBoYXMgbm8gc2VjdXJpdHkgZW5hYmxlZCwgd2hp
-bGUgdGhlIEs4ICh3aGljaCBkb2Vzbid0IHdvcmspIGhhcwogICAgQ09ORklHX1NFQ1VSSVRZPXk7
-CiA0LiBhIHRoaW5nIHdoaWNoIEkgY291bGQgbm90IHRlc3Qgd2FzIENPTkZJR19VU0JfTkVULCB3
-aGljaCB3YXMgZW5hYmxlZAogICAgb24gdGhlIEs4LgoKVW5mb3J0dW5hdGVseSwgb24gdGhlIENl
-bnRyaW5vLUR1byBJIGNvdWxkIG5vdCBwcm92b2tlIGEgZmF1bHR5IGJlaGF2aW91ci4KClNpbmNl
-IDIuNi4yNyBqdXN0IGNhbWUgb3V0LCB3b3VsZCBpdCBiZSBhIGxvdCBvZiBlZmZvcnQgdG8gdHJ5
-IGFnYWluCndpdGggdGhlIG1vcmUgcmVjZW50IGtlcm5lbCBhbmQgc2VlIGlmIHRoZSBwcm9ibGVt
-IHBlcnNpc3RzPwoKSW5jaWRlbnRhbGx5IHRoZSBuZXcgbmV0ZGV2LTIuNiBoYXMgYSBjb21taXQg
-Y2FsbGVkICJSZW1vdmUgQ09ORklHX0tNT0QgZnJvbQpuZXQvICh0b3dhcmRzIHJlbW92aW5nIEtN
-T0QgZW50aXJlbHkpIiwgc28gcGVyaGFwcyB0aGVyZSBpcyBzb21ldGhpbmcgaW4KcHJvZ3Jlc3Mu
-CgpJIGhhdmUgdXBsb2FkZWQgdGhlIG5ldyB0ZXN0IHRyZWUsIGFmdGVyIGNoYW5naW5nIHRoZSBw
-YXRjaCAiQXV0by1sb2FkCih3aGVuIHN1cHBvcnRlZCkgQ0NJRCBwbHVnaW5zIGZvciBuZWdvdGlh
-dGlvbiIKaHR0cDovL2VkZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9jZ2ktYmluL2dpdHdlYi5jZ2k/
-cNxjcF9leHAuZ2l0O2E9Y29tbWl0ZGlmZjtoVmJjZmM3NWI4NzRkMjcwMzljMWEyNjA1NTY2OWRk
-OGM2OWM1N2I3CgpHZXJyaXQKLS0KVG8gdW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxpc3Q6IHNlbmQg
-dGhlIGxpbmUgInVuc3Vic2NyaWJlIGRjY3AiIGluCnRoZSBib2R5IG9mIGEgbWVzc2FnZSB0byBt
-YWpvcmRvbW9Admdlci5rZXJuZWwub3JnCk1vcmUgbWFqb3Jkb21vIGluZm8gYXQgIGh0dHA6Ly92
-Z2VyLmtlcm5lbC5vcmcvbWFqb3Jkb21vLWluZm8uaHRtbA==
+Em Sat, Oct 18, 2008 at 01:06:28PM +0200, Gerrit Renker escreveu:
+
+<SNIP>
+
+> Incidentally the new netdev-2.6 has a commit called "Remove CONFIG_KMOD from
+> net/ (towards removing KMOD entirely)", so perhaps there is something in
+> progress.
+
+Is CONFIG_MODULES present in the config file that produces a kernel that
+has the problem?
+
+I guess not, Leandro, can you please add it manually, then do a make
+oldconfig, check that it is still there, then build the kernel?
+
+This is the part of the patch Gerrit mentioned
+(95a5afca4a8d2e1cb77e1d4bc6ff9f718dc32f7a) that could be hitting you.
+
+
+diff --git a/net/dccp/ccid.c b/net/dccp/ccid.c
+index 4809753..8fe931a 100644
+--- a/net/dccp/ccid.c
++++ b/net/dccp/ccid.c
+@@ -154,7 +154,7 @@ struct ccid *ccid_new(unsigned char id, struct sock *sk, int rx, gfp_t gfp)
+        struct ccid *ccid = NULL;
+ 
+        ccids_read_lock();
+-#ifdef CONFIG_KMOD
++#ifdef CONFIG_MODULES
+        if (ccids[id] = NULL) {
+                /* We only try to load if in process context */
+                ccids_read_unlock();
+
+- Arnaldo
