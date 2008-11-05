@@ -1,41 +1,57 @@
-From: David Miller <davem@davemloft.net>
-Date: Mon, 17 Nov 2008 06:56:36 +0000
-Subject: Re: [PATCH 4/5] dccp: Deprecate Ack Ratio sysctl
-Message-Id: <20081116.225636.32402768.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 05 Nov 2008 06:51:46 +0000
+Subject: v3 [Re-Send] [PATCH 0/5] dccp: Feature negotiation, Part I -
+Message-Id: <20081105065146.GB3482@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1226751079-15019-5-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1226751079-15019-5-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 15 Nov 2008 13:11:18 +0100
-
-> This patch deprecates the Ack Ratio sysctl, since
->  * Ack Ratio is entirely ignored by CCID-3 and CCID-4,
->  * Ack Ratio currently doesn't work in CCID-2 (i.e. is always set to 1);
->  * even if it would work in CCID-2, there is no point for a user to change it:
->    - Ack Ratio is constrained by cwnd (RFC 4341, 6.1.2),
->    - if Ack Ratio > cwnd, the system resorts to spurious RTO timeouts
->      (since waiting for Acks which will never arrive in this window),
->    - cwnd is not a user-configurable value.
-> 
-> The only reasonable place for Ack Ratio is to print it for debugging. It is
-> planned to do this later on, as part of e.g. dccp_probe.
-> 
-> With this patch Ack Ratio is now under full control of feature negotiation:
->  * Ack Ratio is resolved as a dependency of the selected CCID;
->  * if the chosen CCID supports it (i.e. CCID = CCID-2), Ack Ratio is set to
->    the default of 2, following RFC 4340, 11.3 - "New connections start with Ack
->    Ratio 2 for both endpoints";
->  * what happens then is part of another patch set, since it concerns the
->    dynamic update of Ack Ratio while the connection is in full flight.
-> 
-> Thanks to Tomasz Grobelny for discussion leading up to this patch.
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
-
-Applied.
+SGkgRGF2ZSwKCmFzIHJlcXVlc3RlZCBjaXJjYSB0d28gd2Vla3MgYWdvLCBJIGFtIG5vdyByZXNl
+bmRpbmcgdGhlIGZpcnN0IGNodW5rIG9mIHRoZQpmZWF0dXJlLW5lZ290aWF0aW9uIHBhdGNoIHNl
+dC4KClRoZXNlIHBhdGNoZXMgYXJlIGlkZW50aWNhbCB0byB0aGUgZWFybGllciBzdWJtaXNzaW9u
+LgoKQ2FuIHlvdSBwbGVhc2UgbGV0IG1lIGtub3cgd2hlbiBpdCB3b3VsZCBiZSBva2F5IHRvIHN1
+Ym1pdCB0aGUgbmV4dAppbnN0YWxtZW50IG9mIHRoaXMgc2VyaWVzLgoKR2Vycml0CgoKQ2hhbmdl
+cyByZWxhdGl2ZSB0byByZXZpc2lvbiAyCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQog
+KiByZW9yZGVyZWQgcGF0Y2hlcyB0byBlbGltaW5hdGUgYnVpbGQgd2FybmluZ3MgKHJlZHVjaW5n
+IHBhdGNoIHNpemVzKTsgCiAqIGluIGFkZGl0aW9uLCBzcGFyc2UtYnVpbGQgd2FybmluZ3Mgd2Vy
+ZSBhbHNvIGVsaW1pbmF0ZWQ7CiAqIGFsbCBwYXRjaGVzIGFnYWluIHZlcmlmaWVkIHRvIGNvbXBp
+bGUgd2l0aG91dCBidWlsZCBlcnJvcnMuCgoKQ2hhbmdlcyByZWxhdGl2ZSB0byByZXZpc2lvbiAx
+Ci0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQogKiBbMS81XSBzdHJlYW1saW5lZCBmaWVs
+ZCBsYXlvdXQgcmVkdWNpbmcgdGhlIHNpemUgcGVyIGVhY2ggZW50cnk7CiAqIFsyLzVdIG1pZ3Jh
+dGlvbiBvZiBmdW5jdGlvbiAnZGNjcF9kZWZhdWx0X3ZhbHVlJyB0byBhIGxhdGVyIGluIHRoZSBz
+ZXQKICAgICAgICAgd2hlcmUgaXQgaXMgZmlyc3QgdXNlZC4KCgpDb21taXQgc3VtbWFyeQotLS0t
+LS0tLS0tLS0tLQpUaGlzIGlzIHRoZSBmaXJzdCBzZXQgb2YgdGhlIGZlYXR1cmUgbmVnb3RpYXRp
+b24gcGF0Y2hlcy4gVGhlc2UgcHJvdmlkZSBhIApzZWxmLWNvbnRhaW5lZCBmZWF0dXJlIG5lZ290
+aWF0aW9uIEFQSSBmb3IgdGhlIERDQ1AgcHJvdG9jb2wgKFJGQyA0MzQwLTIpLgoKVGhlIHdob2xl
+IHNldCBpcyBzdHJ1Y3R1cmVkIGludG8gMyBtYWluIGJsb2NrcyAtICgxKSBiYXNpcywgKDIpIGNv
+cmUsCigzKSBpbnRlZ3JhdGlvbiBhbmQgY2xlYW51cC4gV2l0aGluIHRoZXNlIGJsb2NrcywgdGhp
+cyBpcyB0aGUgZmlyc3QsCnNlbGYtY29udGFpbmVkLCBzZXQgYW5kIGl0cyBwdXJwb3NlIGlzIHRv
+IHByb3ZpZGUKIChhKSB0aGUgdW5kZXJseWluZyBkYXRhc3RydWN0dXJlcwogKGIpIGluaXRpYWxp
+c2F0aW9uIGFuZCBjbGVhbnVwIHJvdXRpbmVzIGZvciB0aGUgbmV3IGRhdGFzdHJ1Y3R1cmVzLgoK
+Ckxpc3Qgb2YgcGF0Y2hlcyBpbiB0aGlzIHNldDoKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0t
+LQpQYXRjaCAjMTogUHJvdmlkZXMgdGhlIGJhc2ljIGRhdGFzdHJ1Y3R1cmUgZm9yIGZlYXR1cmUg
+bmVnb3RpYXRpb24uIEl0IGdldHMgCiAgICAgICAgICBhcm91bmQgdGhlIHByb2JsZW0gdGhhdCBm
+ZWF0dXJlLW5lZ290aWF0aW9uIHZhbHVlcyBoYXZlIG5vIHVuaWZvcm0KCSAgdHlwZSAtIHRoZXkg
+Y2FuIGJlIDQ4LWJpdCBudW1iZXJzLCBzaW5nbGUgY2hhcmFjdGVycywgMi1ieXRlIGludGVnZXJz
+CgkgIG9yIGEgbGlzdCBvZiB1bnNpZ25lZCBjaGFycy4KUGF0Y2ggIzI6IFByb3ZpZGVzIGEgbG9v
+a3VwLXRhYmxlIGZvciB0aGUgZGlmZmVyZW50IG5lZ290aWFibGUgZmVhdHVyZXMuClBhdGNoICMz
+OiBBZGRzIGxpc3QgbWFuYWdlbWVudCBmb3IgdGhlIGxpc3Qga2VlcGluZyB0aGUgbmVnb3RpYXRp
+b24tb3B0aW9ucy4KUGF0Y2ggIzQ6IEluaXRpYWxpc2F0aW9uIHJvdXRpbmVzIChmb3IgcmVxdWVz
+dCBzb2NrZXRzIGFuZCBub3JtYWwgc29ja2V0cykuClBhdGNoICM1OiBBbmFsb2dvdXMgdG8gIzQs
+IHRoaXMgcHJvdmlkZXMgdGhlIGNsZWFudXAgcm91dGluZXMuCSAgCgpUaGUgc2V0IGlzIGFsc28g
+YXZhaWxhYmxlIGZvciB2aWV3aW5nIG9ubGluZSwgYmVnaW5uaW5nIGF0Cmh0dHA6Ly9lZGVuLWZl
+ZWQuZXJnLmFiZG4uYWMudWsvY2dpLWJpbi9naXR3ZWIuY2dpP3DcY3BfZXhwLmdpdDthPWNvbW1p
+dGRpZmY7aCI4ZDYxMGFiZjYxNGQ5ODFjY2VhYmFiM2MyN2MxZDM4MzdlNDNjYQoKUGF0Y2ggc3Rh
+dHM6Ci0tLS0tLS0tLS0tLQogaW5jbHVkZS9saW51eC9kY2NwLmggfCAgIDEzICsrLQogbmV0L2Rj
+Y3AvZGNjcC5oICAgICAgfCAgICA1ICsKIG5ldC9kY2NwL2ZlYXQuYyAgICAgIHwgIDE2NyArKysr
+KysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysKIG5ldC9kY2Nw
+L2ZlYXQuaCAgICAgIHwgICA2MiArKysrKysrKysrKysrKysrKysKIG5ldC9kY2NwL2lucHV0LmMg
+ICAgIHwgICAgMiAKIG5ldC9kY2NwL2lwdjQuYyAgICAgIHwgICAgNCAtCiBuZXQvZGNjcC9pcHY2
+LmMgICAgICB8ICAgIDQgLQogbmV0L2RjY3AvbWluaXNvY2tzLmMgfCAgICA3ICstCiBuZXQvZGNj
+cC9wcm90by5jICAgICB8ICAgIDMgCiA5IGZpbGVzIGNoYW5nZWQsIDI1NiBpbnNlcnRpb25zKCsp
+LCAxMSBkZWxldGlvbnMoLSkKCi0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5k
+IHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8g
+bWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8v
+dmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
