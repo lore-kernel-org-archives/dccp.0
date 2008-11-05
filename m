@@ -1,27 +1,56 @@
-From: David Miller <davem@davemloft.net>
-Date: Mon, 10 Nov 2008 21:16:03 +0000
-Subject: Re: [PATCH 2/4] dccp: Registration routines for changing feature
-Message-Id: <20081110.131603.182636098.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 05 Nov 2008 06:54:21 +0000
+Subject: [PATCH 5/5] dccp: Cleanup routines for feature negotiation
+Message-Id: <20081105065421.GG3482@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1225950014-6337-3-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1225950014-6337-3-git-send-email-gerrit@erg.abdn.ac.uk>
+References: <1222068117-13401-6-git-send-email-gerrit@erg.abdn.ac.uk>
+In-Reply-To: <1222068117-13401-6-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu,  6 Nov 2008 06:40:12 +0100
+This inserts the required de-allocation routines for memory allocated by
+feature negotiation in the socket destructors, replacing dccp_feat_clean()
+in one instance.
 
-> Two registration routines, for SP and NN features, are provided by this patch,
-> replacing a previous routine which was used for both feature types.
-> 
-> These are internal-only routines and therefore start with `__feat_register'.
-> 
-> It further exports the known limits of Sequence Window and Ack Ratio as symbolic
-> constants.
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ net/dccp/ipv4.c  |    1 +
+ net/dccp/ipv6.c  |    1 +
+ net/dccp/proto.c |    2 +-
+ 3 files changed, 3 insertions(+), 1 deletions(-)
 
-Applied.
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -545,6 +545,7 @@ out:
+ 
+ static void dccp_v4_reqsk_destructor(struct request_sock *req)
+ {
++	dccp_feat_list_purge(&dccp_rsk(req)->dreq_featneg);
+ 	kfree(inet_rsk(req)->opt);
+ }
+ 
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -302,6 +302,7 @@ done:
+ 
+ static void dccp_v6_reqsk_destructor(struct request_sock *req)
+ {
++	dccp_feat_list_purge(&dccp_rsk(req)->dreq_featneg);
+ 	if (inet6_rsk(req)->pktopts != NULL)
+ 		kfree_skb(inet6_rsk(req)->pktopts);
+ }
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -268,7 +268,7 @@ void dccp_destroy_sock(struct sock *sk)
+ 	dp->dccps_hc_rx_ccid = dp->dccps_hc_tx_ccid = NULL;
+ 
+ 	/* clean up feature negotiation state */
+-	dccp_feat_clean(dmsk);
++	dccp_feat_list_purge(&dp->dccps_featneg);
+ }
+ 
+ EXPORT_SYMBOL_GPL(dccp_destroy_sock);
+
