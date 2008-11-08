@@ -1,78 +1,66 @@
-From: "Leandro Sales" <leandroal@gmail.com>
-Date: Thu, 06 Nov 2008 22:05:29 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 08 Nov 2008 08:50:35 +0000
 Subject: Re: Protocol not attached
-Message-Id: <5bc4c4570811061405qe72e43cx861c537885804132@mail.gmail.com>
+Message-Id: <20081108085035.GA7112@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <5bc4c4570809291133k3f5841b1qde962bd3b4882439@mail.gmail.com>
 In-Reply-To: <5bc4c4570809291133k3f5841b1qde962bd3b4882439@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-On Thu, Nov 6, 2008 at 6:17 PM, Leandro Sales <leandroal@gmail.com> wrote:
-> On Thu, Nov 6, 2008 at 6:04 PM, Leandro Sales <leandroal@gmail.com> wrote:
->> On Thu, Nov 6, 2008 at 5:46 PM, Leandro Sales <leandroal@gmail.com> wrote:
->>> On Thu, Nov 6, 2008 at 3:38 PM, Arnaldo Carvalho de Melo
->>> <acme@redhat.com> wrote:
->>>> Em Thu, Nov 06, 2008 at 04:20:48PM +0100, Gerrit Renker escreveu:
->>>>> | > is there any news regarding the CCID/module loading problem on the 64
->>>>> | > bit computer with 32 bit kernel?
->>>>> | >
->>>>> <snip>
->>>>> | Hello Gerrit,
->>>>> |     yes! I think that we found the commit that inserted the problem (probably).
->>>>> |
->>>>> |     This is the list of commits, the first time that the problem
->>>>> | occurs is in "f76fd327a8b32d3ad5b51639faf6f54d18be0981". I'm sending
->>>>> | to you the tree commits before the BAD that it is working properly.
->>>>> |
->>>>> |  - BAD - Gerrit Renker f76fd327a8b32d3ad5b51639faf6f54d18be0981 dccp
->>>>> Ah that would explain it. Did you check the logs - if the not-loading
->>>>> was due to low timer resolution, then there should be a message like
->>>>> "Timer to coarse (xxx usec), need 10usec".
->>>>>
->>>>> If that is the case,
->>>>>     1. does the problem disappear when commenting out
->>>>>        'return -ESOCKTNOSUPPORT' in  ccid3_module_init() below or if
->>>>>     2. the kernel is compiled with support for high-resolution timers?
->>>>>
->>>>>
->>>>> +       if (tp.tv_sec || tp.tv_nsec > DCCP_TIME_RESOLUTION * NSEC_PER_USEC) {
->>>>> +               printk(KERN_ERR "%s: Timer too coarse (%ld usec), need %u-usec"
->>>>> +                      " resolution - check your clocksource.\n", __func__,
->>>>> +                      tp.tv_nsec/NSEC_PER_USEC, DCCP_TIME_RESOLUTION);
->>>>> +               return -ESOCKTNOSUPPORT;
->>>>> +       }
->>>>>
->>>>> Thanks a lot for following this up, this now looks a much more likely cause.
->>>>
->>>> Makes complete sense, to finish this, Leandro, can you please tell us
->>>> what is the value of CONFIG_HZ in your config?
->>>>
->>>> - Arnaldo
->>>>
->>>
->>> CONFIG_HZ_250=y
->>> CONFIG_HZ%0
->>>
->>
->> For the BAD and for last GOOD using HZ%0 I got:
->>
->> "warning: #warning Coarse CONFIG_HZ resolution -- higher value
->> recommended for TFRC."
->>
->> Leandro.
->>
->
-> BAD: Using CONFIG_HZ00 "Protocol Not attached"
-> GOOD: Using CONFIG_HZ00 "OK"
->
-
-Tests using High Resolution Timers using BAD:
-
-100hz OK
-250hz OK
-1000hz OK
-
-Leandro.
+QXJuYWxkbywgTGVhbmRybywgLQp8ID4+IEZvciB0aGUgQkFEIGFuZCBmb3IgbGFzdCBHT09EIHVz
+aW5nIEhaJTAgSSBnb3Q6CnwgPj4KfCA+PiAid2FybmluZzogI3dhcm5pbmcgQ29hcnNlIENPTkZJ
+R19IWiByZXNvbHV0aW9uIC0tIGhpZ2hlciB2YWx1ZQp8ID4+IHJlY29tbWVuZGVkIGZvciBURlJD
+LiIKfCA+Pgp8ID4+IExlYW5kcm8uCnwgPj4KfCA+CnwgPiBCQUQ6IFVzaW5nIENPTkZJR19IWhAw
+MCAiUHJvdG9jb2wgTm90IGF0dGFjaGVkIgp8ID4gR09PRDogVXNpbmcgQ09ORklHX0haEDAwICJP
+SyIKfCA+CnwgCnwgVGVzdHMgdXNpbmcgSGlnaCBSZXNvbHV0aW9uIFRpbWVycyB1c2luZyBCQUQ6
+CnwgCnwgMTAwaHogT0sKfCAyNTBoeiBPSwp8IDEwMDBoeiBPSwp8IApUaGlzIGNvbmZpcm1zIHRo
+YXQgdGhlIGNhdXNlIG9mIHRoZSBwcm9ibGVtIHdhcyBpbiBub3QgZW5hYmxpbmcKSGlnaC1SZXNv
+bHV0aW9uIHRpbWVycy4gVGhlcmUgd2lsbCB0aGVuIGJlIHRoZSB3YXJuaW5nIG1lc3NhZ2UgaW4K
+dGhlIHN5c3RlbSBsb2dzIHNheWluZyB0aGF0IHRoZSB0aW1lciByZXNvbHV0aW9uIGlzIHRvbyBs
+b3cuCgpJIHRyaWVkIHRvIGZpbmQgTGVhbmRyb3MgLmNvbmZpZyBmaWxlIGFnYWluLCBpdCBzZWVt
+cyB0aGF0IGhpZ2gtcmVzb2x1dGlvbgp0aW1lcnMgd2VyZSBub3QgZW5hYmxlZDsgdGhlIG9ubHkg
+b3RoZXIgcG9zc2liaWxpdHkgaXMgd2hlbiBwYXNzaW5nCmNsb2Nrc291cmNlPWppZmZpZXMgKG9y
+IHNvbWV0aGluZyBlbHNlIGNvYXJzZS1ncmFpbmVkKS4KClRoZSBIWiB2YXJpYWJsZSBpcyBub3Qg
+cmVhbGx5IHJlbGV2YW50IGhlcmU7IHlvdSBhcmUgc3RpbGwgc2VlaW5nIHRoaXMKbWVzc2FnZXMg
+c2luY2UgeW91ciB2ZXJzaW9uIG9mIHRoZSB0ZXN0IHRyZWUgaXMgb2xkZXIgdGhhbiAyIHdlZWtz
+OgpodHRwOi8vbWFyYy5pbmZvLz9s3GNwJm0SMjQ1MTc0MTQyNjY4MCZ3PTIKClRoZSBmYWN0IHRo
+YXQgdGhlIENDSUQtMyBtb2R1bGUgaXMgbm90IGxvYWRlZCB3aGVuIHRoZSB0aW1lciByZXNvbHV0
+aW9uCmlzIHRvbyBjb2Fyc2UgaXMgbm90IGEgYnVnLCBpdCBpcyB0aGVyZSB0byBhdm9pZCBwcm9i
+bGVtcyB0aGF0IHJlc3VsdAp3aGVuIHVzaW5nIGNvYXJzZS1ncmFpbmVkIHRpbWVycyBvbiBoaWdo
+LXNwZWVkIGludGVyZmFjZXM6IG1vc3QgUENzCmxhcHRvcHMgbm93IGNvbWUgd2l0aCBHaWdhYml0
+IEV0aGVybmV0IHBlciBkZWZhdWx0LCBsb2NhbCBsb29wYmFjayBhbHNvCm9wZXJhdGVzIGF0IGhp
+Z2ggc3BlZWRzOyB3aGVuIHVzaW5nIHN1Y2ggaW50ZXJmYWNlcyBJIG5vdGljZWQgc2V2ZXJhbApw
+cm9ibGVtcyBhcyBkZXNjcmliZWQgaW4gdGhlIGNvbW1pdCBtZXNzYWdlLCAKaHR0cDovL2VkZW4t
+ZmVlZC5lcmcuYWJkbi5hYy51ay9jZ2ktYmluL2dpdHdlYi5jZ2k/cNxjcF9leHAuZ2l0O2E9Y29t
+bWl0ZGlmZjtoQmM0NjE1MWFlZGM5OTY4OTM0MWFjNzMxMzFjZDU2YzJhZWM1NWM0CgpNYXliZSBp
+dCBpcyBhIGdvb2QgaWRlYSB0byByZXRoaW5rIHRoZSB3aG9sZSBoaWdoLXJlc29sdXRpb24gdGlt
+ZXIKaXNzdWUuIEkgY2FuIHNlZSBvbmx5IHR3byB3YXlzOgoKICgxKSBDb25zaXN0ZW50bHkgdXNl
+IGNvYXJzZS1ncmFpbmVkIHRpbWVycyBldmVyeXdoZXJlIChqaWZmeSByZXNvbHV0aW9uKQogICAg
+IC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0t
+LS0tLS0tLS0tLS0tCQogICAgIElhbiBNY0RvbmFsZCBzdWdnZXN0ZWQgdGhpcywgYW5kIEkgY2Fu
+IHNlZSB0aGUgYWR2YW50YWdlcyAtIHdlIGNvdWxkCiAgICAgdW5pZnkgUlRUIG1lYXN1cmVtZW50
+IGZvciBhbGwgdGhlIENDSURzLCB1c2UgYSBzaW1wbGVyIGltcGxlbWVudGF0aW9uLgoKICgyKSBD
+b25zaXN0ZW50bGx5IHVzZSBoaWdoLXJlc29sdXRpb24gdGltZXJzIGV2ZXJ5d2hlcmUKICAgICAt
+LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KICAgICBU
+aGlzIHdvdWxkIHJlcXVpcmUgdG8gdXNlIHRoZSBhYm92ZSBwcm90ZWN0aW9uIGluIGdlbmVyYWwu
+IEluIGEKICAgICBkaXNjdXNzaW9uIGFib3V0IHRoZSBidWlsZCB3YXJuaW5nLCBEYXZlIE1pbGxl
+ciBzdWdnZXN0ZWQKICAgICBjb252ZXJ0aW5nIHRvIGhpZ2gtcmVzb2x1dGlvbiB0aW1lcnMgYW5k
+IGhlIGlzIHJpZ2h0IGFib3V0IGl0IC0KICAgICBpZiB3ZSBkZWNpZGUgdG8gc3RpY2sgd2l0aCBo
+aWdoLXJlc29sdXRpb24gdGltZXJzIC0gc2luY2UgbWl4aW5nCiAgICAgaGlnaC1yZXNvbHV0aW9u
+IGNvZGUgKGN1cnJlbnRseSB0aGUgY29tcHV0YXRpb24gb2YgWF9yZWN2IGFuZCBSVFQpCiAgICAg
+d2l0aCBsb3ctcmVzb2x1dGlvbiBjb2RlIChkY2NwX3htaXRfdGltZXIpIGlzIG5laXRoZXIgaGVy
+ZSBub3IKICAgICB0aGVyZSBhbmQgZ2l2ZXMgYmFkIHBlcmZvcm1hbmNlLgoKQXJuYWxkbywgTGVh
+bmRybyBhbmQgb3RoZXJzIC0gaXQgd291bGQgYmUgZ29vZCB0byBoYXZlIGlucHV0IG9uIHRoaXMu
+IEkKaGF2ZSBsb29rZWQgaW50byB0aGUgY29udmVyc2lvbiB0byBoaWdoLXJlc29sdXRpb24gdGlt
+ZXJzLCBidXQgSSBoYXZlIApkb3VidCB0aGF0IGl0IHdpbGwgaW1wcm92ZSB0aGUgcGVyZm9ybWFu
+Y2Ugb2YgQ0NJRC0zLiAKCkZyb20gZWFybGllciBkaXNjdXNzaW9uIEkga25vdywgQXJuYWxkbywg
+dGhhdCB5b3Ugd2VyZSBpbiBmYXZvdXIgb2YKa2VlcGluZyB0aGUgcmVzb2x1dGlvbiBoaWdoLiBC
+dXQgaWYgd2Ugd2FudCB0byBkbyB0aGF0IHRoZW4gSSB0aGluayB3ZQpuZWVkIHRvIGNvbnZlcnQg
+dGhlIHJlc3QgdG8gaGlnaC1yZXNvbHV0aW9uIHRpbWVycyBhbHNvLiBPciBkZWNpZGUgdG8KdXNl
+ICgxKS4KCkdlcnJpdAotLQpUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMgbGlzdDogc2VuZCB0aGUg
+bGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJvZHkgb2YgYSBtZXNzYWdlIHRvIG1ham9y
+ZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRvbW8gaW5mbyBhdCAgaHR0cDovL3ZnZXIu
+a2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5odG1s
