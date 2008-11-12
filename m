@@ -1,291 +1,105 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sun, 30 Nov 2008 13:22:54 +0000
-Subject: [PATCH 4/6] dccp: Process incoming Change feature-negotiation options
-Message-Id: <1228051376-8174-5-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Wed, 12 Nov 2008 06:36:43 +0000
+Subject: v2 [PATCH 0/4] dccp: Feature negotiation - conclusion of Part I
+Message-Id: <20081112063643.GB6405@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-This adds/replaces code for processing incoming ChangeL/R options.
-The main difference is that:
- * mandatory FN options are now interpreted inside the function
-  (there are too many individual cases to do this externally);
- * the function returns an appropriate Reset code or 0,
-   which is then used to fill in the data for the Reset packet.
-
-Old code, which is no longer used or referenced, has been removed.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/feat.h    |    4 +-
- net/dccp/feat.c    |  180 +++++++++++++++++++++++++++++++++++++++++++++++++++-
- net/dccp/options.c |   23 ++----
- 3 files changed, 189 insertions(+), 18 deletions(-)
-
---- a/net/dccp/feat.h
-+++ b/net/dccp/feat.h
-@@ -116,8 +116,8 @@ static inline void dccp_feat_debug(const u8 type, const u8 feat, const u8 val)
- extern int  dccp_feat_register_sp(struct sock *sk, u8 feat, u8 is_local,
- 				  u8 const *list, u8 len);
- extern int  dccp_feat_register_nn(struct sock *sk, u8 feat, u64 val);
--extern int  dccp_feat_change_recv(struct sock *sk, u8 type, u8 feature,
--				  u8 *val, u8 len);
-+extern int  dccp_feat_parse_options(struct sock *, struct dccp_request_sock *,
-+				    u8 mand, u8 opt, u8 feat, u8 *val, u8 len);
- extern int  dccp_feat_confirm_recv(struct sock *sk, u8 type, u8 feature,
- 				   u8 *val, u8 len);
- extern void dccp_feat_clean(struct dccp_minisock *dmsk);
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -237,6 +237,40 @@ static int dccp_feat_push_change(struct list_head *fn_list, u8 feat, u8 local,
- 	return 0;
- }
- 
-+/**
-+ * dccp_feat_push_confirm  -  Add a Confirm entry to the FN list
-+ * @fn_list: feature-negotiation list to add to
-+ * @feat: one of %dccp_feature_numbers
-+ * @local: whether local (1) or remote (0) @feat_num is being confirmed
-+ * @fval: pointer to NN/SP value to be inserted or NULL
-+ * Returns 0 on success, a Reset code for further processing otherwise.
-+ */
-+static int dccp_feat_push_confirm(struct list_head *fn_list, u8 feat, u8 local,
-+				  dccp_feat_val *fval)
-+{
-+	struct dccp_feat_entry *new = dccp_feat_entry_new(fn_list, feat, local);
-+
-+	if (new = NULL)
-+		return DCCP_RESET_CODE_TOO_BUSY;
-+
-+	new->feat_num	     = feat;
-+	new->is_local	     = local;
-+	new->state	     = FEAT_STABLE;	/* transition in 6.6.2 */
-+	new->needs_confirm   = 1;
-+	new->empty_confirm   = (fval = NULL);
-+	new->val.nn	     = 0;		/* zeroes the whole structure */
-+	if (!new->empty_confirm)
-+		new->val     = *fval;
-+	new->needs_mandatory = 0;
-+
-+	return 0;
-+}
-+
-+static int dccp_push_empty_confirm(struct list_head *fn_list, u8 feat, u8 local)
-+{
-+	return dccp_feat_push_confirm(fn_list, feat, local, NULL);
-+}
-+
- static inline void dccp_feat_list_pop(struct dccp_feat_entry *entry)
- {
- 	list_del(&entry->node);
-@@ -955,7 +989,6 @@ static int dccp_feat_nn(struct sock *sk, u8 type, u8 feature, u8 *val, u8 len)
- 
- 	return 0;
- }
--#endif /* (later) */
- 
- static void dccp_feat_empty_confirm(struct dccp_minisock *dmsk,
- 				    u8 type, u8 feature)
-@@ -1066,6 +1099,7 @@ int dccp_feat_change_recv(struct sock *sk, u8 type, u8 feature, u8 *val, u8 len)
- }
- 
- EXPORT_SYMBOL_GPL(dccp_feat_change_recv);
-+#endif	/* (later) */
- 
- int dccp_feat_confirm_recv(struct sock *sk, u8 type, u8 feature,
- 			   u8 *val, u8 len)
-@@ -1206,6 +1240,150 @@ out_clean:
- 
- EXPORT_SYMBOL_GPL(dccp_feat_clone);
- 
-+/**
-+ * dccp_feat_change_recv  -  Process incoming ChangeL/R options
-+ * @fn: feature-negotiation list to update
-+ * @is_mandatory: whether the Change was preceded by a Mandatory option
-+ * @opt: %DCCPO_CHANGE_L or %DCCPO_CHANGE_R
-+ * @feat: one of %dccp_feature_numbers
-+ * @val: NN value or SP value/preference list
-+ * @len: length of @val in bytes
-+ * @server: whether this node is the server (1) or the client (0)
-+ */
-+static u8 dccp_feat_change_recv(struct list_head *fn, u8 is_mandatory, u8 opt,
-+				u8 feat, u8 *val, u8 len, const bool server)
-+{
-+	u8 defval, type = dccp_feat_type(feat);
-+	const bool local = (opt = DCCPO_CHANGE_R);
-+	struct dccp_feat_entry *entry;
-+	dccp_feat_val fval;
-+
-+	if (len = 0 || type = FEAT_UNKNOWN)		/* 6.1 and 6.6.8 */
-+		goto unknown_feature_or_value;
-+
-+	/*
-+	 *	Negotiation of NN features: Change R is invalid, so there is no
-+	 *	simultaneous negotiation; hence we do not look up in the list.
-+	 */
-+	if (type = FEAT_NN) {
-+		if (local || len > sizeof(fval.nn))
-+			goto unknown_feature_or_value;
-+
-+		/* 6.3.2: "The feature remote MUST accept any valid value..." */
-+		fval.nn = dccp_decode_value_var(val, len);
-+		if (!dccp_feat_is_valid_nn_val(feat, fval.nn))
-+			goto unknown_feature_or_value;
-+
-+		return dccp_feat_push_confirm(fn, feat, local, &fval);
-+	}
-+
-+	/*
-+	 *	Unidirectional/simultaneous negotiation of SP features (6.3.1)
-+	 */
-+	entry = dccp_feat_list_lookup(fn, feat, local);
-+	if (entry = NULL) {
-+		/*
-+		 * No particular preferences have been registered. We deal with
-+		 * this situation by assuming that all valid values are equally
-+		 * acceptable, and apply the following checks:
-+		 * - if the peer's list is a singleton, we accept a valid value;
-+		 * - if we are the server, we first try to see if the peer (the
-+		 *   client) advertises the default value. If yes, we use it,
-+		 *   otherwise we accept the preferred value;
-+		 * - else if we are the client, we use the first list element.
-+		 */
-+		if (dccp_feat_clone_sp_val(&fval, val, 1))
-+			return DCCP_RESET_CODE_TOO_BUSY;
-+
-+		if (len > 1 && server) {
-+			defval = dccp_feat_default_value(feat);
-+			if (dccp_feat_preflist_match(&defval, 1, val, len) > -1)
-+				fval.sp.vec[0] = defval;
-+		} else if (!dccp_feat_is_valid_sp_val(feat, fval.sp.vec[0])) {
-+			kfree(fval.sp.vec);
-+			goto unknown_feature_or_value;
-+		}
-+
-+		/* Treat unsupported CCIDs like invalid values */
-+		if (feat = DCCPF_CCID && !ccid_support_check(fval.sp.vec, 1)) {
-+			kfree(fval.sp.vec);
-+			goto not_valid_or_not_known;
-+		}
-+
-+		return dccp_feat_push_confirm(fn, feat, local, &fval);
-+
-+	} else if (entry->state = FEAT_UNSTABLE) {	/* 6.6.2 */
-+		return 0;
-+	}
-+
-+	if (dccp_feat_reconcile(&entry->val, val, len, server, true)) {
-+		entry->empty_confirm = 0;
-+	} else if (is_mandatory) {
-+		return DCCP_RESET_CODE_MANDATORY_ERROR;
-+	} else if (entry->state = FEAT_INITIALISING) {
-+		/*
-+		 * Failed simultaneous negotiation (server only): try to `save'
-+		 * the connection by checking whether entry contains the default
-+		 * value for @feat. If yes, send an empty Confirm to signal that
-+		 * the received Change was not understood - which implies using
-+		 * the default value.
-+		 * If this also fails, we use Reset as the last resort.
-+		 */
-+		WARN_ON(!server);
-+		defval = dccp_feat_default_value(feat);
-+		if (!dccp_feat_reconcile(&entry->val, &defval, 1, server, true))
-+			return DCCP_RESET_CODE_OPTION_ERROR;
-+		entry->empty_confirm = 1;
-+	}
-+	entry->needs_confirm   = 1;
-+	entry->needs_mandatory = 0;
-+	entry->state	       = FEAT_STABLE;
-+	return 0;
-+
-+unknown_feature_or_value:
-+	if (!is_mandatory)
-+		return dccp_push_empty_confirm(fn, feat, local);
-+
-+not_valid_or_not_known:
-+	return is_mandatory ? DCCP_RESET_CODE_MANDATORY_ERROR
-+			    : DCCP_RESET_CODE_OPTION_ERROR;
-+}
-+
-+/**
-+ * dccp_feat_parse_options  -  Process Feature-Negotiation Options
-+ * @sk: for general use and used by the client during connection setup
-+ * @dreq: used by the server during connection setup
-+ * @mandatory: whether @opt was preceded by a Mandatory option
-+ * @opt: %DCCPO_CHANGE_L | %DCCPO_CHANGE_R | %DCCPO_CONFIRM_L | %DCCPO_CONFIRM_R
-+ * @feat: one of %dccp_feature_numbers
-+ * @val: value contents of @opt
-+ * @len: length of @val in bytes
-+ * Returns 0 on success, a Reset code for ending the connection otherwise.
-+ */
-+int dccp_feat_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
-+			    u8 mandatory, u8 opt, u8 feat, u8 *val, u8 len)
-+{
-+	struct dccp_sock *dp = dccp_sk(sk);
-+	struct list_head *fn = dreq ? &dreq->dreq_featneg : &dp->dccps_featneg;
-+	bool server = false;
-+
-+	switch (sk->sk_state) {
-+	/*
-+	 *	Negotiation during connection setup
-+	 */
-+	case DCCP_LISTEN:
-+		server = true;			/* fall through */
-+	case DCCP_REQUESTING:
-+		switch (opt) {
-+		case DCCPO_CHANGE_L:
-+		case DCCPO_CHANGE_R:
-+			return dccp_feat_change_recv(fn, mandatory, opt, feat,
-+						     val, len, server);
-+		}
-+	}
-+	return 0;	/* ignore FN options in all other states */
-+}
-+
- int dccp_feat_init(struct sock *sk)
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -135,22 +135,13 @@ int dccp_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
- 				      (unsigned long long)opt_recv->dccpor_ndp);
- 			break;
- 		case DCCPO_CHANGE_L:
--			/* fall through */
- 		case DCCPO_CHANGE_R:
- 			if (pkt_type = DCCP_PKT_DATA)
- 				break;
--			if (len < 2)
--				goto out_invalid_option;
--			rc = dccp_feat_change_recv(sk, opt, *value, value + 1,
--						   len - 1);
--			/*
--			 * When there is a change error, change_recv is
--			 * responsible for dealing with it.  i.e. reply with an
--			 * empty confirm.
--			 * If the change was mandatory, then we need to die.
--			 */
--			if (rc && mandatory)
--				goto out_invalid_option;
-+			rc = dccp_feat_parse_options(sk, dreq, mandatory, opt,
-+						    *value, value + 1, len - 1);
-+			if (rc)
-+				goto out_featneg_failed;
- 			break;
- 		case DCCPO_CONFIRM_L:
- 			/* fall through */
-@@ -292,8 +283,10 @@ out_nonsensical_length:
- 
- out_invalid_option:
- 	DCCP_INC_STATS_BH(DCCP_MIB_INVALIDOPT);
--	DCCP_SKB_CB(skb)->dccpd_reset_code = DCCP_RESET_CODE_OPTION_ERROR;
--	DCCP_WARN("DCCP(%p): invalid option %d, len=%d", sk, opt, len);
-+	rc = DCCP_RESET_CODE_OPTION_ERROR;
-+out_featneg_failed:
-+	DCCP_WARN("DCCP(%p): Option %d (len=%d) error=%u\n", sk, opt, len, rc);
-+	DCCP_SKB_CB(skb)->dccpd_reset_code = rc;
- 	DCCP_SKB_CB(skb)->dccpd_reset_data[0] = opt;
- 	DCCP_SKB_CB(skb)->dccpd_reset_data[1] = len > 0 ? value[0] : 0;
- 	DCCP_SKB_CB(skb)->dccpd_reset_data[2] = len > 1 ? value[1] : 0;
+SGkgRGF2ZSwKCnBsZWFzZSBmaW5kIGF0dGFjaGVkIHRoZSBjb3JyZWN0IHNldCBvZiA0IHBhdGNo
+ZXMsIHRha2VuIGZyb20gdXAtdG8tZGF0ZQpjb3BpZXMuIFRleHQgYmVsb3cgKFVSTCkgYWxzbyB1
+cGRhdGVkLgoKR2Vycml0CgoKQ2hhbmdlcyByZWxhdGl2ZSB0byByZXZpc2lvbi0wMQotLS0tLS0t
+LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tClBhdGNoIDIvNCBpbiB0aGUgZmlyc3QgcmV2aXNpb24g
+d2FzIGluIGFuIG91dGRhdGVkIGZvcm1hdCB3aGljaCBsZWFkIHRvIApzZXZlcmFsIGh1bmtzIG1p
+c3NpbmcuIFRoaXMgc2V0IGNvbnRhaW5zIHRoZSBjb3JyZWN0L3VwLXRvLWRhdGUgdmVyc2lvbnMu
+CkZvciByZWZlcmVuY2UsIGFuIGludGVyLWRpZmYgdG8gdGhlIHByZXZpb3VzIHNldCBpcyBiZWxv
+dy4KCgpDb21taXQgc3VtbWFyeQotLS0tLS0tLS0tLS0tLQpUaGUgc2V0IGNvbmNsdWRlcyB0aGUg
+Zmlyc3Qgc2V0IG9mIHRoZSBmZWF0dXJlIG5lZ290aWF0aW9uIHBhdGNoZXMgdG8gcHJvdmlkZQph
+IHNlbGYtY29udGFpbmVkIGZlYXR1cmUgbmVnb3RpYXRpb24gQVBJIGZvciB0aGUgRENDUCBwcm90
+b2NvbCAoUkZDIDQzNDAtMikuCgpUaGUgd2hvbGUgc2V0IGlzIHN0cnVjdHVyZWQgaW50byAzIG1h
+aW4gYmxvY2tzIC0gKDEpIGJhc2lzLCAoMikgY29yZSwKKDMpIGludGVncmF0aW9uIGFuZCBjbGVh
+bnVwLgoKV2l0aGluIHRoZXNlIGJsb2NrcywgdGhpcyBpcyB0aGUgc2Vjb25kIHNldCBhbmQgaXRz
+IHB1cnBvc2UgaXMgdG8gY29uY2x1ZGUKdGhlIGJhc2UgaW1wbGVtZW50YXRpb24sIHByZXBhcmlu
+ZyBmb3IgdGhlICgxNSkgY29yZSBwYXRjaGVzIGluIHRoZSBzZWNvbmQgc2V0LgoKCkxpc3Qgb2Yg
+cGF0Y2hlcyBpbiB0aGlzIHNldDoKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQpQYXRjaCAj
+MTogQ2hhbmdlcyB0aGUgZXhpc3RpbmcgcG9saWN5IHRvIGFsbG93IGFueXRpbWUgY2hhbmdlcyBh
+cyB0aGF0IGxlYWQKICAgICAgICAgIHRvIHVucHJlZGljdGFibGUgcmVzdWx0cy4KUGF0Y2ggIzI6
+IEFkZHMgcmVnaXN0cmF0aW9uIHJvdXRpbmVzLiBUaGVzZSBmb3JtIHBhcnQgb2YgdGhlIHVzZXIg
+aW50ZXJmYWNlCiAgICAgICAgICBhbmQgYXJlIGxhdGVyIHVzZWQgYnkgdGhlIHNvY2tldCBBUEkg
+dG8gc2V0IGluZGl2aWR1YWwgcHJlZmVyZW5jZXMuClBhdGNoICMzOiBDQ0lEcyBhcmUgYSBuZWdv
+dGlhYmxlIGZlYXR1cmUuIFRoaXMgcGF0Y2ggYWRkcyBzdXBwb3J0IHRvIHF1ZXJ5IHRoZQogICAg
+ICAgICAgc3VwcG9ydGVkIENDSURzLCBzbyBhcyB0byBhZHZlcnRpc2Ugb25seSB0aGUgbG9jYWxs
+eSBzdXBwb3J0ZWQgb25lcy4KUGF0Y2ggIzQ6IFRoZSBjaG9pY2Ugb2YgQ0NJRCBpbiB0dXJuIGNy
+ZWF0ZXMgbmV3IGZlYXR1cmUgZGVwZW5kZW5jaWVzLiBUaGUgcGF0Y2gKICAgICAgICAgIGFkZHMg
+YXV0b21hdGljIHRyYWNraW5nIG9mIHN1Y2ggZGVwZW5kZW5jaWVzIHRvIGF2b2lkIGxhdGVyIGZh
+aWx1cmUuCgpUaGUgc2V0IGlzIGFsc28gYXZhaWxhYmxlIGZvciB2aWV3aW5nIG9ubGluZSwgYmVn
+aW5uaW5nIGF0Cmh0dHA6Ly9lZGVuLWZlZWQuZXJnLmFiZG4uYWMudWsvY2dpLWJpbi9naXR3ZWIu
+Y2dpP3DcY3BfZXhwLmdpdDthPWNvbW1pdGRpZmY7aCg3MjQyZGQ4Y2FhNjU0MTVjMjE5ZTMxNjNh
+OGI2NzQ0MDY3NTA4ZgoKClBhdGNoIHN0YXRzOgotLS0tLS0tLS0tLS0KIERvY3VtZW50YXRpb24v
+bmV0d29ya2luZy9kY2NwLnR4dCB8ICAgIDQgCiBpbmNsdWRlL2xpbnV4L2RjY3AuaCAgICAgICAg
+ICAgICAgfCAgICAxIAogbmV0L2RjY3AvY2NpZC5jICAgICAgICAgICAgICAgICAgIHwgICA0OCAr
+KysrCiBuZXQvZGNjcC9jY2lkLmggICAgICAgICAgICAgICAgICAgfCAgICA1IAogbmV0L2RjY3Av
+Y2NpZHMvY2NpZDIuYyAgICAgICAgICAgIHwgICAgNiAKIG5ldC9kY2NwL2RjY3AuaCAgICAgICAg
+ICAgICAgICAgICB8ICAgIDEgCiBuZXQvZGNjcC9mZWF0LmMgICAgICAgICAgICAgICAgICAgfCAg
+Mzc1ICsrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKystLS0tCiBuZXQvZGNjcC9mZWF0
+LmggICAgICAgICAgICAgICAgICAgfCAgIDI1ICsrCiBuZXQvZGNjcC9vcHRpb25zLmMgICAgICAg
+ICAgICAgICAgfCAgIDE4IC0KIG5ldC9kY2NwL291dHB1dC5jICAgICAgICAgICAgICAgICB8ICAg
+IDQgCiBuZXQvZGNjcC9wcm90by5jICAgICAgICAgICAgICAgICAgfCAgICA3IAogbmV0L2RjY3Av
+dGltZXIuYyAgICAgICAgICAgICAgICAgIHwgICAxMiAtCiAxMiBmaWxlcyBjaGFuZ2VkLCA0Mzcg
+aW5zZXJ0aW9ucygrKSwgNjkgZGVsZXRpb25zKC0pCgoKCgkJLS0tLS0tLS0tLS0tLS0tLS0tLS0t
+LS0tLS0tLS0tLS0tLS0tCgkJQXBwZW5kaXg6IEludGVyLWRpZmYgdG8gcHJldmlvdXMgc2V0CgkJ
+LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgogLS0tIGEvbmV0L2RjY3AvZmVh
+dC5jCiArKysgYi9uZXQvZGNjcC9mZWF0LmMKIEBAIC05Miw2ICs5MiwxOCBAQCBzdGF0aWMgdTgg
+ZGNjcF9mZWF0X3R5cGUodTggZmVhdF9udW0pCiAgCXJldHVybiBkY2NwX2ZlYXRfdGFibGVbaWR4
+XS5yZWNvbmNpbGlhdGlvbjsKICB9CiAgCiArc3RhdGljIGludCBkY2NwX2ZlYXRfZGVmYXVsdF92
+YWx1ZSh1OCBmZWF0X251bSkKICt7CiArCWludCBpZHggPSBkY2NwX2ZlYXRfaW5kZXgoZmVhdF9u
+dW0pOwogKwkvKgogKwkgKiBUaGVyZSBhcmUgbm8gZGVmYXVsdCB2YWx1ZXMgZm9yIHVua25vd24g
+ZmVhdHVyZXMsIHNvIGVuY291bnRlcmluZyBhCiArCSAqIG5lZ2F0aXZlIGluZGV4IGhlcmUgaW5k
+aWNhdGVzIGEgc2VyaW91cyBwcm9ibGVtIHNvbWV3aGVyZSBlbHNlLgogKwkgKi8KICsJRENDUF9C
+VUdfT04oaWR4IDwgMCk7CiArCiArCXJldHVybiBpZHggPCAwID8gMCA6IGRjY3BfZmVhdF90YWJs
+ZVtpZHhdLmRlZmF1bHRfdmFsdWU7CiArfQogKwogIC8qIGNvcHkgY29uc3RydWN0b3IsIGZ2YWwg
+bXVzdCBub3QgYWxyZWFkeSBjb250YWluIGFsbG9jYXRlZCBtZW1vcnkgKi8KICBzdGF0aWMgaW50
+IGRjY3BfZmVhdF9jbG9uZV9zcF92YWwoZGNjcF9mZWF0X3ZhbCAqZnZhbCwgdTggY29uc3QgKnZh
+bCwgdTggbGVuKQogIHsKIEBAIC0xNTUsNiArMTY3LDYzIEBAIHN0YXRpYyB2b2lkIGRjY3BfZmVh
+dF9lbnRyeV9kZXN0cnVjdG9yKHN0cnVjdCBkY2NwX2ZlYXRfZW50cnkgKmVudHJ5KQogICAqIC0g
+bGlzdCBpcyBzb3J0ZWQgaW4gaW5jcmVhc2luZyBvcmRlciBvZiBmZWF0dXJlIG51bWJlciAoZmFz
+dGVyIGxvb2t1cCkKICAgKi8KICAKICsvKioKICsgKiBkY2NwX2ZlYXRfZW50cnlfbmV3ICAtICBD
+ZW50cmFsIGxpc3QgdXBkYXRlIHJvdXRpbmUgKGNhbGxlZCBieSBhbGwgb3RoZXJzKQogKyAqIEBo
+ZWFkOiAgbGlzdCB0byBhZGQgdG8KICsgKiBAZmVhdDogIGZlYXR1cmUgbnVtYmVyCiArICogQGxv
+Y2FsOiB3aGV0aGVyIHRoZSBsb2NhbCAoMSkgb3IgcmVtb3RlIGZlYXR1cmUgd2l0aCBudW1iZXIg
+QGZlYXQgaXMgbWVhbnQKICsgKiBUaGlzIGlzIHRoZSBvbmx5IGNvbnN0cnVjdG9yIGFuZCBzZXJ2
+ZXMgdG8gZW5zdXJlIHRoZSBhYm92ZSBpbnZhcmlhbnRzLgogKyAqLwogK3N0YXRpYyBzdHJ1Y3Qg
+ZGNjcF9mZWF0X2VudHJ5ICoKICsJICAgICAgZGNjcF9mZWF0X2VudHJ5X25ldyhzdHJ1Y3QgbGlz
+dF9oZWFkICpoZWFkLCB1OCBmZWF0LCBib29sIGxvY2FsKQogK3sKICsJc3RydWN0IGRjY3BfZmVh
+dF9lbnRyeSAqZW50cnk7CiArCiArCWxpc3RfZm9yX2VhY2hfZW50cnkoZW50cnksIGhlYWQsIG5v
+ZGUpCiArCQlpZiAoZW50cnktPmZlYXRfbnVtID0gZmVhdCAmJiBlbnRyeS0+aXNfbG9jYWwgPSBs
+b2NhbCkgewogKwkJCWRjY3BfZmVhdF92YWxfZGVzdHJ1Y3RvcihlbnRyeS0+ZmVhdF9udW0sICZl
+bnRyeS0+dmFsKTsKICsJCQlyZXR1cm4gZW50cnk7CiArCQl9IGVsc2UgaWYgKGVudHJ5LT5mZWF0
+X251bSA+IGZlYXQpIHsKICsJCQloZWFkID0gJmVudHJ5LT5ub2RlOwogKwkJCWJyZWFrOwogKwkJ
+fQogKwogKwllbnRyeSA9IGttYWxsb2Moc2l6ZW9mKCplbnRyeSksIGdmcF9hbnkoKSk7CiArCWlm
+IChlbnRyeSAhPSBOVUxMKSB7CiArCQllbnRyeS0+ZmVhdF9udW0gPSBmZWF0OwogKwkJZW50cnkt
+PmlzX2xvY2FsID0gbG9jYWw7CiArCQlsaXN0X2FkZF90YWlsKCZlbnRyeS0+bm9kZSwgaGVhZCk7
+CiArCX0KICsJcmV0dXJuIGVudHJ5OwogK30KICsKICsvKioKICsgKiBkY2NwX2ZlYXRfcHVzaF9j
+aGFuZ2UgIC0gIEFkZC9vdmVyd3JpdGUgYSBDaGFuZ2Ugb3B0aW9uIGluIHRoZSBsaXN0CiArICog
+QGZuX2xpc3Q6IGZlYXR1cmUtbmVnb3RpYXRpb24gbGlzdCB0byB1cGRhdGUKICsgKiBAZmVhdDog
+b25lIG9mICVkY2NwX2ZlYXR1cmVfbnVtYmVycwogKyAqIEBsb2NhbDogd2hldGhlciBsb2NhbCAo
+MSkgb3IgcmVtb3RlICgwKSBAZmVhdF9udW0gaXMgbWVhbnQKICsgKiBAbmVlZHNfbWFuZGF0b3J5
+OiB3aGV0aGVyIHRvIHVzZSBNYW5kYXRvcnkgZmVhdHVyZSBuZWdvdGlhdGlvbiBvcHRpb25zCiAr
+ICogQGZ2YWw6IHBvaW50ZXIgdG8gTk4vU1AgdmFsdWUgdG8gYmUgaW5zZXJ0ZWQgKHdpbGwgYmUg
+Y29waWVkKQogKyAqLwogK3N0YXRpYyBpbnQgZGNjcF9mZWF0X3B1c2hfY2hhbmdlKHN0cnVjdCBs
+aXN0X2hlYWQgKmZuX2xpc3QsIHU4IGZlYXQsIHU4IGxvY2FsLAogKwkJCQkgdTggbWFuZGF0b3J5
+LCBkY2NwX2ZlYXRfdmFsICpmdmFsKQogK3sKICsJc3RydWN0IGRjY3BfZmVhdF9lbnRyeSAqbmV3
+ID0gZGNjcF9mZWF0X2VudHJ5X25ldyhmbl9saXN0LCBmZWF0LCBsb2NhbCk7CiArCiArCWlmIChu
+ZXcgPSBOVUxMKQogKwkJcmV0dXJuIC1FTk9NRU07CiArCiArCW5ldy0+ZmVhdF9udW0JICAgICA9
+IGZlYXQ7CiArCW5ldy0+aXNfbG9jYWwJICAgICA9IGxvY2FsOwogKwluZXctPnN0YXRlCSAgICAg
+PSBGRUFUX0lOSVRJQUxJU0lORzsKICsJbmV3LT5uZWVkc19jb25maXJtICAgPSAwOwogKwluZXct
+PmVtcHR5X2NvbmZpcm0gICA9IDA7CiArCW5ldy0+dmFsCSAgICAgPSAqZnZhbDsKICsJbmV3LT5u
+ZWVkc19tYW5kYXRvcnkgPSBtYW5kYXRvcnk7CiArCiArCXJldHVybiAwOwogK30KICsKICBzdGF0
+aWMgaW5saW5lIHZvaWQgZGNjcF9mZWF0X2xpc3RfcG9wKHN0cnVjdCBkY2NwX2ZlYXRfZW50cnkg
+KmVudHJ5KQogIHsKICAJbGlzdF9kZWwoJmVudHJ5LT5ub2RlKTsKIAotLS0gCi0tClRvIHVuc3Vi
+c2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBp
+bgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3Jl
+IG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZv
+Lmh0bWw=
