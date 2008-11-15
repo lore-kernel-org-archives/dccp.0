@@ -1,50 +1,75 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 22 Nov 2008 10:30:36 +0000
-Subject: net-next-2.6 [PATCH 0/5] dccp: Feature negotiation - continuation of Part II (core)
-Message-Id: <1227349841-9440-1-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sat, 15 Nov 2008 12:11:19 +0000
+Subject: [PATCH 5/5] dccp: Tidy up setsockopt calls
+Message-Id: <1226751079-15019-6-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1226751079-15019-1-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1226751079-15019-1-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-SGkgRGF2ZSwKCnBsZWFzZSBmaW5kIGluIHRoaXMgc2V0IHRoZSBjb250aW51YXRpb24uIFRoZSBw
-YXRjaGVzIGhhdmUgYmVlbiB0ZXN0ZWQgdG8KY29tcGlsZSBzdGFuZGFsb25lLCB3aXRoIHNwYXJz
-ZSBjaGVja2luZyBlbmFibGVkLgoKR2Vycml0CgoKQ29tbWl0IHN1bW1hcnk6Ci0tLS0tLS0tLS0t
-LS0tLQpUaGlzIGlzIGEgY29udGludWF0aW9uIG9mIGFuIG9uZ29pbmcgc3VibWlzc2lvbiB0byBw
-cm92aWRlIGZlYXR1cmUvY2FwYWJpbGl0eQpuZWdvdGlhdGlvbiBmb3IgRENDUCBlbmRwb2ludHMg
-KFJGQyA0MzQwKS4KClRoZSB3aG9sZSBzZXQgaXMgc3RydWN0dXJlZCBpbnRvIDMgbWFpbiBibG9j
-a3MgLSAoMSkgYmFzaXMsICgyKSBjb3JlLAooMykgaW50ZWdyYXRpb24gYW5kIGNsZWFudXAuCgpU
-aGlzIHNldCBjb250aW51ZXMgd2l0aGluIHRoZSBzZWNvbmQgcGFydCAoY29yZSBpbXBsZW1lbnRh
-dGlvbikuIEkgaGF2ZSBzcGxpdAppdCBpbiBzdWNoIGEgd2F5IHRoYXQgdXAgdW50aWwgaGVyZSB0
-aGUgb2xkIGNvZGUgYW5kIHRoZSBuZXcgQVBJIGNhbiBjby1leGlzdC4KCkluIHRoZSBuZXh0IChh
-bmQgbGFzdCkgcGF0Y2ggc2V0IHdpdGhpbiB0aGlzIGJsb2NrLCB0aGUgb2xkIGNvZGUgaXMgc3Rl
-cC1ieS1zdGVwCnN1cGVyc2VkZWQgYnkgdGhlIG5ldyBBUEkuCgpUaGUgZnVsbCBpbnRlZ3JhdGlv
-biBvZiB0aGUgbmV3IEFQSSBhbmQgY2xlYW4tdXAgb2YgdGhlIG9sZCBjb2RlIHRoZW4gaGFwcGVu
-cwppbiB0aGUgY29uY2x1ZGluZyBwYXJ0ICgzKS4KCgpMaXN0IG9mIHBhdGNoZXMgaW4gdGhpcyBz
-ZXQ6Ci0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KUGF0Y2ggIzE6IFNldC9nZXRzb2Nrb3B0
-IHN1cHBvcnQgdG8gbmVnb3RpYXRlIENDSURzIHdpdGggdGhlIHBlZXIuClBhdGNoICMyOiBTb2Nr
-ZXQgQVBJIHRvIHF1ZXJ5IHRoZSBjdXJyZW50IENDSUQgZnJvbSB1c2Vyc3BhY2UuClBhdGNoICMz
-OiBQcmVwYXJlcyB0aGUgdmFyaWFibGUtbGVuZ3RoIGh0b25sL250b2hsIGZ1bmN0aW9ucyBmb3Ig
-NDggYml0cy4KICAgICAgICAgIFN1Y2ggYSBsZW5ndGggaXMgbmVlZGVkIGJ5IGUuZy4gdGhlIFNl
-cXVlbmNlIFdpbmRvdyBmZWF0dXJlLgpQYXRjaCAjNDogU3VwcG9ydCBmb3IgRENDUCBgTWFuZGF0
-b3J5JyB0eXBlIG9wdGlvbnMgKFJGQyA0MzQwLCA1LjguMikuClBhdGNoICM1OiBSb3V0aW5lIHRv
-IGluc2VydCBmZWF0dXJlLW5lZ290aWF0aW9uIGhlYWRlciBvcHRpb25zLgoKVGhlIHNldCBpcyBh
-bHNvIGF2YWlsYWJsZSBmb3Igdmlld2luZyBvbmxpbmUsIGJlZ2lubmluZyBhdApodHRwOi8vZWRl
-bi1mZWVkLmVyZy5hYmRuLmFjLnVrL2NnaS1iaW4vZ2l0d2ViLmNnaT9w3GNwX2V4cC5naXQ7YT1j
-b21taXRkaWZmO2h2YWU0MzZlOTk0OWZkNzVhNGZhYWE4MWY1Y2U5MTUzMDliODNhMWYKCgpQYXRj
-aCBzdGF0czoKLS0tLS0tLS0tLS0tCiBEb2N1bWVudGF0aW9uL25ldHdvcmtpbmcvZGNjcC50eHQg
-fCAgIDE0ICsrKysKIGluY2x1ZGUvbGludXgvZGNjcC5oICAgICAgICAgICAgICB8ICAgIDUgKwog
-bmV0L2RjY3AvYWNrdmVjLmMgICAgICAgICAgICAgICAgIHwgICAgOSArLQogbmV0L2RjY3AvYWNr
-dmVjLmggICAgICAgICAgICAgICAgIHwgICAgNSAtCiBuZXQvZGNjcC9jY2lkLmggICAgICAgICAg
-ICAgICAgICAgfCAgIDE4ICsrKysrCiBuZXQvZGNjcC9mZWF0LmggICAgICAgICAgICAgICAgICAg
-fCAgIDIwICsrKysrCiBuZXQvZGNjcC9vcHRpb25zLmMgICAgICAgICAgICAgICAgfCAgMTI3ICsr
-KysrKysrKysrKysrKysrLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiBuZXQvZGNjcC9wcm9iZS5jICAg
-ICAgICAgICAgICAgICAgfCAgICA3IC0tCiBuZXQvZGNjcC9wcm90by5jICAgICAgICAgICAgICAg
-ICAgfCAgIDQ0ICsrKysrKysrKysrKysKIDkgZmlsZXMgY2hhbmdlZCwgMTY5IGluc2VydGlvbnMo
-KyksIDgwIGRlbGV0aW9ucygtKQotLQpUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMgbGlzdDogc2Vu
-ZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJvZHkgb2YgYSBtZXNzYWdlIHRv
-IG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRvbW8gaW5mbyBhdCAgaHR0cDov
-L3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5odG1s
+This splits the setsockopt calls into two groups, depending on whether an
+integer argument (val) is required and whether routines being called do
+their own locking.
+
+Some options (such as setting the CCID) use u8 rather than int, so that for
+these the test with regard to integer-sizeof can not be used.
+
+The second switch-case statement now only has those statements which need
+locking and which make use of `val'.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Reviewed-by: Eugene Teo <eugeneteo@kernel.sg>
+---
+ net/dccp/proto.c |   23 ++++++++++++-----------
+ 1 files changed, 12 insertions(+), 11 deletions(-)
+
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -512,7 +512,17 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	int val, err = 0;
+ 
+-	if (optlen < sizeof(int))
++	switch (optname) {
++	case DCCP_SOCKOPT_PACKET_SIZE:
++		DCCP_WARN("sockopt(PACKET_SIZE) is deprecated: fix your app\n");
++		return 0;
++	case DCCP_SOCKOPT_CHANGE_L:
++	case DCCP_SOCKOPT_CHANGE_R:
++		DCCP_WARN("sockopt(CHANGE_L/R) is deprecated: fix your app\n");
++		return 0;
++	}
++
++	if (optlen < (int)sizeof(int))
+ 		return -EINVAL;
+ 
+ 	if (get_user(val, (int __user *)optval))
+@@ -523,15 +533,6 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
+ 
+ 	lock_sock(sk);
+ 	switch (optname) {
+-	case DCCP_SOCKOPT_PACKET_SIZE:
+-		DCCP_WARN("sockopt(PACKET_SIZE) is deprecated: fix your app\n");
+-		err = 0;
+-		break;
+-	case DCCP_SOCKOPT_CHANGE_L:
+-	case DCCP_SOCKOPT_CHANGE_R:
+-		DCCP_WARN("sockopt(CHANGE_L/R) is deprecated: fix your app\n");
+-		err = 0;
+-		break;
+ 	case DCCP_SOCKOPT_SERVER_TIMEWAIT:
+ 		if (dp->dccps_role != DCCP_ROLE_SERVER)
+ 			err = -EOPNOTSUPP;
+@@ -548,8 +549,8 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
+ 		err = -ENOPROTOOPT;
+ 		break;
+ 	}
+-
+ 	release_sock(sk);
++
+ 	return err;
+ }
+ 
