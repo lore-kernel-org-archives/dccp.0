@@ -1,81 +1,172 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 15 Nov 2008 10:50:42 +0000
-Subject: [RFC] dccp ccid-3: High-res or low-res timers?
-Message-Id: <20081115105042.GA7798@gerrit.erg.abdn.ac.uk>
+From: "Ian McDonald" <ian.mcdonald@jandi.co.nz>
+Date: Sun, 16 Nov 2008 08:14:04 +0000
+Subject: Re: [RFC] dccp ccid-3: High-res or low-res timers?
+Message-Id: <5640c7e00811160014p17414c54v2499c5b1e996278f@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <20081115105042.GA7798@gerrit.erg.abdn.ac.uk>
+In-Reply-To: <20081115105042.GA7798@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-SSB3b3VsZCBhcHByZWNpYXRlIHNvbWUgYWR2aWNlIGFuZCBpbnNpZ2h0cyByZWdhcmRpbmcgdGhl
-IHVzZSBvZgpoaWdoLXJlc29sdXRpb24gdGltZXJzIHdpdGhpbiBhIHRyYW5zcG9ydCBwcm90b2Nv
-bCwgc3BlY2lmaWNhbGx5CkRDQ1Agd2l0aCBDQ0lELTMgKFJGQyA1MzQ4KS4KCkN1cnJlbnRseSB0
-aGUgaW1wbGVtZW50YXRpb24gaXMgaW4gYSBsaW1ibyBvZiBoaWdoLXJlc29sdXRpb24gYW5kCmxv
-dy1yZXNvbHV0aW9uIGNvZGUuIEl0IGlzIG5vdCBnb29kLCBuZWl0aGVyIGhlcmUgbm9yIHRoZXJl
-LCBzbwpJIHdvdWxkIGxpa2UgdG8gd29yayBvbiBtYWtpbmcgdGhlIGludGVyZmFjZSBjb25zaXN0
-ZW50LgoKQWZ0ZXIgdGhpbmtpbmcgdGhpcyB0aHJvdWdoIEkgZW5jb3VudGVyZWQgYSBudW1iZXIg
-b2YgcG9pbnRzCndoaWNoIG1hZGUgbWUgcXVlc3Rpb24gd2hldGhlciBoaWdoLXJlc29sdXRpb24g
-dGltZXJzIHdpbGwgbGVhZCB0bwpiZXR0ZXIgcGVyZm9ybWFuY2UgYW5kIGEgY2xlYW5lciBpbnRl
-cmZhY2UuCgpJJ2QgYXBwcmVjaWF0ZSBjb21tZW50cyBhbmQgaW5wdXQgb24gdGhpcywgdGhlIHBv
-aW50cyBhcmUgYmVsb3cuCgoxLiBIYW5kbGluZyB1bmF2b2lkYWJsZSB3YWl0aW5nIHRpbWVzCi0t
-LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KIE9uZSBjYW4gbm90IGV4cGVjdCB0
-aGF0LCBpZiB0aGUgc2NoZWR1bGluZyBjbG9jayBzYXlzICdzZW5kIGluIHgKIG1pY3Jvc2Vjb25k
-cycsIGEgcGFja2V0IHdpbGwgaW5kZWVkIGxlYXZlIGFmdGVyIHggbWljcm9zZWNvbmRzOyBkdWUg
-dG8KIHdhaXRpbmcgdGltZXMuIEFuIGV4YW1wbGUgaXMgaW4gbmV0L2RjY3AvdGltZXIuYywgd2hl
-biB0aGUgc29ja2V0IGlzCiBjdXJyZW50bHkgbG9ja2VkIC0gd2Ugd2FpdCBmb3IgYSAic21hbGwi
-IGFtb3VudCBvZiB0aW1lOgoKCWJoX2xvY2tfc29jayhzayk7CglpZiAoc29ja19vd25lZF9ieV91
-c2VyKHNrKSkKCQlza19yZXNldF90aW1lcihzaywgJmRwLT5kY2Nwc194bWl0X3RpbWVyLCBqaWZm
-aWVzICsgMSk7CgllbHNlCgkJZGNjcF93cml0ZV94bWl0KHNrLCAwKTsKCWJoX3VubG9ja19zb2Nr
-KHNrKTsKCgoyLiBEZXBlbmRlbmN5IG9uIGhpZ2gtcmVzb2x1dGlvbiB0aW1lcnMKLS0tLS0tLS0t
-LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiBDb21taXR0aW5nIHRoZSBDQ0lELTMvQ0NJ
-RC00IGltcGxlbWVudGF0aW9ucyB0byB1c2luZyBoaWdoLXJlc29sdXRpb24KIHRpbWVycyBtZWFu
-cyB0aGF0IHRoZSBtb2R1bGVzIGNhbiBub3QgYmUgYnVpbHQvbG9hZGVkIHdoZW4gdGhlIGtlcm5l
-bAogZG9lcyBub3Qgb2ZmZXIgc3VmZmljaWVudCByZXNvbHV0aW9uLgoKIFRoaXMgaGFzIHJlY2Vu
-dGx5IG1hZGUgaXQgaGFyZCBmb3Igc29tZW9uZSB1c2luZyBDQ0lELTMgdG8gZmluZCBvdXQKIHdo
-eSBEQ0NQIHdvdWxkIG5vdCBydW4sIHdoZXJlIHRoZSBjYXVzZSB3YXMgdGhhdCBoaWdoLXJlc29s
-dXRpb24gdGltZXJzCiB3ZXJlIG5vdCBlbmFibGVkIGluIHRoZSBrZXJuZWwuCgoKMy4gTm9pc2Ug
-aW4gdGhlIG91dHB1dAotLS0tLS0tLS0tLS0tLS0tLS0tLS0tCldoZW4gdHJhY2tpbmcgdGhlIHNw
-ZWVkIG9mIGEgY2FyIGV2ZXJ5IDEwIHNlY29uZHMsIHRoZXJlIGlzIGEgbG90IG9mIHZhcmlhdGlv
-bgppbiB0aGUgdmFsdWVzLCBkdWUgdG8gc3RvcHBpbmcgYXQgdHJhZmZpYyBsaWdodHMsIGFjY2Vs
-ZXJhdGluZyBldGMuIEJ1dCB3aGVuCmNvbnNpZGVyaW5nIGEgbGFyZ2VyIHRpbWVzY2FsZSwgb25l
-IGNhbiBzYXkgdGhhdCB0aGUgYXZlcmFnZSBzcGVlZCBmcm9tIGNpdHkKQSB0byBjaXR5IEIgd2Fz
-IHh4IG1waCwgc2luY2UgdGhlIHdob2xlIGpvdXJuZXkgdG9vayAyLjUgaG91cnMuCgpUaGUgc2Ft
-ZSBjYW4gY3VycmVudGx5IGJlIG9ic2VydmVkIHdpdGggWF9yZWN2IC0gdGhlcmUgaXMgb25lIGNv
-bW1pdCB3aGljaCAKdHJpZXMgdG8gbWFrZSBYX3JlY3YgYXMgZmluZS1ncmFpbmVkIGFzIHBvc3Np
-YmxlLCBpdCBpcyBsYWJlbGxlZCAiZGNjcCBjY2lkLTM6ClVwZGF0ZSB0aGUgY29tcHV0YXRpb24g
-b2YgWF9yZWN2IiwKaHR0cDovL2VkZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9jZ2ktYmluL2dpdHdl
-Yi5jZ2k/cNxjcF9leHAuZ2l0O2E9Y29tbWl0ZGlmZjtoLTBiNjg3MDI1NDk0ZTVkODkxOGZmY2M3
-MDI5ZDc5MzM5MDgzNWNjCgpUaGUgcmVzdWx0IGlzIHRoYXQgWF9yZWN2IG5vdyBzaG93cyBtdWNo
-IHdpZGVyIHZhcmlhdGlvbiwgb24gYSBzbWFsbCB0aW1lc2NhbGUKdGhlcmUgaXMgYSBsb3QgaGFw
-cGVuaW5nLiBJdCBjYW4gYmVzdCBiZSBzZWVuIGJ5IHBsb3R0aW5nIHRoZSBYX3JlY3YgdXNpbmcK
-ZGNjcF9wcm9iZS4gV2l0aG91dCB0aGlzIGNvbW1pdCB0aGUgZ3JhcGhzIGFyZSBtdWNoICdxdWll
-dGVyJyBhbmQganVzdCBzaG93CnRoZSBsb25nLXRlcm0gYXZlcmFnZS4KCkluIFRDUCBXZXN0d29v
-ZCBmb3IgaW5zdGFuY2UgYSBsb3ctcGFzcyBmaWx0ZXIgaXMgdXNlZCB0byBmaWx0ZXIgb3V0IHRo
-ZSAKaGlnaC1mcmVxdWVuY3kgY2hhbmdlcyBpbiB0aGUgbWVhc3VyZW1lbnRzIG9mIHRoZSBBY2sg
-UmF0ZToKCiJUQ1AgV2VzdHdvb2Q6IEJhbmR3aWR0aCBFc3RpbWF0aW9uIGZvciBFbmhhbmNlZCBU
-cmFuc3BvcnQgb3ZlciBXaXJlbGVzcyBMaW5rcyIKTW9iaWNvbSAyMDAxCmh0dHA6Ly93d3cuY3Mu
-dWNsYS5lZHUvTlJML2hwaS90Y3B3L3RjcHdfcGFwZXJzLzIwMDEtbW9iaWNvbS0wLnBkZgoKSSdk
-IGFwcHJlY2lhdGUgb3BpbmlvbnMgb24gdGhpcywgYXMgSSB0aGluayAKCldpdGggcmVnYXJkIHRv
-IENDSUQtMywgaXQgYWxzbyBzZWVtcyB0byBiZSBiZSBiZXR0ZXIgdG8gcmV2ZXJ0IHRoZSBhYm92
-ZQpjb21taXQgYW5kIGp1c3QgdXNlIGxvbmctdGVybSBhdmVyYWdlcy4KCgo0LiBOb3Qgc3VyZSB1
-c2luZyBoaWdoLXJlc29sdXRpb24gaXMgdGhlIGFuc3dlcgotLS0tLS0tLS0tLS0tLS0tLS0tLS0t
-LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQpXaGlsZSBhIGZpbmUtZ3JhaW5lZCB0aW1lciByZXNv
-bHV0aW9uIG1heSBiZSBkZXNpcmFibGUsIGl0IGlzIG5vdApuZWNlc3NhcmlseSBhIG11c3QuIFRo
-ZSBpbXBsZW1lbnRhdGlvbiBvZiByYXRlLWJhc2VkIHBhY2luZyBpbiBUQ1AKKGh0dHA6Ly93d3cu
-aXNpLmVkdS9+am9obmgvUEFQRVJTL1Zpc3dlc3dhcmFpYWg5N2IuaHRtbCkgZm9yIGluc3RhbmNl
-CmFsc28gdXNlZCBsb3coZXIpIHJlc29sdXRpb24gdGltZXJzIGFuZCBpdCB3b3JrZWQuCgpUaGUg
-UkZDIGZvciBDQ0lELTMgKGh0dHA6Ly93d3cucmZjLWFyY2hpdmUub3JnL2dldHJmYy5waHA/cmZj
-UzQ4KSBhbHNvCmRvZXMgbm90IGhpZ2gtcmVzb2x1dGlvbjsgaXQgc3VwcG9ydHMgY29hcnNlLWdy
-YWluZWQgdGltZXN0YW1wcyAoc2VjdGlvbgo2LjMgYW5kIFJGQyA0MzQyKSBhbmQgZGlzY3Vzc2Vz
-IGltcGxlbWVudGF0aW9uIGlzc3VlcyB3aGVuIHVzaW5nIGEgCmxvd2VyIHJlc29sdXRpb24gKHNl
-Y3Rpb24gOC4zKS4KClRoZSBjb3VudGVyLWFyZ3VtZW50IGNvdWxkIGJlIHRoYXQgQ0NJRC0zIGlz
-IGEgdHJhbnNwb3J0IHByb3RvY29sIHdpdGggYQpidWlsdC1pbiBUb2tlbiBCdWNrZXQgRmlsdGVy
-IHNvIHRoYXQgc2ltaWxhciBjb25zaWRlcmF0aW9ucyBhcHBseSBhcyBmb3IKdGhlIFFkaXNjIEFQ
-SSAobmV0L3NjaGVkL3NjaF9hcGkuYykuCgpTdW1taW5nIHVwLCBJIGhhdmUgZG91YnRzIHRoYXQg
-YmFzaW5nIENDSUQtMyB3aWxsIGJyaW5nIGFkdmFudGFnZXMgYW5kCndvdWxkIG11Y2ggcmF0aGVy
-IGdvIHRoZSBvdGhlciB3YXkgYW5kIChjb25zaXN0ZW50bHkpIHVzZSBsb3dlciByZXNvbHV0aW9u
-LgoKVGhvdWdodHM/Ci0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBs
-aW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jk
-b21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5r
-ZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
+OK. I'll add a few comments even though I'm a little bit rusty...
+
+I was previously an advocate of low resolution timers and then use
+bursts as needed to achieve the average rate as specified in RFC3448.
+
+The reasoning for this was very much as you discuss in point 1 - that
+you achieve less than the desired rate with high resolution timers as
+you will never get exactly to transmit at the time you require (unless
+you have a "hard" realtime system with desired accuracy) - so any
+delay will slow down your transmit rate, and that high resolution
+timers may not be available on all architectures. I also had a third
+reason - overhead - if you're interrupting other tasks and having to
+do a context switch many, many times a second surely that isn't so
+good?
+
+However RFC 5348 changes this as this clause is added to 4.6:
+  To limit burstiness, a TFRC implementation MUST prevent bursts of
+   arbitrary size.  This limit MUST be less than or equal to one round-
+   trip time's worth of packets.  A TFRC implementation MAY limit bursts
+   to less than a round-trip time's worth of packets
+
+and this is further explained in section 8.3 and the downside - that
+you can't send big bursts so you can't get the full calculated rate.
+
+The RFC uses an example of 1 msec scheduling and 0.1 msec RTT. However
+what would be worse is devices on a LAN with 10 msec timer - e.g. two
+embedded devices at home - I haven't done the maths but I think the
+rate achievable would be quite low.
+
+One thing that I think we do need to be careful about though is
+assuming that we should be trying to get very high speed transfer -
+DCCP is not what we would layer a file serving protocol on top of....
+(some have argued you shouldn't even use TCP for this on a LAN...)
+
+Thinking laterally there is another possible solution - something I
+used way back in the 80s for another project - build your own
+scheduler! We could set a high resolution timer to tick every 0.1 msec
+and then use the coarse grained algorithm at that point....
+
+This is a hack to some degree and I can imagine David Miller
+suggesting that it is more a protocol issue... The other thing is that
+if we did this we would have to only do it when we actually need and
+use higher granularity at other times or else the Powertop people may
+not be so happy.
+
+Anyway - something to think about. I've also added the IETF list as
+well in case people there have the answers.
+
+Regards
+
+Ian
+
+On Sat, Nov 15, 2008 at 11:50 PM, Gerrit Renker <gerrit@erg.abdn.ac.uk> wro=
+te:
+>
+> I would appreciate some advice and insights regarding the use of
+> high-resolution timers within a transport protocol, specifically
+> DCCP with CCID-3 (RFC 5348).
+>
+> Currently the implementation is in a limbo of high-resolution and
+> low-resolution code. It is not good, neither here nor there, so
+> I would like to work on making the interface consistent.
+>
+> After thinking this through I encountered a number of points
+> which made me question whether high-resolution timers will lead to
+> better performance and a cleaner interface.
+>
+> I'd appreciate comments and input on this, the points are below.
+>
+> 1. Handling unavoidable waiting times
+> -------------------------------------
+>  One can not expect that, if the scheduling clock says 'send in x
+>  microseconds', a packet will indeed leave after x microseconds; due to
+>  waiting times. An example is in net/dccp/timer.c, when the socket is
+>  currently locked - we wait for a "small" amount of time:
+>
+>        bh_lock_sock(sk);
+>        if (sock_owned_by_user(sk))
+>                sk_reset_timer(sk, &dp->dccps_xmit_timer, jiffies + 1);
+>        else
+>                dccp_write_xmit(sk, 0);
+>        bh_unlock_sock(sk);
+>
+>
+> 2. Dependency on high-resolution timers
+> ---------------------------------------
+>  Committing the CCID-3/CCID-4 implementations to using high-resolution
+>  timers means that the modules can not be built/loaded when the kernel
+>  does not offer sufficient resolution.
+>
+>  This has recently made it hard for someone using CCID-3 to find out
+>  why DCCP would not run, where the cause was that high-resolution timers
+>  were not enabled in the kernel.
+>
+>
+> 3. Noise in the output
+> ----------------------
+> When tracking the speed of a car every 10 seconds, there is a lot of vari=
+ation
+> in the values, due to stopping at traffic lights, accelerating etc. But w=
+hen
+> considering a larger timescale, one can say that the average speed from c=
+ity
+> A to city B was xx mph, since the whole journey took 2.5 hours.
+>
+> The same can currently be observed with X_recv - there is one commit which
+> tries to make X_recv as fine-grained as possible, it is labelled "dccp cc=
+id-3:
+> Update the computation of X_recv",
+> http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dcom=
+mitdiff;h-0b687025494e5d8918ffcc7029d793390835cc
+>
+> The result is that X_recv now shows much wider variation, on a small time=
+scale
+> there is a lot happening. It can best be seen by plotting the X_recv using
+> dccp_probe. Without this commit the graphs are much 'quieter' and just sh=
+ow
+> the long-term average.
+>
+> In TCP Westwood for instance a low-pass filter is used to filter out the
+> high-frequency changes in the measurements of the Ack Rate:
+>
+> "TCP Westwood: Bandwidth Estimation for Enhanced Transport over Wireless =
+Links"
+> Mobicom 2001
+> http://www.cs.ucla.edu/NRL/hpi/tcpw/tcpw_papers/2001-mobicom-0.pdf
+>
+> I'd appreciate opinions on this, as I think
+>
+> With regard to CCID-3, it also seems to be be better to revert the above
+> commit and just use long-term averages.
+>
+>
+> 4. Not sure using high-resolution is the answer
+> -----------------------------------------------
+> While a fine-grained timer resolution may be desirable, it is not
+> necessarily a must. The implementation of rate-based pacing in TCP
+> (http://www.isi.edu/~johnh/PAPERS/Visweswaraiah97b.html) for instance
+> also used low(er) resolution timers and it worked.
+>
+> The RFC for CCID-3 (http://www.rfc-archive.org/getrfc.php?rfcS48) also
+> does not high-resolution; it supports coarse-grained timestamps (section
+> 6.3 and RFC 4342) and discusses implementation issues when using a
+> lower resolution (section 8.3).
+>
+> The counter-argument could be that CCID-3 is a transport protocol with a
+> built-in Token Bucket Filter so that similar considerations apply as for
+> the Qdisc API (net/sched/sch_api.c).
+>
+> Summing up, I have doubts that basing CCID-3 will bring advantages and
+> would much rather go the other way and (consistently) use lower resolutio=
+n.
+>
+> Thoughts?
+
+
+
+--
+Web: http://wand.net.nz/~iam4/, http://www.jandi.co.nz
+Blog: http://iansblog.jandi.co.nz
