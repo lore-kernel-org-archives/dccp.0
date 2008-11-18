@@ -1,37 +1,53 @@
-From: David Miller <davem@davemloft.net>
-Date: Mon, 17 Nov 2008 06:50:40 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 18 Nov 2008 05:03:47 +0000
 Subject: Re: [PATCH 1/5] dccp: Mechanism to resolve CCID dependencies
-Message-Id: <20081116.225040.197479116.davem@davemloft.net>
+Message-Id: <20081118050346.GA3846@gerrit.erg.abdn.ac.uk>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="DocE+STaALJfprDB"
 List-Id: <dccp.vger.kernel.org>
 References: <1226751079-15019-2-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1226751079-15019-2-git-send-email-gerrit@erg.abdn.ac.uk>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 15 Nov 2008 13:11:15 +0100
 
-> This adds a hook to resolve features whose value depends on the choice of
-> CCID. It is done at the server since it can only be done after the CCID
-> values have been negotiated; i.e. the client will add its CCID preference
-> list on the Change options sent in the Request, which will be reconciled
-> with the local preference list of the server.
-> 
-> The concept is documented on
-> http://www.erg.abdn.ac.uk/users/gerrit/dccp/notes/feature_negotiation/\
-> 				implementation_notes.html#ccid_dependencies
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+--DocE+STaALJfprDB
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
 
-Applied.
+| > +	list_for_each_entry(entry, fn_list, node)
+| > +		if (entry->feat_num == feat_num && entry->is_local == is_local)
+| > +			return entry;
+| > +		else if (entry->feat_num > feat_num)
+| > +			break;
+| 
+| Personally, I would have put braces around this basic block.
+| 
+If it is possible to modify without disturbance, I attach a patch for this and
+have changed it in the test tree.
 
-> +	list_for_each_entry(entry, fn_list, node)
-> +		if (entry->feat_num = feat_num && entry->is_local = is_local)
-> +			return entry;
-> +		else if (entry->feat_num > feat_num)
-> +			break;
+I have checked that making this change does not affect subsequent
+patches - it works with either variant.
 
-Personally, I would have put braces around this basic block.
+--DocE+STaALJfprDB
+Content-Type: text/x-diff; charset=us-ascii
+Content-Description: Missing braces
+Content-Disposition: attachment; filename="3.diff"
+
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -171,11 +171,12 @@ static struct dccp_feat_entry *dccp_feat
+ {
+ 	struct dccp_feat_entry *entry;
+ 
+-	list_for_each_entry(entry, fn_list, node)
++	list_for_each_entry(entry, fn_list, node) {
+ 		if (entry->feat_num == feat_num && entry->is_local == is_local)
+ 			return entry;
+ 		else if (entry->feat_num > feat_num)
+ 			break;
++	}
+ 	return NULL;
+ }
+ 
+
+--DocE+STaALJfprDB--
