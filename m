@@ -1,105 +1,155 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 12 Nov 2008 06:36:43 +0000
-Subject: v2 [PATCH 0/4] dccp: Feature negotiation - conclusion of Part I
-Message-Id: <20081112063643.GB6405@gerrit.erg.abdn.ac.uk>
+Date: Sat, 22 Nov 2008 10:30:41 +0000
+Subject: [PATCH 5/5] dccp: Header option insertion routine for feature-negotiation
+Message-Id: <1227349841-9440-6-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-SGkgRGF2ZSwKCnBsZWFzZSBmaW5kIGF0dGFjaGVkIHRoZSBjb3JyZWN0IHNldCBvZiA0IHBhdGNo
-ZXMsIHRha2VuIGZyb20gdXAtdG8tZGF0ZQpjb3BpZXMuIFRleHQgYmVsb3cgKFVSTCkgYWxzbyB1
-cGRhdGVkLgoKR2Vycml0CgoKQ2hhbmdlcyByZWxhdGl2ZSB0byByZXZpc2lvbi0wMQotLS0tLS0t
-LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tClBhdGNoIDIvNCBpbiB0aGUgZmlyc3QgcmV2aXNpb24g
-d2FzIGluIGFuIG91dGRhdGVkIGZvcm1hdCB3aGljaCBsZWFkIHRvIApzZXZlcmFsIGh1bmtzIG1p
-c3NpbmcuIFRoaXMgc2V0IGNvbnRhaW5zIHRoZSBjb3JyZWN0L3VwLXRvLWRhdGUgdmVyc2lvbnMu
-CkZvciByZWZlcmVuY2UsIGFuIGludGVyLWRpZmYgdG8gdGhlIHByZXZpb3VzIHNldCBpcyBiZWxv
-dy4KCgpDb21taXQgc3VtbWFyeQotLS0tLS0tLS0tLS0tLQpUaGUgc2V0IGNvbmNsdWRlcyB0aGUg
-Zmlyc3Qgc2V0IG9mIHRoZSBmZWF0dXJlIG5lZ290aWF0aW9uIHBhdGNoZXMgdG8gcHJvdmlkZQph
-IHNlbGYtY29udGFpbmVkIGZlYXR1cmUgbmVnb3RpYXRpb24gQVBJIGZvciB0aGUgRENDUCBwcm90
-b2NvbCAoUkZDIDQzNDAtMikuCgpUaGUgd2hvbGUgc2V0IGlzIHN0cnVjdHVyZWQgaW50byAzIG1h
-aW4gYmxvY2tzIC0gKDEpIGJhc2lzLCAoMikgY29yZSwKKDMpIGludGVncmF0aW9uIGFuZCBjbGVh
-bnVwLgoKV2l0aGluIHRoZXNlIGJsb2NrcywgdGhpcyBpcyB0aGUgc2Vjb25kIHNldCBhbmQgaXRz
-IHB1cnBvc2UgaXMgdG8gY29uY2x1ZGUKdGhlIGJhc2UgaW1wbGVtZW50YXRpb24sIHByZXBhcmlu
-ZyBmb3IgdGhlICgxNSkgY29yZSBwYXRjaGVzIGluIHRoZSBzZWNvbmQgc2V0LgoKCkxpc3Qgb2Yg
-cGF0Y2hlcyBpbiB0aGlzIHNldDoKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQpQYXRjaCAj
-MTogQ2hhbmdlcyB0aGUgZXhpc3RpbmcgcG9saWN5IHRvIGFsbG93IGFueXRpbWUgY2hhbmdlcyBh
-cyB0aGF0IGxlYWQKICAgICAgICAgIHRvIHVucHJlZGljdGFibGUgcmVzdWx0cy4KUGF0Y2ggIzI6
-IEFkZHMgcmVnaXN0cmF0aW9uIHJvdXRpbmVzLiBUaGVzZSBmb3JtIHBhcnQgb2YgdGhlIHVzZXIg
-aW50ZXJmYWNlCiAgICAgICAgICBhbmQgYXJlIGxhdGVyIHVzZWQgYnkgdGhlIHNvY2tldCBBUEkg
-dG8gc2V0IGluZGl2aWR1YWwgcHJlZmVyZW5jZXMuClBhdGNoICMzOiBDQ0lEcyBhcmUgYSBuZWdv
-dGlhYmxlIGZlYXR1cmUuIFRoaXMgcGF0Y2ggYWRkcyBzdXBwb3J0IHRvIHF1ZXJ5IHRoZQogICAg
-ICAgICAgc3VwcG9ydGVkIENDSURzLCBzbyBhcyB0byBhZHZlcnRpc2Ugb25seSB0aGUgbG9jYWxs
-eSBzdXBwb3J0ZWQgb25lcy4KUGF0Y2ggIzQ6IFRoZSBjaG9pY2Ugb2YgQ0NJRCBpbiB0dXJuIGNy
-ZWF0ZXMgbmV3IGZlYXR1cmUgZGVwZW5kZW5jaWVzLiBUaGUgcGF0Y2gKICAgICAgICAgIGFkZHMg
-YXV0b21hdGljIHRyYWNraW5nIG9mIHN1Y2ggZGVwZW5kZW5jaWVzIHRvIGF2b2lkIGxhdGVyIGZh
-aWx1cmUuCgpUaGUgc2V0IGlzIGFsc28gYXZhaWxhYmxlIGZvciB2aWV3aW5nIG9ubGluZSwgYmVn
-aW5uaW5nIGF0Cmh0dHA6Ly9lZGVuLWZlZWQuZXJnLmFiZG4uYWMudWsvY2dpLWJpbi9naXR3ZWIu
-Y2dpP3DcY3BfZXhwLmdpdDthPWNvbW1pdGRpZmY7aCg3MjQyZGQ4Y2FhNjU0MTVjMjE5ZTMxNjNh
-OGI2NzQ0MDY3NTA4ZgoKClBhdGNoIHN0YXRzOgotLS0tLS0tLS0tLS0KIERvY3VtZW50YXRpb24v
-bmV0d29ya2luZy9kY2NwLnR4dCB8ICAgIDQgCiBpbmNsdWRlL2xpbnV4L2RjY3AuaCAgICAgICAg
-ICAgICAgfCAgICAxIAogbmV0L2RjY3AvY2NpZC5jICAgICAgICAgICAgICAgICAgIHwgICA0OCAr
-KysrCiBuZXQvZGNjcC9jY2lkLmggICAgICAgICAgICAgICAgICAgfCAgICA1IAogbmV0L2RjY3Av
-Y2NpZHMvY2NpZDIuYyAgICAgICAgICAgIHwgICAgNiAKIG5ldC9kY2NwL2RjY3AuaCAgICAgICAg
-ICAgICAgICAgICB8ICAgIDEgCiBuZXQvZGNjcC9mZWF0LmMgICAgICAgICAgICAgICAgICAgfCAg
-Mzc1ICsrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKystLS0tCiBuZXQvZGNjcC9mZWF0
-LmggICAgICAgICAgICAgICAgICAgfCAgIDI1ICsrCiBuZXQvZGNjcC9vcHRpb25zLmMgICAgICAg
-ICAgICAgICAgfCAgIDE4IC0KIG5ldC9kY2NwL291dHB1dC5jICAgICAgICAgICAgICAgICB8ICAg
-IDQgCiBuZXQvZGNjcC9wcm90by5jICAgICAgICAgICAgICAgICAgfCAgICA3IAogbmV0L2RjY3Av
-dGltZXIuYyAgICAgICAgICAgICAgICAgIHwgICAxMiAtCiAxMiBmaWxlcyBjaGFuZ2VkLCA0Mzcg
-aW5zZXJ0aW9ucygrKSwgNjkgZGVsZXRpb25zKC0pCgoKCgkJLS0tLS0tLS0tLS0tLS0tLS0tLS0t
-LS0tLS0tLS0tLS0tLS0tCgkJQXBwZW5kaXg6IEludGVyLWRpZmYgdG8gcHJldmlvdXMgc2V0CgkJ
-LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgogLS0tIGEvbmV0L2RjY3AvZmVh
-dC5jCiArKysgYi9uZXQvZGNjcC9mZWF0LmMKIEBAIC05Miw2ICs5MiwxOCBAQCBzdGF0aWMgdTgg
-ZGNjcF9mZWF0X3R5cGUodTggZmVhdF9udW0pCiAgCXJldHVybiBkY2NwX2ZlYXRfdGFibGVbaWR4
-XS5yZWNvbmNpbGlhdGlvbjsKICB9CiAgCiArc3RhdGljIGludCBkY2NwX2ZlYXRfZGVmYXVsdF92
-YWx1ZSh1OCBmZWF0X251bSkKICt7CiArCWludCBpZHggPSBkY2NwX2ZlYXRfaW5kZXgoZmVhdF9u
-dW0pOwogKwkvKgogKwkgKiBUaGVyZSBhcmUgbm8gZGVmYXVsdCB2YWx1ZXMgZm9yIHVua25vd24g
-ZmVhdHVyZXMsIHNvIGVuY291bnRlcmluZyBhCiArCSAqIG5lZ2F0aXZlIGluZGV4IGhlcmUgaW5k
-aWNhdGVzIGEgc2VyaW91cyBwcm9ibGVtIHNvbWV3aGVyZSBlbHNlLgogKwkgKi8KICsJRENDUF9C
-VUdfT04oaWR4IDwgMCk7CiArCiArCXJldHVybiBpZHggPCAwID8gMCA6IGRjY3BfZmVhdF90YWJs
-ZVtpZHhdLmRlZmF1bHRfdmFsdWU7CiArfQogKwogIC8qIGNvcHkgY29uc3RydWN0b3IsIGZ2YWwg
-bXVzdCBub3QgYWxyZWFkeSBjb250YWluIGFsbG9jYXRlZCBtZW1vcnkgKi8KICBzdGF0aWMgaW50
-IGRjY3BfZmVhdF9jbG9uZV9zcF92YWwoZGNjcF9mZWF0X3ZhbCAqZnZhbCwgdTggY29uc3QgKnZh
-bCwgdTggbGVuKQogIHsKIEBAIC0xNTUsNiArMTY3LDYzIEBAIHN0YXRpYyB2b2lkIGRjY3BfZmVh
-dF9lbnRyeV9kZXN0cnVjdG9yKHN0cnVjdCBkY2NwX2ZlYXRfZW50cnkgKmVudHJ5KQogICAqIC0g
-bGlzdCBpcyBzb3J0ZWQgaW4gaW5jcmVhc2luZyBvcmRlciBvZiBmZWF0dXJlIG51bWJlciAoZmFz
-dGVyIGxvb2t1cCkKICAgKi8KICAKICsvKioKICsgKiBkY2NwX2ZlYXRfZW50cnlfbmV3ICAtICBD
-ZW50cmFsIGxpc3QgdXBkYXRlIHJvdXRpbmUgKGNhbGxlZCBieSBhbGwgb3RoZXJzKQogKyAqIEBo
-ZWFkOiAgbGlzdCB0byBhZGQgdG8KICsgKiBAZmVhdDogIGZlYXR1cmUgbnVtYmVyCiArICogQGxv
-Y2FsOiB3aGV0aGVyIHRoZSBsb2NhbCAoMSkgb3IgcmVtb3RlIGZlYXR1cmUgd2l0aCBudW1iZXIg
-QGZlYXQgaXMgbWVhbnQKICsgKiBUaGlzIGlzIHRoZSBvbmx5IGNvbnN0cnVjdG9yIGFuZCBzZXJ2
-ZXMgdG8gZW5zdXJlIHRoZSBhYm92ZSBpbnZhcmlhbnRzLgogKyAqLwogK3N0YXRpYyBzdHJ1Y3Qg
-ZGNjcF9mZWF0X2VudHJ5ICoKICsJICAgICAgZGNjcF9mZWF0X2VudHJ5X25ldyhzdHJ1Y3QgbGlz
-dF9oZWFkICpoZWFkLCB1OCBmZWF0LCBib29sIGxvY2FsKQogK3sKICsJc3RydWN0IGRjY3BfZmVh
-dF9lbnRyeSAqZW50cnk7CiArCiArCWxpc3RfZm9yX2VhY2hfZW50cnkoZW50cnksIGhlYWQsIG5v
-ZGUpCiArCQlpZiAoZW50cnktPmZlYXRfbnVtID0gZmVhdCAmJiBlbnRyeS0+aXNfbG9jYWwgPSBs
-b2NhbCkgewogKwkJCWRjY3BfZmVhdF92YWxfZGVzdHJ1Y3RvcihlbnRyeS0+ZmVhdF9udW0sICZl
-bnRyeS0+dmFsKTsKICsJCQlyZXR1cm4gZW50cnk7CiArCQl9IGVsc2UgaWYgKGVudHJ5LT5mZWF0
-X251bSA+IGZlYXQpIHsKICsJCQloZWFkID0gJmVudHJ5LT5ub2RlOwogKwkJCWJyZWFrOwogKwkJ
-fQogKwogKwllbnRyeSA9IGttYWxsb2Moc2l6ZW9mKCplbnRyeSksIGdmcF9hbnkoKSk7CiArCWlm
-IChlbnRyeSAhPSBOVUxMKSB7CiArCQllbnRyeS0+ZmVhdF9udW0gPSBmZWF0OwogKwkJZW50cnkt
-PmlzX2xvY2FsID0gbG9jYWw7CiArCQlsaXN0X2FkZF90YWlsKCZlbnRyeS0+bm9kZSwgaGVhZCk7
-CiArCX0KICsJcmV0dXJuIGVudHJ5OwogK30KICsKICsvKioKICsgKiBkY2NwX2ZlYXRfcHVzaF9j
-aGFuZ2UgIC0gIEFkZC9vdmVyd3JpdGUgYSBDaGFuZ2Ugb3B0aW9uIGluIHRoZSBsaXN0CiArICog
-QGZuX2xpc3Q6IGZlYXR1cmUtbmVnb3RpYXRpb24gbGlzdCB0byB1cGRhdGUKICsgKiBAZmVhdDog
-b25lIG9mICVkY2NwX2ZlYXR1cmVfbnVtYmVycwogKyAqIEBsb2NhbDogd2hldGhlciBsb2NhbCAo
-MSkgb3IgcmVtb3RlICgwKSBAZmVhdF9udW0gaXMgbWVhbnQKICsgKiBAbmVlZHNfbWFuZGF0b3J5
-OiB3aGV0aGVyIHRvIHVzZSBNYW5kYXRvcnkgZmVhdHVyZSBuZWdvdGlhdGlvbiBvcHRpb25zCiAr
-ICogQGZ2YWw6IHBvaW50ZXIgdG8gTk4vU1AgdmFsdWUgdG8gYmUgaW5zZXJ0ZWQgKHdpbGwgYmUg
-Y29waWVkKQogKyAqLwogK3N0YXRpYyBpbnQgZGNjcF9mZWF0X3B1c2hfY2hhbmdlKHN0cnVjdCBs
-aXN0X2hlYWQgKmZuX2xpc3QsIHU4IGZlYXQsIHU4IGxvY2FsLAogKwkJCQkgdTggbWFuZGF0b3J5
-LCBkY2NwX2ZlYXRfdmFsICpmdmFsKQogK3sKICsJc3RydWN0IGRjY3BfZmVhdF9lbnRyeSAqbmV3
-ID0gZGNjcF9mZWF0X2VudHJ5X25ldyhmbl9saXN0LCBmZWF0LCBsb2NhbCk7CiArCiArCWlmIChu
-ZXcgPSBOVUxMKQogKwkJcmV0dXJuIC1FTk9NRU07CiArCiArCW5ldy0+ZmVhdF9udW0JICAgICA9
-IGZlYXQ7CiArCW5ldy0+aXNfbG9jYWwJICAgICA9IGxvY2FsOwogKwluZXctPnN0YXRlCSAgICAg
-PSBGRUFUX0lOSVRJQUxJU0lORzsKICsJbmV3LT5uZWVkc19jb25maXJtICAgPSAwOwogKwluZXct
-PmVtcHR5X2NvbmZpcm0gICA9IDA7CiArCW5ldy0+dmFsCSAgICAgPSAqZnZhbDsKICsJbmV3LT5u
-ZWVkc19tYW5kYXRvcnkgPSBtYW5kYXRvcnk7CiArCiArCXJldHVybiAwOwogK30KICsKICBzdGF0
-aWMgaW5saW5lIHZvaWQgZGNjcF9mZWF0X2xpc3RfcG9wKHN0cnVjdCBkY2NwX2ZlYXRfZW50cnkg
-KmVudHJ5KQogIHsKICAJbGlzdF9kZWwoJmVudHJ5LT5ub2RlKTsKIAotLS0gCi0tClRvIHVuc3Vi
-c2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBp
-bgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3Jl
-IG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZv
-Lmh0bWw=
+The patch extends existing code:
+ * Confirm options divide into the confirmed value plus an optional preference
+   list for SP values. Previously only the preference list was echoed for SP
+   values, now the confirmed value is added as per RFC 4340, 6.1;
+ * length and sanity checks are added to avoid illegal memory (or NULL) access.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ net/dccp/feat.h    |    2 +
+ net/dccp/options.c |   91 ++++++++++++++++++----------------------------------
+ 2 files changed, 33 insertions(+), 60 deletions(-)
+
+--- a/net/dccp/feat.h
++++ b/net/dccp/feat.h
+@@ -140,4 +140,6 @@ extern void dccp_encode_value_var(const u64 value, u8 *to, const u8 len);
+ extern u64  dccp_decode_value_var(const u8 *bf, const u8 len);
+ 
+ extern int  dccp_insert_option_mandatory(struct sk_buff *skb);
++extern int  dccp_insert_fn_opt(struct sk_buff *skb, u8 type, u8 feat,
++			       u8 *val, u8 len, bool repeat_first);
+ #endif /* _DCCP_FEAT_H */
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -482,23 +482,46 @@ int dccp_insert_option_mandatory(struct sk_buff *skb)
+ 	return 0;
+ }
+ 
+-static int dccp_insert_feat_opt(struct sk_buff *skb, u8 type, u8 feat,
+-				u8 *val, u8 len)
++/**
++ * dccp_insert_fn_opt  -  Insert single Feature-Negotiation option into @skb
++ * @type: %DCCPO_CHANGE_L, %DCCPO_CHANGE_R, %DCCPO_CONFIRM_L, %DCCPO_CONFIRM_R
++ * @feat: one out of %dccp_feature_numbers
++ * @val: NN value or SP array (preferred element first) to copy
++ * @len: true length of @val in bytes (excluding first element repetition)
++ * @repeat_first: whether to copy the first element of @val twice
++ * The last argument is used to construct Confirm options, where the preferred
++ * value and the preference list appear separately (RFC 4340, 6.3.1). Preference
++ * lists are kept such that the preferred entry is always first, so we only need
++ * to copy twice, and avoid the overhead of cloning into a bigger array.
++ */
++int dccp_insert_fn_opt(struct sk_buff *skb, u8 type, u8 feat,
++		       u8 *val, u8 len, bool repeat_first)
+ {
+-	u8 *to;
++	u8 tot_len, *to;
+ 
+-	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len + 3 > DCCP_MAX_OPT_LEN) {
+-		DCCP_WARN("packet too small for feature %d option!\n", feat);
++	/* take the `Feature' field and possible repetition into account */
++	if (len > (DCCP_SINGLE_OPT_MAXLEN - 2)) {
++		DCCP_WARN("length %u for feature %u too large\n", len, feat);
+ 		return -1;
+ 	}
+ 
+-	DCCP_SKB_CB(skb)->dccpd_opt_len += len + 3;
++	if (unlikely(val = NULL || len = 0))
++		len = repeat_first = 0;
++	tot_len = 3 + repeat_first + len;
++
++	if (DCCP_SKB_CB(skb)->dccpd_opt_len + tot_len > DCCP_MAX_OPT_LEN) {
++		DCCP_WARN("packet too small for feature %d option!\n", feat);
++		return -1;
++	}
++	DCCP_SKB_CB(skb)->dccpd_opt_len += tot_len;
+ 
+-	to    = skb_push(skb, len + 3);
++	to    = skb_push(skb, tot_len);
+ 	*to++ = type;
+-	*to++ = len + 3;
++	*to++ = tot_len;
+ 	*to++ = feat;
+ 
++	if (repeat_first)
++		*to++ = *val;
+ 	if (len)
+ 		memcpy(to, val, len);
+ 
+@@ -508,51 +531,6 @@ static int dccp_insert_feat_opt(struct sk_buff *skb, u8 type, u8 feat,
+ 	return 0;
+ }
+ 
+-static int dccp_insert_options_feat(struct sock *sk, struct sk_buff *skb)
+-{
+-	struct dccp_minisock *dmsk = dccp_msk(sk);
+-	struct dccp_opt_pend *opt, *next;
+-	int change = 0;
+-
+-	/* confirm any options [NN opts] */
+-	list_for_each_entry_safe(opt, next, &dmsk->dccpms_conf, dccpop_node) {
+-		dccp_insert_feat_opt(skb, opt->dccpop_type,
+-				     opt->dccpop_feat, opt->dccpop_val,
+-				     opt->dccpop_len);
+-		/* fear empty confirms */
+-		if (opt->dccpop_val)
+-			kfree(opt->dccpop_val);
+-		kfree(opt);
+-	}
+-	INIT_LIST_HEAD(&dmsk->dccpms_conf);
+-
+-	/* see which features we need to send */
+-	list_for_each_entry(opt, &dmsk->dccpms_pending, dccpop_node) {
+-		/* see if we need to send any confirm */
+-		if (opt->dccpop_sc) {
+-			dccp_insert_feat_opt(skb, opt->dccpop_type + 1,
+-					     opt->dccpop_feat,
+-					     opt->dccpop_sc->dccpoc_val,
+-					     opt->dccpop_sc->dccpoc_len);
+-
+-			BUG_ON(!opt->dccpop_sc->dccpoc_val);
+-			kfree(opt->dccpop_sc->dccpoc_val);
+-			kfree(opt->dccpop_sc);
+-			opt->dccpop_sc = NULL;
+-		}
+-
+-		/* any option not confirmed, re-send it */
+-		if (!opt->dccpop_conf) {
+-			dccp_insert_feat_opt(skb, opt->dccpop_type,
+-					     opt->dccpop_feat, opt->dccpop_val,
+-					     opt->dccpop_len);
+-			change++;
+-		}
+-	}
+-
+-	return 0;
+-}
+-
+ /* The length of all options needs to be a multiple of 4 (5.8) */
+ static void dccp_insert_option_padding(struct sk_buff *skb)
+ {
+@@ -589,13 +567,6 @@ int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
+ 		dp->dccps_hc_rx_insert_options = 0;
+ 	}
+ 
+-	/* Feature negotiation */
+-	/* Data packets can't do feat negotiation */
+-	if (DCCP_SKB_CB(skb)->dccpd_type != DCCP_PKT_DATA &&
+-	    DCCP_SKB_CB(skb)->dccpd_type != DCCP_PKT_DATAACK &&
+-	    dccp_insert_options_feat(sk, skb))
+-		return -1;
+-
+ 	/*
+ 	 * Obtain RTT sample from Request/Response exchange.
+ 	 * This is currently used in CCID 3 initialisation.
