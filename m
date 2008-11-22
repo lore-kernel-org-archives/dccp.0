@@ -1,190 +1,91 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 22 Nov 2008 10:30:37 +0000
-Subject: [PATCH 1/5] dccp: Set per-connection CCIDs via socket options
-Message-Id: <1227349841-9440-2-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sat, 22 Nov 2008 10:30:38 +0000
+Subject: [PATCH 2/5] dccp: API to query the current TX/RX CCID
+Message-Id: <1227349841-9440-3-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-With this patch, TX/RX CCIDs can now be changed on a per-connection basis, which
-overrides the defaults set by the global sysctl variables for TX/RX CCIDs.
+This provides function to query the current TX/RX CCID dynamically, without
+reliance on the minisock value, using dynamic information available in the
+currently loaded CCID module.
 
-To make full use of this facility, the remaining patches of this patch set are
-needed, which track dependencies and activate negotiated feature values.
+This query function is then used to
+ (a) provide the getsockopt part for getting/setting CCIDs via sockopts;
+ (b) replace the current test for "which CCID is in use" in probe.c.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- Documentation/networking/dccp.txt |   14 ++++++++++++++
- include/linux/dccp.h              |    5 +++++
- net/dccp/ackvec.c                 |    9 ++++-----
- net/dccp/ackvec.h                 |    5 ++---
- net/dccp/feat.h                   |    2 ++
- net/dccp/proto.c                  |   34 ++++++++++++++++++++++++++++++++++
- 6 files changed, 61 insertions(+), 8 deletions(-)
+ net/dccp/ccid.h  |   18 ++++++++++++++++++
+ net/dccp/probe.c |    7 ++-----
+ net/dccp/proto.c |   10 ++++++++++
+ 3 files changed, 30 insertions(+), 5 deletions(-)
 
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -61,6 +61,20 @@ DCCP_SOCKOPT_AVAILABLE_CCIDS is also read-only and returns the list of CCIDs
- supported by the endpoint (see include/linux/dccp.h for symbolic constants).
- The caller needs to provide a sufficiently large (> 2) array of type uint8_t.
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -116,6 +116,24 @@ extern struct ccid *ccid_hc_rx_new(unsigned char id, struct sock *sk,
+ extern struct ccid *ccid_hc_tx_new(unsigned char id, struct sock *sk,
+ 				   gfp_t gfp);
  
-+DCCP_SOCKOPT_CCID is write-only and sets both the TX and RX CCIDs at the same
-+time, combining the operation of the next two socket options. This option is
-+preferrable over the latter two, since often applications will use the same
-+type of CCID for both directions; and mixed use of CCIDs is not currently well
-+understood. This socket option takes as argument at least one uint8_t value, or
-+an array of uint8_t values, which must match available CCIDS (see above). CCIDs
-+must be registered on the socket before calling connect() or listen().
-+
-+DCCP_SOCKOPT_TX_CCID is read/write. It returns the current CCID (if set) or sets
-+the preference list for the TX CCID, using the same format as DCCP_SOCKOPT_CCID.
-+Please note that the getsockopt argument type here is `int', not uint8_t.
-+
-+DCCP_SOCKOPT_RX_CCID is analogous to DCCP_SOCKOPT_TX_CCID, but for the RX CCID.
-+
- DCCP_SOCKOPT_SERVER_TIMEWAIT enables the server (listening socket) to hold
- timewait state when closing the connection (RFC 4340, 8.3). The usual case is
- that the closing server sends a CloseReq, whereupon the client holds timewait
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -168,6 +168,8 @@ enum {
- 	DCCPO_MIN_CCID_SPECIFIC = 128,
- 	DCCPO_MAX_CCID_SPECIFIC = 255,
- };
-+/* maximum size of a single TLV-encoded DCCP option (sans type/len bytes) */
-+#define DCCP_SINGLE_OPT_MAXLEN	253
- 
- /* DCCP CCIDS */
- enum {
-@@ -203,6 +205,9 @@ enum dccp_feature_numbers {
- #define DCCP_SOCKOPT_SEND_CSCOV		10
- #define DCCP_SOCKOPT_RECV_CSCOV		11
- #define DCCP_SOCKOPT_AVAILABLE_CCIDS	12
-+#define DCCP_SOCKOPT_CCID		13
-+#define DCCP_SOCKOPT_TX_CCID		14
-+#define DCCP_SOCKOPT_RX_CCID		15
- #define DCCP_SOCKOPT_CCID_RX_INFO	128
- #define DCCP_SOCKOPT_CCID_TX_INFO	192
- 
---- a/net/dccp/feat.h
-+++ b/net/dccp/feat.h
-@@ -22,6 +22,8 @@
- /* Wmin2 and Wmax=2^46-1 from 7.5.2 */
- #define DCCPF_SEQ_WMIN		32
- #define DCCPF_SEQ_WMAX		0x3FFFFFFFFFFFull
-+/* Maximum number of SP values that fit in a single (Confirm) option */
-+#define DCCP_FEAT_MAX_SP_VALS	(DCCP_SINGLE_OPT_MAXLEN - 2)
- 
- enum dccp_feat_type {
- 	FEAT_AT_RX   = 1,	/* located at RX side of half-connection  */
---- a/net/dccp/ackvec.h
-+++ b/net/dccp/ackvec.h
-@@ -11,15 +11,14 @@
-  *	published by the Free Software Foundation.
-  */
- 
-+#include <linux/dccp.h>
- #include <linux/compiler.h>
- #include <linux/ktime.h>
- #include <linux/list.h>
- #include <linux/types.h>
- 
--/* Read about the ECN nonce to see why it is 253 */
--#define DCCP_MAX_ACKVEC_OPT_LEN 253
- /* We can spread an ack vector across multiple options */
--#define DCCP_MAX_ACKVEC_LEN (DCCP_MAX_ACKVEC_OPT_LEN * 2)
-+#define DCCP_MAX_ACKVEC_LEN (DCCP_SINGLE_OPT_MAXLEN * 2)
- 
- #define DCCP_ACKVEC_STATE_RECEIVED	0
- #define DCCP_ACKVEC_STATE_ECN_MARKED	(1 << 6)
---- a/net/dccp/ackvec.c
-+++ b/net/dccp/ackvec.c
-@@ -12,7 +12,6 @@
- #include "ackvec.h"
- #include "dccp.h"
- 
--#include <linux/dccp.h>
- #include <linux/init.h>
- #include <linux/errno.h>
- #include <linux/kernel.h>
-@@ -68,7 +67,7 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
- 	struct dccp_sock *dp = dccp_sk(sk);
- 	struct dccp_ackvec *av = dp->dccps_hc_rx_ackvec;
- 	/* Figure out how many options do we need to represent the ackvec */
--	const u16 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_MAX_ACKVEC_OPT_LEN);
-+	const u8 nr_opts = DIV_ROUND_UP(av->av_vec_len, DCCP_SINGLE_OPT_MAXLEN);
- 	u16 len = av->av_vec_len + 2 * nr_opts, i;
- 	u32 elapsed_time;
- 	const unsigned char *tail, *from;
-@@ -100,8 +99,8 @@ int dccp_insert_option_ackvec(struct sock *sk, struct sk_buff *skb)
- 	for (i = 0; i < nr_opts; ++i) {
- 		int copylen = len;
- 
--		if (len > DCCP_MAX_ACKVEC_OPT_LEN)
--			copylen = DCCP_MAX_ACKVEC_OPT_LEN;
-+		if (len > DCCP_SINGLE_OPT_MAXLEN)
-+			copylen = DCCP_SINGLE_OPT_MAXLEN;
- 
- 		*to++ = DCCPO_ACK_VECTOR_0;
- 		*to++ = copylen + 2;
-@@ -432,7 +431,7 @@ found:
- int dccp_ackvec_parse(struct sock *sk, const struct sk_buff *skb,
- 		      u64 *ackno, const u8 opt, const u8 *value, const u8 len)
- {
--	if (len > DCCP_MAX_ACKVEC_OPT_LEN)
-+	if (len > DCCP_SINGLE_OPT_MAXLEN)
- 		return -1;
- 
- 	/* dccp_ackvector_print(DCCP_SKB_CB(skb)->dccpd_ack_seq, value, len); */
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -506,6 +506,36 @@ static int dccp_setsockopt_cscov(struct sock *sk, int cscov, bool rx)
- 	return rc;
- }
- 
-+static int dccp_setsockopt_ccid(struct sock *sk, int type,
-+				char __user *optval, int optlen)
++static inline int ccid_get_current_rx_ccid(struct dccp_sock *dp)
 +{
-+	u8 *val;
-+	int rc = 0;
++	struct ccid *ccid = dp->dccps_hc_rx_ccid;
 +
-+	if (optlen < 1 || optlen > DCCP_FEAT_MAX_SP_VALS)
-+		return -EINVAL;
-+
-+	val = kmalloc(optlen, GFP_KERNEL);
-+	if (val = NULL)
-+		return -ENOMEM;
-+
-+	if (copy_from_user(val, optval, optlen)) {
-+		kfree(val);
-+		return -EFAULT;
-+	}
-+
-+	lock_sock(sk);
-+	if (type = DCCP_SOCKOPT_TX_CCID || type = DCCP_SOCKOPT_CCID)
-+		rc = dccp_feat_register_sp(sk, DCCPF_CCID, 1, val, optlen);
-+
-+	if (!rc && (type = DCCP_SOCKOPT_RX_CCID || type = DCCP_SOCKOPT_CCID))
-+		rc = dccp_feat_register_sp(sk, DCCPF_CCID, 0, val, optlen);
-+	release_sock(sk);
-+
-+	kfree(val);
-+	return rc;
++	if (ccid = NULL || ccid->ccid_ops = NULL)
++		return -1;
++	return ccid->ccid_ops->ccid_id;
 +}
 +
- static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
- 		char __user *optval, int optlen)
- {
-@@ -520,6 +550,10 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
- 	case DCCP_SOCKOPT_CHANGE_R:
- 		DCCP_WARN("sockopt(CHANGE_L/R) is deprecated: fix your app\n");
- 		return 0;
-+	case DCCP_SOCKOPT_CCID:
-+	case DCCP_SOCKOPT_RX_CCID:
-+	case DCCP_SOCKOPT_TX_CCID:
-+		return dccp_setsockopt_ccid(sk, optname, optval, optlen);
- 	}
++static inline int ccid_get_current_tx_ccid(struct dccp_sock *dp)
++{
++	struct ccid *ccid = dp->dccps_hc_tx_ccid;
++
++	if (ccid = NULL || ccid->ccid_ops = NULL)
++		return -1;
++	return ccid->ccid_ops->ccid_id;
++}
++
+ extern void ccid_hc_rx_delete(struct ccid *ccid, struct sock *sk);
+ extern void ccid_hc_tx_delete(struct ccid *ccid, struct sock *sk);
  
- 	if (optlen < (int)sizeof(int))
+--- a/net/dccp/probe.c
++++ b/net/dccp/probe.c
+@@ -74,14 +74,11 @@ static void printl(const char *fmt, ...)
+ static int jdccp_sendmsg(struct kiocb *iocb, struct sock *sk,
+ 			 struct msghdr *msg, size_t size)
+ {
+-	const struct dccp_minisock *dmsk = dccp_msk(sk);
+ 	const struct inet_sock *inet = inet_sk(sk);
+-	const struct ccid3_hc_tx_sock *hctx;
++	struct ccid3_hc_tx_sock *hctx = NULL;
+ 
+-	if (dmsk->dccpms_tx_ccid = DCCPC_CCID3)
++	if (ccid_get_current_tx_ccid(dccp_sk(sk)) = DCCPC_CCID3)
+ 		hctx = ccid3_hc_tx_sk(sk);
+-	else
+-		hctx = NULL;
+ 
+ 	if (port = 0 || ntohs(inet->dport) = port ||
+ 	    ntohs(inet->sport) = port) {
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -667,6 +667,16 @@ static int do_dccp_getsockopt(struct sock *sk, int level, int optname,
+ 		break;
+ 	case DCCP_SOCKOPT_AVAILABLE_CCIDS:
+ 		return ccid_getsockopt_builtin_ccids(sk, len, optval, optlen);
++	case DCCP_SOCKOPT_TX_CCID:
++		val = ccid_get_current_tx_ccid(dp);
++		if (val < 0)
++			return -ENOPROTOOPT;
++		break;
++	case DCCP_SOCKOPT_RX_CCID:
++		val = ccid_get_current_rx_ccid(dp);
++		if (val < 0)
++			return -ENOPROTOOPT;
++		break;
+ 	case DCCP_SOCKOPT_SERVER_TIMEWAIT:
+ 		val = dp->dccps_server_timewait;
+ 		break;
