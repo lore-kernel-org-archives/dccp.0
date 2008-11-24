@@ -1,18 +1,34 @@
-From: David Miller <davem@davemloft.net>
-Date: Wed, 12 Nov 2008 08:49:47 +0000
-Subject: Re: v2 [PATCH 2/4] dccp: Registration routines for changing
-Message-Id: <20081112.004947.222786516.davem@davemloft.net>
+From: "Leandro Sales" <leandroal@gmail.com>
+Date: Mon, 24 Nov 2008 19:00:12 +0000
+Subject: System lookup and DCCP plugin for GStreamer
+Message-Id: <5bc4c4570811241100ra4f4e79n4e056e9bea76b826@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20081112063722.GD6405@gerrit.erg.abdn.ac.uk>
-In-Reply-To: <20081112063722.GD6405@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 12 Nov 2008 07:37:22 +0100
-
-> dccp: Registration routines for changing feature values
-
-Applied.
+SGVsbG8sCiAgIFRoZSBmb2xsb3dpbmcgZS1tYWlsIHdhcyBzZW50IGJ5IFN0ZWZhbiBLb3N0LCBv
+bmUgb2YgdGhlIEdTdHJlYW1lcgptYWludGFpbmVyIGFuZCBteSBjb250YWN0IHRoZXJlIHRvIHN5
+bmNocm9uaXplIG15IERDQ1AgZ3N0cmVhbWVyCnBsdWdpbiBpbiB0aGUgb2ZmaWNpYWwgcmVwb3Np
+dG9yeSBvZiBHc3RyZWFtZXIuIEhlIHJlcG9ydGVkIGEgcG9zc2libGUKYnVnIChzZWUgZS1tYWls
+IGJlbGxvdykgYW5kIEknZCBsaWtlIHRvIHNoYXJlIHdpdGggYWxsIG9mIHlvdSwgbWFpbmx5CmJl
+Y2F1c2UgbWF5YmUgYSBwcm9ibGVtIGluIHRoZSBrZXJuZWwsIHNpbmNlIEkgcnVuIGxvY2FsbHkg
+bWFueSB0ZXN0cwp1c2luZyB0aGUgcGx1Z2luIHRoZSB0aGUgcHJvYmxlbSB0aGF0IGhlIHJlcG9y
+dGVkIGRpZG4ndCBoYXBwZW4uIEhlIGlzCnVzaW5nIFVidW50dS4gUGxlYXNlIGFkdmlzZS4KCkxl
+YW5kcm8uCgoKLS0tLS0tLS0tLSBGb3J3YXJkZWQgbWVzc2FnZSAtLS0tLS0tLS0tCkZyb206IFN0
+ZWZhbiBLb3N0IDxlbnNvbmljQGhvcmEtb2JzY3VyYS5kZT4KRGF0ZTogVGh1LCBOb3YgMjAsIDIw
+MDggYXQgNDoxMCBQTQpTdWJqZWN0OiBzeXN0ZW0gbG9va3VwClRvOiBMZWFuZHJvIFNhbGVzIDxs
+ZWFuZHJvYWxAZ21haWwuY29tPgoKCmhpIGxlYW5kcm8sCgpzb3JyeSBhZ2FpbiBmb3IgdGhlIHRy
+b3VibGUgd2l0aCB0aGUgcGF0Y2guCgpJIGhhdmUgYSBwcm9ibGVtIHdpdGggdGhpcyBleGFtcGxl
+Ogpnc3QtbGF1bmNoIC12IGZpbGVzcmMgbG9jYXRpb249bXVzaWMubXAzICEgbXAzcGFyc2UgISBk
+Y2NwY2xpZW50c2luawpob3N0PWxvY2FsaG9zdCBwb3J0kDExIGNjaWQ9MgoKZ3N0LWxhdW5jaCAt
+diBkY2Nwc2VydmVyc3JjIHBvcnSQMTEgY2NpZD0yICEgZGVjb2RlYmluICEgYWxzYXNpbmsKCmFz
+IHNvb24gYXMgSSBzdGFydCB0aGUgZmlyc3QgZ3N0LWxhdW5jaCBwaXBlbGluZSwgdGhlIHN5c3Rl
+bSBsb2FkIGdvZXMKdXAgc28gcXVpY2tseSwgdGhhdCBJIGNhbiBvbmx5IHR1cm4gb2ZmIHRoZSBz
+eXN0ZW0uIE9uIFggbm9uZSBvZiB0aGUKZXZlbnRzIGFyZSBoYW5kbGVkIGFueW1vcmUgKEkgY2Fu
+IG1vdmUgdGhlIG1vdXNlIHRob3VnaCkuIFRoZSBoYXJkZHJpdmUKc3Bpbm5zIGxpa2UgY3Jhenku
+IEFueSBpZGVhPwoKU3RlZmFuCi0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5k
+IHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8g
+bWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8v
+dmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
