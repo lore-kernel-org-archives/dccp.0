@@ -1,91 +1,113 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 22 Nov 2008 10:30:38 +0000
-Subject: [PATCH 2/5] dccp: API to query the current TX/RX CCID
-Message-Id: <1227349841-9440-3-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sun, 30 Nov 2008 13:22:51 +0000
+Subject: [PATCH 1/6] dccp: Insert feature-negotiation options into skb
+Message-Id: <1228051376-8174-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This provides function to query the current TX/RX CCID dynamically, without
-reliance on the minisock value, using dynamic information available in the
-currently loaded CCID module.
-
-This query function is then used to
- (a) provide the getsockopt part for getting/setting CCIDs via sockopts;
- (b) replace the current test for "which CCID is in use" in probe.c.
+This patch replaces the earlier insertion routine from options.c, so that
+code specific to feature negotiation can remain in feat.c. This is possible
+by calling a function already existing in options.c.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/ccid.h  |   18 ++++++++++++++++++
- net/dccp/probe.c |    7 ++-----
- net/dccp/proto.c |   10 ++++++++++
- 3 files changed, 30 insertions(+), 5 deletions(-)
+ net/dccp/dccp.h |    2 +
+ net/dccp/feat.c |   65 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 67 insertions(+), 0 deletions(-)
 
---- a/net/dccp/ccid.h
-+++ b/net/dccp/ccid.h
-@@ -116,6 +116,24 @@ extern struct ccid *ccid_hc_rx_new(unsigned char id, struct sock *sk,
- extern struct ccid *ccid_hc_tx_new(unsigned char id, struct sock *sk,
- 				   gfp_t gfp);
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -443,6 +443,8 @@ static inline int dccp_ack_pending(const struct sock *sk)
  
-+static inline int ccid_get_current_rx_ccid(struct dccp_sock *dp)
+ extern int  dccp_feat_finalise_settings(struct dccp_sock *dp);
+ extern int  dccp_feat_server_ccid_dependencies(struct dccp_request_sock *dreq);
++extern int  dccp_feat_insert_opts(struct dccp_sock*, struct dccp_request_sock*,
++				  struct sk_buff *skb);
+ extern void dccp_feat_list_purge(struct list_head *fn_list);
+ 
+ extern int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -272,6 +272,20 @@ cloning_failed:
+ 	return -ENOMEM;
+ }
+ 
++/**
++ * dccp_feat_valid_nn_length  -  Enforce length constraints on NN options
++ * Length is between 0 and %DCCP_OPTVAL_MAXLEN. Used for outgoing packets only,
++ * incoming options are accepted as long as their values are valid.
++ */
++static u8 dccp_feat_valid_nn_length(u8 feat_num)
 +{
-+	struct ccid *ccid = dp->dccps_hc_rx_ccid;
-+
-+	if (ccid = NULL || ccid->ccid_ops = NULL)
-+		return -1;
-+	return ccid->ccid_ops->ccid_id;
++	if (feat_num = DCCPF_ACK_RATIO)	/* RFC 4340, 11.3 and 6.6.8 */
++		return 2;
++	if (feat_num = DCCPF_SEQUENCE_WINDOW)	/* RFC 4340, 7.5.2 and 6.5  */
++		return 6;
++	return 0;
 +}
 +
-+static inline int ccid_get_current_tx_ccid(struct dccp_sock *dp)
-+{
-+	struct ccid *ccid = dp->dccps_hc_tx_ccid;
-+
-+	if (ccid = NULL || ccid->ccid_ops = NULL)
-+		return -1;
-+	return ccid->ccid_ops->ccid_id;
-+}
-+
- extern void ccid_hc_rx_delete(struct ccid *ccid, struct sock *sk);
- extern void ccid_hc_tx_delete(struct ccid *ccid, struct sock *sk);
- 
---- a/net/dccp/probe.c
-+++ b/net/dccp/probe.c
-@@ -74,14 +74,11 @@ static void printl(const char *fmt, ...)
- static int jdccp_sendmsg(struct kiocb *iocb, struct sock *sk,
- 			 struct msghdr *msg, size_t size)
+ static u8 dccp_feat_is_valid_nn_val(u8 feat_num, u64 val)
  {
--	const struct dccp_minisock *dmsk = dccp_msk(sk);
- 	const struct inet_sock *inet = inet_sk(sk);
--	const struct ccid3_hc_tx_sock *hctx;
-+	struct ccid3_hc_tx_sock *hctx = NULL;
+ 	switch (feat_num) {
+@@ -314,6 +328,57 @@ static u8 dccp_feat_sp_list_ok(u8 feat_num, u8 const *sp_list, u8 sp_len)
+ }
  
--	if (dmsk->dccpms_tx_ccid = DCCPC_CCID3)
-+	if (ccid_get_current_tx_ccid(dccp_sk(sk)) = DCCPC_CCID3)
- 		hctx = ccid3_hc_tx_sk(sk);
--	else
--		hctx = NULL;
- 
- 	if (port = 0 || ntohs(inet->dport) = port ||
- 	    ntohs(inet->sport) = port) {
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -667,6 +667,16 @@ static int do_dccp_getsockopt(struct sock *sk, int level, int optname,
- 		break;
- 	case DCCP_SOCKOPT_AVAILABLE_CCIDS:
- 		return ccid_getsockopt_builtin_ccids(sk, len, optval, optlen);
-+	case DCCP_SOCKOPT_TX_CCID:
-+		val = ccid_get_current_tx_ccid(dp);
-+		if (val < 0)
-+			return -ENOPROTOOPT;
-+		break;
-+	case DCCP_SOCKOPT_RX_CCID:
-+		val = ccid_get_current_rx_ccid(dp);
-+		if (val < 0)
-+			return -ENOPROTOOPT;
-+		break;
- 	case DCCP_SOCKOPT_SERVER_TIMEWAIT:
- 		val = dp->dccps_server_timewait;
- 		break;
+ /**
++ * dccp_feat_insert_opts  -  Generate FN options from current list state
++ * @skb: next sk_buff to be sent to the peer
++ * @dp: for client during handshake and general negotiation
++ * @dreq: used by the server only (all Changes/Confirms in LISTEN/RESPOND)
++ */
++int dccp_feat_insert_opts(struct dccp_sock *dp, struct dccp_request_sock *dreq,
++			  struct sk_buff *skb)
++{
++	struct list_head *fn = dreq ? &dreq->dreq_featneg : &dp->dccps_featneg;
++	struct dccp_feat_entry *pos, *next;
++	u8 opt, type, len, *ptr, nn_in_nbo[DCCP_OPTVAL_MAXLEN];
++	bool rpt;
++
++	/* put entries into @skb in the order they appear in the list */
++	list_for_each_entry_safe_reverse(pos, next, fn, node) {
++		opt  = dccp_feat_genopt(pos);
++		type = dccp_feat_type(pos->feat_num);
++		rpt  = false;
++
++		if (pos->empty_confirm) {
++			len = 0;
++			ptr = NULL;
++		} else {
++			if (type = FEAT_SP) {
++				len = pos->val.sp.len;
++				ptr = pos->val.sp.vec;
++				rpt = pos->needs_confirm;
++			} else if (type = FEAT_NN) {
++				len = dccp_feat_valid_nn_length(pos->feat_num);
++				ptr = nn_in_nbo;
++				dccp_encode_value_var(pos->val.nn, ptr, len);
++			} else {
++				DCCP_BUG("unknown feature %u", pos->feat_num);
++				return -1;
++			}
++		}
++
++		if (dccp_insert_fn_opt(skb, opt, pos->feat_num, ptr, len, rpt))
++			return -1;
++		if (pos->needs_mandatory && dccp_insert_option_mandatory(skb))
++			return -1;
++		/*
++		 * Enter CHANGING after transmitting the Change option (6.6.2).
++		 */
++		if (pos->state = FEAT_INITIALISING)
++			pos->state = FEAT_CHANGING;
++	}
++	return 0;
++}
++
++/**
+  * __feat_register_nn  -  Register new NN value on socket
+  * @fn: feature-negotiation list to register with
+  * @feat: an NN feature from %dccp_feature_numbers
