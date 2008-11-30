@@ -1,72 +1,83 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 06 Nov 2008 05:40:10 +0000
-Subject: net-next-2.6 [PATCH 0/4] dccp: Feature negotiation - conclusion of Part I (basis)
-Message-Id: <1225950014-6337-1-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sun, 30 Nov 2008 13:22:52 +0000
+Subject: [PATCH 2/6] dccp: Integrate feature-negotiation insertion code
+Message-Id: <1228051376-8174-3-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="windows-1252"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Dave,
+The patch implements insertion of feature negotiation at the server (listening
+and request socket) and the client (connecting socket).
 
-please find via the following 4 emails the remaining patches for
-the first set part of the feature-negotiation patch set.
+In dccp_insert_options(), several statements have been grouped together now
+to achieve (it is hoped) better efficiency by reducing the number of tests
+each packet has to go through:
+ - Ack Vectors are sent if the packet is neither a Data or a Request packet;
+ - a previous issue is corrected - feature negotiation options are allowed
+   on DataAck packets (5.8).
 
-I have checked each individually to compile cleanly.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ net/dccp/options.c |   33 +++++++++++++++++++++------------
+ 1 files changed, 21 insertions(+), 12 deletions(-)
 
-Best regards
-Gerrit
-
-
-Commit summary
---------------
-The set concludes the first set of the feature negotiation patches to provi=
-de
-a self-contained feature negotiation API for the DCCP protocol (RFC 4340-2).
-
-The whole set is structured into 3 main blocks - (1) basis, (2) core,
-(3) integration and cleanup.
-
-Within these blocks, this is the second set and its purpose is to conclude
-the base implementation, preparing for the (15) core patches in the second =
-set.
-
-
-List of patches in this set:
-----------------------------
-Patch #1: Changes the existing policy to allow anytime changes as that lead
-          to unpredictable results.
-Patch #2: Adds registration routines. These form part of the user interface
-          and are later used by the socket API to set individual preference=
-s.
-Patch #3: CCIDs are a negotiable feature. This patch adds support to query =
-the
-          supported CCIDs, so as to advertise only the locally supported on=
-es.
-Patch #4: The choice of CCID in turn creates new feature dependencies. The =
-patch
-          adds automatic tracking of such dependencies to avoid later failu=
-re.
-
-The set is also available for viewing online, beginning at
-http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dcommi=
-tdiff;h=822761d3e69a1f7f8b994d1d7efd7771351e0195
-
-
-Patch stats:
-------------
- Documentation/networking/dccp.txt |    4=20
- include/linux/dccp.h              |    1=20
- net/dccp/ccid.c                   |   48 +++++
- net/dccp/ccid.h                   |    5=20
- net/dccp/ccids/ccid2.c            |    6=20
- net/dccp/dccp.h                   |    1=20
- net/dccp/feat.c                   |  306 +++++++++++++++++++++++++++++++++=
------
- net/dccp/feat.h                   |   25 ++-
- net/dccp/options.c                |   18 --
- net/dccp/output.c                 |    4=20
- net/dccp/proto.c                  |    7=20
- net/dccp/timer.c                  |   12 -
- 12 files changed, 368 insertions(+), 69 deletions(-)
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -554,11 +554,25 @@ int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
+ 	    dccp_insert_option_ndp(sk, skb))
+ 		return -1;
+ 
+-	if (!dccp_packet_without_ack(skb)) {
+-		if (dmsk->dccpms_send_ack_vector &&
+-		    dccp_ackvec_pending(dp->dccps_hc_rx_ackvec) &&
+-		    dccp_insert_option_ackvec(sk, skb))
++	if (DCCP_SKB_CB(skb)->dccpd_type != DCCP_PKT_DATA) {
++
++		/* Feature Negotiation */
++		if (dccp_feat_insert_opts(dp, NULL, skb))
+ 			return -1;
++
++		if (DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_REQUEST) {
++			/*
++			 * Obtain RTT sample from Request/Response exchange.
++			 * This is currently used in CCID 3 initialisation.
++			 */
++			if (dccp_insert_option_timestamp(sk, skb))
++				return -1;
++
++		} else if (dmsk->dccpms_send_ack_vector	&&
++			   dccp_ackvec_pending(dp->dccps_hc_rx_ackvec) &&
++			   dccp_insert_option_ackvec(sk, skb)) {
++				return -1;
++		}
+ 	}
+ 
+ 	if (dp->dccps_hc_rx_insert_options) {
+@@ -567,14 +581,6 @@ int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
+ 		dp->dccps_hc_rx_insert_options = 0;
+ 	}
+ 
+-	/*
+-	 * Obtain RTT sample from Request/Response exchange.
+-	 * This is currently used in CCID 3 initialisation.
+-	 */
+-	if (DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_REQUEST &&
+-	    dccp_insert_option_timestamp(sk, skb))
+-		return -1;
+-
+ 	if (dp->dccps_timestamp_echo != 0 &&
+ 	    dccp_insert_option_timestamp_echo(dp, NULL, skb))
+ 		return -1;
+@@ -587,6 +593,9 @@ int dccp_insert_options_rsk(struct dccp_request_sock *dreq, struct sk_buff *skb)
+ {
+ 	DCCP_SKB_CB(skb)->dccpd_opt_len = 0;
+ 
++	if (dccp_feat_insert_opts(NULL, dreq, skb))
++		return -1;
++
+ 	if (dreq->dreq_timestamp_echo != 0 &&
+ 	    dccp_insert_option_timestamp_echo(NULL, dreq, skb))
+ 		return -1;
