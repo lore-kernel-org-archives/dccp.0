@@ -1,29 +1,36 @@
-From: "=?ISO-8859-2?Q?Micha=B3_Miros=B3aw?=" <mirqus@gmail.com>
-Date: Sat, 13 Dec 2008 13:55:05 +0000
-Subject: Re: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for negotiation
-Message-Id: <e2d7436a0812130555r52422bel1dd9b66ba8479e2a@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 13 Dec 2008 14:56:55 +0000
+Subject: Re: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for
+Message-Id: <20081213145655.GA14240@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="windows-1254"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-MjAwOC8xMi8xMyBHZXJyaXQgUmVua2VyIDxnZXJyaXRAZXJnLmFiZG4uYWMudWs+Ogo+ICsvKioK
-PiArICogY2NpZF9yZXF1ZXN0X21vZHVsZSAgLSAgUHJlLWxvYWQgQ0NJRCBtb2R1bGUgZm9yIGxh
-dGVyIHVzZQo+ICsgKiBUaGlzIHNob3VsZCBiZSBjYWxsZWQgb25seSBmcm9tIHByb2Nlc3MgY29u
-dGV4dCAoZS5nLiBkdXJpbmcgY29ubmVjdGlvbgo+ICsgKiBzZXR1cCkgYW5kIGlzIG5lY2Vzc2Fy
-eSBmb3IgbGF0ZXIgY2FsbHMgdG8gY2NpZF9uZXcgKHR5cGljYWxseSBpbiBzb2Z0d2FyZQo+ICsg
-KiBpbnRlcnJ1cHQpLCBzbyB0aGF0IGl0IGhhcyB0aGUgbW9kdWxlcyBhdmFpbGFibGUgd2hlbiB0
-aGV5IGFyZSBuZWVkZWQuCj4gKyAqLwo+ICtzdGF0aWMgaW50IGNjaWRfcmVxdWVzdF9tb2R1bGUo
-dTggaWQpCj4gK3sKPiArICAgICAgIGlmICghaW5fYXRvbWljKCkpIHsKPiArICAgICAgICAgICAg
-ICAgY2NpZHNfcmVhZF9sb2NrKCk7Cj4gKyAgICAgICAgICAgICAgIGlmIChjY2lkc1tpZF0gPSBO
-VUxMKSB7Cj4gKyAgICAgICAgICAgICAgICAgICAgICAgY2NpZHNfcmVhZF91bmxvY2soKTsKPiAr
-ICAgICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmVxdWVzdF9tb2R1bGUoIm5ldC1kY2NwLWNj
-aWQtJWQiLCBpZCk7Cj4gKyAgICAgICAgICAgICAgIH0KPiArICAgICAgICAgICAgICAgY2NpZHNf
-cmVhZF91bmxvY2soKTsKPiArICAgICAgIH0KPiArICAgICAgIHJldHVybiAwOwo+ICt9CgpKdXN0
-IGEgcmFuZG9tIHRob3VnaHQ6IGRvZXMgdGhpcyBsb2NrIHJlYWxseSBkbyBhbnl0aGluZyB1c2Vm
-dWwgaGVyZT8KCkJlc3QgUmVnYXJkcywKTWljaGGzIE1pcm9zs2F3Cv/06Lp7Lm7HK4m3n66JrYYr
-JYrL/7Hp3bYXpYp3/7p7Lm7HK4m3nXHK/4p7YXm6HcqH2pnrLGoHraJmo6K3aJqP74Hq/5Hq53pf
-6K4DKK3pmo6K3aJqIp36GrYbbaf//74Hq/5Hq53p/6K4P5mo6K3aJqP4p36P4Qo=
+| > +static int ccid_request_module(u8 id)
+| > +{
+| > +       if (!in_atomic()) {
+| > +               ccids_read_lock();
+| > +               if (ccids[id] = NULL) {
+| > +                       ccids_read_unlock();
+| > +                       return request_module("net-dccp-ccid-%d", id);
+| > +               }
+| > +               ccids_read_unlock();
+| > +       }
+| > +       return 0;
+| > +}
+| 
+| Just a random thought: does this lock really do anything useful here?
+| 
+Reading the (shared) 'ccids' array is the solution chosen to check whether
+the module for CCID with number 'id' is already loaded.
+
+It would be bad to call request_module() each time a new DCCP socket is
+opened. Using the 'ccids' array may not be the only way to check whether
+a given module (whose name depends on the value of 'id') is loaded. 
+
+But if this solution is chosen, then it requires to protect the read
+access to 'ccids', which is shared among all DCCP sockets.
