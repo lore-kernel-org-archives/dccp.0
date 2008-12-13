@@ -1,62 +1,154 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 23 Dec 2008 17:17:29 +0000
-Subject: Re: [RFC] [Patch 2/4] dccp: Lockless use of CCID blocks
-Message-Id: <20081223171729.GB3855@gerrit.erg.abdn.ac.uk>
+Date: Sat, 13 Dec 2008 13:41:21 +0000
+Subject: [PATCH 1/5] dccp: Initialisation framework for feature negotiation
+Message-Id: <1229175685-18716-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <20081220080813.GC3853@gerrit.erg.abdn.ac.uk>
-In-Reply-To: <20081220080813.GC3853@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-| > -int ccid_unregister(struct ccid_operations *ccid_ops)
-| > +static int ccid_unregister(struct ccid_operations *ccid_ops)
-| >  {
-<snip>
-| 
-| And "register/unregister" now don't make much sense since there is no
-| registration being done, just allocating/deallocating resources
-| 
-Yes agree - this needs revision. We can also drop the EXPORT_SYMBOLS
-from the now-static routines.
+This initialises feature negotiation from two tables, which are initialised
+from sysctls.
 
-| > +
-| > +static struct ccid_operations *ccid_find_by_id(const u8 id)
-| >  {
-| > -	struct ccid *ccid = kmem_cache_alloc(rx ? ccid_ops->ccid_hc_rx_slab :
-| > -						  ccid_ops->ccid_hc_tx_slab, gfp);
-| > +	int i;
-| > +
-| > +	for (i = 0; i < ARRAY_SIZE(ccids); i++)
-| > +		if (ccids[i]->ccid_id = id)
-| > +			return ccids[i];
-| > +	return NULL;
-| 
-| Why the we searching? Can't we just do:
-| 
-| {
-| 	if (id > ARRAY_SIZE(ccids) - 2)
-| 		return NULL;
-| 	return ccids[id - 2];
-| }
-| 
-Agree 100%, I don't like the routine myself and have been thinking about
-how to rewrite it. Current idea is to go back to the original and use
+As a novel feature, specifics of the implementation (e.g. currently short
+seqnos and ECN are not supported) are advertised for robustness.
 
-static struct ccid_operations *ccids[CCIDS_MAX] = {
-	[DCCPC_CCID2] = &ccid2_ops,
-#ifdef CONFIG_IP_DCCP_CCID3
-	[DCCPC_CCID3] = &ccid3_ops,
-#endif
-};
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+---
+ include/linux/dccp.h |   19 --------------
+ net/dccp/feat.h      |    2 +-
+ net/dccp/feat.c      |   65 +++++++++++++++++++++++++++++++++++++++++++-------
+ 3 files changed, 57 insertions(+), 29 deletions(-)
 
-And then use 
-	
-	if (id < 0 || id >= CCIDS_MAX)
-		return NULL;
-	return ccids[id];		
-
-which may be NULL if there is no entry in the array. Better?	
-
-Gerrit
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -369,28 +369,9 @@ static inline unsigned int dccp_hdr_len(const struct sk_buff *skb)
+   * Will be used to pass the state from dccp_request_sock to dccp_sock.
+   *
+   * @dccpms_sequence_window - Sequence Window Feature (section 7.5.2)
+-  * @dccpms_pending - List of features being negotiated
+-  * @dccpms_conf -
+   */
+ struct dccp_minisock {
+ 	__u64			dccpms_sequence_window;
+-	struct list_head	dccpms_pending;
+-	struct list_head	dccpms_conf;
+-};
+-
+-struct dccp_opt_conf {
+-	__u8			*dccpoc_val;
+-	__u8			dccpoc_len;
+-};
+-
+-struct dccp_opt_pend {
+-	struct list_head	dccpop_node;
+-	__u8			dccpop_type;
+-	__u8			dccpop_feat;
+-	__u8		        *dccpop_val;
+-	__u8			dccpop_len;
+-	int			dccpop_conf;
+-	struct dccp_opt_conf    *dccpop_sc;
+ };
+ 
+ extern void dccp_minisock_init(struct dccp_minisock *dmsk);
+--- a/net/dccp/feat.h
++++ b/net/dccp/feat.h
+@@ -113,13 +113,13 @@ static inline void dccp_feat_debug(const u8 type, const u8 feat, const u8 val)
+ #define dccp_feat_debug(type, feat, val)
+ #endif /* CONFIG_IP_DCCP_DEBUG */
+ 
++extern int  dccp_feat_init(struct sock *sk);
+ extern int  dccp_feat_register_sp(struct sock *sk, u8 feat, u8 is_local,
+ 				  u8 const *list, u8 len);
+ extern int  dccp_feat_register_nn(struct sock *sk, u8 feat, u64 val);
+ extern int  dccp_feat_parse_options(struct sock *, struct dccp_request_sock *,
+ 				    u8 mand, u8 opt, u8 feat, u8 *val, u8 len);
+ extern int  dccp_feat_clone_list(struct list_head const *, struct list_head *);
+-extern int  dccp_feat_init(struct sock *sk);
+ 
+ /*
+  * Encoding variable-length options and their maximum length.
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -1115,23 +1115,70 @@ int dccp_feat_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
+ 	return 0;	/* ignore FN options in all other states */
+ }
+ 
++/**
++ * dccp_feat_init  -  Seed feature negotiation with host-specific defaults
++ * This initialises global defaults, depending on the value of the sysctls.
++ * These can later be overridden by registering changes via setsockopt calls.
++ * The last link in the chain is finalise_settings, to make sure that between
++ * here and the start of actual feature negotiation no inconsistencies enter.
++ *
++ * All features not appearing below use either defaults or are otherwise
++ * later adjusted through dccp_feat_finalise_settings().
++ */
+ int dccp_feat_init(struct sock *sk)
+ {
+-	struct dccp_sock *dp = dccp_sk(sk);
+-	struct dccp_minisock *dmsk = dccp_msk(sk);
++	struct list_head *fn = &dccp_sk(sk)->dccps_featneg;
++	u8 on = 1, off = 0;
+ 	int rc;
++	struct {
++		u8 *val;
++		u8 len;
++	} tx, rx;
++
++	/* Non-negotiable (NN) features */
++	rc = __feat_register_nn(fn, DCCPF_SEQUENCE_WINDOW, 0,
++				    sysctl_dccp_feat_sequence_window);
++	if (rc)
++		return rc;
++
++	/* Server-priority (SP) features */
++
++	/* Advertise that short seqnos are not supported (7.6.1) */
++	rc = __feat_register_sp(fn, DCCPF_SHORT_SEQNOS, true, true, &off, 1);
++	if (rc)
++		return rc;
+ 
+-	INIT_LIST_HEAD(&dmsk->dccpms_pending);	/* XXX no longer used */
+-	INIT_LIST_HEAD(&dmsk->dccpms_conf);	/* XXX no longer used */
++	/* RFC 4340 12.1: "If a DCCP is not ECN capable, ..." */
++	rc = __feat_register_sp(fn, DCCPF_ECN_INCAPABLE, true, true, &on, 1);
++	if (rc)
++		return rc;
++
++	/*
++	 * We advertise the available list of CCIDs and reorder according to
++	 * preferences, to avoid failure resulting from negotiating different
++	 * singleton values (which always leads to failure).
++	 * These settings can still (later) be overridden via sockopts.
++	 */
++	if (ccid_get_builtin_ccids(&tx.val, &tx.len) ||
++	    ccid_get_builtin_ccids(&rx.val, &rx.len))
++		return -ENOBUFS;
+ 
+-	/* Ack ratio */
+-	rc = __feat_register_nn(&dp->dccps_featneg, DCCPF_ACK_RATIO, 0,
+-				dp->dccps_l_ack_ratio);
++	if (!dccp_feat_prefer(sysctl_dccp_feat_tx_ccid, tx.val, tx.len) ||
++	    !dccp_feat_prefer(sysctl_dccp_feat_rx_ccid, rx.val, rx.len))
++		goto free_ccid_lists;
++
++	rc = __feat_register_sp(fn, DCCPF_CCID, true, false, tx.val, tx.len);
++	if (rc)
++		goto free_ccid_lists;
++
++	rc = __feat_register_sp(fn, DCCPF_CCID, false, false, rx.val, rx.len);
++
++free_ccid_lists:
++	kfree(tx.val);
++	kfree(rx.val);
+ 	return rc;
+ }
+ 
+-EXPORT_SYMBOL_GPL(dccp_feat_init);
+-
+ int dccp_feat_activate_values(struct sock *sk, struct list_head *fn_list)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
