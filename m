@@ -1,88 +1,104 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 22 Nov 2008 10:30:39 +0000
-Subject: [PATCH 3/5] dccp: Increase the scope of variable-length htonl/ntohl functions
-Message-Id: <1227349841-9440-4-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sat, 13 Dec 2008 13:41:22 +0000
+Subject: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for negotiation
+Message-Id: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This extends the scope of two available functions, encode|decode_value_var,
-to work up to 6 (8) bytes, to match maximum requirements in the RFC.
+This adds auto-loading of CCIDs (when module loading is enabled)
+for the purpose of feature negotiation.
 
-These functions are going to be used both by general option processing and
-feature negotiation code, hence declarations have been put into feat.h.
+The problem with loading the CCIDs at the end of feature negotiation is
+that this would happen in software interrupt context. Besides, if the host
+advertises CCIDs during negotiation, it should have them ready to use, in
+case an agreeing peer wants to use it for the connection.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
-Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 ---
- net/dccp/feat.h    |   14 ++++++++++++++
- net/dccp/options.c |   21 ++++++++++++++-------
- 2 files changed, 28 insertions(+), 7 deletions(-)
+ net/dccp/ccid.h |    1 +
+ net/dccp/ccid.c |   39 +++++++++++++++++++++++++++++----------
+ net/dccp/feat.c |    5 +++++
+ 3 files changed, 35 insertions(+), 10 deletions(-)
 
---- a/net/dccp/feat.h
-+++ b/net/dccp/feat.h
-@@ -124,4 +124,18 @@ extern int  dccp_feat_clone(struct sock *oldsk, struct sock *newsk);
- extern int  dccp_feat_clone_list(struct list_head const *, struct list_head *);
- extern int  dccp_feat_init(struct sock *sk);
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -108,6 +108,7 @@ extern int  ccid_get_builtin_ccids(u8 **ccid_array, u8 *array_len);
+ extern int  ccid_getsockopt_builtin_ccids(struct sock *sk, int len,
+ 					  char __user *, int __user *);
  
-+/*
-+ * Encoding variable-length options and their maximum length.
-+ *
-+ * This affects NN options (SP options are all u8) and other variable-length
-+ * options (see table 3 in RFC 4340). The limit is currently given the Sequence
-+ * Window NN value (sec. 7.5.2) and the NDP count (sec. 7.7) option, all other
-+ * options consume less than 6 bytes (timestamps are 4 bytes).
-+ * When updating this constant (e.g. due to new internet drafts / RFCs), make
-+ * sure that you also update all code which refers to it.
++extern int    ccid_request_modules(u8 const *ccid_array, u8 array_len);
+ extern struct ccid *ccid_new(unsigned char id, struct sock *sk, int rx,
+ 			     gfp_t gfp);
+ 
+--- a/net/dccp/ccid.c
++++ b/net/dccp/ccid.c
+@@ -196,22 +196,41 @@ int ccid_unregister(struct ccid_operations *ccid_ops)
+ 
+ EXPORT_SYMBOL_GPL(ccid_unregister);
+ 
++/**
++ * ccid_request_module  -  Pre-load CCID module for later use
++ * This should be called only from process context (e.g. during connection
++ * setup) and is necessary for later calls to ccid_new (typically in software
++ * interrupt), so that it has the modules available when they are needed.
 + */
-+#define DCCP_OPTVAL_MAXLEN	6
++static int ccid_request_module(u8 id)
++{
++	if (!in_atomic()) {
++		ccids_read_lock();
++		if (ccids[id] = NULL) {
++			ccids_read_unlock();
++			return request_module("net-dccp-ccid-%d", id);
++		}
++		ccids_read_unlock();
++	}
++	return 0;
++}
 +
-+extern void dccp_encode_value_var(const u64 value, u8 *to, const u8 len);
-+extern u64  dccp_decode_value_var(const u8 *bf, const u8 len);
- #endif /* _DCCP_FEAT_H */
---- a/net/dccp/options.c
-+++ b/net/dccp/options.c
-@@ -29,16 +29,20 @@ int sysctl_dccp_feat_tx_ccid	      = DCCPF_INITIAL_CCID;
- int sysctl_dccp_feat_send_ack_vector = DCCPF_INITIAL_SEND_ACK_VECTOR;
- int sysctl_dccp_feat_send_ndp_count  = DCCPF_INITIAL_SEND_NDP_COUNT;
- 
--static u32 dccp_decode_value_var(const unsigned char *bf, const u8 len)
-+u64 dccp_decode_value_var(const u8 *bf, const u8 len)
++int ccid_request_modules(u8 const *ccid_array, u8 array_len)
++{
++#ifdef CONFIG_MODULES
++	while (array_len--)
++		if (ccid_request_module(ccid_array[array_len]))
++			return -1;
++#endif
++	return 0;
++}
++
+ struct ccid *ccid_new(unsigned char id, struct sock *sk, int rx, gfp_t gfp)
  {
--	u32 value = 0;
-+	u64 value = 0;
+ 	struct ccid_operations *ccid_ops;
+ 	struct ccid *ccid = NULL;
  
-+	if (len >= DCCP_OPTVAL_MAXLEN)
-+		value += ((u64)*bf++) << 40;
-+	if (len > 4)
-+		value += ((u64)*bf++) << 32;
- 	if (len > 3)
--		value += *bf++ << 24;
-+		value += ((u64)*bf++) << 24;
- 	if (len > 2)
--		value += *bf++ << 16;
-+		value += ((u64)*bf++) << 16;
- 	if (len > 1)
--		value += *bf++ << 8;
-+		value += ((u64)*bf++) << 8;
- 	if (len > 0)
- 		value += *bf;
+ 	ccids_read_lock();
+-#ifdef CONFIG_MODULES
+-	if (ccids[id] = NULL) {
+-		/* We only try to load if in process context */
+-		ccids_read_unlock();
+-		if (gfp & GFP_ATOMIC)
+-			goto out;
+-		request_module("net-dccp-ccid-%d", id);
+-		ccids_read_lock();
+-	}
+-#endif
+ 	ccid_ops = ccids[id];
+ 	if (ccid_ops = NULL)
+ 		goto out_unlock;
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -1163,6 +1163,11 @@ int dccp_feat_init(struct sock *sk)
+ 	    ccid_get_builtin_ccids(&rx.val, &rx.len))
+ 		return -ENOBUFS;
  
-@@ -298,9 +302,12 @@ out_invalid_option:
- 
- EXPORT_SYMBOL_GPL(dccp_parse_options);
- 
--static void dccp_encode_value_var(const u32 value, unsigned char *to,
--				  const unsigned int len)
-+void dccp_encode_value_var(const u64 value, u8 *to, const u8 len)
- {
-+	if (len >= DCCP_OPTVAL_MAXLEN)
-+		*to++ = (value & 0xFF0000000000ull) >> 40;
-+	if (len > 4)
-+		*to++ = (value & 0xFF00000000ull) >> 32;
- 	if (len > 3)
- 		*to++ = (value & 0xFF000000) >> 24;
- 	if (len > 2)
++	/* Pre-load all CCID modules that are going to be advertised */
++	rc = -EUNATCH;
++	if (ccid_request_modules(tx.val, tx.len))
++		goto free_ccid_lists;
++
+ 	if (!dccp_feat_prefer(sysctl_dccp_feat_tx_ccid, tx.val, tx.len) ||
+ 	    !dccp_feat_prefer(sysctl_dccp_feat_rx_ccid, rx.val, rx.len))
+ 		goto free_ccid_lists;
