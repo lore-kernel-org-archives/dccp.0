@@ -1,104 +1,29 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 13 Dec 2008 13:41:22 +0000
-Subject: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for negotiation
-Message-Id: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
+From: "=?ISO-8859-2?Q?Micha=B3_Miros=B3aw?=" <mirqus@gmail.com>
+Date: Sat, 13 Dec 2008 13:55:05 +0000
+Subject: Re: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for negotiation
+Message-Id: <e2d7436a0812130555r52422bel1dd9b66ba8479e2a@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
+In-Reply-To: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="windows-1254"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-This adds auto-loading of CCIDs (when module loading is enabled)
-for the purpose of feature negotiation.
-
-The problem with loading the CCIDs at the end of feature negotiation is
-that this would happen in software interrupt context. Besides, if the host
-advertises CCIDs during negotiation, it should have them ready to use, in
-case an agreeing peer wants to use it for the connection.
-
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
----
- net/dccp/ccid.h |    1 +
- net/dccp/ccid.c |   39 +++++++++++++++++++++++++++++----------
- net/dccp/feat.c |    5 +++++
- 3 files changed, 35 insertions(+), 10 deletions(-)
-
---- a/net/dccp/ccid.h
-+++ b/net/dccp/ccid.h
-@@ -108,6 +108,7 @@ extern int  ccid_get_builtin_ccids(u8 **ccid_array, u8 *array_len);
- extern int  ccid_getsockopt_builtin_ccids(struct sock *sk, int len,
- 					  char __user *, int __user *);
- 
-+extern int    ccid_request_modules(u8 const *ccid_array, u8 array_len);
- extern struct ccid *ccid_new(unsigned char id, struct sock *sk, int rx,
- 			     gfp_t gfp);
- 
---- a/net/dccp/ccid.c
-+++ b/net/dccp/ccid.c
-@@ -196,22 +196,41 @@ int ccid_unregister(struct ccid_operations *ccid_ops)
- 
- EXPORT_SYMBOL_GPL(ccid_unregister);
- 
-+/**
-+ * ccid_request_module  -  Pre-load CCID module for later use
-+ * This should be called only from process context (e.g. during connection
-+ * setup) and is necessary for later calls to ccid_new (typically in software
-+ * interrupt), so that it has the modules available when they are needed.
-+ */
-+static int ccid_request_module(u8 id)
-+{
-+	if (!in_atomic()) {
-+		ccids_read_lock();
-+		if (ccids[id] = NULL) {
-+			ccids_read_unlock();
-+			return request_module("net-dccp-ccid-%d", id);
-+		}
-+		ccids_read_unlock();
-+	}
-+	return 0;
-+}
-+
-+int ccid_request_modules(u8 const *ccid_array, u8 array_len)
-+{
-+#ifdef CONFIG_MODULES
-+	while (array_len--)
-+		if (ccid_request_module(ccid_array[array_len]))
-+			return -1;
-+#endif
-+	return 0;
-+}
-+
- struct ccid *ccid_new(unsigned char id, struct sock *sk, int rx, gfp_t gfp)
- {
- 	struct ccid_operations *ccid_ops;
- 	struct ccid *ccid = NULL;
- 
- 	ccids_read_lock();
--#ifdef CONFIG_MODULES
--	if (ccids[id] = NULL) {
--		/* We only try to load if in process context */
--		ccids_read_unlock();
--		if (gfp & GFP_ATOMIC)
--			goto out;
--		request_module("net-dccp-ccid-%d", id);
--		ccids_read_lock();
--	}
--#endif
- 	ccid_ops = ccids[id];
- 	if (ccid_ops = NULL)
- 		goto out_unlock;
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -1163,6 +1163,11 @@ int dccp_feat_init(struct sock *sk)
- 	    ccid_get_builtin_ccids(&rx.val, &rx.len))
- 		return -ENOBUFS;
- 
-+	/* Pre-load all CCID modules that are going to be advertised */
-+	rc = -EUNATCH;
-+	if (ccid_request_modules(tx.val, tx.len))
-+		goto free_ccid_lists;
-+
- 	if (!dccp_feat_prefer(sysctl_dccp_feat_tx_ccid, tx.val, tx.len) ||
- 	    !dccp_feat_prefer(sysctl_dccp_feat_rx_ccid, rx.val, rx.len))
- 		goto free_ccid_lists;
+MjAwOC8xMi8xMyBHZXJyaXQgUmVua2VyIDxnZXJyaXRAZXJnLmFiZG4uYWMudWs+Ogo+ICsvKioK
+PiArICogY2NpZF9yZXF1ZXN0X21vZHVsZSAgLSAgUHJlLWxvYWQgQ0NJRCBtb2R1bGUgZm9yIGxh
+dGVyIHVzZQo+ICsgKiBUaGlzIHNob3VsZCBiZSBjYWxsZWQgb25seSBmcm9tIHByb2Nlc3MgY29u
+dGV4dCAoZS5nLiBkdXJpbmcgY29ubmVjdGlvbgo+ICsgKiBzZXR1cCkgYW5kIGlzIG5lY2Vzc2Fy
+eSBmb3IgbGF0ZXIgY2FsbHMgdG8gY2NpZF9uZXcgKHR5cGljYWxseSBpbiBzb2Z0d2FyZQo+ICsg
+KiBpbnRlcnJ1cHQpLCBzbyB0aGF0IGl0IGhhcyB0aGUgbW9kdWxlcyBhdmFpbGFibGUgd2hlbiB0
+aGV5IGFyZSBuZWVkZWQuCj4gKyAqLwo+ICtzdGF0aWMgaW50IGNjaWRfcmVxdWVzdF9tb2R1bGUo
+dTggaWQpCj4gK3sKPiArICAgICAgIGlmICghaW5fYXRvbWljKCkpIHsKPiArICAgICAgICAgICAg
+ICAgY2NpZHNfcmVhZF9sb2NrKCk7Cj4gKyAgICAgICAgICAgICAgIGlmIChjY2lkc1tpZF0gPSBO
+VUxMKSB7Cj4gKyAgICAgICAgICAgICAgICAgICAgICAgY2NpZHNfcmVhZF91bmxvY2soKTsKPiAr
+ICAgICAgICAgICAgICAgICAgICAgICByZXR1cm4gcmVxdWVzdF9tb2R1bGUoIm5ldC1kY2NwLWNj
+aWQtJWQiLCBpZCk7Cj4gKyAgICAgICAgICAgICAgIH0KPiArICAgICAgICAgICAgICAgY2NpZHNf
+cmVhZF91bmxvY2soKTsKPiArICAgICAgIH0KPiArICAgICAgIHJldHVybiAwOwo+ICt9CgpKdXN0
+IGEgcmFuZG9tIHRob3VnaHQ6IGRvZXMgdGhpcyBsb2NrIHJlYWxseSBkbyBhbnl0aGluZyB1c2Vm
+dWwgaGVyZT8KCkJlc3QgUmVnYXJkcywKTWljaGGzIE1pcm9zs2F3Cv/06Lp7Lm7HK4m3n66JrYYr
+JYrL/7Hp3bYXpYp3/7p7Lm7HK4m3nXHK/4p7YXm6HcqH2pnrLGoHraJmo6K3aJqP74Hq/5Hq53pf
+6K4DKK3pmo6K3aJqIp36GrYbbaf//74Hq/5Hq53p/6K4P5mo6K3aJqP4p36P4Qo=
