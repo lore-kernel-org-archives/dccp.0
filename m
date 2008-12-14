@@ -1,36 +1,43 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 13 Dec 2008 14:56:55 +0000
-Subject: Re: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for
-Message-Id: <20081213145655.GA14240@gerrit.erg.abdn.ac.uk>
+From: "=?ISO-8859-2?Q?Micha=B3_Miros=B3aw?=" <mirqus@gmail.com>
+Date: Sun, 14 Dec 2008 14:50:30 +0000
+Subject: Re: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for negotiation
+Message-Id: <e2d7436a0812140650r41b601dfgc3bbf41f01c2bb5d@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="windows-1254"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-| > +static int ccid_request_module(u8 id)
-| > +{
-| > +       if (!in_atomic()) {
-| > +               ccids_read_lock();
-| > +               if (ccids[id] = NULL) {
-| > +                       ccids_read_unlock();
-| > +                       return request_module("net-dccp-ccid-%d", id);
-| > +               }
-| > +               ccids_read_unlock();
-| > +       }
-| > +       return 0;
-| > +}
-| 
-| Just a random thought: does this lock really do anything useful here?
-| 
-Reading the (shared) 'ccids' array is the solution chosen to check whether
-the module for CCID with number 'id' is already loaded.
-
-It would be bad to call request_module() each time a new DCCP socket is
-opened. Using the 'ccids' array may not be the only way to check whether
-a given module (whose name depends on the value of 'id') is loaded. 
-
-But if this solution is chosen, then it requires to protect the read
-access to 'ccids', which is shared among all DCCP sockets.
+MjAwOC8xMi8xMyBHZXJyaXQgUmVua2VyIDxnZXJyaXRAZXJnLmFiZG4uYWMudWs+Ogo+IHwgPiAr
+c3RhdGljIGludCBjY2lkX3JlcXVlc3RfbW9kdWxlKHU4IGlkKQo+IHwgPiArewo+IHwgPiArICAg
+ICAgIGlmICghaW5fYXRvbWljKCkpIHsKPiB8ID4gKyAgICAgICAgICAgICAgIGNjaWRzX3JlYWRf
+bG9jaygpOwo+IHwgPiArICAgICAgICAgICAgICAgaWYgKGNjaWRzW2lkXSA9IE5VTEwpIHsKPiB8
+ID4gKyAgICAgICAgICAgICAgICAgICAgICAgY2NpZHNfcmVhZF91bmxvY2soKTsKPiB8ID4gKyAg
+ICAgICAgICAgICAgICAgICAgICAgcmV0dXJuIHJlcXVlc3RfbW9kdWxlKCJuZXQtZGNjcC1jY2lk
+LSVkIiwgaWQpOwo+IHwgPiArICAgICAgICAgICAgICAgfQo+IHwgPiArICAgICAgICAgICAgICAg
+Y2NpZHNfcmVhZF91bmxvY2soKTsKPiB8ID4gKyAgICAgICB9Cj4gfCA+ICsgICAgICAgcmV0dXJu
+IDA7Cj4gfCA+ICt9Cj4gfAo+IHwgSnVzdCBhIHJhbmRvbSB0aG91Z2h0OiBkb2VzIHRoaXMgbG9j
+ayByZWFsbHkgZG8gYW55dGhpbmcgdXNlZnVsIGhlcmU/Cj4gfAo+IFJlYWRpbmcgdGhlIChzaGFy
+ZWQpICdjY2lkcycgYXJyYXkgaXMgdGhlIHNvbHV0aW9uIGNob3NlbiB0byBjaGVjayB3aGV0aGVy
+Cj4gdGhlIG1vZHVsZSBmb3IgQ0NJRCB3aXRoIG51bWJlciAnaWQnIGlzIGFscmVhZHkgbG9hZGVk
+Lgo+Cj4gSXQgd291bGQgYmUgYmFkIHRvIGNhbGwgcmVxdWVzdF9tb2R1bGUoKSBlYWNoIHRpbWUg
+YSBuZXcgRENDUCBzb2NrZXQgaXMKPiBvcGVuZWQuIFVzaW5nIHRoZSAnY2NpZHMnIGFycmF5IG1h
+eSBub3QgYmUgdGhlIG9ubHkgd2F5IHRvIGNoZWNrIHdoZXRoZXIKPiBhIGdpdmVuIG1vZHVsZSAo
+d2hvc2UgbmFtZSBkZXBlbmRzIG9uIHRoZSB2YWx1ZSBvZiAnaWQnKSBpcyBsb2FkZWQuCj4KPiBC
+dXQgaWYgdGhpcyBzb2x1dGlvbiBpcyBjaG9zZW4sIHRoZW4gaXQgcmVxdWlyZXMgdG8gcHJvdGVj
+dCB0aGUgcmVhZAo+IGFjY2VzcyB0byAnY2NpZHMnLCB3aGljaCBpcyBzaGFyZWQgYW1vbmcgYWxs
+IERDQ1Agc29ja2V0cy4KClNpbmNlIHRoZSBsb2NrIGlzIGRyb3BwZWQgYWZ0ZXIgY2hlY2tpbmcg
+Y2NpZHNbaWRdIHRoZW4gdGhlcmUncwphIHdpbmRvdyB3aGVyZSBtdWx0aXBsZSByZXF1ZXN0X21v
+ZHVsZSgpcyBjYW4gYmUgY2FsbGVkIGlmIG11bHRpcGxlCmFwcGxpY2F0aW9ucyBjcmVhdGUgYSBE
+Q0NQIHNvY2tldCBhdCBhIHNhbWUgdGltZS4gVGhlIGNvZGUgYmVsb3cKc2hvdWxkIGRvIHRoZSBz
+YW1lIHdpdGhvdXQgYSBsb2NrIChjY2lkcyBpcyBhIHN0YXRpYyBhcnJheSwKc28gY2NpZHNbTl0g
+aXMgYWx3YXlzIGF0IHRoZSBzYW1lIHBsYWNlKS4KCnN0YXRpYyBpbnQgY2NpZF9yZXF1ZXN0X21v
+ZHVsZSh1OCBpZCkKewogICAgICAgaWYgKCFpbl9hdG9taWMoKSkgewogICAgICAgICAgICAgICBy
+bWIoKTsKICAgICAgICAgICAgICAgaWYgKGNjaWRzW2lkXSA9IE5VTEwpCiAgICAgICAgICAgICAg
+ICAgICAgICAgcmV0dXJuIHJlcXVlc3RfbW9kdWxlKCJuZXQtZGNjcC1jY2lkLSVkIiwgaWQpOwog
+ICAgICAgfQogICAgICAgcmV0dXJuIDA7Cn0KCkJlc3QgUmVnYXJkcywKTWljaGGzIE1pcm9zs2F3
+Cv/06Lp7Lm7HK4m3n66JrYYrJYrL/7Hp3bYXpYp3/7p7Lm7HK4m3nXHK/4p7YXm6HcqH2pnrLGoH
+raJmo6K3aJqP74Hq/5Hq53pf6K4DKK3pmo6K3aJqIp36GrYbbaf//74Hq/5Hq53p/6K4P5mo6K3a
+JqP4p36P4Qo=
