@@ -1,43 +1,115 @@
-From: "=?ISO-8859-2?Q?Micha=B3_Miros=B3aw?=" <mirqus@gmail.com>
-Date: Sun, 14 Dec 2008 14:50:30 +0000
-Subject: Re: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for negotiation
-Message-Id: <e2d7436a0812140650r41b601dfgc3bbf41f01c2bb5d@mail.gmail.com>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Mon, 15 Dec 2008 13:48:22 +0000
+Subject: Re: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for
+Message-Id: <20081215134822.GD4775@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
 References: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="windows-1254"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-MjAwOC8xMi8xMyBHZXJyaXQgUmVua2VyIDxnZXJyaXRAZXJnLmFiZG4uYWMudWs+Ogo+IHwgPiAr
-c3RhdGljIGludCBjY2lkX3JlcXVlc3RfbW9kdWxlKHU4IGlkKQo+IHwgPiArewo+IHwgPiArICAg
-ICAgIGlmICghaW5fYXRvbWljKCkpIHsKPiB8ID4gKyAgICAgICAgICAgICAgIGNjaWRzX3JlYWRf
-bG9jaygpOwo+IHwgPiArICAgICAgICAgICAgICAgaWYgKGNjaWRzW2lkXSA9IE5VTEwpIHsKPiB8
-ID4gKyAgICAgICAgICAgICAgICAgICAgICAgY2NpZHNfcmVhZF91bmxvY2soKTsKPiB8ID4gKyAg
-ICAgICAgICAgICAgICAgICAgICAgcmV0dXJuIHJlcXVlc3RfbW9kdWxlKCJuZXQtZGNjcC1jY2lk
-LSVkIiwgaWQpOwo+IHwgPiArICAgICAgICAgICAgICAgfQo+IHwgPiArICAgICAgICAgICAgICAg
-Y2NpZHNfcmVhZF91bmxvY2soKTsKPiB8ID4gKyAgICAgICB9Cj4gfCA+ICsgICAgICAgcmV0dXJu
-IDA7Cj4gfCA+ICt9Cj4gfAo+IHwgSnVzdCBhIHJhbmRvbSB0aG91Z2h0OiBkb2VzIHRoaXMgbG9j
-ayByZWFsbHkgZG8gYW55dGhpbmcgdXNlZnVsIGhlcmU/Cj4gfAo+IFJlYWRpbmcgdGhlIChzaGFy
-ZWQpICdjY2lkcycgYXJyYXkgaXMgdGhlIHNvbHV0aW9uIGNob3NlbiB0byBjaGVjayB3aGV0aGVy
-Cj4gdGhlIG1vZHVsZSBmb3IgQ0NJRCB3aXRoIG51bWJlciAnaWQnIGlzIGFscmVhZHkgbG9hZGVk
-Lgo+Cj4gSXQgd291bGQgYmUgYmFkIHRvIGNhbGwgcmVxdWVzdF9tb2R1bGUoKSBlYWNoIHRpbWUg
-YSBuZXcgRENDUCBzb2NrZXQgaXMKPiBvcGVuZWQuIFVzaW5nIHRoZSAnY2NpZHMnIGFycmF5IG1h
-eSBub3QgYmUgdGhlIG9ubHkgd2F5IHRvIGNoZWNrIHdoZXRoZXIKPiBhIGdpdmVuIG1vZHVsZSAo
-d2hvc2UgbmFtZSBkZXBlbmRzIG9uIHRoZSB2YWx1ZSBvZiAnaWQnKSBpcyBsb2FkZWQuCj4KPiBC
-dXQgaWYgdGhpcyBzb2x1dGlvbiBpcyBjaG9zZW4sIHRoZW4gaXQgcmVxdWlyZXMgdG8gcHJvdGVj
-dCB0aGUgcmVhZAo+IGFjY2VzcyB0byAnY2NpZHMnLCB3aGljaCBpcyBzaGFyZWQgYW1vbmcgYWxs
-IERDQ1Agc29ja2V0cy4KClNpbmNlIHRoZSBsb2NrIGlzIGRyb3BwZWQgYWZ0ZXIgY2hlY2tpbmcg
-Y2NpZHNbaWRdIHRoZW4gdGhlcmUncwphIHdpbmRvdyB3aGVyZSBtdWx0aXBsZSByZXF1ZXN0X21v
-ZHVsZSgpcyBjYW4gYmUgY2FsbGVkIGlmIG11bHRpcGxlCmFwcGxpY2F0aW9ucyBjcmVhdGUgYSBE
-Q0NQIHNvY2tldCBhdCBhIHNhbWUgdGltZS4gVGhlIGNvZGUgYmVsb3cKc2hvdWxkIGRvIHRoZSBz
-YW1lIHdpdGhvdXQgYSBsb2NrIChjY2lkcyBpcyBhIHN0YXRpYyBhcnJheSwKc28gY2NpZHNbTl0g
-aXMgYWx3YXlzIGF0IHRoZSBzYW1lIHBsYWNlKS4KCnN0YXRpYyBpbnQgY2NpZF9yZXF1ZXN0X21v
-ZHVsZSh1OCBpZCkKewogICAgICAgaWYgKCFpbl9hdG9taWMoKSkgewogICAgICAgICAgICAgICBy
-bWIoKTsKICAgICAgICAgICAgICAgaWYgKGNjaWRzW2lkXSA9IE5VTEwpCiAgICAgICAgICAgICAg
-ICAgICAgICAgcmV0dXJuIHJlcXVlc3RfbW9kdWxlKCJuZXQtZGNjcC1jY2lkLSVkIiwgaWQpOwog
-ICAgICAgfQogICAgICAgcmV0dXJuIDA7Cn0KCkJlc3QgUmVnYXJkcywKTWljaGGzIE1pcm9zs2F3
-Cv/06Lp7Lm7HK4m3n66JrYYrJYrL/7Hp3bYXpYp3/7p7Lm7HK4m3nXHK/4p7YXm6HcqH2pnrLGoH
-raJmo6K3aJqP74Hq/5Hq53pf6K4DKK3pmo6K3aJqIp36GrYbbaf//74Hq/5Hq53p/6K4P5mo6K3a
-JqP4p36P4Qo=
+Em Sat, Dec 13, 2008 at 02:41:22PM +0100, Gerrit Renker escreveu:
+> This adds auto-loading of CCIDs (when module loading is enabled)
+> for the purpose of feature negotiation.
+> 
+> The problem with loading the CCIDs at the end of feature negotiation is
+> that this would happen in software interrupt context. Besides, if the host
+> advertises CCIDs during negotiation, it should have them ready to use, in
+> case an agreeing peer wants to use it for the connection.
+> 
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+> Signed-off-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+> ---
+>  net/dccp/ccid.h |    1 +
+>  net/dccp/ccid.c |   39 +++++++++++++++++++++++++++++----------
+>  net/dccp/feat.c |    5 +++++
+>  3 files changed, 35 insertions(+), 10 deletions(-)
+> 
+> --- a/net/dccp/ccid.h
+> +++ b/net/dccp/ccid.h
+> @@ -108,6 +108,7 @@ extern int  ccid_get_builtin_ccids(u8 **ccid_array, u8 *array_len);
+>  extern int  ccid_getsockopt_builtin_ccids(struct sock *sk, int len,
+>  					  char __user *, int __user *);
+>  
+> +extern int    ccid_request_modules(u8 const *ccid_array, u8 array_len);
+>  extern struct ccid *ccid_new(unsigned char id, struct sock *sk, int rx,
+>  			     gfp_t gfp);
+>  
+> --- a/net/dccp/ccid.c
+> +++ b/net/dccp/ccid.c
+> @@ -196,22 +196,41 @@ int ccid_unregister(struct ccid_operations *ccid_ops)
+>  
+>  EXPORT_SYMBOL_GPL(ccid_unregister);
+>  
+> +/**
+> + * ccid_request_module  -  Pre-load CCID module for later use
+> + * This should be called only from process context (e.g. during connection
+> + * setup) and is necessary for later calls to ccid_new (typically in software
+> + * interrupt), so that it has the modules available when they are needed.
+> + */
+> +static int ccid_request_module(u8 id)
+> +{
+> +	if (!in_atomic()) {
+
+Shouldn't the above be in a BUG_ON? It looks strange to simply refuse to
+do that and return OK. 
+
+> +		ccids_read_lock();
+> +		if (ccids[id] = NULL) {
+> +			ccids_read_unlock();
+> +			return request_module("net-dccp-ccid-%d", id);
+> +		}
+> +		ccids_read_unlock();
+> +	}
+> +	return 0;
+> +}
+> +
+> +int ccid_request_modules(u8 const *ccid_array, u8 array_len)
+> +{
+> +#ifdef CONFIG_MODULES
+> +	while (array_len--)
+> +		if (ccid_request_module(ccid_array[array_len]))
+> +			return -1;
+> +#endif
+> +	return 0;
+> +}
+> +
+>  struct ccid *ccid_new(unsigned char id, struct sock *sk, int rx, gfp_t gfp)
+>  {
+>  	struct ccid_operations *ccid_ops;
+>  	struct ccid *ccid = NULL;
+>  
+>  	ccids_read_lock();
+> -#ifdef CONFIG_MODULES
+> -	if (ccids[id] = NULL) {
+> -		/* We only try to load if in process context */
+> -		ccids_read_unlock();
+> -		if (gfp & GFP_ATOMIC)
+> -			goto out;
+> -		request_module("net-dccp-ccid-%d", id);
+> -		ccids_read_lock();
+> -	}
+> -#endif
+>  	ccid_ops = ccids[id];
+>  	if (ccid_ops = NULL)
+>  		goto out_unlock;
+> --- a/net/dccp/feat.c
+> +++ b/net/dccp/feat.c
+> @@ -1163,6 +1163,11 @@ int dccp_feat_init(struct sock *sk)
+>  	    ccid_get_builtin_ccids(&rx.val, &rx.len))
+>  		return -ENOBUFS;
+>  
+> +	/* Pre-load all CCID modules that are going to be advertised */
+> +	rc = -EUNATCH;
+> +	if (ccid_request_modules(tx.val, tx.len))
+> +		goto free_ccid_lists;
+> +
+>  	if (!dccp_feat_prefer(sysctl_dccp_feat_tx_ccid, tx.val, tx.len) ||
+>  	    !dccp_feat_prefer(sysctl_dccp_feat_rx_ccid, rx.val, rx.len))
+>  		goto free_ccid_lists;
+> --
+> To unsubscribe from this list: send the line "unsubscribe dccp" in
+> the body of a message to majordomo@vger.kernel.org
+> More majordomo info at  http://vger.kernel.org/majordomo-info.html
