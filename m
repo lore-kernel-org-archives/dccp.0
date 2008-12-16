@@ -1,51 +1,46 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Tue, 16 Dec 2008 11:19:08 +0000
-Subject: Re: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for
-Message-Id: <20081216111908.GI14518@ghostprotocols.net>
+From: "=?ISO-8859-2?Q?Micha=B3_Miros=B3aw?=" <mirqus@gmail.com>
+Date: Tue, 16 Dec 2008 11:31:39 +0000
+Subject: Re: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for negotiation
+Message-Id: <e2d7436a0812160331h63152b26kd4aad6b449ed7f8@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="windows-1254"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-Em Tue, Dec 16, 2008 at 01:40:45AM -0800, David Miller escreveu:
-> From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> Date: Tue, 16 Dec 2008 06:29:54 +0100
-> 
-> > | Hence I think we have a chance by going completely lockless here, by
-> > | loading all configured CCIDs at runtime. In this manner the per-connection
-> > | check "are all advertised CCIDs are loaded?" falls under the table, we
-> > | do not need to worry about concurrent access, and loading DCCP implies that
-> > | all needed CCIDs are there.
-> > Unfortunately this won't work since the CCIDs depend on dccp.ko being
-> > fully loaded, so requiring that CCID module are loaded during the
-> > loading process of dccp.ko creates a cyclic dependency.
-> 
-> I don't like this stuff at all.
-> 
-> Every new connection you're going to loop over the CCID
-> table and grab that CCID read lock N times.
-> 
-> The first time it will do something meaningful, and then
-> %99.999999999999 of subsequent calls will do nothing.
-> 
-> What kind of overhead is deserved by that access pattern?
-> 
-> And, if the first thing the first connection is going to do
-> is load all the modules, there is ZERO reason to make them
-> modular.  It's just useless seperation and it adds all of
-> this rediculious synchronization.
-> 
-> If it's modular "for the sake of development" I'm sure you
-> can simply reload the dccp.ko module when you make some
-> CCID algorithm change.
-> 
-> I'm tossing this patch set until we get something better
-> in this area.
-
-I guess that looking at tcp_set_congestion_control() could be a good
-start. 8-)
-
-- Arnaldo
+MjAwOC8xMi8xNiBHZXJyaXQgUmVua2VyIDxnZXJyaXRAZXJnLmFiZG4uYWMudWs+Ogo+IHwgU2lu
+Y2UgdGhlIGxvY2sgaXMgZHJvcHBlZCBhZnRlciBjaGVja2luZyBjY2lkc1tpZF0gdGhlbiB0aGVy
+ZSdzCj4gfCBhIHdpbmRvdyB3aGVyZSBtdWx0aXBsZSByZXF1ZXN0X21vZHVsZSgpcyBjYW4gYmUg
+Y2FsbGVkIGlmIG11bHRpcGxlCj4gfCBhcHBsaWNhdGlvbnMgY3JlYXRlIGEgRENDUCBzb2NrZXQg
+YXQgYSBzYW1lIHRpbWUuIFRoZSBjb2RlIGJlbG93Cj4gfCBzaG91bGQgZG8gdGhlIHNhbWUgd2l0
+aG91dCBhIGxvY2sgKGNjaWRzIGlzIGEgc3RhdGljIGFycmF5LAo+IHwgc28gY2NpZHNbTl0gaXMg
+YWx3YXlzIGF0IHRoZSBzYW1lIHBsYWNlKS4KPiB8Cj4gfCBzdGF0aWMgaW50IGNjaWRfcmVxdWVz
+dF9tb2R1bGUodTggaWQpCj4gfCB7Cj4gfCAgICAgICAgaWYgKCFpbl9hdG9taWMoKSkgewo+IHwg
+ICAgICAgICAgICAgICAgcm1iKCk7Cj4gfCAgICAgICAgICAgICAgICBpZiAoY2NpZHNbaWRdID0g
+TlVMTCkKPiB8ICAgICAgICAgICAgICAgICAgICAgICAgcmV0dXJuIHJlcXVlc3RfbW9kdWxlKCJu
+ZXQtZGNjcC1jY2lkLSVkIiwgaWQpOwo+IHwgICAgICAgIH0KPiB8ICAgICAgICByZXR1cm4gMDsK
+PiB8IH0KPiB8Cj4gU29ycnkgTWljaGFlbCwgYnV0IHRoaXMgaXMgcmVhbGx5IGp1c3QgYSAicmFu
+ZG9tIHRob3VnaHQiLiBXaGF0IHlvdSBhcmUKPiBpbiBlZmZlY3Qgc2F5aW5nIGlzIHRoYXQgcmVh
+ZGVyL3dyaXRlciBsb2NrcyBjYW4gYmUgcmVwbGFjZWQgd2l0aCBqdXN0IGEKPiByZWFkIG1lbW9y
+eSBiYXJyaWVyLgoKPiBQbGVhc2UgaGF2ZSBhIG1vcmUgZGV0YWlsZWQgbG9vayBhdCBuZXQvZGNj
+cC9jY2lkLmMuIEkgYWxzbyBjaGVja2VkIGhvdwo+IG90aGVyIHN1YnN5c3RlbXMgaGFuZGxlIGNv
+bXBhcmFibGUgc2l0dWF0aW9ucyBvZiBtb2R1bGUgbG9hZGluZzogdGhlCj4gaW1wbGVtZW50YXRp
+b24gZGV0YWlscyBkaWZmZXIsIGJ1dCB0aGUgcHJpbmNpcGxlIGlzIHRoZSBzYW1lOiB0aGVyZSBh
+cmUKPiBtdXRleGVzLCBzZW1hcGhvcmVzLCBhbmQgc3BpbmxvY2tzIGluIHVzZSB0byBwcm90ZWN0
+IHRob3NlIHNoYXJlZAo+IHN0cnVjdHVyZXMgdGhhdCBhcmUgcmVsYXRlZCB0byB0aGUgbG9hZGVk
+IG1vZHVsZS4KPgo+IEhlbmNlIHlvdXIgc3VnZ2VzdGlvbiBkb2VzIG5vdCBpbXByb3ZlIHRoZSBj
+b2RlLiBJIG1haW50YWluIHRoYXQgaXQgaXMKPiBjb3JyZWN0LiBBbmQgaXQgaGFzIHByb3ZlbiB0
+byB3b3JrIGluIHRoZSB0ZXN0IHRyZWUgZm9yIG1vcmUgdGhhbiBvbmUKPiB5ZWFyLCBpbmNsdWRp
+bmcgdGVzdHMgd2l0aCB1cCB0byAxMDAgcGFyYWxsZWwgKGlwZXJmKSBjb25uZWN0aW9ucy4KClRo
+ZSByZWFkLWxvY2sgaXMganVzdCBhIG1lbW9yeSBiYXJyaWVyIGhlcmUgKG5vdCBhIHJlYWQgbWVt
+b3J5IGJhcnJpZXIKYXMgSSB3cm90ZQpiZWZvcmUpIGFuZCBpdCdzIG5vdCBuZWVkZWQgaGVyZS4g
+SWYgSSByZWFkIHRoZSBjb2RlIGNvcnJlY3RseSB5b3UgYXJlCnRlc3RpbmcgYSBzaW5nbGUKcG9p
+bnRlciB0byBiZSBOVUxMIGFuZCBkb24ndCByZWFsbHkgY2FyZSBhYm91dCBvcmRlcmluZyB3cnQg
+bW9kdWxlCmluaXRpYWxpemF0aW9uLgoKWW91IGNhbiBhY3R1YWxseSBhbm5vdGF0ZSBjY2lkc1td
+IGFzIHJlYWRfbW9zdGx5IChpdCdzIGNoYW5nZWQgb25seSBvbiBtb2R1bGUKbG9hZC91bmxvYWQp
+IGFuZCBwcm90ZWN0IGl0IHdpdGggUkNVIGluc3RlYWQgb2YgdGhlIGhvbWUtZ3Jvd24gcndsb2Nr
+CnlvdSBhcmUgdXNpbmcuCgpCZXN0IFJlZ2FyZHMsCk1pY2hhsyBNaXJvc7Nhdwr/9Oi6ey5uxyuJ
+t5+uia2GKyWKy/+x6d22F6WKd/+6ey5uxyuJt51xyv+Ke2F5uh3Kh9qZ6yxqB62iZqOit2iaj++B
+6v+R6ud6X+iuAyit6ZqOit2iaiKd+hq2G22n//++B6v+R6ud6f+iuD+ZqOit2iaj+Kd+j+EK
