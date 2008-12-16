@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 16 Dec 2008 05:44:16 +0000
+Date: Tue, 16 Dec 2008 05:55:41 +0000
 Subject: Re: [PATCH 2/5] dccp: Auto-load (when supported) CCID plugins for
-Message-Id: <20081216054416.GB6199@gerrit.erg.abdn.ac.uk>
+Message-Id: <20081216055540.GC6199@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1229175685-18716-3-git-send-email-gerrit@erg.abdn.ac.uk>
@@ -10,59 +10,57 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-| > +/**
-| > + * ccid_request_module  -  Pre-load CCID module for later use
-| > + * This should be called only from process context (e.g. during connection
-| > + * setup) and is necessary for later calls to ccid_new (typically in software
-| > + * interrupt), so that it has the modules available when they are needed.
-| > + */
-| > +static int ccid_request_module(u8 id)
-| > +{
-| > +	if (!in_atomic()) {
+| > | > +static int ccid_request_module(u8 id)
+| > | > +{
+| > | > +       if (!in_atomic()) {
+| > | > +               ccids_read_lock();
+| > | > +               if (ccids[id] = NULL) {
+| > | > +                       ccids_read_unlock();
+| > | > +                       return request_module("net-dccp-ccid-%d", id);
+| > | > +               }
+| > | > +               ccids_read_unlock();
+| > | > +       }
+| > | > +       return 0;
+| > | > +}
+| > |
+| > | Just a random thought: does this lock really do anything useful here?
+| > |
+| > Reading the (shared) 'ccids' array is the solution chosen to check whether
+| > the module for CCID with number 'id' is already loaded.
+| >
+| > It would be bad to call request_module() each time a new DCCP socket is
+| > opened. Using the 'ccids' array may not be the only way to check whether
+| > a given module (whose name depends on the value of 'id') is loaded.
+| >
+| > But if this solution is chosen, then it requires to protect the read
+| > access to 'ccids', which is shared among all DCCP sockets.
 | 
-| Shouldn't the above be in a BUG_ON? It looks strange to simply refuse to
-| do that and return OK. 
+| Since the lock is dropped after checking ccids[id] then there's
+| a window where multiple request_module()s can be called if multiple
+| applications create a DCCP socket at a same time. The code below
+| should do the same without a lock (ccids is a static array,
+| so ccids[N] is always at the same place).
 | 
-| > +		ccids_read_lock();
-| > +		if (ccids[id] = NULL) {
-| > +			ccids_read_unlock();
-| > +			return request_module("net-dccp-ccid-%d", id);
-| > +		}
-| > +		ccids_read_unlock();
-| > +	}
-| > +	return 0;
-| > +}
-We can do this if you want, but in a way this is a suggestion for the
-existing code, compare with the original from ccid_new() below
+| static int ccid_request_module(u8 id)
+| {
+|        if (!in_atomic()) {
+|                rmb();
+|                if (ccids[id] = NULL)
+|                        return request_module("net-dccp-ccid-%d", id);
+|        }
+|        return 0;
+| }
+| 
+Sorry Michael, but this is really just a "random thought". What you are
+in effect saying is that reader/writer locks can be replaced with just a
+read memory barrier.
 
-	ccids_read_lock();
-#ifdef CONFIG_MODULES
-	if (ccids[id] = NULL) {
-		/* We only try to load if in process context */
-		ccids_read_unlock();
-		if (gfp & GFP_ATOMIC)
-			goto out;
-		request_module("net-dccp-ccid-%d", id);
-		ccids_read_lock();
-	}
-#endif
+Please have a more detailed look at net/dccp/ccid.c. I also checked how
+other subsystems handle comparable situations of module loading: the 
+implementation details differ, but the principle is the same: there are
+mutexes, semaphores, and spinlocks in use to protect those shared
+structures that are related to the loaded module.
 
-=> gfp is atomic when called from dccp_feat_update_ccid(), which is why
-    in the previous feature-negotiation code DCCP crashed when trying to
-    negotiate any CCID module that had not been loaded:
-    
-	new_ccid = ccid_new(new_ccid_nr, sk, rx, GFP_ATOMIC);
-
-    meant that the module would not be reloaded.
-
-=> On the other hand, when called via ccid_hc_{rx,tx}_new(), gfp=GFP_KERNEL
-    and so an attempted module load would succeed. This explains why loading
-    worked when starting with the default (non-negotiated) CCIDs.
-
-
-
-=> So how do we remain? I am ok turning the above into a BUG_ON.
-    As an alternative, since the function is only called in a single
-    place (the initialisation of feat.c), we could consider removing the
-    function entirely and merge its contents into dccp_feat_init().
-    Would that be better?
+Hence your suggestion does not improve the code. I maintain that it is
+correct. And it has proven to work in the test tree for more than one
+year, including tests with up to 100 parallel (iperf) connections.
