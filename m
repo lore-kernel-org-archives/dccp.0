@@ -1,50 +1,27 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sat, 13 Dec 2008 13:41:20 +0000
-Subject: net-next-2.6 [PATCH 0/5] dccp: Feature negotiation part III -- complete
-Message-Id: <1229175685-18716-1-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Wed, 17 Dec 2008 18:30:41 +0000
+Subject: Re: [RFC][PATCH] static builtin CCIDs was  Re: [PATCH 2/5] dccp:
+Message-Id: <20081217183041.GW14518@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
-References: <1226751079-15019-1-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1226751079-15019-1-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-SGkgRGF2ZSwKCnBsZWFzZSBmaW5kIGVuY2xvc2VkIHRoZSBsYXN0IHNldCwgY29tcGxldGluZyB0
-aGUgZmVhdHVyZSBuZWdvdGlhdGlvbgppbXBsZW1lbnRhdGlvbi4gSSBoYXZlIGNoZWNrZWQgdGhl
-c2UgdG8gY29tcGlsZSBpbmRpdmlkdWFsbHkuIAoKR2Vycml0CgoKQ29tbWl0IHN1bW1hcnk6Ci0t
-LS0tLS0tLS0tLS0tLQpUaGlzIGlzIHRoZSBmaW5hbCBzZXQgb3V0IG9mIGFuIG9uZ29pbmcgc3Vi
-bWlzc2lvbiB0byBwcm92aWRlIGZlYXR1cmUgYW5kIApjYXBhYmlsaXR5IG5lZ290aWF0aW9uIGZv
-ciBEQ0NQIGVuZHBvaW50cyAoUkZDIDQzNDAgLSA0MzQyLCBSRkMgNTM0OCkuCgpUaGUgd2hvbGUg
-c2V0IGlzIHN0cnVjdHVyZWQgaW50byAzIG1haW4gYmxvY2tzIC0gKDEpIGJhc2lzLCAoMikgY29y
-ZSwgKDMpCmludGVncmF0aW9uIGFuZCBjbGVhbnVwLgoKVGhpcyBzZXQgaXMgdGhlIGZpbmFsIGlu
-IGJsb2NrICgzKSBhbmQgaW1wbGVtZW50cyB0aGUgaW5pdGlhbGl6YXRpb24gb2YKZmVhdHVyZS1u
-ZWdvdGlhdGlvbiBzdGF0ZS4gVGhpcyBpbmNsdWRlcyBwaWNraW5nIHVwIHRoZSBnbG9iYWwgZGVm
-YXVsdHMKc2V0IHZpYSBzeXNjdGxzIGFuZCB0byBhdXRvLWxvYWQgdGhlIENDSUQgbW9kdWxlcyBi
-ZWZvcmUgYW5ub3VuY2luZwphdmFpbGFibGUgQ0NJRCBtb2R1bGVzIGFzIG5lZ290aWFibGUgY2Fu
-ZGlkYXRlcyB0byB0aGUgcGVlci4KCgpMaXN0IG9mIHBhdGNoZXMgaW4gdGhpcyBzZXQ6Ci0tLS0t
-LS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KUGF0Y2ggIzE6IEluaXRpYWxpc2F0aW9uIGZyYW1ld29y
-ayBmb3IgdGhlIHN1cHBvcnRlZCBmZWF0dXJlcy4KUGF0Y2ggIzI6IEF1dG8tbG9hZGluZyBvZiBD
-Q0lEIG1vZHVsZXMgc28gdGhhdCB0aGUgbW9kdWxlcyBhcmUgYXZhaWxhYmxlCiAgICAgICAgICB3
-aGVuIHRoZSBuZWdvdGlhdGlvbiBpcyBjb21wbGV0ZWQuClBhdGNoICMzOiBBZGRzIGZ1bGwgc3Vw
-cG9ydCBmb3IgbG9jYWwvcmVtb3RlIFNlcXVlbmNlIFdpbmRvdy4KUGF0Y2ggIzQ6IEluaXRpYWxp
-c2F0aW9uIGFuZCB0eXBlLWNoZWNraW5nIG9mIGludm9sdmVkIHN5c2N0bHMuClBhdGNoICM1OiBB
-IHNldCBvZiAodXNlZnVsKSBkZWJ1Z2dpbmcvcHJpbnRpbmcgaGVscGVyIGZ1bmN0aW9ucy4KClRo
-ZSBzZXQgaXMgYWxzbyBhdmFpbGFibGUgZm9yIHZpZXdpbmcgb25saW5lLCBiZWdpbm5pbmcgYXQK
-aHR0cDovL2VkZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9jZ2ktYmluL2dpdHdlYi5jZ2k/cNxjcF9l
-eHAuZ2l0O2E9Y29tbWl0ZGlmZjtokTNlZjhmYWMxNWUzNzA0Nzk0MzYwYzA4NjJhZDY1YTExZjgz
-M2FlCgoKUGF0Y2ggc3RhdHM6Ci0tLS0tLS0tLS0tLQogRG9jdW1lbnRhdGlvbi9uZXR3b3JraW5n
-L2RjY3AudHh0IHwgICAgMyAKIGluY2x1ZGUvbGludXgvZGNjcC5oICAgICAgICAgICAgICB8ICAg
-NTEgLS0tLS0tLQogbmV0L2RjY3AvY2NpZC5jICAgICAgICAgICAgICAgICAgIHwgICAzOSArKysr
-LS0KIG5ldC9kY2NwL2NjaWQuaCAgICAgICAgICAgICAgICAgICB8ICAgIDEgCiBuZXQvZGNjcC9k
-Y2NwLmggICAgICAgICAgICAgICAgICAgfCAgIDIxICstLQogbmV0L2RjY3AvZmVhdC5jICAgICAg
-ICAgICAgICAgICAgIHwgIDI0NyArKysrKysrKysrKysrKysrKysrKysrKysrKysrLS0tLS0tLS0t
-LQogbmV0L2RjY3AvZmVhdC5oICAgICAgICAgICAgICAgICAgIHwgICAyMyArLS0KIG5ldC9kY2Nw
-L21pbmlzb2Nrcy5jICAgICAgICAgICAgICB8ICAgMTEgLQogbmV0L2RjY3Avb3B0aW9ucy5jICAg
-ICAgICAgICAgICAgIHwgICAgOCAtCiBuZXQvZGNjcC9wcm90by5jICAgICAgICAgICAgICAgICAg
-fCAgICAyIAogbmV0L2RjY3Avc3lzY3RsLmMgICAgICAgICAgICAgICAgIHwgICA0MyArKysrLS0K
-IDExIGZpbGVzIGNoYW5nZWQsIDI3MSBpbnNlcnRpb25zKCspLCAxNzggZGVsZXRpb25zKC0pCi0t
-ClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmli
-ZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVs
-Lm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9y
-ZG9tby1pbmZvLmh0bWw=
+Em Wed, Dec 17, 2008 at 04:20:38PM -0200, Arnaldo Carvalho de Melo escreveu:
+> > IOW we're back to my suggestion on looking at
+> > tcp_set_congestion_control(). :-)
+> 
+> I tried to test this using ttcp over loopback but the tree seems broken
+> somehow, with or without this patch I'm getting:
+> 
+> Could not activate 0 at /home/acme/git/net-next-2.6/net/dccp/feat.c:1176
+> 
+> I tried doing a quick chase on this one but failed miserably, Gerrit,
+> any ideas?
+
+Well, without the patch the problem was that dccp_ccid2 was not being
+autoloaded, as soon as I manually loaded it, ttcp worked. Now to see
+why...
+
+- Arnaldo
