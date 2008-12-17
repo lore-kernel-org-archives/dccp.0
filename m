@@ -1,133 +1,52 @@
 From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Sun, 21 Dec 2008 00:35:33 +0000
-Subject: Re: [RFC] [Patch 3/4] dccp: Add unregister function
-Message-Id: <20081221003533.GB5700@ghostprotocols.net>
+Date: Wed, 17 Dec 2008 20:03:32 +0000
+Subject: [PATCH] dccp_diag: LISTEN sockets don't have CCIDs
+Message-Id: <20081217200332.GY14518@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
-References: <20081220080821.GD3853@gerrit.erg.abdn.ac.uk>
-In-Reply-To: <20081220080821.GD3853@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Sat, Dec 20, 2008 at 09:08:21AM +0100, Gerrit Renker escreveu:
-> dccp: Add unregister function
-> 
-> This adds an unregister function to facilitate unloading the DCCP module.
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-> ---
->  net/dccp/ccid.h  |    3 ++-
->  net/dccp/ccid.c  |   48 +++++++++++++++++++++++++++---------------------
->  net/dccp/proto.c |    3 ++-
->  3 files changed, 31 insertions(+), 23 deletions(-)
-> 
-> --- a/net/dccp/ccid.h
-> +++ b/net/dccp/ccid.h
-> @@ -91,7 +91,8 @@ extern struct ccid_operations ccid2_ops;
->  extern struct ccid_operations ccid3_ops;
->  #endif
->  
-> -extern int ccids_register_builtins(void);
-> +extern int  ccid_register_builtins(void);
-> +extern void ccid_unregister_builtins(void);
->  
->  struct ccid {
->  	struct ccid_operations *ccid_ops;
-> --- a/net/dccp/ccid.c
-> +++ b/net/dccp/ccid.c
-> @@ -123,7 +123,7 @@ static int ccid_register(struct ccid_ope
->  	return 0;
->  }
->  
-> -static int ccid_unregister(struct ccid_operations *ccid_ops)
-> +static void ccid_unregister(struct ccid_operations *ccid_ops)
->  {
->  	ccid_kmem_cache_destroy(ccid_ops->ccid_hc_tx_slab);
->  	ccid_ops->ccid_hc_tx_slab = NULL;
-> @@ -132,28 +132,8 @@ static int ccid_unregister(struct ccid_o
->  
->  	pr_info("CCID: Unregistered CCID %d (%s)\n",
->  		ccid_ops->ccid_id, ccid_ops->ccid_name);
-> -	return 0;
-> -}
-> -
-> -int ccids_register_builtins(void)
-> -{
-> -	int i, err;
-> -
-> -	for (i = 0; i < ARRAY_SIZE(ccids); i++) {
-> -		err = ccid_register(ccids[i]);
-> -		if (err)
-> -			goto unwind_registrations;
-> -	}
-> -
-> -	return 0;
-> -
-> -unwind_registrations:
-> -	while(--i >= 0)
-> -		ccid_unregister(ccids[i]);
-> -	return err;
->  }
+And thus when we try to use 'ss -danemi' on these sockets that have no
+ccid blocks (data collected using systemtap after I fixed the problem):
 
-Why remove this?
-  
-> -
->  static struct ccid_operations *ccid_find_by_id(const u8 id)
->  {
->  	int i;
-> @@ -231,3 +211,29 @@ void ccid_hc_tx_delete(struct ccid *ccid
->  }
->  
->  EXPORT_SYMBOL_GPL(ccid_hc_tx_delete);
-> +
-> +int __init ccid_register_builtins(void)
-> +{
-> +	int i, err;
-> +
-> +	for (i = 0; i < ARRAY_SIZE(ccids); i++) {
-> +		err = ccid_register(ccids[i]);
-> +		if (err)
-> +			goto unwind_registrations;
-> +	}
-> +
-> +	return 0;
-> +
-> +unwind_registrations:
-> +	while(--i >= 0)
-> +		ccid_unregister(ccids[i]);
-> +	return err;
-> +}
+dccp_diag_get_info sk=0xffff8801220a3100, dp->dccps_hc_rx_ccid=0x0000000000000000, dp->dccps_hc_tx_ccid=0x0000000000000000
 
-Ah, just moved it around.
+We get an OOPS:
 
-> +void ccid_unregister_builtins(void)
-> +{
-> +	int i;
-> +
-> +	for (i = 0; i < ARRAY_SIZE(ccids); i++)
-> +		ccid_unregister(ccids[i]);
-> +}
-> --- a/net/dccp/proto.c
-> +++ b/net/dccp/proto.c
-> @@ -1119,7 +1119,7 @@ static int __init dccp_init(void)
->  	if (rc)
->  		goto out_ackvec_exit;
->  
-> -	rc = ccids_register_builtins();
-> +	rc = ccid_register_builtins();
->  	if (rc)
->  		goto out_sysctl_exit;
->  
-> @@ -1148,6 +1148,7 @@ out_free_bind_bucket_cachep:
->  
->  static void __exit dccp_fini(void)
->  {
-> +	ccid_unregister_builtins();
->  	dccp_mib_exit();
->  	free_pages((unsigned long)dccp_hashinfo.bhash,
->  		   get_order(dccp_hashinfo.bhash_size *
+mica.ghostprotocols.net login: BUG: unable to handle kernel NULL pointer
+dereferenc0
+IP: [<ffffffffa0136082>] dccp_diag_get_info+0x82/0xc0 [dccp_diag]
+PGD 12106f067 PUD 122488067 PMD 0
+Oops: 0000 [#1] PREEMPT
 
-OK:
+Fix is trivial, and 'ss -d' is working again:
 
-Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+[root@mica ~]# ss -danemi
+State   Recv-Q Send-Q   Local Address:Port   Peer Address:Port 
+LISTEN  0      0                    *:5001              *:*
+ino:7288 sk:220a3100ffff8801
+	 mem:(r0,w0,f0,t0) cwnd:0 ssthresh:0
+[root@mica ~]# 
+
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+
+diff --git a/net/dccp/diag.c b/net/dccp/diag.c
+index 652a1b6..b21f261 100644
+--- a/net/dccp/diag.c
++++ b/net/dccp/diag.c
+@@ -32,8 +32,11 @@ static void dccp_get_info(struct sock *sk, struct tcp_info *info)
+ 	if (dp->dccps_hc_rx_ackvec != NULL)
+ 		info->tcpi_options |= TCPI_OPT_SACK;
+ 
+-	ccid_hc_rx_get_info(dp->dccps_hc_rx_ccid, sk, info);
+-	ccid_hc_tx_get_info(dp->dccps_hc_tx_ccid, sk, info);
++	if (dp->dccps_hc_rx_ccid != NULL)
++		ccid_hc_rx_get_info(dp->dccps_hc_rx_ccid, sk, info);
++
++	if (dp->dccps_hc_tx_ccid != NULL)
++		ccid_hc_tx_get_info(dp->dccps_hc_tx_ccid, sk, info);
+ }
+ 
+ static void dccp_diag_get_info(struct sock *sk, struct inet_diag_msg *r,
