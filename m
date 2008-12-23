@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 23 Dec 2008 17:08:23 +0000
+Date: Tue, 23 Dec 2008 17:17:29 +0000
 Subject: Re: [RFC] [Patch 2/4] dccp: Lockless use of CCID blocks
-Message-Id: <20081223170823.GA3855@gerrit.erg.abdn.ac.uk>
+Message-Id: <20081223171729.GB3855@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <20081220080813.GC3853@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20081220080813.GC3853@gerrit.erg.abdn.ac.uk>
