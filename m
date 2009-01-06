@@ -1,28 +1,36 @@
-From: "Arnaldo Carvalho de Melo" <acme@ghostprotocols.net>
-Date: Tue, 06 Jan 2009 01:17:29 +0000
-Subject: Re: dccp test tree [RFC/RFT] [Patch 1/3] dccp: minor Kconfig cosmetics
-Message-Id: <39e6f6c70901051717p33da63b2ra8dade1da945624@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 06 Jan 2009 12:22:23 +0000
+Subject: Re: dccp test tree [RFC/RFT] [Patch 1/3] dccp: minor Kconfig
+Message-Id: <20090106122222.GA4448@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <20090105144213.GB3773@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20090105144213.GB3773@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-On Mon, Jan 5, 2009 at 11:06 PM, Wei Yongjun <yjwei@cn.fujitsu.com> wrote:
-> Gerrit Renker wrote:
-
->> +         value. Values in units of milliseconds can be set here.
->> +
->> +         A value of 0 disables this feature by enforcing the value
->> specified
->> +         in RFC 5448. The following values have been suggested as bounds
->> for
->>
->
-> RFC 5448 should be RFC 5348.
-
-Indeed.
-
-- Arnaldo
+UXVvdGluZyBBcm5hbGRvIENhcnZhbGhvIGRlIE1lbG86CnwgT24gTW9uLCBKYW4gNSwgMjAwOSBh
+dCAxMTowNiBQTSwgV2VpIFlvbmdqdW4gPHlqd2VpQGNuLmZ1aml0c3UuY29tPiB3cm90ZToKfCA+
+IEdlcnJpdCBSZW5rZXIgd3JvdGU6CnwgCnwgPj4gKyAgICAgICAgIHZhbHVlLiBWYWx1ZXMgaW4g
+dW5pdHMgb2YgbWlsbGlzZWNvbmRzIGNhbiBiZSBzZXQgaGVyZS4KfCA+PiArCnwgPj4gKyAgICAg
+ICAgIEEgdmFsdWUgb2YgMCBkaXNhYmxlcyB0aGlzIGZlYXR1cmUgYnkgZW5mb3JjaW5nIHRoZSB2
+YWx1ZQp8ID4+IHNwZWNpZmllZAp8ID4+ICsgICAgICAgICBpbiBSRkMgNTQ0OC4gVGhlIGZvbGxv
+d2luZyB2YWx1ZXMgaGF2ZSBiZWVuIHN1Z2dlc3RlZCBhcyBib3VuZHMKfCA+PiBmb3IKfCA+Pgp8
+ID4KfCA+IFJGQyA1NDQ4IHNob3VsZCBiZSBSRkMgNTM0OC4KfCAKfCBJbmRlZWQuCnwgCkEgZ2Vu
+dWluZSBibHVuZGVyIC0gSSBoYWQgdmVyaWZpZWQgdGhlIHNlY3Rpb24gcmVmZXJlbmNlcyBidXQg
+bm90IHRoZQpSRkMgbnVtYmVyLiBJdCBpcyByZWFsbHkgZ29vZCB0byBzZWUgdGhhdCBwZW9wbGUg
+ZG8gbG9vazogdGhhdCBpcyB3aHkKSSBkb24ndCBtYWtlIGNoYW5nZXMgdG8gdGhlIHRlc3QgdHJl
+ZSB3aXRob3V0IGFsc28gc3VibWl0dGluZyB0aGVzZS4KClRoZSBvbmx5IGV4Y2VwdGlvbiB0byB0
+aGlzIHJ1bGUgYXJlIGEgZmV3IHBhdGNoZXMgdGhhdCBoYXZlIGJlZW4KZGVsZXRlZCwgc3VjaCBh
+cyB0aGUgb25lIHRvIGF1dG8tbG9hZCBDQ0lEcywgYW5kIDIgcGF0Y2hlcyB0aGF0IGJlY2FtZQpv
+YnNvbGV0ZSBpbiB0aGUgQ0NJRC00IHRyZWUuIEF0IHRoZSBtb21lbnQgSSBkb24ndCBrbm93IHdo
+YXQgdG8gZG8Kd2l0aCB0aGF0IENDSUQtNCB0cmVlLCB3aWxsIGp1c3Qga2VlcCBpdCB1cC10by1k
+YXRlLCBpdCBtaWdodCBiZSBnb29kIHRvCnJlb3JnYW5pc2UgdGhlIGFib3V0IDIwIHBhdGNoZXMg
+c29tZSB0aW1lLgoKQWdhaW4gdGhhbmtzIGEgbG90IHRvIHlvdSwgV2VpLCBhbmQgSWFuCkdlcnJp
+dAoKSnVzdCBmaXhlZCBpdCBpbiB0aGUgdGVzdCB0cmVlCmh0dHA6Ly9lZGVuLWZlZWQuZXJnLmFi
+ZG4uYWMudWsvY2dpLWJpbi9naXR3ZWIuY2dpP3DcY3BfZXhwLmdpdDthPWNvbW1pdGRpZmY7aBFm
+YzFkYzExZWFmYWIwYmQxOGMyMmY3MTdhOWIyMTU1YTM4MzM4MwotLQpUbyB1bnN1YnNjcmliZSBm
+cm9tIHRoaXMgbGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJv
+ZHkgb2YgYSBtZXNzYWdlIHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRv
+bW8gaW5mbyBhdCAgaHR0cDovL3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5odG1s
