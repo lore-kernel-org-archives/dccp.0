@@ -1,36 +1,56 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 06 Jan 2009 12:22:23 +0000
-Subject: Re: dccp test tree [RFC/RFT] [Patch 1/3] dccp: minor Kconfig
-Message-Id: <20090106122222.GA4448@gerrit.erg.abdn.ac.uk>
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
+Date: Thu, 08 Jan 2009 23:28:47 +0000
+Subject: Re: [PATCH] net: fix section mismatch warnings in
+Message-Id: <20090108232847.GV23891@ghostprotocols.net>
 List-Id: <dccp.vger.kernel.org>
-References: <20090105144213.GB3773@gerrit.erg.abdn.ac.uk>
-In-Reply-To: <20090105144213.GB3773@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-UXVvdGluZyBBcm5hbGRvIENhcnZhbGhvIGRlIE1lbG86CnwgT24gTW9uLCBKYW4gNSwgMjAwOSBh
-dCAxMTowNiBQTSwgV2VpIFlvbmdqdW4gPHlqd2VpQGNuLmZ1aml0c3UuY29tPiB3cm90ZToKfCA+
-IEdlcnJpdCBSZW5rZXIgd3JvdGU6CnwgCnwgPj4gKyAgICAgICAgIHZhbHVlLiBWYWx1ZXMgaW4g
-dW5pdHMgb2YgbWlsbGlzZWNvbmRzIGNhbiBiZSBzZXQgaGVyZS4KfCA+PiArCnwgPj4gKyAgICAg
-ICAgIEEgdmFsdWUgb2YgMCBkaXNhYmxlcyB0aGlzIGZlYXR1cmUgYnkgZW5mb3JjaW5nIHRoZSB2
-YWx1ZQp8ID4+IHNwZWNpZmllZAp8ID4+ICsgICAgICAgICBpbiBSRkMgNTQ0OC4gVGhlIGZvbGxv
-d2luZyB2YWx1ZXMgaGF2ZSBiZWVuIHN1Z2dlc3RlZCBhcyBib3VuZHMKfCA+PiBmb3IKfCA+Pgp8
-ID4KfCA+IFJGQyA1NDQ4IHNob3VsZCBiZSBSRkMgNTM0OC4KfCAKfCBJbmRlZWQuCnwgCkEgZ2Vu
-dWluZSBibHVuZGVyIC0gSSBoYWQgdmVyaWZpZWQgdGhlIHNlY3Rpb24gcmVmZXJlbmNlcyBidXQg
-bm90IHRoZQpSRkMgbnVtYmVyLiBJdCBpcyByZWFsbHkgZ29vZCB0byBzZWUgdGhhdCBwZW9wbGUg
-ZG8gbG9vazogdGhhdCBpcyB3aHkKSSBkb24ndCBtYWtlIGNoYW5nZXMgdG8gdGhlIHRlc3QgdHJl
-ZSB3aXRob3V0IGFsc28gc3VibWl0dGluZyB0aGVzZS4KClRoZSBvbmx5IGV4Y2VwdGlvbiB0byB0
-aGlzIHJ1bGUgYXJlIGEgZmV3IHBhdGNoZXMgdGhhdCBoYXZlIGJlZW4KZGVsZXRlZCwgc3VjaCBh
-cyB0aGUgb25lIHRvIGF1dG8tbG9hZCBDQ0lEcywgYW5kIDIgcGF0Y2hlcyB0aGF0IGJlY2FtZQpv
-YnNvbGV0ZSBpbiB0aGUgQ0NJRC00IHRyZWUuIEF0IHRoZSBtb21lbnQgSSBkb24ndCBrbm93IHdo
-YXQgdG8gZG8Kd2l0aCB0aGF0IENDSUQtNCB0cmVlLCB3aWxsIGp1c3Qga2VlcCBpdCB1cC10by1k
-YXRlLCBpdCBtaWdodCBiZSBnb29kIHRvCnJlb3JnYW5pc2UgdGhlIGFib3V0IDIwIHBhdGNoZXMg
-c29tZSB0aW1lLgoKQWdhaW4gdGhhbmtzIGEgbG90IHRvIHlvdSwgV2VpLCBhbmQgSWFuCkdlcnJp
-dAoKSnVzdCBmaXhlZCBpdCBpbiB0aGUgdGVzdCB0cmVlCmh0dHA6Ly9lZGVuLWZlZWQuZXJnLmFi
-ZG4uYWMudWsvY2dpLWJpbi9naXR3ZWIuY2dpP3DcY3BfZXhwLmdpdDthPWNvbW1pdGRpZmY7aBFm
-YzFkYzExZWFmYWIwYmQxOGMyMmY3MTdhOWIyMTU1YTM4MzM4MwotLQpUbyB1bnN1YnNjcmliZSBm
-cm9tIHRoaXMgbGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJv
-ZHkgb2YgYSBtZXNzYWdlIHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRv
-bW8gaW5mbyBhdCAgaHR0cDovL3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5odG1s
+Adding netdev to the CC list.
+
+Em Thu, Jan 08, 2009 at 07:57:03PM +0100, Leonardo Potenza escreveu:
+> From: Leonardo Potenza <lpotenza@inwind.it>
+> 
+> Removed the __exit annotation of tfrc_lib_exit(), in order to suppress the following section mismatch messages:
+> 
+> WARNING: net/dccp/dccp.o(.text+0xd9): Section mismatch in reference from the function ccid_cleanup_builtins() to the function .exit.text:tfrc_lib_exit()
+> The function ccid_cleanup_builtins() references a function in an exit section.
+> Often the function tfrc_lib_exit() has valid usage outside the exit section
+> and the fix is to remove the __exit annotation of tfrc_lib_exit.
+> 
+> WARNING: net/dccp/dccp.o(.init.text+0x48): Section mismatch in reference from the function ccid_initialize_builtins() to the function .exit.text:tfrc_lib_exit()
+> The function __init ccid_initialize_builtins() references
+> a function __exit tfrc_lib_exit().
+> This is often seen when error handling in the init function
+> uses functionality in the exit path.
+> The fix is often to remove the __exit annotation of
+> tfrc_lib_exit() so it may be used outside an exit section.
+> 
+> Signed-off-by: Leonardo Potenza <lpotenza@inwind.it>
+> ---
+> Index: linux-2.6/net/dccp/ccids/lib/tfrc.c
+> =================================> --- linux-2.6.orig/net/dccp/ccids/lib/tfrc.c	2009-01-08 19:19:50.000000000 +0100
+> +++ linux-2.6/net/dccp/ccids/lib/tfrc.c	2009-01-08 19:20:07.000000000 +0100
+> @@ -36,7 +36,7 @@ out:
+>  	return rc;
+>  }
+>  
+> -void __exit tfrc_lib_exit(void)
+> +void tfrc_lib_exit(void)
+>  {
+>  	tfrc_rx_packet_history_exit();
+>  	tfrc_tx_packet_history_exit();
+
+Thanks Leonardo,
+
+Dave/Gerrit,
+
+	Please apply.
+
+Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+
+Thanks,
+
+- Arnaldo
