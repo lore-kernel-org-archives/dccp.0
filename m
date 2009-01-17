@@ -1,27 +1,46 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 22 Jan 2009 16:36:10 +0000
-Subject: New iperf-dccp uploaded
-Message-Id: <20090122163610.GB3758@gerrit.erg.abdn.ac.uk>
+Date: Sat, 17 Jan 2009 09:36:29 +0000
+Subject: [PATCH 0/4] dccp: Completing feature negotiation
+Message-Id: <1232184993-9927-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-I have uploaded an updated version of iperf-dccp at
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/iperf/zip/iperf-2.0.2_DCCP-patched-CBR-continuous.tar.bz2
-
-The fix includes build errors on more recent glibc versions (2.8.90 and 2.9).
-It has been tested to compile on a number of platforms (debian, arch linux, ubuntu).
-
-Individual patches and source:
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/iperf/patches/iperf_individual_patches.tar.gz
-http://www.erg.abdn.ac.uk/users/gerrit/dccp/apps/iperf/zip/iperf-2.0.2.tar.gz
-
-with UDP-Lite support:
-http://www.erg.abdn.ac.uk/users/gerrit/udp-lite/files/udplite_linux.tar.gz
-
-Many thanks to Olivier Mehani who helped with the build errors,
-provided test reports on other architectures, and    
-also contributed an arch linux build script on
-http://aur.archlinux.org/packages.php?ID#297
+SGkgRGF2ZSwKCmZvbGxvd2luZyB0aGUgcmUtZGVzaWduIG9mIHRoZSBDQ0lELXBsdWdpbiBsb2Fk
+aW5nIGludG8gZGNjcC5rbyBhbmQgZnVydGhlcgp0ZXN0aW5nLCBwbGVhc2UgZmluZCBhdHRhY2hl
+ZCB0aGUgcGF0Y2ggc2V0IHRvIGNvbXBsZXRlIHRoZSBpbXBsZW1lbnRhdGlvbgpvZiBzdGF0aWMg
+ZmVhdHVyZSBuZWdvdGlhdGlvbiBpbiBEQ0NQLgoKUGF0Y2hlcyBoYXZlIGJlZW4gdGVzdGVkIHRv
+IGNvbXBpbGUgc3RhbmRhbG9uZSwgd2l0aCBzcGFyc2UgZW5hYmxlZC4KCkdlcnJpdAoKCkNvbW1p
+dCBzdW1tYXJ5OgotLS0tLS0tLS0tLS0tLS0KVGhpcyBzZXQgY29tcGxldGVzIHRoZSBzZWxmLWNv
+bnRhaW5lZCBpbXBsZW1lbnRhdGlvbiBvZiBzdGF0aWMgZmVhdHVyZQpuZWdvdGlhdGlvbiBmb3Ig
+RENDUCBlbmRwb2ludHMgKFJGQyA0MzQwIC0gNDM0MiwgUkZDIDUzNDgpLgoKVGhlIHdob2xlIHNl
+dCBpcyBzdHJ1Y3R1cmVkIGludG8gMyBtYWluIGJsb2NrcyAtICgxKSBiYXNpcywgKDIpIGNvcmUs
+ICgzKQppbnRlZ3JhdGlvbiBhbmQgY2xlYW51cC4KClRoaXMgc2V0IGlzIHRoZSBmaW5hbCBpbiBi
+bG9jayAoMykgYW5kIGltcGxlbWVudHMgdGhlIGluaXRpYWxpemF0aW9uIG9mCmZlYXR1cmUtbmVn
+b3RpYXRpb24gc3RhdGUuIAoKVGhlcmUgaXMgZnVydGhlciB3b3JrIGdvaW5nIG9uIGluIHRoZSB0
+ZXN0IHRyZWUgIHRvIGFsc28gZHluYW1pY2FsbHkgdXBkYXRlCihub24tbmVnb3RpYWJsZSkgZmVh
+dHVyZSB2YWx1ZXMgc3VjaCBhcyBBY2sgUmF0aW8uIEJlZm9yZSB0aGlzIGNhbiBiZSBkb25lLApo
+b3dldmVyLCB0aGUgQ0NJRHMgdGhlbXNlbHZlcyBuZWVkIHNvbWUgbW9yZSB3b3JrLgoKTGlzdCBv
+ZiBwYXRjaGVzIGluIHRoaXMgc2V0OgotLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tClBhdGNo
+ICMxOiBJbml0aWFsaXNhdGlvbiBmcmFtZXdvcmsgZm9yIHRoZSBzdXBwb3J0ZWQgZmVhdHVyZXMu
+ClBhdGNoICMyOiBBZGRzIGZ1bGwgc3VwcG9ydCBmb3IgbG9jYWwvcmVtb3RlIFNlcXVlbmNlIFdp
+bmRvdy4KUGF0Y2ggIzM6IEluaXRpYWxpc2F0aW9uIGFuZCB0eXBlLWNoZWNraW5nIG9mIGludm9s
+dmVkIHN5c2N0bHMuClBhdGNoICM0OiBBIHNldCBvZiAodXNlZnVsKSBkZWJ1Z2dpbmcvcHJpbnRp
+bmcgaGVscGVyIGZ1bmN0aW9ucy4KClRoZSBzZXQgaXMgYWxzbyBhdmFpbGFibGUgZm9yIHZpZXdp
+bmcgb25saW5lLCBiZWdpbm5pbmcgYXQKY29tbWl0IGJkZTFlODMwZTg3ZjNhM2U1MWE3MmZhNWIz
+NTQwNWMzMTNiNjRiNzQgb2YKaHR0cDovL2VkZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9jZ2ktYmlu
+L2dpdHdlYi5jZ2k/cNxjcF9leHAuZ2l0CgpQYXRjaCBzdGF0czoKLS0tLS0tLS0tLS0tCiBEb2N1
+bWVudGF0aW9uL25ldHdvcmtpbmcvZGNjcC50eHQgfCAgICAzIAogaW5jbHVkZS9saW51eC9kY2Nw
+LmggICAgICAgICAgICAgIHwgICA1MSAtLS0tLS0tLQogbmV0L2RjY3AvZGNjcC5oICAgICAgICAg
+ICAgICAgICAgIHwgICAyMSArLS0KIG5ldC9kY2NwL2ZlYXQuYyAgICAgICAgICAgICAgICAgICB8
+ICAyNDAgKysrKysrKysrKysrKysrKysrKysrKysrKysrKy0tLS0tLS0tLS0KIG5ldC9kY2NwL2Zl
+YXQuaCAgICAgICAgICAgICAgICAgICB8ICAgMjMgKy0tCiBuZXQvZGNjcC9taW5pc29ja3MuYyAg
+ICAgICAgICAgICAgfCAgIDExIC0KIG5ldC9kY2NwL29wdGlvbnMuYyAgICAgICAgICAgICAgICB8
+ICAgIDggLQogbmV0L2RjY3AvcHJvdG8uYyAgICAgICAgICAgICAgICAgIHwgICAgMiAKIG5ldC9k
+Y2NwL3N5c2N0bC5jICAgICAgICAgICAgICAgICB8ICAgNDMgKysrKy0tCiA5IGZpbGVzIGNoYW5n
+ZWQsIDIzNyBpbnNlcnRpb25zKCspLCAxNjUgZGVsZXRpb25zKC0pCi0tClRvIHVuc3Vic2NyaWJl
+IGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUg
+Ym9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9y
+ZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
