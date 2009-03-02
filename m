@@ -1,90 +1,54 @@
-From: gerrit@erg.abdn.ac.uk
-Date: Wed, 04 Mar 2009 11:45:39 +0000
-Subject: Re: [PATCH] dccp: ensure gap does not become unsigned -1
-Message-Id: <35998.148.187.160.35.1236167139.squirrel@148.187.160.35>
+From: David Miller <davem@davemloft.net>
+Date: Mon, 02 Mar 2009 11:08:10 +0000
+Subject: Re: [PATCH 2/2] dccp: Do not let initial option overhead shrink
+Message-Id: <20090302.030810.243875852.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
-References: <49AD9217.8020206@gmail.com>
-In-Reply-To: <49AD9217.8020206@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-[added missing copy to netdev@vger]
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Sat, 28 Feb 2009 09:38:29 +0100
 
-> Is this maybe necessary?
-> ------------------------------>8-------------8<---------------------------------
-> if packets is 0, becomes -1, but since gap is unsigned, the test 'gap > 0'
-> does not work.
->
-Thank you for looking through. It is not necessary, see below.
+> This fixes a problem caused by the overlap of the connection-setup and
+> established-state phases of DCCP connections.
+> 
+> During connection setup, the client retransmits Confirm Feature-Negotiation
+> options until a response from the server signals that it can move from the
+> half-established PARTOPEN into the OPEN state, whereupon the connection is
+> fully established on both ends (RFC 4340, 8.1.5).
+> 
+> However, since the client may already send data while it is in the PARTOPEN
+> state, consequences arise for the Maximum Packet Size: the problem is that the
+> initial option overhead is much higher than for the subsequent established
+> phase, as it involves potentially many variable-length list-type options
+> (server-priority options, RFC 4340, 6.4).
+> 
+> Applying the standard MPS is insufficient here: especially with larger
+> payloads this can lead to annoying, counter-intuitive EMSGSIZE errors.
+> 
+> On the other hand, reducing the MPS available for the established phase by
+> the added initial overhead is highly wasteful and inefficient.
+> 
+> The solution chosen therefore is a two-phase strategy:
+> 
+>    If the payload length of the DataAck in PARTOPEN is too large, an Ack is sent
+>    to carry the options, and the feature-negotiation list is then flushed.
+> 
+>    This means that the server gets two Acks for one Response. If both Acks get
+>    lost, it is probably better to restart the connection anyway and devising yet
+>    another special-case does not seem worth the extra complexity.
+> 
+> The result is a higher utilisation of the available packet space for the data
+> transmission phase (established state) of a connection.
+> 
+> The patch (over-)estimates the initial overhead to be 32*4 bytes -- commonly
+> seen values were around 90 bytes for initial feature-negotiation options.
+> 
+> It uses sizeof(u32) to mean "aligned units of 4 bytes".
+> For consistency, another use of 4-byte alignment is adapted.
+> 
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-> --- a/net/dccp/ackvec.c
-> +++ b/net/dccp/ackvec.c
-> @@ -207,7 +207,11 @@ static inline int
-> dccp_ackvec_set_buf_head_state(struct dccp_ackvec *av,
->  	if (av->av_vec_len + packets > DCCP_MAX_ACKVEC_LEN)
->  		return -ENOBUFS;
->
-> -	gap	 = packets - 1;
-> +	if (packets > 0)
-
-Why 'gap < 0' <=> packets < 0 can not happen:
-
-/*
- * If several packets are missing, the HC-Receiver may prefer to enter
-multiple
- * bytes with run length 0, rather than a single byte with a larger run
-length;
- * this simplifies table updates if one of the missing packets arrives.
- */
-static inline int dccp_ackvec_set_buf_head_state(struct dccp_ackvec *av,
-                                                 const unsigned int packets,
-                                                 const unsigned char state)
-
-This is a static routine which is called in one place only in
-net/dccp/ackvec.c, in dccp_ackvec_add():
-//...
-} else if (after48(ackno, av->av_buf_ackno)) {
-                const u64 delta = dccp_delta_seqno(av->av_buf_ackno, ackno);
-
-                /*
-                 * Look if the state of this packet is the same as the
-                 * previous ackno and if so if we can bump the head len.
-                 */
-                if (delta = 1 &&
-                    dccp_ackvec_state(av, av->av_buf_head) = state &&
-                    dccp_ackvec_len(av, av->av_buf_head) <
-DCCP_ACKVEC_LEN_MASK)
-                        av->av_buf[av->av_buf_head]++;
-                else if (dccp_ackvec_set_buf_head_state(av, delta, state))
-                        return -ENOBUFS;
-
-=> We thus have:
- 1) after48(a, b) => sequence number `a' is `after' b
- 2) sequence number `a' is `after' `b' =>  dccp_delta_seqno(b, a) > 0
- 3) hence delta > 0
- 4) hence delta - 1 = gap >= 0
- 5) The subsequent `else' in dccp_ackvec_add() catches the case
-    of !after48(a, b), note the reversed order of arguments to
-    dccp_delta_seqno, so that a positive value is returned:
-
-    } else {
-                /*
-                 * A.1.2.  Old Packets
-                 *
-                 *      When a packet with Sequence Number S <= buf_ackno
-                 *      arrives, the HC-Receiver will scan the table for
-                 *      the byte corresponding to S. (Indexing structures
-                 *      could reduce the complexity of this scan.)
-                 */
-                u64 delta = dccp_delta_seqno(ackno, av->av_buf_ackno);
-
-
-    => But this is in an entirely different block of code outside the
-        one to which this patch was meant.
-
-Hence it is not necessary.
-
-
-
+Applied.
