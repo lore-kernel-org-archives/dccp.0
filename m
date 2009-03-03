@@ -1,29 +1,34 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 06 Feb 2009 06:41:39 +0000
-Subject: Re: Get Current CCID
-Message-Id: <20090206064139.GA3718@gerrit.erg.abdn.ac.uk>
+From: Roel Kluin <roel.kluin@gmail.com>
+Date: Tue, 03 Mar 2009 20:24:55 +0000
+Subject: [PATCH] dccp: ensure gap does not become unsigned -1
+Message-Id: <49AD9217.8020206@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Sorry for the delay which was caused by illness.
+Is this maybe necessary?
+------------------------------>8-------------8<---------------------------------
+if packets is 0, becomes -1, but since gap is unsigned, the test 'gap > 0' does
+not work.
 
-| Gerrit,
-|    consider this:
-|      getsockopt (so, SOL_DCCP, DCCP_SOCKOPT_RX_CCID, &ccid, &ccidlen);
-| 
-|    Is there any reason for getsockopt is returning 255? This is
-| happening with me using 2.6.29-rc2 (your test tree)
-| 
-Sorry this is not enough information to say whether the result is really
-what can be expected. First 
- * where is the 255 returned ? -- is that the return value of getsocktopt()
-   or do you mean the value returned in 'ccid'?	
- * what type is 'ccid' ? -- from Documentation/networking/dccp.txt, it 
-   should be 'int', not an array of uint8_t;
- * analogous -- what is ccidlen?
- * last - the 'so' argument has to be a connected socket -- I don't know
-   whether you tried the getsockopt on a listening socket, where naturally
-   the value of the CCID(s) is undefined.
+Signed-off-by: Roel Kluin <roel.kluin@gmail.com>
+---
+diff --git a/net/dccp/ackvec.c b/net/dccp/ackvec.c
+index 01e4d39..7c61bc0 100644
+--- a/net/dccp/ackvec.c
++++ b/net/dccp/ackvec.c
+@@ -207,7 +207,11 @@ static inline int dccp_ackvec_set_buf_head_state(struct dccp_ackvec *av,
+ 	if (av->av_vec_len + packets > DCCP_MAX_ACKVEC_LEN)
+ 		return -ENOBUFS;
+ 
+-	gap	 = packets - 1;
++	if (packets > 0)
++		gap = packets - 1;
++	else
++		gap = 0;
++
+ 	new_head = av->av_buf_head - packets;
+ 
+ 	if (new_head < 0) {
