@@ -1,48 +1,36 @@
-From: Burak Gorkemli <burakgmail-dccp@yahoo.com>
-Date: Fri, 05 Jun 2009 22:58:59 +0000
-Subject: panic on 2.6.30-rc6
-Message-Id: <295033.28246.qm@web30002.mail.mud.yahoo.com>
+From: Ivo Augusto <ivocalado@embedded.ufcg.edu.br>
+Date: Tue, 14 Jul 2009 01:39:16 +0000
+Subject: How can i retrieve the ecn nonce information in a dccp datagram
+Message-Id: <cb00fa210907131839t545900dfjf7c9dfd529fbecb5@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
+Hi guys,
+=A0=A0=A0 I am working in the implementation of some features in CCID4
+congestion control. Although, i'm with a trouble in the implementation
+of a feature.
+One of the features that we're currently implementing is the handle of
+ECN nonce status.
 
-Hi,
+However, we didn't know how we can access the ECN nonce information in
+the DCCP datagram. Can we access this information directly from the
+datagram or is there a predefined way to do that?
 
-I am having kernel panic while doing video streaming tests with ccid3, using kernel version 2.6.30-rc6, pulled from Gerrit's
-tree. The crash happens on the receiver node (there is a sender node and a receiver node, both Linux boxes running 2.6.30-rc6) and it is quite reproducible. The console output is as follows:
 
-[<>] ? do_invalid_op
-[<>] do_invalid_op
-[<>] ? ccid3_hc_tx_no_feedback_timer
-[<>] ? __wake_up
-[<>] ? __kfree_skb
-[<>] ? trace_hardirqs_off_thunk
-[<>] error_code
-[<>] ? __mod_timer
-[<>] ? do_invalid_op
-[<>] ? ccid3_hc_tx_no_feedback_timer
-[<>] run_timer_softirq
-[<>] ? ccid3_hc_tx_no_feedback_timer
-[<>] ? ccid3_hc_tx_no_feedback_timer
-[<>] __do_softirq
-[<>] ? __do_softirq 
-<IRQ> [<>] ? irq_exit
-[<>] ? smp_apic_timer_interrupt
-[<>] ? apic_timer_interrupt
-[<>] ? native_safe_halt
-[<>] ? default_idle
-[<>] ? cpu_idle
-[<>] ? rest_init
-[<>] ? start_kernel
-[<>] ? i386_start_kernel
+thanks,
 
-Any comments?
+Ivo
 
-Thanks.
+--
+Ivo Augusto Andrade Rocha Calado
+MSc. Candidate
+Embedded Systems and Pervasive Computing Lab - http://embedded.ufcg.edu.br
+Systems and Computing Department - http://www.dsc.ufcg.edu.br
+Electrical Engineering and Informatics Center - http://www.ceei.ufcg.edu.br
+Federal University of Campina Grande - http://www.ufcg.edu.br
 
- --
-Burak
-
+PGP: 0x03422935
+Quidquid latine dictum sit, altum viditur.
