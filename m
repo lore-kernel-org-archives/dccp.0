@@ -1,7 +1,7 @@
-From: Leandro Sales <leandroal@gmail.com>
-Date: Thu, 16 Jul 2009 19:27:32 +0000
+From: Ivo Calado <ivocalado@embedded.ufcg.edu.br>
+Date: Fri, 31 Jul 2009 00:11:56 +0000
 Subject: Re: How can i retrieve the ecn nonce information in a dccp datagram
-Message-Id: <5bc4c4570907161227lfe43f46p9cd1f211d19b7d4a@mail.gmail.com>
+Message-Id: <cb00fa210907301711y17571bb6o6a872667978c5f68@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <cb00fa210907131839t545900dfjf7c9dfd529fbecb5@mail.gmail.com>
 In-Reply-To: <cb00fa210907131839t545900dfjf7c9dfd529fbecb5@mail.gmail.com>
@@ -10,18 +10,27 @@ Content-Type: text/plain; charset="iso-8859-1"
 Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-I'm in the Linux Symposium, in Montreal, and there were some people
-asking about the DCCP feedback to the user space applications. The ECN
-bit is one of the requirements from them. So, it is very important to
-have this available as soon as possible.
+Hi Gerrit and everybody,
+=A0=A0 we made the merge between the CCID4 (with our new patches) and ECN
+trees to allow us implement some features of TRFC-SP. The merge was a
+success (neither compile error nor kernel panic :P). Everything is
+working fine :)!
+However we are in doubt about what dccp branch our patches should be
+applied, because the TRFC-SP has relation with CCID4 branch but also
+depends of ECN branch Therefore, these patches don't strictly fit with
+ecn or ccid4 branch.
+So, what should we do about it?
 
-Ivo, when I get back to the laboratory or to Brazil we can discuss
-more about this issue.
+I have another doubt, how stable the ECN branch is? Are there a lot
+improvements to be done in the next few days or weeks?
 
-BR,
-Leandro.
+Cheers,
 
-On Thu, Jul 16, 2009 at 2:40 PM, Gerrit Renker<gerrit@erg.abdn.ac.uk> wrote:
+Ivo
+
+
+On Thu, Jul 16, 2009 at 14:40, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+>
 > Ciao Ivo,
 >
 > | However, we didn't know how we can access the ECN nonce information in
@@ -54,24 +63,29 @@ shortlog;h=ECn
 > hearing from you.
 >
 > Gerrit
-> --
-> To unsubscribe from this list: send the line "unsubscribe dccp" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at =A0http://vger.kernel.org/majordomo-info.html
->
 
 
 
---=20
-Leandro Melo de Sales
-Pervasive and Embedded Computing Laboratory
-Assistent Professor in Computer Science at Federal University of Alagoas
-PhD candidate in Computer Science at UFCG
+--
+Ivo Augusto Andrade Rocha Calado
+MSc. Candidate
+Embedded Systems and Pervasive Computing Lab - http://embedded.ufcg.edu.br
+Systems and Computing Department - http://www.dsc.ufcg.edu.br
+Electrical Engineering and Informatics Center - http://www.ceei.ufcg.edu.br
+Federal University of Campina Grande - http://www.ufcg.edu.br
 
-"The warrior is strong in loyalty, intensity, determination,
-initiative, persistence, courage and willpower. The warrior is light
-in the soul, self-trust and compassion. The warrior is often called to
-take the front when other cowardly make a step backwards. There are
-warriors on the battlefield and in everyday life."
+PGP: 0x03422935
+Quidquid latine dictum sit, altum viditur.
 
-http://www.leandrosales.com/
+
+
+--
+Ivo Augusto Andrade Rocha Calado
+MSc. Candidate
+Embedded Systems and Pervasive Computing Lab - http://embedded.ufcg.edu.br
+Systems and Computing Department - http://www.dsc.ufcg.edu.br
+Electrical Engineering and Informatics Center - http://www.ceei.ufcg.edu.br
+Federal University of Campina Grande - http://www.ufcg.edu.br
+
+PGP: 0x03422935
+Quidquid latine dictum sit, altum viditur.
