@@ -1,91 +1,75 @@
-From: Ivo Calado <ivocalado@embedded.ufcg.edu.br>
-Date: Fri, 31 Jul 2009 00:11:56 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 31 Jul 2009 19:23:26 +0000
 Subject: Re: How can i retrieve the ecn nonce information in a dccp datagram
-Message-Id: <cb00fa210907301711y17571bb6o6a872667978c5f68@mail.gmail.com>
+Message-Id: <20090731192326.GA4439@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <cb00fa210907131839t545900dfjf7c9dfd529fbecb5@mail.gmail.com>
 In-Reply-To: <cb00fa210907131839t545900dfjf7c9dfd529fbecb5@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Gerrit and everybody,
-=A0=A0 we made the merge between the CCID4 (with our new patches) and ECN
-trees to allow us implement some features of TRFC-SP. The merge was a
-success (neither compile error nor kernel panic :P). Everything is
-working fine :)!
-However we are in doubt about what dccp branch our patches should be
-applied, because the TRFC-SP has relation with CCID4 branch but also
-depends of ECN branch Therefore, these patches don't strictly fit with
-ecn or ccid4 branch.
-So, what should we do about it?
+|       we made the merge between the CCID4 (with our new patches) and ECN
+|    trees to allow us implement some features of TRFC-SP. The merge was a
+|    success (neither compile error nor kernel panic :P). Everything is working
+|    fine :)!
+Thanks indeed for testing, please see below.
 
-I have another doubt, how stable the ECN branch is? Are there a lot
-improvements to be done in the next few days or weeks?
+|    However we are in doubt about what dccp tree branch our patches should be
+|    applied, because the TRFC-SP has relation with CCID4 branch but also
+|    depends of ECN branch Therefore, these patches don't strictly fit with ecn
+|    or ccid4 branch.
+|    So, what should we do about it?
+Good point - I think it is essential to reorganise the tree, to simplify
+merging operations. Step one is the question below:
 
-Cheers,
+|    I have another doubt, how stable the ECN branch is? Are there a lot
+|    improvements to be done in the next few days or weeks?
+The implementation is basic but I'd say it is sufficient for now. In its present
+state, it should be considered stable, in particular the CCID-3 implementation.
 
-Ivo
+The implementation has been tested and has been running without any known problems
+for several months. If any bugs surface, they will of course be addresses. 
 
+Here is the list of things that will need further work:
 
-On Thu, Jul 16, 2009 at 14:40, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
->
-> Ciao Ivo,
->
-> | However, we didn't know how we can access the ECN nonce information in
-> | the DCCP datagram. Can we access this information directly from the
-> | datagram or is there a predefined way to do that?
-> |
-> The stock kernel does not support ECN bits.
->
-> It is really my fault, I forgot to announce that there is a separate tree
-> to support ECN. This extends the ECN support to the extent that ECN bits
-> can be modified and read even in userspace. There were also some programs
-> to work with the userspace ECN modifications, and continuing work on this.
->
-> The tree is available from
->
-> =A0git://eden-feed.erg.abdn.ac.uk/dccp_exp [subtree 'ecn']
->
-> =A0http://eden-feed.erg.abdn.ac.uk/latest-ecn-subtree.diff.gz
->
-> =A0http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3D=
-shortlog;h=ECn
->
-> This is all from work several months ago, as said, I just forgot to
-> activate/announce it. The patch is meant to be applied on top of the
-> either the DCCP or CCID-4 tree.
->
-> Will also start posting the ECN-tree patches to the list.
->
-> Please post any further issues regarding ECN support, looking forward to
-> hearing from you.
->
-> Gerrit
+ 1) There is an experimental Kconfig option "Interpret ECN congestion-experienced
+    packets as lost" (commit 81a94d9e15c76d28b18f17ffd0c2ed178da249e6) which I
+    would like to take out before merging it with the main test tree. 
+    This is an earlier option for experimentation only. People at Thales France
+    have tested it, and the results show that the performance of "translating"
+    an ECN-CE event into a standard DCCP loss event reduces efficiency and
+    responsiveness.
 
+ 2) There is IPv6 support but it is very ugly. I have started to work on a better
+    solution. But since this touches other networking code paths, it could take
+    a while until a more solution has been approved.
+    Even though it is ugly, it does work, so my suggestion for the moment is to
+    keep the IPv6 ECN support as it is while sorting out a better solution. The
+    patch that this refers to is called "net: Hack to enable IPv6 ECN support"
+    (commit 5564ed8b54156b75540b637895a95c37ca71dc3a). I have posted a question
+    about this on netdev already. Suggestions are welcome.
 
+ 3) Only a single ECN codepoint, the default ECT(0) as per RFC 3168 is supported.
+    This is in agreement with other Linux transport protocols, but could in some
+    later future be extended.
 
---
-Ivo Augusto Andrade Rocha Calado
-MSc. Candidate
-Embedded Systems and Pervasive Computing Lab - http://embedded.ufcg.edu.br
-Systems and Computing Department - http://www.dsc.ufcg.edu.br
-Electrical Engineering and Informatics Center - http://www.ceei.ufcg.edu.br
-Federal University of Campina Grande - http://www.ufcg.edu.br
+ 4) Still on the ToDo list is a review of CCID-2. I think it still needs more 
+    work, but this is a general issue and not specific to ECN.
 
-PGP: 0x03422935
-Quidquid latine dictum sit, altum viditur.
+To come back to your question from above, I would like to ask whether people
+are generally OK with merging the ECN-subtree into the dccp test tree
+  - without the patch from (1) above,
+  - with the IPv6 ECN hack (2) as no more than a temporary solution,
 
+I have not seen your CCID-4 patches but assume they apply on top of the dccp
+test tree. I think this would make things easier:
+  - no need for a separate patch
+  - the current CCID-4 implementation would come with ECN enabled
+  - you could merge your patches easier.
 
+Once this is done, I would like to encourage submitting CCID-4 patches also
+so that we can update the CCID-4 tree.
 
---
-Ivo Augusto Andrade Rocha Calado
-MSc. Candidate
-Embedded Systems and Pervasive Computing Lab - http://embedded.ufcg.edu.br
-Systems and Computing Department - http://www.dsc.ufcg.edu.br
-Electrical Engineering and Informatics Center - http://www.ceei.ufcg.edu.br
-Federal University of Campina Grande - http://www.ufcg.edu.br
-
-PGP: 0x03422935
-Quidquid latine dictum sit, altum viditur.
+Gerrit
