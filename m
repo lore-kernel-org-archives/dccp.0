@@ -1,60 +1,54 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sun, 09 Aug 2009 19:48:44 +0000
-Subject: dccp-test-tree [PATCH 7/10] Extend the packet-history code to support ECN-marked-CE events
-Message-Id: <1249847327-6792-8-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sun, 09 Aug 2009 19:48:41 +0000
+Subject: dccp-test-tree [PATCH 4/10] net: Hack to enable IPv6 ECN support
+Message-Id: <1249847327-6792-5-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This extends the main accounting routine, tfrc_rx_congestion_event, to
-also consider ECN-marks.
+ECN is not currently supported on inet6 sockets.
 
-Loss and ECN-marks are treated separately: when there is already a loss
-event, it is not necessary to also check for ECN marks (there will be at
-most one new congestion event anyway).
+This is a hack to copy over the ECN bits when ECN-capable transport
+has been enabled on the inet_sk socket.
 
-Conversely, if there is an ECN-event, tracking a pending loss is disabled.
-This is due to the fact that considering every possible combination of
-loss_count with/-out ECN-marks creates a lot of complexity which does not
-seem warranted -- comments added to point this out.
+This allows to support DCCPv6 ECN support, but needs to be revised:
+ * the inet_sock already has an u8 `tos' field for the DSCP/ECN bits;
+ * the same field is present as u8 `tclass' field in ipv6_pinfo;
+ * the DS field (RFC 2474) and the ECN bits (RFC 3168) are AF-independent,
+   so TOS/Traffic Class could be made AF-independent;
+ * sockets that include ipv6_pinfo also include struct inet_sock.
+
+Ideally there should be one field, e.g. `inet->dsfield', but doing
+this requires some more careful analysis, since inet_sk(sk)->tos and
+inet6_sk(sk)->tclass are referenced all over the source code.
+
+Leaving this for the moment, to be completed later.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/lib/packet_history.c |   21 +++++++++++++++++++++
- 1 files changed, 21 insertions(+), 0 deletions(-)
+ include/net/inet_ecn.h |    8 ++++++--
+ 1 files changed, 6 insertions(+), 2 deletions(-)
 
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -360,6 +360,27 @@ bool tfrc_rx_congestion_event(struct tfrc_rx_hist *h,
- 		 */
- 		new_event = tfrc_lh_interval_add(lh, h, first_li, sk);
- 		__three_after_loss(h);
-+
-+	} else if (dccp_data_packet(skb) && dccp_skb_is_ecn_ce(skb)) {
-+		/*
-+		 * We only test for ECN marks on data packets. This is the way
-+		 * the RFC considers ECN marks - a future implementation may
-+		 * find it useful to also check ECN marks on non-data packets.
-+		 */
-+		new_event = tfrc_lh_interval_add(lh, h, first_li, sk);
-+		/*
-+		 * Also combinations of loss and ECN-marks (as per the warning)
-+		 * are not supported. The permutations of loss combined with or
-+		 * without ECN-marks create a lot of complexity, which does not
-+		 * seem warranted: ECN-marked packets immediately trigger con-
-+		 * gestion events.
-+		 * Testing is needed to see whether ignoring the loss_count in
-+		 * light of an ECN-marked-CE event really has any disadvantages.
-+		 */
-+		if (new_event && h->loss_count) {
-+			DCCP_WARN("Ignoring loss count due to ECN\n");
-+			tfrc_rx_hist_resume_rtt_sampling(h);
-+		}
- 	}
+--- a/include/net/inet_ecn.h
++++ b/include/net/inet_ecn.h
+@@ -46,9 +46,13 @@ static inline __u8 INET_ECN_encapsulate(__u8 outer, __u8 inner)
+       (label) &= ~htonl(INET_ECN_MASK << 20);	\
+     } while (0)
  
- 	/*
++/*
++ * XXX Hack: copy over the ECN bits from inet_sk to inet6_sk.
++ *           This should be replaced by a single `dsfield' in inet
++ */
+ #define	IP6_ECN_flow_xmit(sk, label) do {				\
+-	if (INET_ECN_is_capable(inet6_sk(sk)->tclass))			\
+-		(label) |= htonl(INET_ECN_ECT_0 << 20);			\
++	IP6_ECN_flow_init(label);					\
++	(label) |= htonl((inet_sk(sk)->tos & INET_ECN_MASK) << 20);	\
+     } while (0)
+ 
+ static inline int IP_ECN_set_ce(struct iphdr *iph)
 -- 
 1.6.0.rc2
 
