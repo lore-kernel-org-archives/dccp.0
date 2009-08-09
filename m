@@ -1,155 +1,127 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sun, 09 Aug 2009 19:48:38 +0000
-Subject: dccp-test-tree [PATCH 1/10]: Put the ECN bits into the dccp_skb_cb
-Message-Id: <1249847327-6792-2-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sun, 09 Aug 2009 19:48:40 +0000
+Subject: dccp-test-tree [PATCH 3/10] Add feature-negotiation handler for ECN-Incapable feature
+Message-Id: <1249847327-6792-4-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This adds the two bits from the IPv4 TOS or IPv6 Traffic Class field into the
-dccp_skb_cb.
+This completes the feature-negotiation support for ECN in DCCP:
+ * a socket field to indicate whether this end is ECN-incapable,
+ * a socket field to record whether the remote end is ECN-capable,
+ * a feature-negotiation handler to activate the local/remote features.
 
-To make the required room, dccp_opt_len is curtailed to 10 bits, since the
-DCCP option length can not exceed 1020 < 2^10-1.
-
-Further changes:
-----------------
- * added code to copy the TOS/traffic class field contents,
- * supplied a utility function that checks for CE,
- * deleted duplicate inclusion of headers.
+When local ECN support is disabled, the ECN bits are erased before passing
+the skb on to the CCIDs (which perform the actual ECN processing). If the
+remote end is ECN-capable, dccp_transmit_skb() sets the ECT(0) codepoint.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/dccp.h |   10 +++++++++-
- net/dccp/ipv4.c |    5 ++---
- net/dccp/ipv6.c |   15 ++++++++-------
- 3 files changed, 19 insertions(+), 11 deletions(-)
+ include/linux/dccp.h |    4 ++++
+ net/dccp/feat.c      |   13 ++++++++++++-
+ net/dccp/input.c     |   13 +++++++++++++
+ net/dccp/output.c    |    3 +++
+ 4 files changed, 32 insertions(+), 1 deletions(-)
 
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -14,6 +14,7 @@
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -467,6 +467,8 @@ struct dccp_ackvec;
+  * @dccps_r_ack_ratio - feature-remote Ack Ratio
+  * @dccps_l_seq_win - local Sequence Window (influences ack number validity)
+  * @dccps_r_seq_win - remote Sequence Window (influences seq number validity)
++ * @dccps_l_ecn_ok - this host understands ECN bits (RFC 4340, 12.1)
++ * @dccps_r_ecn_ok - the remote end understands ECN bits
+  * @dccps_pcslen - sender   partial checksum coverage (via sockopt)
+  * @dccps_pcrlen - receiver partial checksum coverage (via sockopt)
+  * @dccps_send_ndp_count - local Send NDP Count feature (7.7.2)
+@@ -512,6 +514,8 @@ struct dccp_sock {
+ 	__u16				dccps_r_ack_ratio;
+ 	__u64				dccps_l_seq_win:48;
+ 	__u64				dccps_r_seq_win:48;
++	bool				dccps_l_ecn_ok:1,
++					dccps_r_ecn_ok:1;
+ 	__u8				dccps_pcslen:4;
+ 	__u8				dccps_pcrlen:4;
+ 	__u8				dccps_send_ndp_count:1;
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -72,6 +72,17 @@ static int dccp_hdlr_seq_win(struct sock *sk, u64 seq_win, bool rx)
+ 	return 0;
+ }
  
- #include <linux/dccp.h>
- #include <linux/ktime.h>
-+#include <net/inet_ecn.h>
- #include <net/snmp.h>
- #include <net/sock.h>
- #include <net/tcp.h>
-@@ -355,6 +356,7 @@ static inline int dccp_bad_service_code(const struct sock *sk,
-  * dccp_skb_cb  -  DCCP per-packet control information
-  * @dccpd_type: one of %dccp_pkt_type (or unknown)
-  * @dccpd_ccval: CCVal field (5.1), see e.g. RFC 4342, 8.1
-+ * @dccpd_ecn: ECN bits read from the IPv4 TOS / IPv6 Traffic Class field
-  * @dccpd_reset_code: one of %dccp_reset_codes
-  * @dccpd_reset_data: Data1..3 fields (depend on @dccpd_reset_code)
-  * @dccpd_opt_len: total length of all options (5.8) in the packet
-@@ -371,15 +373,21 @@ struct dccp_skb_cb {
- 	} header;
- 	__u8  dccpd_type:4;
- 	__u8  dccpd_ccval:4;
-+	__u8  dccpd_ecn:2;
- 	__u8  dccpd_reset_code,
- 	      dccpd_reset_data[3];
--	__u16 dccpd_opt_len;
-+	__u16 dccpd_opt_len:10;
- 	__u64 dccpd_seq;
- 	__u64 dccpd_ack_seq;
- };
- 
- #define DCCP_SKB_CB(__skb) ((struct dccp_skb_cb *)&((__skb)->cb[0]))
- 
-+static inline bool dccp_skb_is_ecn_ce(const struct sk_buff *skb)
++static int dccp_hdlr_ecn(struct sock *sk, u64 ecn_incapable, bool rx)
 +{
-+	return (DCCP_SKB_CB(skb)->dccpd_ecn & INET_ECN_MASK) = INET_ECN_CE;
++	struct dccp_sock *dp = dccp_sk(sk);
++
++	if (rx)
++		dp->dccps_l_ecn_ok = (ecn_incapable = 0);
++	else
++		dp->dccps_r_ecn_ok = (ecn_incapable = 0);
++	return 0;
 +}
 +
- /* RFC 4340, sec. 7.7 */
- static inline int dccp_non_data_packet(const struct sk_buff *skb)
+ static int dccp_hdlr_ack_ratio(struct sock *sk, u64 ratio, bool rx)
  {
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -10,16 +10,13 @@
-  *	2 of the License, or (at your option) any later version.
-  */
+ #ifndef __CCID2_COPES_GRACEFULLY_WITH_DYNAMIC_ACK_RATIO_UPDATES__
+@@ -170,7 +181,7 @@ static const struct {
+ 	{ DCCPF_CCID,		 FEAT_AT_TX, FEAT_SP, 2,   dccp_hdlr_ccid     },
+ 	{ DCCPF_SHORT_SEQNOS,	 FEAT_AT_TX, FEAT_SP, 0,   NULL },
+ 	{ DCCPF_SEQUENCE_WINDOW, FEAT_AT_TX, FEAT_NN, 100, dccp_hdlr_seq_win  },
+-	{ DCCPF_ECN_INCAPABLE,	 FEAT_AT_RX, FEAT_SP, 0,   NULL },
++	{ DCCPF_ECN_INCAPABLE,	 FEAT_AT_RX, FEAT_SP, 0,   dccp_hdlr_ecn      },
+ 	{ DCCPF_ACK_RATIO,	 FEAT_AT_TX, FEAT_NN, 2,   dccp_hdlr_ack_ratio},
+ 	{ DCCPF_SEND_ACK_VECTOR, FEAT_AT_RX, FEAT_SP, 0,   dccp_hdlr_ackvec   },
+ 	{ DCCPF_SEND_NDP_COUNT,  FEAT_AT_TX, FEAT_SP, 0,   dccp_hdlr_ndp      },
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -159,6 +159,17 @@ static void dccp_rcv_reset(struct sock *sk, struct sk_buff *skb)
+ 	dccp_time_wait(sk, DCCP_TIME_WAIT, 0);
+ }
  
--#include <linux/dccp.h>
- #include <linux/icmp.h>
- #include <linux/module.h>
--#include <linux/skbuff.h>
- #include <linux/random.h>
- 
- #include <net/icmp.h>
- #include <net/inet_common.h>
- #include <net/inet_hashtables.h>
--#include <net/inet_sock.h>
- #include <net/protocol.h>
- #include <net/sock.h>
- #include <net/timewait_sock.h>
-@@ -783,6 +780,8 @@ static int dccp_v4_rcv(struct sk_buff *skb)
- 		goto discard_it;
- 
- 	iph = ip_hdr(skb);
-+	DCCP_SKB_CB(skb)->dccpd_ecn = iph->tos & INET_ECN_MASK;
++static void dccp_handle_ecn_codepoints(struct sock *sk, struct sk_buff *skb)
++{
++	/*
++	 * When locally disabled, erase ECN codepoints (a peer conforming to
++	 * RFC 4340, 12.2 should set these to zero anyway).
++	 */
++	if (!dccp_sk(sk)->dccps_l_ecn_ok)
++		DCCP_SKB_CB(skb)->dccpd_ecn = INET_ECN_NOT_ECT;
 +
- 	/* Step 1: If header checksum is incorrect, drop packet and return */
- 	if (dccp_v4_csum_finish(skb, iph->saddr, iph->daddr)) {
- 		DCCP_WARN("dropped packet with invalid checksum\n");
---- a/net/dccp/ipv6.c
-+++ b/net/dccp/ipv6.c
-@@ -19,7 +19,6 @@
- #include <net/addrconf.h>
- #include <net/inet_common.h>
- #include <net/inet_hashtables.h>
--#include <net/inet_sock.h>
- #include <net/inet6_connection_sock.h>
- #include <net/inet6_hashtables.h>
- #include <net/ip6_route.h>
-@@ -783,6 +782,7 @@ discard:
- 
- static int dccp_v6_rcv(struct sk_buff *skb)
++}
++
+ static void dccp_handle_ackvec_processing(struct sock *sk, struct sk_buff *skb)
  {
-+	struct dccp_skb_cb *dcb = DCCP_SKB_CB(skb);
- 	const struct dccp_hdr *dh;
- 	struct sock *sk;
- 	int min_cov;
-@@ -792,6 +792,8 @@ static int dccp_v6_rcv(struct sk_buff *skb)
- 	if (dccp_invalid_packet(skb))
- 		goto discard_it;
+ 	struct dccp_ackvec *av = dccp_sk(sk)->dccps_hc_rx_ackvec;
+@@ -372,6 +383,7 @@ int dccp_rcv_established(struct sock *sk, struct sk_buff *skb,
+ 	if (dccp_parse_options(sk, NULL, skb))
+ 		return 1;
  
-+	dcb->dccpd_ecn = ipv6_get_dsfield(ipv6_hdr(skb)) & INET_ECN_MASK;
++	dccp_handle_ecn_codepoints(sk, skb);
+ 	dccp_handle_ackvec_processing(sk, skb);
+ 	dccp_deliver_input_to_ccids(sk, skb);
+ 
+@@ -665,6 +677,7 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+ 
+ 	case DCCP_PARTOPEN:
+ 		/* Step 8: if using Ack Vectors, mark packet acknowledgeable */
++		dccp_handle_ecn_codepoints(sk, skb);
+ 		dccp_handle_ackvec_processing(sk, skb);
+ 		dccp_deliver_input_to_ccids(sk, skb);
+ 		/* fall through */
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -130,6 +130,9 @@ static int dccp_transmit_skb(struct sock *sk, struct sk_buff *skb)
+ 			break;
+ 		}
+ 
++		if (dp->dccps_r_ecn_ok)
++			INET_ECN_xmit(sk);
 +
- 	/* Step 1: If header checksum is incorrect, drop packet and return. */
- 	if (dccp_v6_csum_finish(skb, &ipv6_hdr(skb)->saddr,
- 				     &ipv6_hdr(skb)->daddr)) {
-@@ -801,13 +803,13 @@ static int dccp_v6_rcv(struct sk_buff *skb)
+ 		icsk->icsk_af_ops->send_check(sk, 0, skb);
  
- 	dh = dccp_hdr(skb);
- 
--	DCCP_SKB_CB(skb)->dccpd_seq  = dccp_hdr_seq(dh);
--	DCCP_SKB_CB(skb)->dccpd_type = dh->dccph_type;
-+	dcb->dccpd_seq  = dccp_hdr_seq(dh);
-+	dcb->dccpd_type = dh->dccph_type;
- 
- 	if (dccp_packet_without_ack(skb))
--		DCCP_SKB_CB(skb)->dccpd_ack_seq = DCCP_PKT_WITHOUT_ACK_SEQ;
-+		dcb->dccpd_ack_seq = DCCP_PKT_WITHOUT_ACK_SEQ;
- 	else
--		DCCP_SKB_CB(skb)->dccpd_ack_seq = dccp_hdr_ack_seq(skb);
-+		dcb->dccpd_ack_seq = dccp_hdr_ack_seq(skb);
- 
- 	/* Step 2:
- 	 *	Look up flow ID in table and get corresponding socket */
-@@ -863,8 +865,7 @@ no_dccp_socket:
- 	 *		Drop packet and return
- 	 */
- 	if (dh->dccph_type != DCCP_PKT_RESET) {
--		DCCP_SKB_CB(skb)->dccpd_reset_code -					DCCP_RESET_CODE_NO_CONNECTION;
-+		dcb->dccpd_reset_code = DCCP_RESET_CODE_NO_CONNECTION;
- 		dccp_v6_ctl_send_reset(sk, skb);
- 	}
- 
+ 		if (set_ack)
 -- 
 1.6.0.rc2
 
