@@ -1,132 +1,119 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sun, 09 Aug 2009 19:48:43 +0000
-Subject: dccp-test-tree [PATCH 6/10] Extend the loss interval code to support ECN events
-Message-Id: <1249847327-6792-7-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Sun, 09 Aug 2009 19:48:47 +0000
+Subject: dccp-test-tree [PATCH 10/10] Userspace support for reading ECN bits
+Message-Id: <1249847327-6792-11-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This updates the TFRC loss intervals code, which so far could only support
-lost packets, to also handle the case of ECN-marked-CE packets:
- * the begin and length of the loss interval are different;
- * there are combinations of loss + ECN-marked-CE which the code does not
-   currently consider (it is not worth the complexity), comments have been
-   added to point this out.
+This adds support to read the ECN bits of incoming DCCP packets.
 
-Further changes:
-----------------
-The implementation of the "is the loss interval already closed?" check as per
-RFC 4342, 10.2 has been improved to test the condition more efficiently.
+RFC: This is an AF-independent alternative to IP_RECVTOS/IPV6_RECVTCLASS.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/lib/loss_interval.c |   76 ++++++++++++++++++++++++++++--------
- 1 files changed, 59 insertions(+), 17 deletions(-)
+ Documentation/networking/dccp.txt |    6 ++++++
+ include/linux/dccp.h              |    5 ++++-
+ net/dccp/proto.c                  |   15 +++++++++++++++
+ 3 files changed, 25 insertions(+), 1 deletions(-)
 
---- a/net/dccp/ccids/lib/loss_interval.c
-+++ b/net/dccp/ccids/lib/loss_interval.c
-@@ -124,12 +124,12 @@ void tfrc_lh_update_i_mean(struct tfrc_loss_hist *lh, struct sk_buff *skb)
- 	tfrc_lh_calc_i_mean(lh);
- }
+--- a/Documentation/networking/dccp.txt
++++ b/Documentation/networking/dccp.txt
+@@ -41,6 +41,8 @@ than 3 are not accepted. Values need to be wrapped into a cmsg(3) header:
+ 	cmsg->cmsg_level = SOL_DCCP;
+ 	cmsg->cmsg_type	 = DCCP_SCM_ECN_BITS;
+ 	cmsg->cmsg_len	 = CMSG_LEN(sizeof(uint8_t));	/* or CMSG_LEN(1) */
++The process can be reversed for recvmsg(2) when the DCCP_SOCKOPT_GET_ECN_BITS
++socket option is enabled (see below), using the same cmsg encapsulation.
  
--/* Determine if `new_loss' does begin a new loss interval [RFC 4342, 10.2] */
--static inline u8 tfrc_lh_is_new_loss(struct tfrc_loss_interval *cur,
--				     struct tfrc_rx_hist_entry *new_loss)
-+/* RFC 4342, 10.2: test for the existence of packet with sequence number S */
-+static bool tfrc_lh_closed_check(struct tfrc_loss_interval *cur, const u8 ccval)
+ 
+ Missing features
+@@ -131,6 +133,10 @@ DCCP_SOCKOPT_RECV_CSCOV is for the receiver and has a different meaning: it
+ 	restrictive this setting (see [RFC 4340, sec. 9.2.1]). Partial coverage
+ 	settings are inherited to the child socket after accept().
+ 
++DCCP_SOCKOPT_GET_ECN_BITS takes a boolean int value and enables the delivery
++	of ECN bits as ancillary data to recvmsg(2). The data is received as
++	uint8_t value at SOL_DCCP level and cmsg_type of DCCP_SCM_ECN_BITS.
++
+ The following two options apply to CCID 3 exclusively and are getsockopt()-only.
+ In either case, a TFRC info struct (defined in <linux/tfrc.h>) is returned.
+ DCCP_SOCKOPT_CCID_RX_INFO
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -228,6 +228,7 @@ enum dccp_packet_dequeueing_policy {
+ #define DCCP_SOCKOPT_RX_CCID		15
+ #define DCCP_SOCKOPT_QPOLICY_ID		16
+ #define DCCP_SOCKOPT_QPOLICY_TXQLEN	17
++#define DCCP_SOCKOPT_GET_ECN_BITS	18
+ #define DCCP_SOCKOPT_CCID_RX_INFO	128
+ #define DCCP_SOCKOPT_CCID_TX_INFO	192
+ 
+@@ -470,6 +471,7 @@ struct dccp_ackvec;
+  * @dccps_r_seq_win - remote Sequence Window (influences seq number validity)
+  * @dccps_l_ecn_ok - this host understands ECN bits (RFC 4340, 12.1)
+  * @dccps_r_ecn_ok - the remote end understands ECN bits
++ * @dccps_get_ecn_bits - this host requests ECN bits as recvmsg() ancillary data
+  * @dccps_pcslen - sender   partial checksum coverage (via sockopt)
+  * @dccps_pcrlen - receiver partial checksum coverage (via sockopt)
+  * @dccps_send_ndp_count - local Send NDP Count feature (7.7.2)
+@@ -516,7 +518,8 @@ struct dccp_sock {
+ 	__u64				dccps_l_seq_win:48;
+ 	__u64				dccps_r_seq_win:48;
+ 	bool				dccps_l_ecn_ok:1,
+-					dccps_r_ecn_ok:1;
++					dccps_r_ecn_ok:1,
++					dccps_get_ecn_bits:1;
+ 	__u8				dccps_pcslen:4;
+ 	__u8				dccps_pcrlen:4;
+ 	__u8				dccps_send_ndp_count:1;
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -550,6 +550,9 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
+ 		else
+ 			dp->dccps_tx_qlen = val;
+ 		break;
++	case DCCP_SOCKOPT_GET_ECN_BITS:
++		dp->dccps_get_ecn_bits = (val != 0);
++		break;
+ 	default:
+ 		err = -ENOPROTOOPT;
+ 		break;
+@@ -663,6 +666,9 @@ static int do_dccp_getsockopt(struct sock *sk, int level, int optname,
+ 	case DCCP_SOCKOPT_QPOLICY_TXQLEN:
+ 		val = dp->dccps_tx_qlen;
+ 		break;
++	case DCCP_SOCKOPT_GET_ECN_BITS:
++		val = dp->dccps_get_ecn_bits;
++		break;
+ 	case 128 ... 191:
+ 		return ccid_hc_rx_getsockopt(dp->dccps_hc_rx_ccid, sk, optname,
+ 					     len, (u32 __user *)optval, optlen);
+@@ -825,6 +831,13 @@ out_discard:
+ 
+ EXPORT_SYMBOL_GPL(dccp_sendmsg);
+ 
++static void dccp_cmsg_recv_ecn_bits(struct msghdr *msg, struct sk_buff *skb)
++{
++	u8 val = DCCP_SKB_CB(skb)->dccpd_ecn;
++
++	put_cmsg(msg, SOL_DCCP, DCCP_SCM_ECN_BITS, sizeof(val), &val);
++}
++
+ int dccp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
+ 		 size_t len, int nonblock, int flags, int *addr_len)
  {
--	return	dccp_delta_seqno(cur->li_seqno, new_loss->tfrchrx_seqno) > 0 &&
--		(cur->li_is_closed || SUB16(new_loss->tfrchrx_ccval, cur->li_ccval) > 4);
-+	if (SUB16(ccval, cur->li_ccval) > 4)
-+		cur->li_is_closed = true;
-+	return cur->li_is_closed;
- }
- 
- /** tfrc_lh_interval_add  -  Insert new record into the Loss Interval database
-@@ -142,27 +142,69 @@ static inline u8 tfrc_lh_is_new_loss(struct tfrc_loss_interval *cur,
- bool tfrc_lh_interval_add(struct tfrc_loss_hist *lh, struct tfrc_rx_hist *rh,
- 			  u32 (*calc_first_li)(struct sock *), struct sock *sk)
- {
--	struct tfrc_loss_interval *cur = tfrc_lh_peek(lh), *new;
-+	struct tfrc_loss_interval *cur = tfrc_lh_peek(lh);
-+	struct tfrc_rx_hist_entry *cong_evt;
-+	u64 cong_evt_seqno;
-+
-+	/*
-+	 * Determine if the new event is caused by a lost or ECN-marked packet.
-+	 * Both events can coincide (e.g. if the third packet after a loss is
-+	 * marked as CE). We avoid the complexity caused by such mixed cases:
-+	 *   1) if the cause is a lost packet, we do not check whether it is
-+	 *      also an ECN-marked packet (not necessary);
-+	 *   2) calling this routine with a loss_count of 0..NDUPACK-1 implies
-+	 *      that the cause is an ECN-marked-CE packet.
-+	 *      FIXME: if in this case the loss_count is not 0, loss tracking is
-+	 *      reset. This is a complex corner case (see packet_history.c) and
-+	 *      hence currently not supported.
-+	 */
-+	if (rh->loss_count = TFRC_NDUPACK) {
-+		/*
-+		 * The sequence number of the first packet known to be lost is
-+		 * the successor of the last packet received before the gap.
-+		 */
-+		cong_evt = tfrc_rx_hist_loss_prev(rh);
-+		cong_evt_seqno = ADD48(cong_evt->tfrchrx_seqno, 1);
-+	} else {
-+		/*
-+		 * ECN-marked packet. Since ECN-marks are reported as soon as a
-+		 * packet is delivered, it is stored in the last-received entry.
-+		 */
-+		cong_evt = tfrc_rx_hist_last_rcv(rh);
-+		cong_evt_seqno = cong_evt->tfrchrx_seqno;
-+	}
- 
--	if (cur != NULL && !tfrc_lh_is_new_loss(cur, tfrc_rx_hist_loss_prev(rh)))
--		return false;
-+	/* Test if this event starts a new loss interval */
-+	if (cur != NULL) {
-+		s64 len = dccp_delta_seqno(cur->li_seqno, cong_evt_seqno);
-+		if (len <= 0)
-+			return false;
-+
-+		if (!tfrc_lh_closed_check(cur, cong_evt->tfrchrx_ccval))
-+			return false;
- 
--	new = tfrc_lh_demand_next(lh);
--	if (unlikely(new = NULL)) {
-+		/* RFC 5348, 5.3: length between subsequent intervals */
-+		cur->li_length = len;
-+	}
-+
-+	/* Make the new interval the current one */
-+	cur = tfrc_lh_demand_next(lh);
-+	if (unlikely(cur = NULL)) {
- 		DCCP_CRIT("Cannot allocate/add loss record.");
- 		return false;
- 	}
- 
--	new->li_seqno	  = tfrc_rx_hist_loss_prev(rh)->tfrchrx_seqno;
--	new->li_ccval	  = tfrc_rx_hist_loss_prev(rh)->tfrchrx_ccval;
--	new->li_is_closed = 0;
-+	cur->li_seqno	  = cong_evt_seqno;
-+	cur->li_ccval	  = cong_evt->tfrchrx_ccval;
-+	cur->li_is_closed = false;
- 
- 	if (++lh->counter = 1)
--		lh->i_mean = new->li_length = (*calc_first_li)(sk);
-+		lh->i_mean = cur->li_length = (*calc_first_li)(sk);
- 	else {
--		cur->li_length = dccp_delta_seqno(cur->li_seqno, new->li_seqno);
--		new->li_length = dccp_delta_seqno(new->li_seqno,
--				  tfrc_rx_hist_last_rcv(rh)->tfrchrx_seqno) + 1;
-+		/* RFC 5348, 5.3: length of the open loss interval I_0 */
-+		cur->li_length = dccp_delta_seqno(cur->li_seqno,
-+				 tfrc_rx_hist_last_rcv(rh)->tfrchrx_seqno) + 1;
-+
- 		if (lh->counter > (2*LIH_SIZE))
- 			lh->counter -= LIH_SIZE;
- 
+@@ -919,6 +932,8 @@ verify_sock_status:
+ 			len = -EFAULT;
+ 			break;
+ 		}
++		if (dccp_sk(sk)->dccps_get_ecn_bits)
++			dccp_cmsg_recv_ecn_bits(msg, skb);
+ 	found_fin_ok:
+ 		if (!(flags & MSG_PEEK))
+ 			sk_eat_skb(sk, skb, 0);
 -- 
 1.6.0.rc2
 
