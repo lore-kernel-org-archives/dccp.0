@@ -1,40 +1,38 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 05 Aug 2009 20:18:09 +0000
-Subject: Re: [PATCH] dccp: missing destroy of percpu counter variable while
-Message-Id: <20090805201808.GA32333@gerrit.erg.abdn.ac.uk>
+From: Julien.HUEBER@fr.thalesgroup.com
+Date: Fri, 21 Aug 2009 08:22:45 +0000
+Subject: DCCP module insertion issues
+Message-Id: <DD7F6BACE0940D4AA451F8762B4D513C025A6E8A@thot.clb.tcfr.thales>
 List-Id: <dccp.vger.kernel.org>
-References: <4A793867.3030104@cn.fujitsu.com>
-In-Reply-To: <4A793867.3030104@cn.fujitsu.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-fCA+IFdBUk5JTkc6IGF0IGxpYi9saXN0X2RlYnVnLmM6MjYgX19saXN0X2FkZCsweDI3LzB4NWMo
-KQp8ID4gSGFyZHdhcmUgbmFtZTogVk13YXJlIFZpcnR1YWwgUGxhdGZvcm0KfCA+IGxpc3RfYWRk
-IGNvcnJ1cHRpb24uIG5leHQtPnByZXYgc2hvdWxkIGJlIHByZXYgKGMwODBjMGM0KSwgYnV0IHdh
-cyAobnVsbCkuIChuZXh0CnwgPiDKNzE4OGNjKS4KfCA+IE1vZHVsZXMgbGlua2VkIGluOiBkY2Nw
-KCspIG5mc2QgbG9ja2QgbmZzX2FjbCBhdXRoX3JwY2dzcyBleHBvcnRmcyBzdW5ycGMKfCA+IFBp
-ZDogMTk1NiwgY29tbTogbW9kcHJvYmUgTm90IHRhaW50ZWQgMi42LjMxLXJjNSAjNTUKfCA+IENh
-bGwgVHJhY2U6CnwgPiAgWzxjMDQyZjhmYT5dIHdhcm5fc2xvd3BhdGhfY29tbW9uKzB4NmEvMHg4
-MQp8ID4gIFs8YzA1M2E2Y2I+XSA/IF9fbGlzdF9hZGQrMHgyNy8weDVjCnwgPiAgWzxjMDQyZjk0
-Zj5dIHdhcm5fc2xvd3BhdGhfZm10KzB4MjkvMHgyYwp8ID4gIFs8YzA1M2E2Y2I+XSBfX2xpc3Rf
-YWRkKzB4MjcvMHg1Ywp8ID4gIFs8YzA1M2M5YjM+XSBfX3BlcmNwdV9jb3VudGVyX2luaXQrMHg0
-ZC8weDVkCnwgPiAgWzxjYTljOTBjNz5dIGRjY3BfaW5pdCsweDE5LzB4MmVkIFtkY2NwXQp8ID4g
-IFs8YzA0MDExNDE+XSBkb19vbmVfaW5pdGNhbGwrMHg0Zi8weDExMQp8ID4gIFs8Y2E5YzkwYWU+
-XSA/IGRjY3BfaW5pdCsweDAvMHgyZWQgW2RjY3BdCnwgPiAgWzxjMDY5NzFiNT5dID8gbm90aWZp
-ZXJfY2FsbF9jaGFpbisweDI2LzB4NDgKfCA+ICBbPGMwNDQ0OTQzPl0gPyBfX2Jsb2NraW5nX25v
-dGlmaWVyX2NhbGxfY2hhaW4rMHg0NS8weDUxCnwgPiAgWzxjMDQ1MTZmNz5dIHN5c19pbml0X21v
-ZHVsZSsweGFjLzB4MWJkCnwgPiAgWzxjMDQwMjhlND5dIHN5c2VudGVyX2RvX2NhbGwrMHgxMi8w
-eDIyCnwgPiAKfCA+IFNpZ25lZC1vZmYtYnk6IFdlaSBZb25nanVuIDx5andlaUBjbi5mdWppdHN1
-LmNvbT4KfCA+IC0tLQoKVGhhbmtzIGEgbG90IC0tIEkgaGF2ZSBhZGRlZCB0aGlzIHRvIHRoZSB0
-ZXN0LXRyZWUgKHdoaWNoIGlzIHN0aWxsCjIuNi4zMS1yYzEpLCB1bnRpbCB0aGUgcGF0Y2ggaXMg
-aW4gbmV0LTIuNiwKCmh0dHA6Ly9lZGVuLWZlZWQuZXJnLmFiZG4uYWMudWsvY2dpLWJpbi9naXR3
-ZWIuY2dpP3DcY3BfZXhwLmdpdDthPXNob3J0bG9nO2jcY3AKIGdpdDovL2VkZW4tZmVlZC5lcmcu
-YWJkbi5hYy51ay9kY2NwX2V4cCAgICAgICAgW3N1YnRyZWUgZGNjcF0KCkkgYW0gd29uZGVyaW5n
-IHdoZXRoZXIgdGhlcmUgaXMgYSByZWxhdGlvbnNoaXAgd2l0aCAKaHR0cDovL2J1Z3ppbGxhLmtl
-cm5lbC5vcmcvc2hvd19idWcuY2dpP2lkEzY5MgoKYW5kIGFtIGNjOmluZyBBbGV4IER1Ym92LCB3
-aG8gcmVwb3J0ZWQgaXQuCi0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5kIHRo
-ZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFq
-b3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdl
-ci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
+Hello, 
+I am currently working on DCCP in a research purpose but I am experiencing
+new issues that I don't understand.
+ 
+We already have a Test-Bed with a couple of machines working with the latest
+version of the Linux Kernel (2.6.31-rc1) modified for DCCP, but when we
+tried to install this kernel on another computer the DCCP module isn't
+loading.
+ 
+When we try to insert it manually we get the following error :
+# sudo insmod dccp.ko
+> insmod: error inserting 'dccp.ko' : -1 Socket type not supported
+ 
+We saw on the mailing list that this error can be caused by the timer
+resolution (on the post "dccp ccid3 : Runtime verification of timer
+resolution"). Our clocksource was "tsc", but even when changing it to
+"acpi_pm" (which is working just fine with DCCP on another machine) we are
+still getting this error.
+Moreover, DCCP used to work on this machine when an older version
+(2.6.26-rc8) of the modified Kernel was installed.
+ 
+So I am running out of idea about this problem, if anyone could explain me
+what is the matter, or how can I get rid of it, it would be very helpful.
+Thanks,
+--
+Julien Hueber
+ 
+MSc student in internship at Thales Communications
