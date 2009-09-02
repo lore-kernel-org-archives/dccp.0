@@ -1,119 +1,174 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Sun, 09 Aug 2009 19:48:47 +0000
-Subject: dccp-test-tree [PATCH 10/10] Userspace support for reading ECN bits
-Message-Id: <1249847327-6792-11-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Ivo Calado <ivocalado@embedded.ufcg.edu.br>
+Date: Wed, 02 Sep 2009 02:45:28 +0000
+Subject: [PATCH 3/5] Implement TFRC-SP calc of mean length of loss intervals
+Message-Id: <cb00fa210909011945l1c44d1eap90329a4c6eb0480a@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-This adds support to read the ECN bits of incoming DCCP packets.
+Implement TFRC-SP calc of mean length of loss intervals accordingly to
+section 3 of RFC 4828
 
-RFC: This is an AF-independent alternative to IP_RECVTOS/IPV6_RECVTCLASS.
+Changes:
+=A0- Modify tfrc_sp_lh_calc_i_mean header, now receiving the current
+ccval, so it can determine
+=A0 if a loss interval is too recent
+=A0- Consider number of losses in each loss interval
+=A0- Only consider open loss interval if it is at least 2 rtt old
+=A0- Changes function signatures as necessary
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- Documentation/networking/dccp.txt |    6 ++++++
- include/linux/dccp.h              |    5 ++++-
- net/dccp/proto.c                  |   15 +++++++++++++++
- 3 files changed, 25 insertions(+), 1 deletions(-)
+Signed-off-by: Ivo Calado, Erivaldo Xavier, Leandro Sales
+<ivocalado@embedded.ufcg.edu.br>, <desadoc@gmail.com>,
+<leandroal@gmail.com>
 
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -41,6 +41,8 @@ than 3 are not accepted. Values need to be wrapped into a cmsg(3) header:
- 	cmsg->cmsg_level = SOL_DCCP;
- 	cmsg->cmsg_type	 = DCCP_SCM_ECN_BITS;
- 	cmsg->cmsg_len	 = CMSG_LEN(sizeof(uint8_t));	/* or CMSG_LEN(1) */
-+The process can be reversed for recvmsg(2) when the DCCP_SOCKOPT_GET_ECN_BITS
-+socket option is enabled (see below), using the same cmsg encapsulation.
- 
- 
- Missing features
-@@ -131,6 +133,10 @@ DCCP_SOCKOPT_RECV_CSCOV is for the receiver and has a different meaning: it
- 	restrictive this setting (see [RFC 4340, sec. 9.2.1]). Partial coverage
- 	settings are inherited to the child socket after accept().
- 
-+DCCP_SOCKOPT_GET_ECN_BITS takes a boolean int value and enables the delivery
-+	of ECN bits as ancillary data to recvmsg(2). The data is received as
-+	uint8_t value at SOL_DCCP level and cmsg_type of DCCP_SCM_ECN_BITS.
+Index: b/net/dccp/ccids/lib/loss_interval_sp.c
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D--- a/net/dccp/ccids/lib/loss_interval_sp.c =A0 =A0=
+ 2009-08-26
+23:28:27.000000000 -0300
++++ b/net/dccp/ccids/lib/loss_interval_sp.c =A0 =A0 2009-08-26
+23:53:32.000000000 -0300
+@@ -66,10 +66,11 @@
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0}
+=A0}
+
+-static void tfrc_sp_lh_calc_i_mean(struct tfrc_loss_hist *lh)
++static void tfrc_sp_lh_calc_i_mean(struct tfrc_loss_hist *lh, __u8 curr_cc=
+val)
+=A0{
+=A0 =A0 =A0 =A0u32 i_i, i_tot0 =3D 0, i_tot1 =3D 0, w_tot =3D 0;
+=A0 =A0 =A0 =A0int i, k =3D tfrc_lh_length(lh) - 1; /* k is as in rfc3448bi=
+s, 5.4 */
++ =A0 =A0 =A0 u32 losses;
+
+=A0 =A0 =A0 =A0if (k <=3D 0)
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0return;
+@@ -77,6 +78,14 @@
+=A0 =A0 =A0 =A0for (i =3D 0; i <=3D k; i++) {
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0i_i =3D tfrc_lh_get_interval(lh, i);
+
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (SUB16(curr_ccval,
+tfrc_lh_get_loss_interval(lh,i)->li_ccval) <=3D 8)
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 losses =3D tfrc_lh_get_loss_i=
+nterval(lh,i)->li_losses;
 +
- The following two options apply to CCID 3 exclusively and are getsockopt()-only.
- In either case, a TFRC info struct (defined in <linux/tfrc.h>) is returned.
- DCCP_SOCKOPT_CCID_RX_INFO
---- a/include/linux/dccp.h
-+++ b/include/linux/dccp.h
-@@ -228,6 +228,7 @@ enum dccp_packet_dequeueing_policy {
- #define DCCP_SOCKOPT_RX_CCID		15
- #define DCCP_SOCKOPT_QPOLICY_ID		16
- #define DCCP_SOCKOPT_QPOLICY_TXQLEN	17
-+#define DCCP_SOCKOPT_GET_ECN_BITS	18
- #define DCCP_SOCKOPT_CCID_RX_INFO	128
- #define DCCP_SOCKOPT_CCID_TX_INFO	192
- 
-@@ -470,6 +471,7 @@ struct dccp_ackvec;
-  * @dccps_r_seq_win - remote Sequence Window (influences seq number validity)
-  * @dccps_l_ecn_ok - this host understands ECN bits (RFC 4340, 12.1)
-  * @dccps_r_ecn_ok - the remote end understands ECN bits
-+ * @dccps_get_ecn_bits - this host requests ECN bits as recvmsg() ancillary data
-  * @dccps_pcslen - sender   partial checksum coverage (via sockopt)
-  * @dccps_pcrlen - receiver partial checksum coverage (via sockopt)
-  * @dccps_send_ndp_count - local Send NDP Count feature (7.7.2)
-@@ -516,7 +518,8 @@ struct dccp_sock {
- 	__u64				dccps_l_seq_win:48;
- 	__u64				dccps_r_seq_win:48;
- 	bool				dccps_l_ecn_ok:1,
--					dccps_r_ecn_ok:1;
-+					dccps_r_ecn_ok:1,
-+					dccps_get_ecn_bits:1;
- 	__u8				dccps_pcslen:4;
- 	__u8				dccps_pcrlen:4;
- 	__u8				dccps_send_ndp_count:1;
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -550,6 +550,9 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
- 		else
- 			dp->dccps_tx_qlen = val;
- 		break;
-+	case DCCP_SOCKOPT_GET_ECN_BITS:
-+		dp->dccps_get_ecn_bits = (val != 0);
-+		break;
- 	default:
- 		err = -ENOPROTOOPT;
- 		break;
-@@ -663,6 +666,9 @@ static int do_dccp_getsockopt(struct sock *sk, int level, int optname,
- 	case DCCP_SOCKOPT_QPOLICY_TXQLEN:
- 		val = dp->dccps_tx_qlen;
- 		break;
-+	case DCCP_SOCKOPT_GET_ECN_BITS:
-+		val = dp->dccps_get_ecn_bits;
-+		break;
- 	case 128 ... 191:
- 		return ccid_hc_rx_getsockopt(dp->dccps_hc_rx_ccid, sk, optname,
- 					     len, (u32 __user *)optval, optlen);
-@@ -825,6 +831,13 @@ out_discard:
- 
- EXPORT_SYMBOL_GPL(dccp_sendmsg);
- 
-+static void dccp_cmsg_recv_ecn_bits(struct msghdr *msg, struct sk_buff *skb)
-+{
-+	u8 val = DCCP_SKB_CB(skb)->dccpd_ecn;
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (losses > 0)
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 i_i =3D div64=
+_u64(i_i, losses);
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
 +
-+	put_cmsg(msg, SOL_DCCP, DCCP_SCM_ECN_BITS, sizeof(val), &val);
-+}
-+
- int dccp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
- 		 size_t len, int nonblock, int flags, int *addr_len)
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0if (i < k) {
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0i_tot0 +=3D i_i * tfrc_lh_we=
+ights[i];
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0w_tot =A0+=3D tfrc_lh_weight=
+s[i];
+@@ -86,6 +95,12 @@
+=A0 =A0 =A0 =A0}
+
+=A0 =A0 =A0 =A0lh->i_mean =3D max(i_tot0, i_tot1) / w_tot;
++ =A0 =A0 =A0 BUG_ON(w_tot =3D 0);
++ =A0 =A0 =A0 if (SUB16(curr_ccval, tfrc_lh_get_loss_interval(lh,0)->li_ccv=
+al) > 8) {
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 lh->i_mean =3D max(i_tot0, i_tot1) / w_tot;
++ =A0 =A0 =A0 } else {
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 lh->i_mean =3D i_tot1 / w_tot;
++ =A0 =A0 =A0 }
+=A0}
+
+=A0/**
+@@ -126,7 +141,7 @@
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0return;
+
+=A0 =A0 =A0 =A0cur->li_length =3D len;
+- =A0 =A0 =A0 tfrc_sp_lh_calc_i_mean(lh);
++ =A0 =A0 =A0 tfrc_sp_lh_calc_i_mean(lh, dccp_hdr(skb)->dccph_ccval);
+=A0}
+
+=A0/* RFC 4342, 10.2: test for the existence of packet with sequence number=
+ S */
+@@ -145,7 +160,7 @@
+=A0* Updates I_mean and returns 1 if a new interval has in fact been
+added to @lh.
+=A0*/
+=A0bool tfrc_sp_lh_interval_add(struct tfrc_loss_hist *lh, struct
+tfrc_rx_hist *rh,
+- =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0u32 (*calc_first_l=
+i)(struct sock *),
+struct sock *sk)
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0u32 (*calc_first_l=
+i)(struct sock *),
+struct sock *sk, __u8 ccval)
+=A0{
+=A0 =A0 =A0 =A0struct tfrc_loss_interval *cur =3D tfrc_lh_peek(lh);
+=A0 =A0 =A0 =A0struct tfrc_rx_hist_entry *cong_evt;
+@@ -214,7 +229,7 @@
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0if (lh->counter > (2*LIH_SIZE))
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0lh->counter -=3D LIH_SIZE;
+
+- =A0 =A0 =A0 =A0 =A0 =A0 =A0 tfrc_sp_lh_calc_i_mean(lh);
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 tfrc_sp_lh_calc_i_mean(lh, ccval);
+=A0 =A0 =A0 =A0}
+
+=A0 =A0 =A0 =A0return true;
+Index: b/net/dccp/ccids/lib/loss_interval_sp.h
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D--- a/net/dccp/ccids/lib/loss_interval_sp.h =A0 =A0=
+ 2009-08-26
+22:52:20.000000000 -0300
++++ b/net/dccp/ccids/lib/loss_interval_sp.h =A0 =A0 2009-08-26
+23:44:20.000000000 -0300
+@@ -71,7 +71,7 @@
+=A0#endif
+
+=A0extern bool tfrc_sp_lh_interval_add(struct tfrc_loss_hist *, struct
+tfrc_rx_hist *,
+- =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 u32 (=
+*first_li)(struct sock *),
+struct sock *);
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 u32 (=
+*first_li)(struct sock *),
+struct sock *, __u8 ccval);
+=A0extern void tfrc_sp_lh_update_i_mean(struct tfrc_loss_hist *lh,
+struct sk_buff *);
+=A0extern void tfrc_sp_lh_cleanup(struct tfrc_loss_hist *lh);
+
+Index: b/net/dccp/ccids/lib/packet_history_sp.c
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D--- a/net/dccp/ccids/lib/packet_history_sp.c =A0 =
+=A02009-08-26
+22:55:01.000000000 -0300
++++ b/net/dccp/ccids/lib/packet_history_sp.c =A0 =A02009-08-26
+23:49:59.000000000 -0300
+@@ -359,7 +359,7 @@
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0/*
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0* Update Loss Interval database and recycle =
+RX records
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0*/
+- =A0 =A0 =A0 =A0 =A0 =A0 =A0 new_event =3D tfrc_sp_lh_interval_add(lh, h, =
+first_li, sk);
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 new_event =3D tfrc_sp_lh_interval_add(lh, h, =
+first_li, sk,
+dccp_hdr(skb)->dccph_ccval);
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0__three_after_loss(h);
+
+=A0 =A0 =A0 =A0} else if (dccp_data_packet(skb) && dccp_skb_is_ecn_ce(skb))=
  {
-@@ -919,6 +932,8 @@ verify_sock_status:
- 			len = -EFAULT;
- 			break;
- 		}
-+		if (dccp_sk(sk)->dccps_get_ecn_bits)
-+			dccp_cmsg_recv_ecn_bits(msg, skb);
- 	found_fin_ok:
- 		if (!(flags & MSG_PEEK))
- 			sk_eat_skb(sk, skb, 0);
--- 
-1.6.0.rc2
-
+@@ -368,7 +368,7 @@
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0* the RFC considers ECN marks - a future imp=
+lementation may
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0* find it useful to also check ECN marks on =
+non-data packets.
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0*/
+- =A0 =A0 =A0 =A0 =A0 =A0 =A0 new_event =3D tfrc_sp_lh_interval_add(lh, h, =
+first_li, sk);
++ =A0 =A0 =A0 =A0 =A0 =A0 =A0 new_event =3D tfrc_sp_lh_interval_add(lh, h, =
+first_li, sk,
+dccp_hdr(skb)->dccph_ccval);
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0/*
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0* Also combinations of loss and ECN-marks (a=
+s per the warning)
+=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0* are not supported. The permutations of los=
+s combined with or
