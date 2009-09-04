@@ -1,566 +1,518 @@
 From: Ivo Calado <ivocalado@embedded.ufcg.edu.br>
-Date: Wed, 02 Sep 2009 02:45:59 +0000
+Date: Fri, 04 Sep 2009 12:25:08 +0000
 Subject: [PATCH 4/5] Adds options DROPPED PACKETS and LOSS INTERVALS to
-Message-Id: <cb00fa210909011945u2d82da97i7a7f2d1f12519a5f@mail.gmail.com>
+Message-Id: <1252067108.6172.4.camel@localhost>
 List-Id: <dccp.vger.kernel.org>
+References: <cb00fa210909011945u2d82da97i7a7f2d1f12519a5f@mail.gmail.com>
+In-Reply-To: <cb00fa210909011945u2d82da97i7a7f2d1f12519a5f@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
 Adds options DROPPED PACKETS and LOSS INTERVALS to receiver. In this
 patch is added the
-mechanism of gathering information about loss intervals and storing
-it, for later
+mechanism of gathering information about loss intervals and storing it,
+for later
 construction of these two options.
 
 Changes:
-=A0- Adds tfrc_loss_data and tfrc_loss_data_entry, structures that
-register loss intervals info
-=A0- Adds dccp_skb_is_ecn_ect0 and dccp_skb_is_ecn_ect1 as necessary, so
+- Adds tfrc_loss_data and tfrc_loss_data_entry, structures that register
+loss intervals info
+- Adds dccp_skb_is_ecn_ect0 and dccp_skb_is_ecn_ect1 as necessary, so
 ecn can be verified and
-=A0 used in loss intervals option, that reports ecn nonce sum
-=A0- Adds tfrc_sp_update_li_data that updates information about loss interv=
-als
-=A0- Adds tfrc_sp_ld_prepare_data, that fills fields on tfrc_loss_data
-with current options values
-=A0- And adds a field of type struct tfrc_loss_data to struct tfrc_hc_rx_so=
-ck
+   used in loss intervals option, that reports ecn nonce sum
+- Adds tfrc_sp_update_li_data that updates information about loss
+intervals
+- Adds tfrc_sp_ld_prepare_data, that fills fields on tfrc_loss_data with
+current options values
+- And adds a field of type struct tfrc_loss_data to struct
+tfrc_hc_rx_sock
 
 Signed-off-by: Ivo Calado, Erivaldo Xavier, Leandro Sales
 <ivocalado@embedded.ufcg.edu.br>, <desadoc@gmail.com>,
 <leandroal@gmail.com>
 
-Index: b/net/dccp/ccids/lib/packet_history_sp.c
-=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
-=3D=3D=3D=3D=3D=3D=3D=3D--- a/net/dccp/ccids/lib/packet_history_sp.c =A0 =
-=A02009-08-26
-23:49:59.000000000 -0300
-+++ b/net/dccp/ccids/lib/packet_history_sp.c =A0 =A02009-08-27
-22:36:43.000000000 -0300
-@@ -339,10 +339,12 @@
-=A0*/
-=A0bool tfrc_sp_rx_congestion_event(struct tfrc_rx_hist *h,
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0struct tfrc_loss=
-_hist *lh,
-- =A0 =A0 =A0 =A0struct sk_buff *skb, const u64 ndp,
-- =A0u32 (*first_li)(struct sock *), struct sock *sk)
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 struct tfrc_loss_=
-data *ld,
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 struct sk_buff *s=
-kb, const u64 ndp,
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 u32 (*first_li)(s=
-truct sock *), struct sock *sk)
-=A0{
-=A0 =A0 =A0 =A0bool new_event =3D false;
-+ =A0 =A0 =A0 bool new_loss =3D false;
+Index: dccp_tree_work4/net/dccp/ccids/lib/packet_history_sp.c
+=================================--- dccp_tree_work4.orig/net/dccp/ccids/lib/packet_history_sp.c
+2009-09-03 23:10:05.000000000 -0300
++++ dccp_tree_work4/net/dccp/ccids/lib/packet_history_sp.c 2009-09-04
+00:10:24.000000000 -0300
+@@ -233,7 +233,9 @@
+}
 
-=A0 =A0 =A0 =A0if (tfrc_sp_rx_hist_duplicate(h, skb))
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0return 0;
-@@ -355,11 +357,12 @@
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0__one_after_loss(h, skb, ndp);
-=A0 =A0 =A0 =A0} else if (h->loss_count !=3D 2) {
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0DCCP_BUG("invalid loss_count %d", h->loss_co=
-unt);
-- =A0 =A0 =A0 } else if (__two_after_loss(h, skb, ndp)) {
-+ =A0 =A0 =A0 } else if ((new_loss =3D __two_after_loss(h, skb, ndp))) {
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0/*
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0* Update Loss Interval database and recycle =
-RX records
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0*/
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0new_event =3D tfrc_sp_lh_interval_add(lh, h,=
- first_li, sk,
+/* return 1 if a new loss event has been identified */
+-static int __two_after_loss(struct tfrc_rx_hist *h, struct sk_buff
+*skb, u32 n3)
++static int __two_after_loss(struct tfrc_rx_hist *h,
++     struct sk_buff *skb, u32 n3,
++     bool *new_loss)
+{
+u64 s0 = tfrc_rx_hist_loss_prev(h)->tfrchrx_seqno,
+    s1 = tfrc_rx_hist_entry(h, 1)->tfrchrx_seqno,
+@@ -245,6 +247,7 @@
+tfrc_sp_rx_hist_entry_from_skb(tfrc_rx_hist_entry(h, 3),
+       skb, n3);
+h->num_losses = dccp_loss_count(s2, s3, n3);
++ *new_loss = 1;
+return 1;
+}
+
+@@ -259,6 +262,7 @@
+       skb, n3);
+h->loss_count = 3;
+h->num_losses = dccp_loss_count(s1, s3, n3);
++ *new_loss = 1;
+return 1;
+}
+
+@@ -284,6 +288,7 @@
+tfrc_sp_rx_hist_entry_from_skb(
+tfrc_rx_hist_loss_prev(h), skb, n3);
+
++ *new_loss = 0;
+return 0;
+}
+
+@@ -297,6 +302,7 @@
+h->loss_count = 3;
+h->num_losses = dccp_loss_count(s0, s3, n3);
+
++ *new_loss = 1;
+return 1;
+}
+
+@@ -348,11 +354,14 @@
+  *  operations when loss_count is greater than 0 after calling this
+function.
+  */
+bool tfrc_sp_rx_congestion_event(struct tfrc_rx_hist *h,
+-       struct tfrc_loss_hist *lh,
+- struct sk_buff *skb, const u64 ndp,
+-  u32 (*first_li)(struct sock *), struct sock *sk)
++ struct tfrc_loss_hist *lh,
++ struct tfrc_loss_data *ld,
++ struct sk_buff *skb, const u64 ndp,
++ u32 (*first_li)(struct sock *),
++ struct sock *sk)
+{
+bool new_event = false;
++ bool new_loss = false;
+
+if (tfrc_sp_rx_hist_duplicate(h, skb))
+return 0;
+@@ -365,12 +374,13 @@
+__one_after_loss(h, skb, ndp);
+} else if (h->loss_count != 2) {
+DCCP_BUG("invalid loss_count %d", h->loss_count);
+- } else if (__two_after_loss(h, skb, ndp)) {
++ } else if (__two_after_loss(h, skb, ndp, &new_loss)) {
+/*
+* Update Loss Interval database and recycle RX records
+*/
+new_event = tfrc_sp_lh_interval_add(lh, h, first_li, sk,
 dccp_hdr(skb)->dccph_ccval);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 tfrc_sp_update_li_data(ld, h, skb, new_loss, =
-new_event);
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0__three_after_loss(h);
++ tfrc_sp_update_li_data(ld, h, skb, new_loss, new_event);
+__three_after_loss(h);
 
-=A0 =A0 =A0 =A0} else if (dccp_data_packet(skb) && dccp_skb_is_ecn_ce(skb))=
- {
-@@ -384,6 +387,8 @@
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0}
-=A0 =A0 =A0 =A0}
+} else if (dccp_data_packet(skb) && dccp_skb_is_ecn_ce(skb)) {
+@@ -396,6 +406,8 @@
+}
+}
 
-+ =A0 =A0 =A0 tfrc_sp_update_li_data(ld, h, skb, new_loss, new_event);
++ tfrc_sp_update_li_data(ld, h, skb, new_loss, new_event);
 +
-=A0 =A0 =A0 =A0/*
-=A0 =A0 =A0 =A0* Update moving-average of `s' and the sum of received paylo=
-ad bytes.
-=A0 =A0 =A0 =A0*/
-Index: b/net/dccp/ccids/lib/loss_interval_sp.c
-=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
-=3D=3D=3D=3D=3D=3D=3D=3D--- a/net/dccp/ccids/lib/loss_interval_sp.c =A0 =A0=
- 2009-08-26
-23:53:32.000000000 -0300
-+++ b/net/dccp/ccids/lib/loss_interval_sp.c =A0 =A0 2009-08-27
-22:36:43.000000000 -0300
-@@ -14,9 +14,89 @@
-=A0#include "tfrc_sp.h"
+/*
+* Update moving-average of `s' and the sum of received payload bytes.
+*/
+Index: dccp_tree_work4/net/dccp/ccids/lib/loss_interval_sp.c
+=================================--- dccp_tree_work4.orig/net/dccp/ccids/lib/loss_interval_sp.c
+2009-09-03 23:10:05.000000000 -0300
++++ dccp_tree_work4/net/dccp/ccids/lib/loss_interval_sp.c 2009-09-04
+00:28:03.000000000 -0300
+@@ -14,6 +14,7 @@
+#include "tfrc_sp.h"
 
-=A0static struct kmem_cache =A0*tfrc_lh_slab =A0__read_mostly;
-+static struct kmem_cache =A0*tfrc_ld_slab =A0__read_mostly;
-+
-=A0/* Loss Interval weights from [RFC 3448, 5.4], scaled by 10 */
-=A0static const int tfrc_lh_weights[NINTERVAL] =3D { 10, 10, 10, 10, 8, 6, =
-4, 2 };
+static struct kmem_cache  *tfrc_lh_slab  __read_mostly;
++static struct kmem_cache  *tfrc_ld_slab  __read_mostly;
+/* Loss Interval weights from [RFC 3448, 5.4], scaled by 10 */
+static const int tfrc_lh_weights[NINTERVAL] = { 10, 10, 10, 10, 8, 6, 4,
+2 };
+
+@@ -67,6 +68,224 @@
+}
+}
 
 +/*
 + * Allocation routine for new entries of loss interval data
 + */
-+static struct tfrc_loss_data_entry* tfrc_ld_add_new(struct tfrc_loss_data*=
- ld)
++static struct tfrc_loss_data_entry *tfrc_ld_add_new(struct
+tfrc_loss_data *ld)
 +{
-+ =A0 =A0 =A0 struct tfrc_loss_data_entry* new kmem_cache_alloc(tfrc_ld_sla=
-b, GFP_ATOMIC);
++ struct tfrc_loss_data_entry *new + kmem_cache_alloc(tfrc_ld_slab, GFP_ATOMIC);
 +
-+ =A0 =A0 =A0 if(new =3D NULL)
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 return NULL;
++ if (new = NULL)
++ return NULL;
 +
-+ =A0 =A0 =A0 memset(new, 0, sizeof(struct tfrc_loss_data_entry));
++ memset(new, 0, sizeof(struct tfrc_loss_data_entry));
 +
-+ =A0 =A0 =A0 new->next =3D ld->head;
-+ =A0 =A0 =A0 ld->head =3D new;
-+ =A0 =A0 =A0 ld->counter++;
++ new->next = ld->head;
++ ld->head = new;
++ ld->counter++;
 +
-+ =A0 =A0 =A0 return new;
++ return new;
 +}
 +
 +void tfrc_sp_ld_cleanup(struct tfrc_loss_data *ld)
 +{
-+ =A0 =A0 =A0 struct tfrc_loss_data_entry *next, *h =3D ld->head;
++ struct tfrc_loss_data_entry *next, *h = ld->head;
 +
-+ =A0 =A0 =A0 if(!h)
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 return;
++ if (!h)
++ return;
 +
-+ =A0 =A0 =A0 while(h)
-+ =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 next =3D h->next;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 kmem_cache_free(tfrc_ld_slab, h);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 h =3D next;
-+ =A0 =A0 =A0 }
++ while (h) {
++ next = h->next;
++ kmem_cache_free(tfrc_ld_slab, h);
++ h = next;
++ }
 +
-+ =A0 =A0 =A0 ld->head =3D NULL;
-+ =A0 =A0 =A0 ld->counter =3D 0;
++ ld->head = NULL;
++ ld->counter = 0;
 +}
 +
-+void tfrc_sp_ld_prepare_data(u8 loss_count, struct tfrc_loss_data* ld)
++void tfrc_sp_ld_prepare_data(u8 loss_count, struct tfrc_loss_data *ld)
 +{
-+ =A0 =A0 =A0 u8* li_ofs, *d_ofs;
-+ =A0 =A0 =A0 struct tfrc_loss_data_entry* e;
-+ =A0 =A0 =A0 u16 count;
++ u8 *li_ofs, *d_ofs;
++ struct tfrc_loss_data_entry *e;
++ u16 count;
 +
-+ =A0 =A0 =A0 li_ofs =3D &ld->loss_intervals_opts[0];
-+ =A0 =A0 =A0 d_ofs =3D &ld->drop_opts[0];
++ li_ofs = &ld->loss_intervals_opts[0];
++ d_ofs = &ld->drop_opts[0];
 +
-+ =A0 =A0 =A0 count =3D 0;
-+ =A0 =A0 =A0 e =3D ld->head;
++ count = 0;
++ e = ld->head;
 +
-+ =A0 =A0 =A0 *li_ofs =3D loss_count + 1;
-+ =A0 =A0 =A0 li_ofs++;
++ *li_ofs = loss_count + 1;
++ li_ofs++;
 +
-+ =A0 =A0 =A0 while (e !=3D NULL) {
++ while (e != NULL) {
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 if(count<TFRC_LOSS_INTERVALS_OPT_MAX_LENGTH)
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 *li_ofs =3D ((htonl(e->lossle=
-ss_length)&0x00FFFFFF)<<8);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 li_ofs +=3D 3;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 *li_ofs ((e->ecn_nonce_sum&0x=
-1)<<31)&(htonl((e->loss_length&0x00FFFFFF))<<8);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 li_ofs +=3D 3;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 *li_ofs =3D ((htonl(e->data_l=
-ength)&0x00FFFFFF)<<8);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 li_ofs +=3D 3;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
++ if (count < TFRC_LOSS_INTERVALS_OPT_MAX_LENGTH) {
++ *li_ofs = ((htonl(e->lossless_length) & 0x00FFFFFF)<<8);
++ li_ofs += 3;
++ *li_ofs = ((e->ecn_nonce_sum&0x1) << 31) &
++   (htonl((e->loss_length & 0x00FFFFFF))<<8);
++ li_ofs += 3;
++ *li_ofs = ((htonl(e->data_length) & 0x00FFFFFF)<<8);
++ li_ofs += 3;
++ }
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 if(count<TFRC_DROP_OPT_MAX_LENGTH)
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 *d_ofs =3D (htonl(e->drop_cou=
-nt)&0x00FFFFFF)<<8;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 d_ofs +=3D 3;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
++ if (count < TFRC_DROP_OPT_MAX_LENGTH) {
++ *d_ofs = (htonl(e->drop_count) & 0x00FFFFFF)<<8;
++ d_ofs += 3;
++ }
 +
++ if ((count >= TFRC_LOSS_INTERVALS_OPT_MAX_LENGTH) &&
++     (count >= TFRC_DROP_OPT_MAX_LENGTH))
++ break;
 +
-if((count>=3DTFRC_LOSS_INTERVALS_OPT_MAX_LENGTH)&&(count>=3DTFRC_DROP_OPT_M=
-AX_LENGTH))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 break;
-+
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 count++;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 e =3D e->next;
-+ =A0 =A0 =A0 }
++ count++;
++ e = e->next;
++ }
 +}
 +
-=A0/* implements LIFO semantics on the array */
-=A0static inline u8 LIH_INDEX(const u8 ctr)
-=A0{
-@@ -235,13 +315,166 @@
-=A0 =A0 =A0 =A0return true;
-=A0}
-
-+void tfrc_sp_update_li_data(struct tfrc_loss_data *ld, struct
-tfrc_rx_hist *rh, struct sk_buff *skb, bool new_loss, bool new_event)
++void tfrc_sp_update_li_data(struct tfrc_loss_data *ld,
++     struct tfrc_rx_hist *rh,
++     struct sk_buff *skb,
++     bool new_loss, bool new_event)
 +{
-+ =A0 =A0 =A0 struct tfrc_loss_data_entry* new, *h;
++ struct tfrc_loss_data_entry *new, *h;
 +
-+ =A0 =A0 =A0 if(!dccp_data_packet(skb))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 return;
++ if (!dccp_data_packet(skb))
++ return;
 +
-+ =A0 =A0 =A0 if (ld->head =3D NULL)
-+ =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 new =3D tfrc_ld_add_new(ld);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (unlikely(new =3D NULL)) {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 DCCP_CRIT("Cannot allocate ne=
-w loss data registry.");
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 return;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
++ if (ld->head = NULL) {
++ new = tfrc_ld_add_new(ld);
++ if (unlikely(new = NULL)) {
++ DCCP_CRIT("Cannot allocate new loss data registry.");
++ return;
++ }
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (new_loss)
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->drop_count =3D rh->num_l=
-osses;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->lossless_length =3D 1;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->loss_length =3D rh->num_=
-losses;
++ if (new_loss) {
++ new->drop_count = rh->num_losses;
++ new->lossless_length = 1;
++ new->loss_length = rh->num_losses;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (dccp_data_packet(skb))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->data_len=
-gth =3D 1;
++ if (dccp_data_packet(skb))
++ new->data_length = 1;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if(dccp_data_packet(skb) && d=
-ccp_skb_is_ecn_ect1(skb))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->ecn_nonc=
-e_sum =3D 1;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 else
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->ecn_nonc=
-e_sum =3D 0;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 else
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->drop_count =3D 0;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->lossless_length =3D 1;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->loss_length =3D 0;
++ if (dccp_data_packet(skb) && dccp_skb_is_ecn_ect1(skb))
++ new->ecn_nonce_sum = 1;
++ else
++ new->ecn_nonce_sum = 0;
++ } else {
++ new->drop_count = 0;
++ new->lossless_length = 1;
++ new->loss_length = 0;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (dccp_data_packet(skb))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->data_len=
-gth =3D 1;
++ if (dccp_data_packet(skb))
++ new->data_length = 1;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if(dccp_data_packet(skb) && d=
-ccp_skb_is_ecn_ect1(skb))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->ecn_nonc=
-e_sum =3D 1;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 else
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->ecn_nonc=
-e_sum =3D 0;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
++ if (dccp_data_packet(skb) && dccp_skb_is_ecn_ect1(skb))
++ new->ecn_nonce_sum = 1;
++ else
++ new->ecn_nonce_sum = 0;
++ }
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 return;
-+ =A0 =A0 =A0 }
++ return;
++ }
 +
-+ =A0 =A0 =A0 if (new_event)
-+ =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 new =3D tfrc_ld_add_new(ld);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (unlikely(new =3D NULL)) {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 DCCP_CRIT("Cannot allocate ne=
-w loss data
-registry. Cleaning up.");
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 tfrc_sp_ld_cleanup(ld);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 return;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
++ if (new_event) {
++ new = tfrc_ld_add_new(ld);
++ if (unlikely(new = NULL)) {
++ DCCP_CRIT("Cannot allocate new loss data registry. \
++ Cleaning up.");
++ tfrc_sp_ld_cleanup(ld);
++ return;
++ }
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->drop_count =3D rh->num_losses;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->lossless_length =3D (ld->last_loss_count=
- - rh->loss_count);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->loss_length =3D rh->num_losses;
++ new->drop_count = rh->num_losses;
++ new->lossless_length = (ld->last_loss_count - rh->loss_count);
++ new->loss_length = rh->num_losses;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->ecn_nonce_sum =3D 0;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->data_length =3D 0;
++ new->ecn_nonce_sum = 0;
++ new->data_length = 0;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 while (ld->last_loss_count > rh->loss_count)
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 ld->last_loss_count--;
++ while (ld->last_loss_count > rh->loss_count) {
++ ld->last_loss_count--;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (ld->sto_is_data&(1 << (ld=
-->last_loss_count)))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 new->data_len=
-gth++;
++ if (ld->sto_is_data & (1 << (ld->last_loss_count))) {
++ new->data_length++;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (ld->sto_e=
-cn&(1 << (ld->last_loss_count)))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
-=A0 new->ecn_nonce_sum !new->ecn_nonce_sum;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
++ if (ld->sto_ecn & (1 << (ld->last_loss_count)))
++ new->ecn_nonce_sum + !new->ecn_nonce_sum;
++ }
++ }
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 return;
-+ =A0 =A0 =A0 }
++ return;
++ }
 +
-+ =A0 =A0 =A0 h =3D ld->head;
++ h = ld->head;
 +
-+ =A0 =A0 =A0 if (rh->loss_count > ld->last_loss_count)
-+ =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 ld->last_loss_count =3D rh->loss_count;
++ if (rh->loss_count > ld->last_loss_count) {
++ ld->last_loss_count = rh->loss_count;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (dccp_data_packet(skb))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 ld->sto_is_data |=3D (1 << (l=
-d->last_loss_count - 1));
++ if (dccp_data_packet(skb))
++ ld->sto_is_data |= (1 << (ld->last_loss_count - 1));
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (dccp_skb_is_ecn_ect1(skb))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 ld->sto_ecn |=3D (1 << (ld->l=
-ast_loss_count - 1));
++ if (dccp_skb_is_ecn_ect1(skb))
++ ld->sto_ecn |= (1 << (ld->last_loss_count - 1));
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 return;
-+ =A0 =A0 =A0 }
++ return;
++ }
 +
-+ =A0 =A0 =A0 if (new_loss)
-+ =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 h->drop_count +=3D rh->num_losses;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 h->lossless_length =3D (ld->last_loss_count -=
- rh->loss_count);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 h->loss_length +=3D h->lossless_length + rh->=
-num_losses;
++ if (new_loss) {
++ h->drop_count += rh->num_losses;
++ h->lossless_length = (ld->last_loss_count - rh->loss_count);
++ h->loss_length += h->lossless_length + rh->num_losses;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 h->ecn_nonce_sum =3D 0;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 h->data_length =3D 0;
++ h->ecn_nonce_sum = 0;
++ h->data_length = 0;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 while (ld->last_loss_count > rh->loss_count)
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 ld->last_loss_count--;
++ while (ld->last_loss_count > rh->loss_count) {
++ ld->last_loss_count--;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (ld->sto_is_data&(1 << (ld=
-->last_loss_count)))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 h->data_lengt=
-h++;
++ if (ld->sto_is_data&(1 << (ld->last_loss_count))) {
++ h->data_length++;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (ld->sto_e=
-cn&(1 << (ld->last_loss_count)))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
-=A0 h->ecn_nonce_sum =3D !h->ecn_nonce_sum;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
++ if (ld->sto_ecn & (1 << (ld->last_loss_count)))
++ h->ecn_nonce_sum = !h->ecn_nonce_sum;
++ }
++ }
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 return;
-+ =A0 =A0 =A0 }
++ return;
++ }
 +
-+ =A0 =A0 =A0 if (ld->last_loss_count > rh->loss_count)
-+ =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 while (ld->last_loss_count > rh->loss_count)
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 ld->last_loss_count--;
++ if (ld->last_loss_count > rh->loss_count) {
++ while (ld->last_loss_count > rh->loss_count) {
++ ld->last_loss_count--;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 h->lossless_length++;
++ h->lossless_length++;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (ld->sto_is_data&(1 << (ld=
-->last_loss_count)))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 h->data_lengt=
-h++;
++ if (ld->sto_is_data & (1 << (ld->last_loss_count))) {
++ h->data_length++;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (ld->sto_e=
-cn&(1 << (ld->last_loss_count)))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
-=A0 h->ecn_nonce_sum =3D !h->ecn_nonce_sum;
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 }
++ if (ld->sto_ecn & (1 << (ld->last_loss_count)))
++ h->ecn_nonce_sum = !h->ecn_nonce_sum;
++ }
++ }
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 return;
-+ =A0 =A0 =A0 }
++ return;
++ }
 +
-+ =A0 =A0 =A0 h->lossless_length++;
++ h->lossless_length++;
 +
-+ =A0 =A0 =A0 if(dccp_data_packet(skb))
-+ =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 h->data_length++;
++ if (dccp_data_packet(skb)) {
++ h->data_length++;
 +
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 if (dccp_skb_is_ecn_ect1(skb))
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 h->ecn_nonce_sum =3D !h->ecn_=
-nonce_sum;
-+ =A0 =A0 =A0 }
++ if (dccp_skb_is_ecn_ect1(skb))
++ h->ecn_nonce_sum = !h->ecn_nonce_sum;
++ }
 +}
 +
-=A0int __init tfrc_sp_li_init(void)
-=A0{
-=A0 =A0 =A0 =A0tfrc_lh_slab =3D kmem_cache_create("tfrc_sp_li_hist",
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0=
- =A0 sizeof(struct tfrc_loss_interval), 0,
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0=
- =A0 SLAB_HWCACHE_ALIGN, NULL);
-+ =A0 =A0 =A0 tfrc_ld_slab =3D kmem_cache_create("tfrc_sp_li_data",
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
-=A0 =A0sizeof(struct tfrc_loss_data_entry), 0,
-+
+static void tfrc_sp_lh_calc_i_mean(struct tfrc_loss_hist *lh, __u8
+curr_ccval)
+{
+u32 i_i, i_tot0 = 0, i_tot1 = 0, w_tot = 0;
+@@ -244,8 +463,11 @@
+tfrc_lh_slab = kmem_cache_create("tfrc_sp_li_hist",
+sizeof(struct tfrc_loss_interval), 0,
 SLAB_HWCACHE_ALIGN, NULL);
++ tfrc_ld_slab = kmem_cache_create("tfrc_sp_li_data",
++ sizeof(struct tfrc_loss_data_entry), 0,
++ SLAB_HWCACHE_ALIGN, NULL);
 
-- =A0 =A0 =A0 if((tfrc_lh_slab !=3D NULL))
-+ =A0 =A0 =A0 if((tfrc_lh_slab !=3D NULL)||(tfrc_ld_slab !=3D NULL))
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0return 0;
+- if ((tfrc_lh_slab != NULL))
++ if ((tfrc_lh_slab != NULL) || (tfrc_ld_slab != NULL))
+return 0;
 
-=A0 =A0 =A0 =A0if(tfrc_lh_slab !=3D NULL)
-@@ -250,6 +483,12 @@
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0tfrc_lh_slab =3D NULL;
-=A0 =A0 =A0 =A0}
+if (tfrc_lh_slab != NULL) {
+@@ -253,6 +475,11 @@
+tfrc_lh_slab = NULL;
+}
 
-+ =A0 =A0 =A0 if(tfrc_ld_slab !=3D NULL)
-+ =A0 =A0 =A0 {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 kmem_cache_destroy(tfrc_ld_slab);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 tfrc_ld_slab =3D NULL;
-+ =A0 =A0 =A0 }
++ if (tfrc_ld_slab != NULL) {
++ kmem_cache_destroy(tfrc_ld_slab);
++ tfrc_ld_slab = NULL;
++ }
 +
-=A0 =A0 =A0 =A0return -ENOBUFS;
-=A0}
+return -ENOBUFS;
+}
 
-@@ -259,4 +498,9 @@
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0kmem_cache_destroy(tfrc_lh_slab);
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0tfrc_lh_slab =3D NULL;
-=A0 =A0 =A0 =A0}
+@@ -262,4 +489,9 @@
+kmem_cache_destroy(tfrc_lh_slab);
+tfrc_lh_slab = NULL;
+}
 +
-+ =A0 =A0 =A0 if (tfrc_ld_slab !=3D NULL) {
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 kmem_cache_destroy(tfrc_ld_slab);
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 tfrc_ld_slab =3D NULL;
-+ =A0 =A0 =A0 }
-=A0}
-Index: b/net/dccp/ccids/lib/loss_interval_sp.h
-=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
-=3D=3D=3D=3D=3D=3D=3D=3D--- a/net/dccp/ccids/lib/loss_interval_sp.h =A0 =A0=
- 2009-08-26
-23:44:20.000000000 -0300
-+++ b/net/dccp/ccids/lib/loss_interval_sp.h =A0 =A0 2009-08-27
-22:37:40.000000000 -0300
-@@ -67,12 +67,44 @@
-=A0 =A0 =A0 =A0return min(lh->counter, (u8)LIH_SIZE);
-=A0}
-
--struct tfrc_rx_hist;
-=A0#endif
++ if (tfrc_ld_slab != NULL) {
++ kmem_cache_destroy(tfrc_ld_slab);
++ tfrc_ld_slab = NULL;
++ }
+}
+Index: dccp_tree_work4/net/dccp/ccids/lib/loss_interval_sp.h
+=================================--- dccp_tree_work4.orig/net/dccp/ccids/lib/loss_interval_sp.h
+2009-09-03 23:00:31.000000000 -0300
++++ dccp_tree_work4/net/dccp/ccids/lib/loss_interval_sp.h 2009-09-04
+00:19:53.000000000 -0300
+@@ -70,13 +70,52 @@
+struct tfrc_rx_hist;
+#endif
 
 +struct tfrc_loss_data_entry {
-+ =A0 =A0 =A0 struct tfrc_loss_data_entry =A0 =A0 *next;
-+ =A0 =A0 =A0 u32 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 l=
-ossless_length:24;
-+ =A0 =A0 =A0 u8 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
-=A0ecn_nonce_sum:1;
-+ =A0 =A0 =A0 u32 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 l=
-oss_length:24;
-+ =A0 =A0 =A0 u32 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 d=
-ata_length:24;
-+ =A0 =A0 =A0 u32 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 d=
-rop_count:24;
++ struct tfrc_loss_data_entry *next;
++ u32 lossless_length:24;
++ u8 ecn_nonce_sum:1;
++ u32 loss_length:24;
++ u32 data_length:24;
++ u32 drop_count:24;
 +};
 +
-+#define TFRC_LOSS_INTERVALS_OPT_MAX_LENGTH =A0 =A0 28
-+#define TFRC_DROP_OPT_MAX_LENGTH =A0 =A0 =A0 =A0 =A0 =A0 =A0 84
++#define TFRC_LOSS_INTERVALS_OPT_MAX_LENGTH 28
++#define TFRC_DROP_OPT_MAX_LENGTH 84
++#define TFRC_LI_OPT_SZ \
++ (2 + TFRC_LOSS_INTERVALS_OPT_MAX_LENGTH*9)
++#define TFRC_DROPPED_OPT_SZ \
++ (1 + TFRC_DROP_OPT_MAX_LENGTH*3)
 +
 +struct tfrc_loss_data {
-+ =A0 =A0 =A0 struct tfrc_loss_data_entry =A0 =A0 *head;
-+ =A0 =A0 =A0 u16 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 c=
-ounter;
-+ =A0 =A0 =A0 u8 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
-=A0loss_intervals_opts[2 +
-TFRC_LOSS_INTERVALS_OPT_MAX_LENGTH*9];
-+ =A0 =A0 =A0 u8 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
-=A0drop_opts[1 +
-TFRC_DROP_OPT_MAX_LENGTH*3];
-+ =A0 =A0 =A0 u8 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
-=A0last_loss_count;
-+ =A0 =A0 =A0 u8 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
-=A0sto_ecn;
-+ =A0 =A0 =A0 u8 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =
-=A0sto_is_data;
++ struct tfrc_loss_data_entry *head;
++ u16 counter;
++ u8 loss_intervals_opts[TFRC_LI_OPT_SZ];
++ u8 drop_opts[TFRC_DROPPED_OPT_SZ];
++ u8 last_loss_count;
++ u8 sto_ecn;
++ u8 sto_is_data;
 +};
 +
-+static inline void tfrc_ld_init(struct tfrc_loss_data* ld)
++static inline void tfrc_ld_init(struct tfrc_loss_data *ld)
 +{
-+ =A0 =A0 =A0 memset(ld, 0, sizeof(struct tfrc_loss_data));
++ memset(ld, 0, sizeof(struct tfrc_loss_data));
 +}
 +
 +struct tfrc_rx_hist;
 +
-=A0extern bool tfrc_sp_lh_interval_add(struct tfrc_loss_hist *, struct
-tfrc_rx_hist *,
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0u32 =
-(*first_li)(struct sock *),
-struct sock *, __u8 ccval);
-+extern void tfrc_sp_update_li_data(struct tfrc_loss_data *, =A0struct
-tfrc_rx_hist *,
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0struct=
- sk_buff *, bool new_loss,
-bool new_event);
-=A0extern void tfrc_sp_lh_update_i_mean(struct tfrc_loss_hist *lh,
-struct sk_buff *);
-=A0extern void tfrc_sp_lh_cleanup(struct tfrc_loss_hist *lh);
+extern bool tfrc_sp_lh_interval_add(struct tfrc_loss_hist *,
+    struct tfrc_rx_hist *,
+    u32 (*first_li)(struct sock *),
+    struct sock *,
+    __u8 ccval);
++extern void tfrc_sp_update_li_data(struct tfrc_loss_data *,
++    struct tfrc_rx_hist *,
++    struct sk_buff *,
++    bool new_loss, bool new_event);
+extern void tfrc_sp_lh_update_i_mean(struct tfrc_loss_hist *lh,
+     struct sk_buff *);
+extern void tfrc_sp_lh_cleanup(struct tfrc_loss_hist *lh);
 +extern void tfrc_sp_ld_cleanup(struct tfrc_loss_data *ld);
-+extern void tfrc_sp_ld_prepare_data(u8 loss_count, struct tfrc_loss_data* =
-ld);
++extern void tfrc_sp_ld_prepare_data(u8 loss_count, struct
+tfrc_loss_data *ld);
 
-=A0#endif /* _DCCP_LI_HIST_SP_ */
-Index: b/net/dccp/ccids/lib/tfrc_ccids_sp.h
-=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
-=3D=3D=3D=3D=3D=3D=3D=3D--- a/net/dccp/ccids/lib/tfrc_ccids_sp.h =A0 =A0 =
-=A0 =A02009-08-27
-00:50:46.000000000 -0300
-+++ b/net/dccp/ccids/lib/tfrc_ccids_sp.h =A0 =A0 =A0 =A02009-08-27
-22:36:43.000000000 -0300
-@@ -128,6 +128,7 @@
-=A0* =A0@tstamp_last_feedback =A0- =A0Time at which last feedback was sent
-=A0* =A0@hist =A0- =A0Packet history (loss detection + RTT sampling)
-=A0* =A0@li_hist =A0- =A0Loss Interval database
-+ * =A0@li_data =A0- =A0Loss Interval data for options
-=A0* =A0@p_inverse =A0- =A0Inverse of Loss Event Rate (RFC 4342, sec. 8.5)
-=A0*/
-=A0struct tfrc_hc_rx_sock {
-@@ -137,6 +138,7 @@
-=A0 =A0 =A0 =A0ktime_t =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 tsta=
-mp_last_feedback;
-=A0 =A0 =A0 =A0struct tfrc_rx_hist =A0 =A0 =A0 =A0 =A0 =A0 hist;
-=A0 =A0 =A0 =A0struct tfrc_loss_hist =A0 =A0 =A0 =A0 =A0 li_hist;
-+ =A0 =A0 =A0 struct tfrc_loss_data =A0 =A0 =A0 =A0 =A0 li_data;
-=A0#define p_inverse =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0li_hist.i_m=
-ean
-=A0};
+#endif /* _DCCP_LI_HIST_SP_ */
+Index: dccp_tree_work4/net/dccp/ccids/lib/packet_history_sp.h
+=================================--- dccp_tree_work4.orig/net/dccp/ccids/lib/packet_history_sp.h
+2009-09-03 22:58:29.000000000 -0300
++++ dccp_tree_work4/net/dccp/ccids/lib/packet_history_sp.h 2009-09-03
+23:38:22.000000000 -0300
+@@ -202,6 +202,7 @@
 
-Index: b/net/dccp/ccids/lib/packet_history_sp.h
-=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
-=3D=3D=3D=3D=3D=3D=3D=3D--- a/net/dccp/ccids/lib/packet_history_sp.h =A0 =
-=A02009-08-26
-22:55:58.000000000 -0300
-+++ b/net/dccp/ccids/lib/packet_history_sp.h =A0 =A02009-08-27
-22:36:43.000000000 -0300
-@@ -200,6 +200,7 @@
+extern bool tfrc_sp_rx_congestion_event(struct tfrc_rx_hist *h,
+     struct tfrc_loss_hist *lh,
++      struct tfrc_loss_data *ld,
+     struct sk_buff *skb, const u64 ndp,
+     u32 (*first_li)(struct sock *sk),
+     struct sock *sk);
+Index: dccp_tree_work4/net/dccp/ccids/lib/tfrc_ccids_sp.h
+=================================--- dccp_tree_work4.orig/net/dccp/ccids/lib/tfrc_ccids_sp.h 2009-09-03
+21:56:15.000000000 -0300
++++ dccp_tree_work4/net/dccp/ccids/lib/tfrc_ccids_sp.h 2009-09-03
+23:34:40.000000000 -0300
+@@ -129,6 +129,7 @@
+  *  @tstamp_last_feedback  -  Time at which last feedback was sent
+  *  @hist  -  Packet history (loss detection + RTT sampling)
+  *  @li_hist  -  Loss Interval database
++ *  @li_data  -  Loss Interval data for options
+  *  @p_inverse  -  Inverse of Loss Event Rate (RFC 4342, sec. 8.5)
+  */
+struct tfrc_hc_rx_sock {
+@@ -138,6 +139,7 @@
+ktime_t tstamp_last_feedback;
+struct tfrc_rx_hist hist;
+struct tfrc_loss_hist li_hist;
++ struct tfrc_loss_data li_data;
+#define p_inverse li_hist.i_mean
+};
 
-=A0extern bool tfrc_sp_rx_congestion_event(struct tfrc_rx_hist *h,
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 str=
-uct tfrc_loss_hist *lh,
-+ =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0st=
-ruct tfrc_loss_data *ld,
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 str=
-uct sk_buff *skb, const u64 ndp,
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 u32=
- (*first_li)(struct sock *sk),
-=A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 str=
-uct sock *sk);
-Index: b/net/dccp/dccp.h
-=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
-=3D=3D=3D=3D=3D=3D=3D=3D--- a/net/dccp/dccp.h =A0 2009-08-26 22:59:10.00000=
-0000 -0300
-+++ b/net/dccp/dccp.h =A0 2009-08-27 22:36:43.000000000 -0300
+Index: dccp_tree_work4/net/dccp/dccp.h
+=================================--- dccp_tree_work4.orig/net/dccp/dccp.h 2009-09-03 22:58:29.000000000
+-0300
++++ dccp_tree_work4/net/dccp/dccp.h 2009-09-03 23:42:04.000000000 -0300
 @@ -403,6 +403,16 @@
-=A0 =A0 =A0 =A0return (DCCP_SKB_CB(skb)->dccpd_ecn & INET_ECN_MASK) =3D INE=
-T_ECN_CE;
-=A0}
+return (DCCP_SKB_CB(skb)->dccpd_ecn & INET_ECN_MASK) = INET_ECN_CE;
+}
 
 +static inline bool dccp_skb_is_ecn_ect0(const struct sk_buff *skb)
 +{
-+ =A0 =A0 =A0 return (DCCP_SKB_CB(skb)->dccpd_ecn & INET_ECN_MASK) =3D INET=
-_ECN_ECT_0;
++ return (DCCP_SKB_CB(skb)->dccpd_ecn & INET_ECN_MASK) =
+INET_ECN_ECT_0;
 +}
 +
 +static inline bool dccp_skb_is_ecn_ect1(const struct sk_buff *skb)
 +{
-+ =A0 =A0 =A0 return (DCCP_SKB_CB(skb)->dccpd_ecn & INET_ECN_MASK) =3D INET=
-_ECN_ECT_0;
++ return (DCCP_SKB_CB(skb)->dccpd_ecn & INET_ECN_MASK) =
+INET_ECN_ECT_0;
 +}
 +
-=A0/* RFC 4340, sec. 7.7 */
-=A0static inline int dccp_non_data_packet(const struct sk_buff *skb)
-=A0{
+/* RFC 4340, sec. 7.7 */
+static inline int dccp_non_data_packet(const struct sk_buff *skb)
+{
+
