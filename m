@@ -1,7 +1,7 @@
 From: Ivo Calado <ivocalado@embedded.ufcg.edu.br>
-Date: Fri, 04 Sep 2009 12:24:54 +0000
+Date: Tue, 08 Sep 2009 18:28:34 +0000
 Subject: [PATCH 0/5] Adds implementation of TFRC-SP on DCCP test tree
-Message-Id: <1252067094.6172.1.camel@localhost>
+Message-Id: <4AA6A252.5060405@embedded.ufcg.edu.br>
 List-Id: <dccp.vger.kernel.org>
 References: <cb00fa210909011943s656fbadfo95132dc2fba0d73c@mail.gmail.com>
 In-Reply-To: <cb00fa210909011943s656fbadfo95132dc2fba0d73c@mail.gmail.com>
@@ -10,7 +10,7 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Due to the problems in the previuos patch pointed by Gerrit Renker, I'm
+Due to the problems in the previuos patch pointed by Gerrit Renker and all, I'm
 resending the patches.
 
 
