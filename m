@@ -1,35 +1,54 @@
 From: gerrit@erg.abdn.ac.uk
-Date: Fri, 18 Sep 2009 22:54:53 +0000
+Date: Sat, 19 Sep 2009 06:16:10 +0000
 Subject: Re: [PATCH 1/5] First Patch on TFRC-SP. Copy base files from TFRC
-Message-Id: <5006.72.11.80.242.1253314493.squirrel@72.11.80.242>
+Message-Id: <5146.72.11.80.242.1253340970.squirrel@72.11.80.242>
 List-Id: <dccp.vger.kernel.org>
 References: <cb00fa210909011944o46ba33dbn6d26c69f0a838411@mail.gmail.com>
 In-Reply-To: <cb00fa210909011944o46ba33dbn6d26c69f0a838411@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-Sorry for the delay in replying.
-
->> One future patch will need to modify this file, but now it's really an
->> exact copy.
+>> Also separated the conditions
+>> + =A0 =A0 =A0 =A0 =A0 =A0 =A0 if ((len <=3D 0) ||
+>> + =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 (!tfrc_lh_closed_check(cur,
+>> cong_evt->tfrchrx_ccval))) {
+>> back into
+>> =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0if (len <=3D 0)
+>> =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0return false;
 >>
+>> =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0if (!tfrc_lh_closed_check(cur, cong_evt->=
+tfrchrx_ccval))
+>> =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0return false;
 >>
-> Basically the rule with a patch set is that all the patches should
-> make sense together.
 >
-> It may well be that it makes sense to make a copy, but if you want to
-> do this then present it with the patch that then modifies it.
->
-I agree with Ian's point. At the moment I can only see patch 5/5 modifying
-this file (adding documentation); from my reading of RFC 4828/5622 it seems
-not necessary to use 'tfrc_sp' variants of the functions computing X.
+> Thanks!
+Yes I know, the above change is reintroduced by patch 2/2. Only found
+out after I had gone through this one.
 
-The situation will be better as soon as the patches are in their own subtree.
-Currently there is a benefit in using separate files: the tfrc library does
-not support a sender-based variant of TFRC, hence requires further work
-and/or
-a decision to support a sender-bsed variant of CCID-3/4 only in an
-experimental subtree - this requires input and discussion.
+
+>> The following function pokes a hole in thei so far "abstract" data type;
+>> the convention has been to access the internals of the struct only via
+>> get-functions:
+>>
+>> static inline struct tfrc_loss_interval
+>> =A0 =A0 =A0 =A0*tfrc_lh_get_loss_interval(struct tfrc_loss_hist *lh, con=
+st u8 i)
+>> {
+>> =A0 =A0 =A0 =A0BUG_ON(i >=3D lh->counter);
+>> =A0 =A0 =A0 =A0return lh->ring[LIH_INDEX(lh->counter - i - 1)];
+>> }
+>>
+>> (You use it in patch 3/5 to gain access to li_ccval and li_losses.
+>> Better would be to have two separate accessor functions.)
+>>
+>
+> Okay, I will fix this.
+>
+It would be great but is secondary at this stage. The primary objective
+should be to get a common prototype out soon, and then verify that it is
+correct. I expect several rewrites of other code to make this possible,
+so the above detail can also be fixed once a prototype has been found to
+work satisfactorily.
 
