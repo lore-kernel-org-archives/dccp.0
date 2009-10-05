@@ -1,39 +1,27 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 05 Oct 2009 10:53:09 +0000
-Subject: [PATCH 0/4][RFC]: coding convention for CCID-struct prefixes
-Message-Id: <1254739993-5051-1-git-send-email-gerrit@erg.abdn.ac.uk>
+From: David Miller <davem@davemloft.net>
+Date: Mon, 05 Oct 2009 10:58:15 +0000
+Subject: Re: [PATCH 0/4][RFC]: coding convention for CCID-struct prefixes
+Message-Id: <20091005.035815.238234647.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
+References: <1254739993-5051-1-git-send-email-gerrit@erg.abdn.ac.uk>
+In-Reply-To: <1254739993-5051-1-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Arnaldo, Dave,
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon,  5 Oct 2009 12:53:09 +0200
 
-this codifies new naming scheme discussed at netconf. Can you please have a
-look and indicate whether you are ok with the set?
+> this codifies new naming scheme discussed at netconf. Can you please have a
+> look and indicate whether you are ok with the set?
+> 
+> They are divided into 4 for readability, but can be combined into
+> one large patch if agreed.
 
-They are divided into 4 for readability, but can be combined into
-one large patch if agreed.
+This looks like an improvement to me, I guess.
 
-It is all just regexp substitutions:
+You can keep it as 4 patches.
 
-Patch #1: Introduces the naming scheme on CCID-2:
-	    s#hc\(tx\|rx\)->ccid2hc\1_#hc\1->\1_#g;
-            s#ccid2hc\(tx\|rx\)_#\1_#g;
-
-Patch #2: Extends the changes of patch#1 to CCID-3.
-
-Patch #3: Removes the second, repetitive redundancy in this scheme:
-	    s#hc\(tx\|rx\)->\1_#hc->\1_#g;
-
-Patch #4: Extends patch#3 from CCID-2 to CCID-3.
-
---
- ccids/ccid2.c |  595 ++++++++++++++++++++++++-------------------------
- ccids/ccid2.h |   46 +--
- ccids/ccid3.c |  692 +++++++++++++++++++++++++++-------------------------------
- ccids/ccid3.h |  120 +++++-----
- probe.c       |   22 -
- 5 files changed, 723 insertions(+), 752 deletions(-)
-
+After Arnaldo takes a look, I can add this as-is to net-next-2.6
+if you like.
