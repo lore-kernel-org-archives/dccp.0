@@ -1,37 +1,39 @@
-From: Ivo Calado <ivocalado@embedded.ufcg.edu.br>
-Date: Tue, 15 Sep 2009 00:41:13 +0000
-Subject: Re: [PATCH 5/5] Updating documentation accordingly
-Message-Id: <cb00fa210909141741r54cd541fi242b110a727fbfcc@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 05 Oct 2009 10:53:09 +0000
+Subject: [PATCH 0/4][RFC]: coding convention for CCID-struct prefixes
+Message-Id: <1254739993-5051-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <cb00fa210909011946g744a4f5cvbe6a2e7642eaa8ff@mail.gmail.com>
-In-Reply-To: <cb00fa210909011946g744a4f5cvbe6a2e7642eaa8ff@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Sun, Sep 13, 2009 at 15:50, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
-> | Updating documentation accordingly
->
-> +/* As defined at section 8.6.1. of RFC 4342 */
-> =A0#define TFRC_LOSS_INTERVALS_OPT_MAX_LENGTH =A0 =A0 28
-> +/* Specified on section 8.7. of CCID4 draft */
-> =A0#define TFRC_DROP_OPT_MAX_LENGTH =A0 =A0 =A0 =A0 =A0 =A0 =A0 84
-> Need to update the references to CCID4 draft with RFC 5622. See also 4/5.
->
-> It would be more helpful to include the documentation for structs with
-> the patches that use these structs.
->
+Arnaldo, Dave,
 
-Thanks, I'll fix this.
+this codifies new naming scheme discussed at netconf. Can you please have a
+look and indicate whether you are ok with the set?
 
---=20
-Ivo Augusto Andrade Rocha Calado
-MSc. Candidate
-Embedded Systems and Pervasive Computing Lab - http://embedded.ufcg.edu.br
-Systems and Computing Department - http://www.dsc.ufcg.edu.br
-Electrical Engineering and Informatics Center - http://www.ceei.ufcg.edu.br
-Federal University of Campina Grande - http://www.ufcg.edu.br
+They are divided into 4 for readability, but can be combined into
+one large patch if agreed.
 
-PGP: 0x03422935
-Quidquid latine dictum sit, altum viditur.
+It is all just regexp substitutions:
+
+Patch #1: Introduces the naming scheme on CCID-2:
+	    s#hc\(tx\|rx\)->ccid2hc\1_#hc\1->\1_#g;
+            s#ccid2hc\(tx\|rx\)_#\1_#g;
+
+Patch #2: Extends the changes of patch#1 to CCID-3.
+
+Patch #3: Removes the second, repetitive redundancy in this scheme:
+	    s#hc\(tx\|rx\)->\1_#hc->\1_#g;
+
+Patch #4: Extends patch#3 from CCID-2 to CCID-3.
+
+--
+ ccids/ccid2.c |  595 ++++++++++++++++++++++++-------------------------
+ ccids/ccid2.h |   46 +--
+ ccids/ccid3.c |  692 +++++++++++++++++++++++++++-------------------------------
+ ccids/ccid3.h |  120 +++++-----
+ probe.c       |   22 -
+ 5 files changed, 723 insertions(+), 752 deletions(-)
+
