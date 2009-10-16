@@ -1,29 +1,30 @@
-From: Ivo Calado <ivocalado@embedded.ufcg.edu.br>
-Date: Tue, 13 Oct 2009 17:27:56 +0000
-Subject: [PATCH 0/2] Add implementation of CCID4 into the DCCP test tree
-Message-Id: <4AD4B89C.6010704@embedded.ufcg.edu.br>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 16 Oct 2009 06:07:18 +0000
+Subject: Re: [PATCH 0/2] Add implementation of CCID4 into the DCCP test tree
+Message-Id: <20091016060718.GA7199@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
+References: <4AD4B89C.6010704@embedded.ufcg.edu.br>
+In-Reply-To: <4AD4B89C.6010704@embedded.ufcg.edu.br>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-These patches add implementation of CCID4 into the DCCP test tree.
-
-Patch #1: Adds ccid4 to DCCP test tree.
-Patch #2: Modifies CCID4 in order to work with tfrc-sp.
-
-
---
-Ivo Augusto Andrade Rocha Calado
-MSc. Candidate
-Embedded Systems and Pervasive Computing Lab -
-http://embedded.ufcg.edu.br
-Systems and Computing Department - http://www.dsc.ufcg.edu.br
-Electrical Engineering and Informatics Center -
-http://www.ceei.ufcg.edu.br
-Federal University of Campina Grande - http://www.ufcg.edu.br
-
-PGP: 0x03422935
-Quidquid latine dictum sit, altum viditur.
-
+fCBUaGVzZSBwYXRjaGVzIGFkZCBpbXBsZW1lbnRhdGlvbiBvZiBDQ0lENCBpbnRvIHRoZSBEQ0NQ
+IHRlc3QgdHJlZS4KVGhhbmsgeW91IGZvciBzZW5kaW5nIHRoZXNlLgoKSSBoYXZlIHRha2VuIGFs
+bCB0aHJlZSBzZXJpZXMsCiAqIDQtcGFydCBURlJDLVNQIHJlY2VpdmVyIHNldCwKICogNC1wYXJ0
+IFRGUkMtU1Agc2VuZGVyIHNldCwKICogMi1wYXJ0IENDSUQtNCBpbXBsZW1lbnRhdGlvbiBzZXQs
+CmFuZCByZXBsYWNlZCB0aGUgb2xkIGNjaWQ0IHN1YnRyZWUgb2YgdGhlIERDQ1AgdGVzdCB0cmVl
+LgoKCllvdSBjYW4gY2hlY2tvdXQgdGhlIHdob2xlIENDSUQtNCBzdWJ0cmVlIHZpYQogICAgZ2l0
+Oi8vZWRlbi1mZWVkLmVyZy5hYmRuLmFjLnVrL2RjY3BfZXhwICAgID0+IHN1YnRyZWUgJ2NjaWQ0
+JwoKYW5kIHZpZXcgKG9yIGRvd25sb2FkKSB0aGUgQ0NJRC00IHBhdGNoIHNlcmllcyBhdAogICAg
+aHR0cDovL2VkZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9jZ2ktYmluL2dpdHdlYi5jZ2k/cNxjcF9l
+eHAuZ2l0O2E9bG9nO2jMaWQ0CgpUaGVzZSBhcmUgYWxsIHlvdXIgcGF0Y2hlcywgbm8gZWRpdHMg
+YXBhcnQgZnJvbSByZW1vdmluZyBzb21lIHRyYWlsaW5nIHdoaXRlc3BhY2UuCklmIHlvdSBtYWtl
+IGNoYW5nZXMgdG8geW91ciBwYXRjaGVzIHBsZWFzZSBzZW5kIHRoZW0gcmVsYXRpdmUgdG8gdGhp
+cyB0cmVlLgoKU28gZmFyIEkgaGF2ZSBvbmx5IHZlcmlmaWVkIHRoYXQgdGhleSBidWlsZCBjbGVh
+bmx5LCB3aWxsIGJlIGJhY2sgbmV4dCB3ZWVrIGFmdGVyCnNvbWUgbW9yZSB0ZXN0cy4KLS0KVG8g
+dW5zdWJzY3JpYmUgZnJvbSB0aGlzIGxpc3Q6IHNlbmQgdGhlIGxpbmUgInVuc3Vic2NyaWJlIGRj
+Y3AiIGluCnRoZSBib2R5IG9mIGEgbWVzc2FnZSB0byBtYWpvcmRvbW9Admdlci5rZXJuZWwub3Jn
+Ck1vcmUgbWFqb3Jkb21vIGluZm8gYXQgIGh0dHA6Ly92Z2VyLmtlcm5lbC5vcmcvbWFqb3Jkb21v
+LWluZm8uaHRtbA==
