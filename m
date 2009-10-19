@@ -1,44 +1,60 @@
-From: Jarek Poplawski <jarkao2@gmail.com>
-Date: Tue, 13 Oct 2009 18:53:02 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 19 Oct 2009 05:21:53 +0000
 Subject: Re: [PATCHv2 1/4] First Patch on TFRC-SP. Copy base files from TFRC
-Message-Id: <20091013185302.GA3491@del.dom.local>
+Message-Id: <20091019052153.GB3366@gerrit.erg.abdn.ac.uk>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="oyUTqETQ0mS9luUI"
 List-Id: <dccp.vger.kernel.org>
 References: <4AD4B677.4000308@embedded.ufcg.edu.br>
 In-Reply-To: <4AD4B677.4000308@embedded.ufcg.edu.br>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On Tue, Oct 13, 2009 at 03:25:48PM -0300, Ivo Calado wrote:
-> On Tue, Oct 13, 2009 at 15:21, Jarek Poplawski <jarkao2@gmail.com> wrote:
-> > On Tue, Oct 13, 2009 at 03:12:14PM -0300, Ivo Calado wrote:
-> >> On Tue, Oct 13, 2009 at 15:06, Jarek Poplawski <jarkao2@gmail.com> wro=
-te:
-> >> > Ivo Calado wrote, On 10/13/2009 07:18 PM:
-> >> >
-> >> > ...
-> >> >> Following the rule #8 in Documentation/SubmittingPatches the patch =
-is
-...
-> >> 8) E-mail size.
-> >>
-> >> ...
-> >> Large changes are not appropriate for mailing lists, and some
-> >> maintainers. =A0If your patch, uncompressed, exceeds 40 kB in size,
-...
-> > Large changes are not appropriate for mailing lists, and some
-> > maintainers. =A0If your patch, uncompressed, exceeds 300 kB in size,
-...
-> Hi Jarek,
->      strange! I'm using the current DCCP test tree, branch dccp.
-> Am I correct in use these rules?
 
-Hmm... Looks like a fresh change in Linus' (and net-next) tree. So,
-there is a hard legal question: which tree rules should be respected
-here?
+--oyUTqETQ0mS9luUI
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
 
-I guess you're one of a few respecting these rules ;-) Well done!
+| First Patch on TFRC-SP.
+Please find attached one edit that I made.
 
-Best regards,
-Jarek P.
+I added unwinding the initialisation of tfrc_lib in the case where the
+initialisation of tfrc_sp_lib fails.  Unwinding is now done in the reverse
+order of the steps done during initialisation.
+
+--oyUTqETQ0mS9luUI
+Content-Type: text/x-diff; charset=us-ascii
+Content-Disposition: attachment; filename="1.diff"
+
+--- a/net/dccp/ccid.c
++++ b/net/dccp/ccid.c
+@@ -223,7 +223,7 @@ int __init ccid_initialize_builtins(void
+ 
+ 	err = tfrc_sp_lib_init();
+ 	if (err)
+-		return err;
++		goto unwind_tfrc_lib;
+ 
+ 	for (i = 0; i < ARRAY_SIZE(ccids); i++) {
+ 		err = ccid_activate(ccids[i]);
+@@ -235,8 +235,10 @@ int __init ccid_initialize_builtins(void
+ unwind_registrations:
+ 	while(--i >= 0)
+ 		ccid_deactivate(ccids[i]);
+-	tfrc_lib_exit();
++
+ 	tfrc_sp_lib_exit();
++unwind_tfrc_lib:	
++	tfrc_lib_exit();
+ 	return err;
+ }
+ 
+@@ -246,6 +248,6 @@ void ccid_cleanup_builtins(void)
+ 
+ 	for (i = 0; i < ARRAY_SIZE(ccids); i++)
+ 		ccid_deactivate(ccids[i]);
+-	tfrc_lib_exit();
+ 	tfrc_sp_lib_exit();
++	tfrc_lib_exit();
+ }
+
+--oyUTqETQ0mS9luUI--
