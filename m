@@ -1,68 +1,95 @@
-From: Golam Sarwar <Golam.Sarwar@nicta.com.au>
-Date: Wed, 11 Nov 2009 11:29:12 +0000
-Subject: Problem with CCID2 in 2.6.31
-Message-Id: <2F0FD8E3A35DD543A61AC85B4B69254B2D6974E3F2@atp-mbx1.in.nicta.com.au>
+From: Ivo Calado <ivocalado@embedded.ufcg.edu.br>
+Date: Fri, 06 Nov 2009 00:16:21 +0000
+Subject: Re: dccp-test-tree [PATCH 1/1]: Count lost data packets in a burst
+Message-Id: <cb00fa210911051616o186b30cau527f7d92e4ad121f@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-**(Please disregard my last email without a subject line)
+On Mon, Oct 19, 2009 at 02:16, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
+> dccp: Generalise data-loss condition
+>
+> This patch is thanks to Ivo Calado who had integrated this function into =
+one
+> of the TFRC-SP patches.
+>
+> It generalises the task of determining data loss from RFC 43430, 7.7.1.
+>
+> Let S_A, S_B be sequence numbers such that S_B is "after" S_A, and let
+> N_B be the NDP count of packet S_B. Then, using module-2^48 arithmetic,
+> =A0D =3D S_B - S_A - 1 =A0is an upper bound of the number of lost data pa=
+ckets,
+> =A0D - N_B =A0 =A0 =A0 =A0 =A0 =A0is an approximation of the number of lo=
+st data packets
+> =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0 =A0(there are cases where this is not=
+ exact).
+>
+> The patch implements this as
+> =A0dccp_loss_count(S_A, S_B, N_B) :=3D max(S_B - S_A - 1 - N_B, 0)
+>
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+> ---
+> =A0net/dccp/dccp.h | =A0 21 +++++++++++++++------
+> =A01 file changed, 15 insertions(+), 6 deletions(-)
+>
+> --- a/net/dccp/dccp.h
+> +++ b/net/dccp/dccp.h
+> @@ -153,18 +153,27 @@ static inline u64 max48(const u64 seq1,
+> =A0}
+>
+> =A0/**
+> - * dccp_loss_free =A0- =A0Evaluates condition for data loss from RFC 434=
+0, 7.7.1
+> - * @s1: =A0 =A0 =A0 =A0 start sequence number
+> - * @s2: =A0end sequence number
+> + * dccp_loss_count - Approximate the number of lost data packets in a bu=
+rst loss
+> + * @s1: =A0last known sequence number before the loss ('hole')
+> + * @s2: =A0first sequence number seen after the 'hole'
+> =A0* @ndp: NDP count on packet with sequence number @s2
+> - * Returns true if the sequence range s1...s2 has no data loss.
+> =A0*/
+> -static inline bool dccp_loss_free(const u64 s1, const u64 s2, const u64 =
+ndp)
+> +static inline u64 dccp_loss_count(const u64 s1, const u64 s2, const u64 =
+ndp)
+> =A0{
+> =A0 =A0 =A0 =A0s64 delta =3D dccp_delta_seqno(s1, s2);
+>
+> =A0 =A0 =A0 =A0WARN_ON(delta < 0);
+> - =A0 =A0 =A0 return (u64)delta <=3D ndp + 1;
+> + =A0 =A0 =A0 delta -=3D ndp + 1;
+> +
+> + =A0 =A0 =A0 return delta > 0 ? delta : 0;
+> +}
+> +
+> +/**
+> + * dccp_loss_free - Evaluate condition for data loss from RFC 4340, 7.7.1
+> + */
+> +static inline bool dccp_loss_free(const u64 s1, const u64 s2, const u64 =
+ndp)
+> +{
+> + =A0 =A0 =A0 return dccp_loss_count(s1, s2, ndp) =3D 0;
+> =A0}
+>
+> =A0enum {
+>
 
-Dear List,
 
-I have upgraded my test machines to 2.6.31 (released on 9-11-2009) experimental DCCP tree. With CCID2, My problem is - I can not send enough data even though both my test machines are connected to 10Mbit/s LAN. While with CCID3, for the same 2 machines, with exact same configuration, I can transfer data properly without being limited by anything.
+Agree
 
-The following is my iperf output for CCID2:
-=======================[  4]  0.0- 1.0 sec  31.9 KBytes   261 Kbits/sec
-[  4]  1.0- 2.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4]  2.0- 3.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4]  3.0- 4.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4]  4.0- 5.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4]  5.0- 6.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4]  6.0- 7.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4]  7.0- 8.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4]  8.0- 9.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4]  9.0-10.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4] 10.0-11.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4] 11.0-12.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4] 12.0-13.0 sec  2.77 KBytes  22.7 Kbits/sec
-[  4]  0.0-13.0 sec  65.2 KBytes  41.0 Kbits/sec
-=======================
-The following is my iperf output for CCID3:
-=======================[  4] local 203.143.170.102 port 5001 connected with 203.143.170.200 port 56657
-[  4]  0.0- 1.0 sec  11549 KBytes  94606 Kbits/sec
-[  4]  1.0- 2.0 sec  11586 KBytes  94913 Kbits/sec
-[  4]  2.0- 3.0 sec  11568 KBytes  94765 Kbits/sec
-[  4]  3.0- 4.0 sec  11583 KBytes  94890 Kbits/sec
-[  4]  4.0- 5.0 sec  11585 KBytes  94901 Kbits/sec
-[  4]  5.0- 6.0 sec  11576 KBytes  94833 Kbits/sec
-[  4]  6.0- 7.0 sec  11579 KBytes  94856 Kbits/sec
-[  4]  7.0- 8.0 sec  11583 KBytes  94890 Kbits/sec
-[  4]  8.0- 9.0 sec  11586 KBytes  94913 Kbits/sec
-[  4]  9.0-10.0 sec  11564 KBytes  94731 Kbits/sec
-[  4]  0.0-10.0 sec  115801 KBytes  94810 Kbits/sec
-=======================
-I am using the following /proc entries to switch between CCID2 and CCID3:
-=======================sysctl -w net.dccp.default.seq_window000
-sysctl -w net.dccp.default.rx_ccid=2
-sysctl -w net.dccp.default.tx_ccid=2
-=======================
-I have double checked this issue with an older kernel (2.6.25-rc8) on the same two machines and I don't get this problem with CCID2. The following is the iperf receiving end output from one of the two 2.6.25-rc8 machines:
+--=20
+Ivo Augusto Andrade Rocha Calado
+MSc. Candidate
+Embedded Systems and Pervasive Computing Lab - http://embedded.ufcg.edu.br
+Systems and Computing Department - http://www.dsc.ufcg.edu.br
+Electrical Engineering and Informatics Center - http://www.ceei.ufcg.edu.br
+Federal University of Campina Grande - http://www.ufcg.edu.br
 
-=======================[  4]  0.0- 1.0 sec  11507 KBytes  94265 Kbits/sec
-[  4]  1.0- 2.0 sec  11508 KBytes  94277 Kbits/sec
-[  4]  2.0- 3.0 sec  11507 KBytes  94265 Kbits/sec
-[  4]  3.0- 4.0 sec  11507 KBytes  94265 Kbits/sec
-[  4]  4.0- 5.0 sec  11508 KBytes  94277 Kbits/sec
-[  4]  5.0- 6.0 sec  11507 KBytes  94265 Kbits/sec
-[  4]  6.0- 7.0 sec  11508 KBytes  94277 Kbits/sec
-[  4]  7.0- 8.0 sec  11507 KBytes  94265 Kbits/sec
-[  4]  8.0- 9.0 sec  11507 KBytes  94265 Kbits/sec
-[  4]  9.0-10.0 sec  11508 KBytes  94277 Kbits/sec
-[  4]  0.0-10.0 sec  115132 KBytes  94269 Kbits/sec
-=======================
-
-Regards,
-Golam Sarwar (Babil)
+PGP: 0x03422935
+Putt's Law:
+       Technology is dominated by two types of people:
+               Those who understand what they do not manage.
+               Those who manage what they do not understand.
