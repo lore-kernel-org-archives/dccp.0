@@ -1,52 +1,64 @@
-From: Neil Horman <nhorman@tuxdriver.com>
-Date: Tue, 02 Feb 2010 15:39:29 +0000
-Subject: Re: [PATCH 02/86] dccp: revert buggy auto-loading of dccp module
-Message-Id: <20100202153929.GA12697@hmsreliant.think-freely.org>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 01 Feb 2010 06:18:06 +0000
+Subject: [PATCH 01/86] dccp: fix bug in cache allocation
+Message-Id: <1265005087-5549-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1265005087-5549-3-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1265005087-5549-3-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Tue, Feb 02, 2010 at 03:06:15PM -0000, gerrit@erg.abdn.ac.uk wrote:
-> > --- a/net/dccp/probe.c
-> > +++ b/net/dccp/probe.c
-> > @@ -161,7 +161,8 @@ static __init int dccpprobe_init(void)
-> >  	if (!proc_net_fops_create(&init_net, procname, S_IRUSR,
-> > &dccpprobe_fops))
-> >  		goto err0;
-> >
-> > -	ret = try_then_request_module((register_jprobe(&dccp_send_probe) = 0),
-> > +	try_then_request_module(
-> > +		((ret = register_jprobe(&dccp_send_probe)) = 0),
-> >  					"dccp");
-> >  	if (ret)
-> >  		goto err1;
-> 
-> Apologies for the late response -- delays are sometimes possible due to
-> day job. The only problem that I had with this patch was that it was
-> apparently not tested, causing the described problems.
-> 
-> 
-> > I've not tested it, but this should do it,
-> > without re-breaking the silent dependency.
-> 
-> I will test it and get back to you until tomorrow morning (GMT),
-> if it works I'll also push it out in the test tree.
-> 
-> Thanks a lot for getting back and devising a different route.
-> 
-Thanks, and apologies for being brusque.  I just didn't want to fix what is
-clearly a problem in what you describe by rebreaking a previously seen problem.
-I expect this should work just fine.  Let me know if it doesn't and I'll
-resurrect my test bed here and take a look
-Neil
+This fixes a bug introduced in commit de4ef86cfce60d2250111f34f8a084e769f23b16
+("dccp: fix dccp rmmod when kernel configured to use slub", 17 Jan): the
+vsnprintf used sizeof(slab_name_fmt), which became truncated to 4 bytes, since
+slab_name_fmt is now a 4-byte pointer and no longer a 32-character array.
 
-> 
-> --
-> To unsubscribe from this list: send the line "unsubscribe netdev" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
-> 
+This lead to error messages such as
+ FATAL: Error inserting dccp: No buffer space available
+
+ >> kernel: [ 1456.341501] kmem_cache_create: duplicate cache cci
+generated due to the truncation after the 3rrdc character.
+
+Fixed for the moment by introducing a symbolic constant. Tested to fix the bug.
+
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccid.c |    2 +-
+ net/dccp/ccid.h |    8 +++++---
+ 2 files changed, 6 insertions(+), 4 deletions(-)
+
+--- a/net/dccp/ccid.c
++++ b/net/dccp/ccid.c
+@@ -83,7 +83,7 @@ static struct kmem_cache *ccid_kmem_cache_create(int obj_size, char *slab_name_f
+ 	va_list args;
+ 
+ 	va_start(args, fmt);
+-	vsnprintf(slab_name_fmt, sizeof(slab_name_fmt), fmt, args);
++	vsnprintf(slab_name_fmt, CCID_SLAB_NAME_LENGTH, fmt, args);
+ 	va_end(args);
+ 
+ 	slab = kmem_cache_create(slab_name_fmt, sizeof(struct ccid) + obj_size, 0,
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -19,7 +19,9 @@
+ #include <linux/list.h>
+ #include <linux/module.h>
+ 
+-#define CCID_MAX 255
++/* maximum value for a CCID (RFC 4340, 19.5) */
++#define CCID_MAX		255
++#define CCID_SLAB_NAME_LENGTH	32
+ 
+ struct tcp_info;
+ 
+@@ -49,8 +51,8 @@ struct ccid_operations {
+ 	const char		*ccid_name;
+ 	struct kmem_cache	*ccid_hc_rx_slab,
+ 				*ccid_hc_tx_slab;
+-	char			ccid_hc_rx_slab_name[32];
+-	char			ccid_hc_tx_slab_name[32];
++	char			ccid_hc_rx_slab_name[CCID_SLAB_NAME_LENGTH];
++	char			ccid_hc_tx_slab_name[CCID_SLAB_NAME_LENGTH];
+ 	__u32			ccid_hc_rx_obj_size,
+ 				ccid_hc_tx_obj_size;
+ 	/* Interface Routines */
