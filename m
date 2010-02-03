@@ -1,30 +1,48 @@
-From: David Miller <davem@davemloft.net>
-Date: Fri, 12 Feb 2010 20:07:38 +0000
-Subject: Re: [PATCH 1/1] dccp: allow probing of CCID-array length
-Message-Id: <20100212.120738.189368103.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 03 Feb 2010 06:16:56 +0000
+Subject: Re: [PATCH v2 1/1] dccp: fix auto-loading of dccp(_probe)
+Message-Id: <20100203061656.GA5415@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <20100208062028.GA5478@gerrit.erg.abdn.ac.uk>
-In-Reply-To: <20100208062028.GA5478@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 8 Feb 2010 07:20:28 +0100
+Hi Neil,
 
-> This fixes a problem in the DCCP getsockopt() API: currently there is no way
-> for a user to a priori know the number of built-in CCIDs, other than trying
-> DCCP_SOCKOPT_AVAILABLE_CCIDS in a loop, incrementing the option length until
-> EINVAL is no longer returned.
-> 
-> This patch truncates the array to the user-provided length. No copy is made
-> when the length is <= 0.
-> 
-> Due to the length restriction in do_dccp_getsockopt() to sizeof(int), the
-> minimum array length remains 4, which is a reasonable default (only 3
-> CCIDs, CCID-2..4, are currently defined).
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+I have tested your patch, it works fine thanks to the repeated execution of the macro
+argument. I have reformatted it, removing the inner parentheses, which I think is
+justified since macros copy their arguments in full. Also converted your email to a
+drafted commit message. Due to this, have not copied your signed-off -- if you are
+ok, please add, this should be submitted asap.
 
-Applied to net-next-2.6, thanks Gerrit.
+>>>>>>>>>>>>>>>>>>>>>>>>>>> Patch v2 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+dccp: fix loading of dccp_probe
+
+This fixes commit (38ff3e6bb987ec583268da8eb22628293095d43b) ("dccp_probe:
+Fix module load dependencies between dccp and dccp_probe", from 15 Jan).
+
+It fixes the construction of the first argument of try_then_request_module(),
+where only valid return codes from the first argument should be returned.
+
+What we do now is assign the result of register_jprobe() to ret, without
+the side effect of the comparison.
+
+Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/probe.c |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+--- a/net/dccp/probe.c
++++ b/net/dccp/probe.c
+@@ -161,8 +161,8 @@ static __init int dccpprobe_init(void)
+ 	if (!proc_net_fops_create(&init_net, procname, S_IRUSR, &dccpprobe_fops))
+ 		goto err0;
+ 
+-	ret = try_then_request_module((register_jprobe(&dccp_send_probe) = 0),
+-					"dccp");
++	try_then_request_module((ret = register_jprobe(&dccp_send_probe)) = 0,
++				"dccp");
+ 	if (ret)
+ 		goto err1;
+ 
