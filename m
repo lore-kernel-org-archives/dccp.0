@@ -1,29 +1,18 @@
-From: David Miller <davem@davemloft.net>
-Date: Thu, 04 Feb 2010 03:01:42 +0000
-Subject: Re: [PATCH v2 1/1] dccp: fix auto-loading of dccp(_probe)
-Message-Id: <20100203.190142.123408896.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Thu, 11 Feb 2010 06:26:17 +0000
+Subject: net-2.6 [PATCH 0/2] udp/dccp: MSG_TRUNC
+Message-Id: <1265869579-5829-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <20100203061656.GA5415@gerrit.erg.abdn.ac.uk>
-In-Reply-To: <20100203061656.GA5415@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Neil Horman <nhorman@tuxdriver.com>
-Date: Wed, 3 Feb 2010 06:58:40 -0500
+Hi Dave,
 
-> On Wed, Feb 03, 2010 at 07:16:56AM +0100, Gerrit Renker wrote:
->> Hi Neil,
->> 
->> I have tested your patch, it works fine thanks to the repeated execution of the macro
->> argument. I have reformatted it, removing the inner parentheses, which I think is
->> justified since macros copy their arguments in full. Also converted your email to a
->> drafted commit message. Due to this, have not copied your signed-off -- if you are
->> ok, please add, this should be submitted asap.
->> 
-> Understood, and thank you.  This looks fine to me
-> 
-> Signed-off-by: Neil Horman <nhorman@tuxdriver.com>
+I have here two datagram-API patches, both submitted for net-2.6:
 
-Applied, thanks.
+Patch #1: Resolves missing MSG_TRUNC support. Since DCCP is datagram-based,
+          the user-space API is broken/incomplete without.
+
+Patch #2: UDP recvmsg() cleanup, remove redundant variable. 	  
