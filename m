@@ -1,31 +1,40 @@
-From: David Miller <davem@davemloft.net>
-Date: Mon, 15 Mar 2010 23:07:04 +0000
-Subject: Re: net-2.6 [Bug-Fix][dccp]: fix oops caused after failed
-Message-Id: <20100315.160704.112076366.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 15 Mar 2010 06:14:21 +0000
+Subject: test-tree: logging message cosmetics
+Message-Id: <20100315061421.GB6110@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <20100315061318.GA6110@gerrit.erg.abdn.ac.uk>
-In-Reply-To: <20100315061318.GA6110@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 15 Mar 2010 07:13:19 +0100
+dccp: cosmetics of info message
 
-> dccp: fix panic caused by failed initialisation
-> 
-> This fixes a kernel panic reported thanks to Andre Noll:
-> 
-> if DCCP is compiled into the kernel and any out of the initialisation
-> steps in net/dccp/proto.c:dccp_init() fail, a subsequent attempt to create
-> a SOCK_DCCP socket will panic, since inet{,6}_create() are not prevented
-> from creating DCCP sockets.
-> 
-> This patch fixes the problem by propagating a failure in dccp_init() to
-> dccp_v{4,6}_init_net(), and from there to dccp_v{4,6}_init(), so that the
-> DCCP protocol is not made available if its initialisation fails.
-> 
-> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Change the CCID (de)activation message to start with the
+protocol name, as 'CCID' is already in there.
 
-Applied, thanks Gerrit.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccid.c |    4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+--- a/net/dccp/ccid.c
++++ b/net/dccp/ccid.c
+@@ -119,7 +119,7 @@ static int ccid_activate(struct ccid_ope
+ 	if (ccid_ops->ccid_hc_tx_slab = NULL)
+ 		goto out_free_rx_slab;
+ 
+-	pr_info("CCID: Activated CCID %d (%s)\n",
++	pr_info("DCCP: Activated CCID %d (%s)\n",
+ 		ccid_ops->ccid_id, ccid_ops->ccid_name);
+ 	err = 0;
+ out:
+@@ -137,7 +137,7 @@ static void ccid_deactivate(struct ccid_
+ 	ccid_kmem_cache_destroy(ccid_ops->ccid_hc_rx_slab);
+ 	ccid_ops->ccid_hc_rx_slab = NULL;
+ 
+-	pr_info("CCID: Deactivated CCID %d (%s)\n",
++	pr_info("DCCP: Deactivated CCID %d (%s)\n",
+ 		ccid_ops->ccid_id, ccid_ops->ccid_name);
+ }
+ 
