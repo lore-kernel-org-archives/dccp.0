@@ -1,55 +1,25 @@
-From: Shan Wei <shanwei@cn.fujitsu.com>
-Date: Fri, 16 Apr 2010 02:26:09 +0000
-Subject: Re: [net-next-2.6 PATCH 2/2] net: replace ipfragok with	skb->local_df
-Message-Id: <4BC7CAC1.4000803@cn.fujitsu.com>
+From: Herbert Xu <herbert@gondor.hengli.com.au>
+Date: Fri, 16 Apr 2010 06:43:44 +0000
+Subject: Re: [net-next-2.6 PATCH 2/2] net: replace ipfragok with
+Message-Id: <20100416064344.GA12412@gondor.apana.org.au>
 List-Id: <dccp.vger.kernel.org>
+References: <4BC7CAC1.4000803@cn.fujitsu.com>
+In-Reply-To: <4BC7CAC1.4000803@cn.fujitsu.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="hz-gb-2312"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-Herbert Xu wrote, at 04/15/2010 11:19 PM:
-> On Thu, Apr 15, 2010 at 09:04:49PM +0800, Shan Wei wrote:
->> As Herbert Xu said: we should be able to simply replace ipfragok
->> with skb->local_df. commit f88037(sctp: Drop ipfargok in sctp_xmit function)
->> has droped ipfragok and set local_df value properly.
->>
->> The patch kills the ipfragok parameter of .queue_xmit().
-> 
-> Both patches look good to me.
-> 
->> @@ -370,7 +370,7 @@ packet_routed:
->>  	skb_reset_network_header(skb);
->>  	iph = ip_hdr(skb);
->>  	*((__be16 *)iph) = htons((4 << 12) | (5 << 8) | (inet->tos & 0xff));
->> -	if (ip_dont_fragment(sk, &rt->u.dst) && !ipfragok)
->> +	if (ip_dont_fragment(sk, &rt->u.dst) && !skb->local_df)
->>  		iph->frag_off = htons(IP_DF);
->>  	else
->>  		iph->frag_off = 0;
-> 
-> This hunk looked suspecious at first.  However, it is OK because
-> ever calls this with ipfragok = 1, or local_df = 1.
-> 
-> The first is obvious from this patch itself, the second not quite
-> so obvious.
-> 
-> As nobody calls it with local_df = 1 anyway, and strictly speaking
-> local_df shouldn't be set at all by the caller of ip_queue_xmit, we
-> should simply remove the && ... bit and have 
-> 
-> 	if (ip_dont_fragment(sk, &rt->u.dst))
-
-Now, PPPoX/PPPoL2TP driver still use ip_queue_xmit to send packets with ipfragok = 1.
-So, now we can't remove the && ... bit. 
-
-
--- 
-Best Regards
------
-Shan Wei
-
-> 
-> Cheers,
-
-
+T24gRnJpLCBBcHIgMTYsIDIwMTAgYXQgMTA6MjY6MDlBTSArMDgwMCwgU2hhbiBXZWkgd3JvdGU6
+Cj4gCj4gTm93LCBQUFBvWC9QUFBvTDJUUCBkcml2ZXIgc3RpbGwgdXNlIGlwX3F1ZXVlX3htaXQg
+dG8gc2VuZCBwYWNrZXRzIHdpdGggaXBmcmFnb2sgPSAxLgo+IFNvLCBub3cgd2UgY2FuJ3QgcmVt
+b3ZlIHRoZSAmJiAuLi4gYml0LiAKCkh1aD8gSWYgdGhleSBzdGlsbCBjYWxsIGlwX3F1ZXVlX3ht
+aXQgd2l0aCBpcGZyYWdvayB0aGVuIHN1cmVseQp0aGUgYnVpbGQgd2lsbCBmYWlsIGFmdGVyIHlv
+dXIgcGF0Y2ggYXMgaXQgcmVtb3ZlcyB0aGUgaXBmcmFnb2sKYXJndW1lbnQ/CgpDaGVlcnMsCi0t
+IApWaXNpdCBPcGVuc3dhbiBhdCBodHRwOi8vd3d3Lm9wZW5zd2FuLm9yZy8KRW1haWw6IEhlcmJl
+cnQgWHUgfntQbVY+SEl+fSA8aGVyYmVydEBnb25kb3IuYXBhbmEub3JnLmF1PgpIb21lIFBhZ2U6
+IGh0dHA6Ly9nb25kb3IuYXBhbmEub3JnLmF1L35oZXJiZXJ0LwpQR1AgS2V5OiBodHRwOi8vZ29u
+ZG9yLmFwYW5hLm9yZy5hdS9+aGVyYmVydC9wdWJrZXkudHh0Ci0tClRvIHVuc3Vic2NyaWJlIGZy
+b20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9k
+eSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9t
+byBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
