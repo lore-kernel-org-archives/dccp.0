@@ -1,25 +1,71 @@
-From: David Miller <davem@davemloft.net>
-Date: Fri, 16 Apr 2010 06:37:33 +0000
-Subject: Re: [net-next-2.6 PATCH 2/3 v2] net: replace ipfragok with
-Message-Id: <20100415.233733.35006639.davem@davemloft.net>
+From: Julia Lawall <julia@diku.dk>
+Date: Sat, 22 May 2010 08:25:19 +0000
+Subject: [PATCH 22/27] net/dccp: Use memdup_user
+Message-Id: <Pine.LNX.4.64.1005221025040.13021@ask.diku.dk>
 List-Id: <dccp.vger.kernel.org>
-References: <4BC7CEBC.70200@cn.fujitsu.com>
-In-Reply-To: <4BC7CEBC.70200@cn.fujitsu.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Shan Wei <shanwei@cn.fujitsu.com>
-Date: Fri, 16 Apr 2010 10:43:08 +0800
+From: Julia Lawall <julia@diku.dk>
 
-> As Herbert Xu said: we should be able to simply replace ipfragok
-> with skb->local_df. commit f88037(sctp: Drop ipfargok in sctp_xmit function)
-> has droped ipfragok and set local_df value properly.
-> 
-> The patch kills the ipfragok parameter of .queue_xmit().
-> 
-> 
-> Signed-off-by: Shan Wei <shanwei@cn.fujitsu.com>
+Use memdup_user when user data is immediately copied into the
+allocated region.
 
-Applied.
+The semantic patch that makes this change is as follows:
+(http://coccinelle.lip6.fr/)
+
+// <smpl>
+@@
+expression from,to,size,flag;
+position p;
+identifier l1,l2;
+@@
+
+-  to = \(kmalloc@p\|kzalloc@p\)(size,flag);
++  to = memdup_user(from,size);
+   if (
+-      to=NULL
++      IS_ERR(to)
+                 || ...) {
+   <+... when != goto l1;
+-  -ENOMEM
++  PTR_ERR(to)
+   ...+>
+   }
+-  if (copy_from_user(to, from, size) != 0) {
+-    <+... when != goto l2;
+-    -EFAULT
+-    ...+>
+-  }
+// </smpl>
+
+Signed-off-by: Julia Lawall <julia@diku.dk>
+
+---
+ net/dccp/proto.c |   11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index b03ecf6..f79bcef 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -473,14 +473,9 @@ static int dccp_setsockopt_ccid(struct sock *sk, int type,
+ 	if (optlen < 1 || optlen > DCCP_FEAT_MAX_SP_VALS)
+ 		return -EINVAL;
+ 
+-	val = kmalloc(optlen, GFP_KERNEL);
+-	if (val = NULL)
+-		return -ENOMEM;
+-
+-	if (copy_from_user(val, optval, optlen)) {
+-		kfree(val);
+-		return -EFAULT;
+-	}
++	val = memdup_user(optval, optlen);
++	if (IS_ERR(val))
++		return PTR_ERR(val);
+ 
+ 	lock_sock(sk);
+ 	if (type = DCCP_SOCKOPT_TX_CCID || type = DCCP_SOCKOPT_CCID)
