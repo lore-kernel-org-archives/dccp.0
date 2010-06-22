@@ -1,26 +1,18 @@
-From: David Miller <davem@davemloft.net>
-Date: Mon, 31 May 2010 07:31:09 +0000
-Subject: Re: [PATCH 22/27] net/dccp: Use memdup_user
-Message-Id: <20100531.003109.260112093.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 22 Jun 2010 11:14:33 +0000
+Subject: [PATCH 0/2] dccp: fix slow slow-start by symmetric Syn-RTT
+Message-Id: <1277205275-5862-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <Pine.LNX.4.64.1005221025040.13021@ask.diku.dk>
-In-Reply-To: <Pine.LNX.4.64.1005221025040.13021@ask.diku.dk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Julia Lawall <julia@diku.dk>
-Date: Sat, 22 May 2010 10:25:19 +0200 (CEST)
+This changeset fixes slow startup behaviour for DCCP streaming via
+CCID-3/4 when a listening server needs to start streaming.
 
-> From: Julia Lawall <julia@diku.dk>
-> 
-> Use memdup_user when user data is immediately copied into the
-> allocated region.
-> 
-> The semantic patch that makes this change is as follows:
-> (http://coccinelle.lip6.fr/)
- ...
-> Signed-off-by: Julia Lawall <julia@diku.dk>
+Patch #1: removes an unused 'sk' argument from several functions,
+          it is used by patch #2;
 
-Applied.
+Patch #2: fixes the sluggish slow-start problem by taking an RTT
+          sample from the initial handshake also for listeing servers.
