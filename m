@@ -1,7 +1,7 @@
-From: Arnaldo Carvalho de Melo <acme@redhat.com>
-Date: Mon, 02 Aug 2010 15:08:44 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 09 Aug 2010 05:59:17 +0000
 Subject: Re: Problems with idle DCCP connections
-Message-Id: <20100802150844.GS29507@ghostprotocols.net>
+Message-Id: <20100809055917.GA4148@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1280524030.9374.108.camel@sjerolaptop.homelinux.net>
 In-Reply-To: <1280524030.9374.108.camel@sjerolaptop.homelinux.net>
@@ -10,22 +10,31 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Mon, Aug 02, 2010 at 10:19:15AM +0100, Ian McDonald escreveu:
-> Hi Samuel,
-> 
-> My main comment about DCCP in Linux is that it is still very
-> experimental. There is a lot of good work gone into it, but there are
-> also still some problems.
-> 
-> I used it for my research also (see my website and click on research)
-> and did quite a bit to get it working for me but I largely used CCID3
-> and fixed up aspects of that and got code merged for that. I would
-> encourage you to have a go at seeing if you can fix it (provided
-> no-one else does first!) as this will help you in your future research
-> if you are able to work on this aspect.
+| In attempting to set this up I have come across some very odd behavior
+| from DCCP. My goal is to open one DCCP connection and then keep it open
+| even when the encapsulated protocol is idle (this avoids having a
+| three-way handshake for every packet sent). However, in my tests, DCCP
+| clamps the sending rate down to three packets per second after a short
+| idle period (a few seconds) and then never attempts to increase that
+| rate. This seems to be a very unusual and counter-intuitive behavior.
+| Has anyone else seen similar behavior? This seems to contradict RFC4341
+| section 5.1 which says that CCID2 should slow start after an idle
+| period. Is this not implemented yet or is it a bug?
+| 
+It is probably a bug, the state of the CCID-2 code is not as good as the
+CCID-3 code, the latter has received more attention.
 
-Exactly, it will get as much traction and improve as people like Ian,
-Andrea, Gerrit, Leandro, etc, did and you are encouraged to do: while
-doing some research, fix bugs in the current implementation.
- 
-- Arnaldo
+But you will find several bug CCID-2 bug fixes already contained in the
+DCCP test tree available at
+     git://eden-feed.erg.abdn.ac.uk/dccp_exp   [subtree 'dccp' or 'ccid4']
+     http://[same-address]
+
+and I would like to ask you to use this tree for testing and bug-fixing, 
+since it is ahead of the mainline tree. I know from testing that the 
+mainline CCID-2 code does not perform very well.
+
+In addition, there is a CCID-248 ("UDP-like") test-CCID available in the
+test tree, which does not perform congestion control. This might be useful
+for your tests which need as much bandwidth as possible. 
+
+Please let us know any bugs or problems encountered/fixed.
