@@ -1,185 +1,326 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 23 Aug 2010 05:41:38 +0000
-Subject: [PATCH 3/5] dccp ccid-2: Remove redundant sanity tests
-Message-Id: <1282542100-5799-4-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 09 Aug 2010 05:59:26 +0000
+Subject: dccp-test tree [Patch v2 1/1] dccp: Refine the wait-for-ccid
+Message-Id: <20100809055926.GB4148@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This removes the ccid2_hc_tx_check_sanity function: it is redundant.
+This change _only_ affects the DCCP test tree at git://eden-feed.erg.abdn.ac.uk
 
-Details:
-====
-The tx_check_sanity function performs three tests:
- 1) it checks that the circular TX list is sorted
-    - in ascending order of sequence number (ccid2s_seq)
-    - and time (ccid2s_sent),
-    - in the direction from `tail' (hctx_seqt) to `head' (hctx_seqh);
- 2) it ensures that the entire list has the length seqbufc * CCID2_SEQBUF_LEN;
- 3) it ensures that pipe equals the number of packets that were not
-    marked `acked' (ccid2s_acked) between `tail' and `head'.
+The change below avoids futile timer modifications when rate-based CCIDs 3/4
+are used. The timer is set by the CCID congestion control to limit the number
+of outgoing packets. 
 
-The following argues that each of these tests is redundant, this can be verified
-by going through the code.
+Once the timer expires, as many packets are taken off the tx queue as allowed
+by the current rate of the TX CCID. Calling dccp_write_xmit() before the timer
+expires is futile since it will merely cause the timer to be reset.
 
-(1) is not necessary, since both time and GSS increase from one packet to the
-next, so that subsequent insertions in tx_packet_sent (which advance the `head'
-pointer) will be in ascending order of time and sequence number.
+The degree of useless activity increases according to the amount of data to 
+send. In the worst case the first packet in the tx queue causes the timer to
+be set, and the n-1 remaining packets merely retrigger this event.
 
-In (2), the length of the list is always equal to seqbufc times CCID2_SEQBUF_LEN
-(set to 1024) unless allocation caused an earlier failure, because:
- * at initialisation (tx_init), there is one chunk of size 1024 and seqbufc=1;
- * subsequent calls to tx_alloc_seq take place whenever head->next = tail in
-   tx_packet_sent; then a new chunk of size 1024 is inserted between head and
-   tail, and seqbufc is incremented by one.
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -731,7 +731,13 @@ int dccp_sendmsg(struct kiocb *iocb, str
+ 		goto out_discard;
+ 
+ 	skb_queue_tail(&sk->sk_write_queue, skb);
+-	dccp_write_xmit(sk);
++	/*
++	 * The xmit_timer is set if the TX CCID is rate-based and will expire
++	 * when congestion control permits to release further packets into the
++	 * network. Window-based CCIDs do not use this timer.
++	 */
++	if (!timer_pending(&dp->dccps_xmit_timer))
++		dccp_write_xmit(sk);
+ out_release:
+ 	release_sock(sk);
+ 	return rc ? : len;
 
-To show that (3) is redundant requires looking at two cases.
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Patch v2 <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<	
+dccp: Refine the wait-for-ccid mechanism
 
-The `pipe' variable of the TX socket is incremented only in tx_packet_sent, and
-decremented in tx_packet_recv.  When head = tail (TX history empty) then pipe
-should be 0, which is the case directly after initialisation and after a
-retransmission timeout has occurred (ccid2_hc_tx_rto_expire).
+This extends the existing wait-for-ccid routine so that it may be used with
+different types of CCID. It further addresses the problems listed below.
 
-The first case involves parsing Ack Vectors for packets recorded in the live
-portion of the buffer, between tail and head. For each packet marked by the
-receiver as received (state 0) or ECN-marked (state 1), pipe is decremented by
-one, so for all such packets the BUG_ON in tx_check_sanity will not trigger.
+The code looks if the write queue is non-empty and grants the TX CCID up to
+`timeout' jiffies to drain the queue. It will instead purge that queue if
+ * the delay suggested by the CCID exceeds the time budget;
+ * a socket error occurred while waiting for the CCID;
+ * there is a signal pending (eg. annoyed user pressed Control-C);
+ * the CCID does not support delays (we don't know how long it will take).
 
-The second case is the loss detection in the second half of tx_packet_recv,
-below the comment "Check for NUMDUPACK".
 
-The first while-loop here ensures that the sequence number of `seqp' is either
-above or equal to `high_ack', or otherwise equal to the highest sequence number
-sent so far (of the entry head->prev, as head points to the next unsent entry).
-The next while-loop ("while (1)") counts the number of acked packets starting
-from that position of seqp, going backwards in the direction from head->prev to
-tail. If NUMDUPACK=3 such packets were counted within this loop, `seqp' points
-to the last acknowledged packet of these, and the "if (done = NUMDUPACK)" block
-is entered next.
-The while-loop contained within that block in turn traverses the list backwards,
-from head to tail; the position of `seqp' is saved in the variable `last_acked'.
-For each packet not marked as `acked', a congestion event is triggered within
-the loop, and pipe is decremented. The loop terminates when `seqp' has reached
-`tail', whereupon tail is set to the position previously stored in `last_acked'.
-Thus, between `last_acked' and the previous position of `tail',
- - pipe has been decremented earlier if the packet was marked as state 0 or 1;
- - pipe was decremented if the packet was not marked as acked.
-That is, pipe has been decremented by the number of packets between `last_acked'
-and the previous position of `tail'. As a consequence, pipe now again reflects
-the number of packets which have not (yet) been acked between the new position
-of tail (at `last_acked') and head->prev, or 0 if head=tail. The result is that
-the BUG_ON condition in check_sanity will also not be triggered, hence the test
-(3) is also redundant.
+                 D e t a i l s  [can be removed]
+                 -------------------------------
+DCCP's sending mechanism acts similar to non-blocking I/O: dccp_sendmsg() will 
+enqueue up to net.dccp.default.tx_qlen packets (default=5), without waiting for 
+them to be released to the network.
+
+Rate-based CCIDs, such as CCID-3/4, can impose sending delays of up to maximally
+64 seconds (t_mbi in RFC 5348). Hence the write queue may still contain packets
+when the application closes. Since the write queue is congestion-controlled by
+the CCID, draining the queue is also under control of the CCID.
+
+There are several problems to address here:
+ 1) The queue-drain mechanism only works with rate-based CCIDs. If CCID-2 for
+    example has a full TX queue and becomes network-limited just as the
+    application wants to close, then waiting for CCID-2 to become unblocked could
+    lead to an indefinite  delay (i.e., application "hangs").
+ 2) Since each TX CCID in turn uses a feedback mechanism, there may be changes
+    in its sending policy while the queue is being drained. This can lead to
+    further delays during which the application will not be able to terminate.
+ 3) The minimum wait time for CCID-3/4 can be expected to be the queue length
+    times the current inter-packet delay. For example if tx_qlen0 and a delay
+    of 15 ms is used for each packet, then the application would have to wait
+    for a minimum of 1.5 seconds before being allowed to exit.
+ 4) There is no way for the user/application to control this behaviour. It would
+    be good to use the timeout argument of dccp_close() as an upper bound. Then
+    the maximum time that an application is willing to wait for its CCIDs to can
+    be set via the SO_LINGER option.
+
+These problems are addressed by giving the CCID a grace period of up to the
+`timeout' value.
+
+The wait-for-ccid function is, as before, used when the application 
+ (a) has read all the data in its receive buffer and
+ (b) if SO_LINGER was set with a non-zero linger time, or
+ (c) the socket is either in the OPEN (active close) or in the PASSIVE_CLOSEREQ
+     state (client application closes after receiving CloseReq).
+
+In addition, there is a catch-all case of __skb_queue_purge() after waiting for 
+the CCID. This is necessary since the write queue may still have data when
+ (a) the host has been passively-closed,
+ (b) abnormal termination (unread data, zero linger time),
+ (c) wait-for-ccid could not finish within the given time limit.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid2.c |   52 ------------------------------------------------
- 1 files changed, 0 insertions(+), 52 deletions(-)
+ net/dccp/dccp.h   |    5 +-
+ net/dccp/output.c |  115 ++++++++++++++++++++++++++++++------------------------
+ net/dccp/proto.c  |   21 +++++++++
+ net/dccp/timer.c  |    2 
+ 4 files changed, 89 insertions(+), 54 deletions(-)
 
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -33,51 +33,8 @@
- #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
- static int ccid2_debug;
- #define ccid2_pr_debug(format, a...)	DCCP_PR_DEBUG(ccid2_debug, format, ##a)
--
--static void ccid2_hc_tx_check_sanity(const struct ccid2_hc_tx_sock *hc)
--{
--	int len = 0;
--	int pipe = 0;
--	struct ccid2_seq *seqp = hc->tx_seqh;
--
--	/* there is data in the chain */
--	if (seqp != hc->tx_seqt) {
--		seqp = seqp->ccid2s_prev;
--		len++;
--		if (!seqp->ccid2s_acked)
--			pipe++;
--
--		while (seqp != hc->tx_seqt) {
--			struct ccid2_seq *prev = seqp->ccid2s_prev;
--
--			len++;
--			if (!prev->ccid2s_acked)
--				pipe++;
--
--			/* packets are sent sequentially */
--			BUG_ON(dccp_delta_seqno(seqp->ccid2s_seq,
--						prev->ccid2s_seq ) >= 0);
--			BUG_ON(time_before(seqp->ccid2s_sent,
--					   prev->ccid2s_sent));
--
--			seqp = prev;
--		}
--	}
--
--	BUG_ON(pipe != hc->tx_pipe);
--	ccid2_pr_debug("len of chain=%d\n", len);
--
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -209,49 +209,29 @@ void dccp_write_space(struct sock *sk)
+ }
+ 
+ /**
+- * dccp_wait_for_ccid - Wait for ccid to tell us we can send a packet
++ * dccp_wait_for_ccid  -  Await CCID send permission
+  * @sk:    socket to wait for
+- * @skb:   current skb to pass on for waiting
+- * @delay: sleep timeout in milliseconds (> 0)
+- * This function is called by default when the socket is closed, and
+- * when a non-zero linger time is set on the socket. For consistency
++ * @delay: timeout in jiffies
++ * This is used by CCIDs which need to delay the send time in process context.
+  */
+-static int dccp_wait_for_ccid(struct sock *sk, struct sk_buff *skb, int delay)
++static int dccp_wait_for_ccid(struct sock *sk, unsigned long delay)
+ {
+-	struct dccp_sock *dp = dccp_sk(sk);
+ 	DEFINE_WAIT(wait);
+-	unsigned long jiffdelay;
+-	int rc;
++	long remaining;
+ 
 -	do {
--		seqp = seqp->ccid2s_prev;
--		len++;
--	} while (seqp != hc->tx_seqh);
+-		dccp_pr_debug("delayed send by %d msec\n", delay);
+-		jiffdelay = msecs_to_jiffies(delay);
 -
--	ccid2_pr_debug("total len=%d\n", len);
--	BUG_ON(len != hc->tx_seqbufc * CCID2_SEQBUF_LEN);
--}
- #else
- #define ccid2_pr_debug(format, a...)
--#define ccid2_hc_tx_check_sanity(hc)
- #endif
- 
- static int ccid2_hc_tx_alloc_seq(struct ccid2_hc_tx_sock *hc)
-@@ -178,8 +135,6 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
- 
- 	ccid2_pr_debug("RTO_EXPIRE\n");
- 
--	ccid2_hc_tx_check_sanity(hc);
+-		prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
 -
- 	/* back-off timer */
- 	hc->tx_rto <<= 1;
+-		sk->sk_write_pending++;
+-		release_sock(sk);
+-		schedule_timeout(jiffdelay);
+-		lock_sock(sk);
+-		sk->sk_write_pending--;
+-
+-		if (sk->sk_err)
+-			goto do_error;
+-		if (signal_pending(current))
+-			goto do_interrupted;
++	prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
++	sk->sk_write_pending++;
++	release_sock(sk);
  
-@@ -204,7 +159,6 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
- 	hc->tx_rpseq    = 0;
- 	hc->tx_rpdupack = -1;
- 	ccid2_change_l_ack_ratio(sk, 1);
--	ccid2_hc_tx_check_sanity(hc);
- out:
- 	bh_unlock_sock(sk);
- 	sock_put(sk);
-@@ -312,7 +266,6 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
- 		}
- 	} while (0);
- 	ccid2_pr_debug("=====\n");
--	ccid2_hc_tx_check_sanity(hc);
- #endif
+-		rc = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb);
+-	} while ((delay = rc) > 0);
+-out:
++	remaining = schedule_timeout(delay);
++
++	lock_sock(sk);
++	sk->sk_write_pending--;
+ 	finish_wait(sk_sleep(sk), &wait);
+-	return rc;
+ 
+-do_error:
+-	rc = -EPIPE;
+-	goto out;
+-do_interrupted:
+-	rc = -EINTR;
+-	goto out;
++	if (signal_pending(current) || sk->sk_err)
++		return -1;
++	return remaining;
  }
  
-@@ -510,7 +463,6 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	int done = 0;
- 	unsigned int maxincr = 0;
+ /**
+@@ -305,7 +285,53 @@ static void dccp_xmit_packet(struct sock
+ 	ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, len);
+ }
  
--	ccid2_hc_tx_check_sanity(hc);
- 	/* check reverse path congestion */
- 	seqno = DCCP_SKB_CB(skb)->dccpd_seq;
+-void dccp_write_xmit(struct sock *sk, int block)
++/**
++ * dccp_flush_write_queue  -  Drain queue at end of connection
++ * Since dccp_sendmsg queues packets without waiting for them to be sent, it may
++ * happen that the TX queue is not empty at the end of a connection. We give the
++ * HC-sender CCID a grace period of up to @time_budget jiffies. If this function
++ * returns with a non-empty write queue, it will be purged later.
++ */
++void dccp_flush_write_queue(struct sock *sk, long *time_budget)
++{
++	struct dccp_sock *dp = dccp_sk(sk);
++	struct sk_buff *skb;
++	long delay, rc;
++
++	while (*time_budget > 0 && (skb = skb_peek(&sk->sk_write_queue))) {
++		rc = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb);
++
++		switch (ccid_packet_dequeue_eval(rc)) {
++		case CCID_PACKET_WILL_DEQUEUE_LATER:
++			/*
++			 * If the CCID determines when to send, the next sending
++			 * time is unknown or the CCID may not even send again
++			 * (e.g. remote host crashes or lost Ack packets).
++			 */
++			DCCP_WARN("CCID did not manage to send all packets\n");
++			return;
++		case CCID_PACKET_DELAY:
++			delay = msecs_to_jiffies(rc);
++			if (delay > *time_budget)
++				return;
++			rc = dccp_wait_for_ccid(sk, delay);
++			if (rc < 0)
++				return;
++			*time_budget -= (delay - rc);
++			/* check again if we can send now */
++			break;
++		case CCID_PACKET_SEND_AT_ONCE:
++			dccp_xmit_packet(sk);
++			break;
++		case CCID_PACKET_ERR:
++			skb_dequeue(&sk->sk_write_queue);
++			kfree_skb(skb);
++			dccp_pr_debug("packet discarded due to err=%ld\n", rc);
++		}
++	}
++}
++
++void dccp_write_xmit(struct sock *sk)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct sk_buff *skb;
+@@ -317,19 +343,9 @@ void dccp_write_xmit(struct sock *sk, in
+ 		case CCID_PACKET_WILL_DEQUEUE_LATER:
+ 			return;
+ 		case CCID_PACKET_DELAY:
+-			if (!block) {
+-				sk_reset_timer(sk, &dp->dccps_xmit_timer,
+-						msecs_to_jiffies(rc)+jiffies);
+-				return;
+-			}
+-			rc = dccp_wait_for_ccid(sk, skb, rc);
+-			if (rc && rc != -EINTR) {
+-				DCCP_BUG("err=%d after dccp_wait_for_ccid", rc);
+-				skb_dequeue(&sk->sk_write_queue);
+-				kfree_skb(skb);
+-				break;
+-			}
+-			/* fall through */
++			sk_reset_timer(sk, &dp->dccps_xmit_timer,
++				       jiffies + msecs_to_jiffies(rc));
++			return;
+ 		case CCID_PACKET_SEND_AT_ONCE:
+ 			dccp_xmit_packet(sk);
+ 			break;
+@@ -648,7 +664,6 @@ void dccp_send_close(struct sock *sk, co
+ 		DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_CLOSE;
  
-@@ -694,8 +646,6 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	if (active) {
+-		dccp_write_xmit(sk, 1);
+ 		dccp_skb_entail(sk, skb);
+ 		dccp_transmit_skb(sk, skb_clone(skb, prio));
+ 		/*
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -731,7 +731,13 @@ int dccp_sendmsg(struct kiocb *iocb, str
+ 		goto out_discard;
  
- 		hc->tx_seqt = hc->tx_seqt->ccid2s_next;
+ 	skb_queue_tail(&sk->sk_write_queue, skb);
+-	dccp_write_xmit(sk,0);
++	/*
++	 * The xmit_timer is set if the TX CCID is rate-based and will expire
++	 * when congestion control permits to release further packets into the
++	 * network. Window-based CCIDs do not use this timer.
++	 */
++	if (!timer_pending(&dp->dccps_xmit_timer))
++		dccp_write_xmit(sk);
+ out_release:
+ 	release_sock(sk);
+ 	return rc ? : len;
+@@ -956,9 +962,22 @@ void dccp_close(struct sock *sk, long ti
+ 		/* Check zero linger _after_ checking for unread data. */
+ 		sk->sk_prot->disconnect(sk, 0);
+ 	} else if (sk->sk_state != DCCP_CLOSED) {
++		/*
++		 * Normal connection termination. May need to wait if there are
++		 * still packets in the TX queue that are delayed by the CCID.
++		 */
++		dccp_flush_write_queue(sk, &timeout);
+ 		dccp_terminate_connection(sk);
  	}
--
--	ccid2_hc_tx_check_sanity(hc);
+ 
++	/*
++	 * Flush write queue. This may be necessary in several cases:
++	 * - we have been closed by the peer but still have application data;
++	 * - abortive termination (unread data or zero linger time),
++	 * - normal termination but queue could not be flushed within time limit
++	 */
++	__skb_queue_purge(&sk->sk_write_queue);
++
+ 	sk_stream_wait_close(sk, timeout);
+ 
+ adjudge_to_death:
+--- a/net/dccp/timer.c
++++ b/net/dccp/timer.c
+@@ -249,7 +249,7 @@ static void dccp_write_xmitlet(unsigned 
+ 	if (sock_owned_by_user(sk))
+ 		sk_reset_timer(sk, &dccp_sk(sk)->dccps_xmit_timer, jiffies + 1);
+ 	else
+-		dccp_write_xmit(sk, 0);
++		dccp_write_xmit(sk);
+ 	bh_unlock_sock(sk);
  }
  
- static int ccid2_hc_tx_init(struct ccid *ccid, struct sock *sk)
-@@ -730,8 +680,6 @@ static int ccid2_hc_tx_init(struct ccid *ccid, struct sock *sk)
- 	hc->tx_last_cong = jiffies;
- 	setup_timer(&hc->tx_rtotimer, ccid2_hc_tx_rto_expire,
- 			(unsigned long)sk);
--
--	ccid2_hc_tx_check_sanity(hc);
- 	return 0;
- }
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -243,8 +243,9 @@ extern void dccp_reqsk_send_ack(struct s
+ extern void dccp_send_sync(struct sock *sk, const u64 seq,
+ 			   const enum dccp_pkt_type pkt_type);
  
+-extern void dccp_write_xmit(struct sock *sk, int block);
+-extern void dccp_write_space(struct sock *sk);
++extern void   dccp_write_xmit(struct sock *sk);
++extern void   dccp_write_space(struct sock *sk);
++extern void   dccp_flush_write_queue(struct sock *sk, long *time_budget);
+ 
+ extern void dccp_init_xmit_timers(struct sock *sk);
+ static inline void dccp_clear_xmit_timers(struct sock *sk)
+
