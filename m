@@ -1,36 +1,37 @@
-From: gerrit@erg.abdn.ac.uk
-Date: Thu, 12 Aug 2010 11:02:33 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 13 Aug 2010 05:15:45 +0000
 Subject: Re: Problems with idle DCCP connections
-Message-Id: <48357.148.187.160.35.1281610953.squirrel@148.187.160.35>
+Message-Id: <20100813051545.GA6799@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <1280524030.9374.108.camel@sjerolaptop.homelinux.net>
 In-Reply-To: <1280524030.9374.108.camel@sjerolaptop.homelinux.net>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-> I have also done some testing with CCID-3 (Linux 2.6.35 kernel.org tree)
-> and the same symptoms are present there, but much, much less often.
-> Maybe once every for every 2 hours the dccp connection is transferring
-> data, as apposed to once for every 2 minutes in CCID-2.
->
-Looking back at your other post, it is likely that you will see the
-same behaviour also with CCID-3 in the test tree.
-
-If I understand your setting of Delay Tolerant Networking correctly, then
-this is a connection which has long idle phases.
-
-The old TFRC specification (RFC 3448) penalized such connections (see
-RFC 5348, 9.1), the new specification has support for data-limited
-intervals (RFC 5348, 4.3), but the code is still at the in-between state
-of rfc3448bis which preceded RFC 5348.
-
-Hence it is a good time to add this missing support.
-
-In the meantime, for testing CCID-248 might be of interest
-    CONFIG_IP_DCCP_CCID0=y
-and then, after modprobe -v dccp,
-    echo  248 > /proc/sys/net/dccp/default/tx_ccid
-    echo  248 > /proc/sys/net/dccp/default/rx_ccid
-
+U2FtdWVsLCAtCnwgSG93ZXZlciwgaW4gbXkgdGVzdHMsIERDQ1AgY2xhbXBzIHRoZSBzZW5kaW5n
+IHJhdGUgZG93biB0byB0aHJlZSBwYWNrZXRzCnwgcGVyIHNlY29uZCBhZnRlciBhIHNob3J0IGlk
+bGUgcGVyaW9kIChhIGZldyBzZWNvbmRzKSBhbmQgdGhlbiBuZXZlcgp8IGF0dGVtcHRzIHRvIGlu
+Y3JlYXNlIHRoYXQgcmF0ZS4gVGhpcyBzZWVtcyB0byBiZSBhIHZlcnkgdW51c3VhbCBhbmQKfCBj
+b3VudGVyLWludHVpdGl2ZSBiZWhhdmlvci4KfCBIYXMgYW55b25lIGVsc2Ugc2VlbiBzaW1pbGFy
+IGJlaGF2aW9yPyBUaGlzIHNlZW1zIHRvIGNvbnRyYWRpY3QgUkZDNDM0MQp8IHNlY3Rpb24gNS4x
+IHdoaWNoIHNheXMgdGhhdCBDQ0lEMiBzaG91bGQgc2xvdyBzdGFydCBhZnRlciBhbiBpZGxlCnwg
+cGVyaW9kLiBJcyB0aGlzIG5vdCBpbXBsZW1lbnRlZCB5ZXQgb3IgaXMgaXQgYSBidWc/CgpJIHRv
+b2sgYW5vdGhlciBsb29rIHRocm91Z2ggdGhlIHBhdGNoZXMgYW5kIGZvdW5kIGFuIGltcGxlbWVu
+dGF0aW9uIG9mClRDUCBDb25nZXN0aW9uIFdpbmRvdyBWYWxpZGF0aW9uIChDV1YsIFJGQyAyODYx
+KSBhdCBob21lLiBUaGlzIGltcGxlbWVudHMKc2xvdy1zdGFydCBhZnRlciBpZGxlIGFzIGEgYnlw
+cm9kdWN0LiAKCldoZW4gSSBvcmlnaW5hbGx5IHRlc3RlZCB0aGlzIEkgZm91bmQgdGhhdCBDV1Yg
+cHJvdmVkIHZlcnkgd29ydGh3aGlsZSB0bwpoYXZlIGluIENDSUQtMi4KCkNvdWxkIEkgdGh1cyBh
+c2sgeW91IHRvIHB1bGwgCiAgICAgIGdpdDovL2VkZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9kY2Nw
+X2V4cCAgW3N1YnRyZWUgJ2RjY3AnXQoKb25jZSBhZ2FpbiBhbmQgcmV0cnkgd2l0aCBDV1YgKGl0
+IGlzIHRoZSBjY2lkMl9kb19jd3YgbW9kdWxlIHBhcmFtZXRlciwKcGVyIGRlZmF1bHQgaXQgaXMg
+b24pPyBUbyBtZSBpdCBzZWVtcyBsaWtlbHkgdGhhdCB0aGlzIGNvdWxkIGJlIGhlbHBmdWwKZm9y
+IHdoYXQgeW91IGFyZSB0cnlpbmcgdG8gZG8uCgpUaGUgcGF0Y2ggaXMgYXQgCiAgICBodHRwOi8v
+ZWRlbi1mZWVkLmVyZy5hYmRuLmFjLnVrL2NnaS1iaW4vZ2l0d2ViLmNnaT9w3GNwX2V4cC5naXQ7
+YT1jb21taXRkaWZmO2ieNjdhMzAyNWIxN2QwN2Q3MmQzMGJjNDhkMDhhY2NiOWE2NDg3ZjMKCmFu
+ZCB3aWxsIGFsc28sIHBlciBmb3JtYSwgYmUgc3VibWl0dGVkIHRvIHRoZSBsaXN0IGp1c3Qgbm93
+LgotLQpUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMgbGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJz
+Y3JpYmUgZGNjcCIgaW4KdGhlIGJvZHkgb2YgYSBtZXNzYWdlIHRvIG1ham9yZG9tb0B2Z2VyLmtl
+cm5lbC5vcmcKTW9yZSBtYWpvcmRvbW8gaW5mbyBhdCAgaHR0cDovL3ZnZXIua2VybmVsLm9yZy9t
+YWpvcmRvbW8taW5mby5odG1s
