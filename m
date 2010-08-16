@@ -1,43 +1,99 @@
-From: Ian McDonald <ian.mcdonald@jandi.co.uk>
-Date: Mon, 30 Aug 2010 17:33:38 +0000
-Subject: Re: DCCP_BUG called
-Message-Id: <AANLkTimobXLZX+LDEeEQjyRYZAZvzkoz+xTCkzT8O0S=@mail.gmail.com>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 16 Aug 2010 05:19:36 +0000
+Subject: dccp test-tree [Patch 1/1] ccid-3: use per-route min-RTO and/or
+Message-Id: <20100816051936.GD3571@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <4C6D3DD8.4080606@pu-pm.univ-fcomte.fr>
-In-Reply-To: <4C6D3DD8.4080606@pu-pm.univ-fcomte.fr>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 26 August 2010 21:12, Eugen Dedu <Eugen.Dedu@pu-pm.univ-fcomte.fr> wrote:
-> We have a working environment, but maybe there is some useful stuff in your scripts, send them to us if it does not take you much time.
->
-> Thank you,
-> Eugen
->
+This patch relates to the similar one submitted last week for CCID-2.
 
-To turn rate limiting and delay on I do:
-/sbin/tc qdisc add dev lan0 root handle 1:0 netem delay $1ms
-/sbin/tc qdisc add dev lan1 root handle 1:0 netem delay $1ms
-/sbin/tc qdisc add dev lan0 parent 1:1 handle 10: tbf rate $2kbit
-buffer 10000 limit 30000
+It replaces the hardcoded (Kconfig) value of the minimum RTO value with
+a reconfigurable, per-route value which falls back to the TCP minimum
+RTO value.
 
-and off:
-/sbin/tc qdisc del dev lan0 parent 1:1
-/sbin/tc qdisc del dev lan0 root
-/sbin/tc qdisc del dev lan1 root
+Leando, Ivo, can you please have a look and indicate whether you are ok
+with this? If yes I would like to also update the CCID-4 tree to make it
+consistent with the test tree - for this reason the test tree has not yet
+been updated.
 
-To turn on packet loss and delay I do:
-/sbin/tc qdisc add dev lan1 root netem delay $1ms loss $3%
-/sbin/tc qdisc add dev lan0 root netem delay $1ms loss $2%
+>>>>>>>>>>>>>>>>>>>>>>> Patch <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+dccp ccid-3: use per-route RTO or TCP RTO as fallback
 
-and off:
-/sbin/tc qdisc del dev lan1 root netem
-/sbin/tc qdisc del dev lan0 root netem
+This makes the TCP (per-route) RTO value also available to CCID-3, hence it
+is now possible to influence this value at runtime rather than, as before,
+via Kconfig.
 
-These are all from the box in the middle.
+The same effect as the default Kconfig option of 100ms is now achieved by
 
-Regards
+> ip route replace to unicast 192.168.0.0/24 rto_min 100j dev eth0
+ 
+(assuming HZ00).
 
-Ian
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/Kconfig |   31 -------------------------------
+ net/dccp/ccids/ccid3.c |    9 ++++-----
+ 2 files changed, 4 insertions(+), 36 deletions(-)
+
+--- a/net/dccp/ccids/Kconfig
++++ b/net/dccp/ccids/Kconfig
+@@ -47,37 +47,6 @@ config IP_DCCP_CCID3_DEBUG
+ 
+ 	  If in doubt, say N.
+ 
+-config IP_DCCP_CCID3_RTO
+-	  int "Use higher bound for nofeedback timer"
+-	  default 100
+-	  depends on IP_DCCP_CCID3 && EXPERIMENTAL
+-	  ---help---
+-	    Use higher lower bound for nofeedback timer expiration.
+-
+-	    The TFRC nofeedback timer normally expires after the maximum of 4
+-	    RTTs and twice the current send interval (RFC 3448, 4.3). On LANs
+-	    with a small RTT this can mean a high processing load and reduced
+-	    performance, since then the nofeedback timer is triggered very
+-	    frequently.
+-
+-	    This option enables to set a higher lower bound for the nofeedback
+-	    value. Values in units of milliseconds can be set here.
+-
+-	    A value of 0 disables this feature by enforcing the value specified
+-	    in RFC 3448. The following values have been suggested as bounds for
+-	    experimental use:
+-		* 16-20ms to match the typical multimedia inter-frame interval
+-		* 100ms as a reasonable compromise [default]
+-		* 1000ms corresponds to the lower TCP RTO bound (RFC 2988, 2.4)
+-
+-	    The default of 100ms is a compromise between a large value for
+-	    efficient DCCP implementations, and a small value to avoid disrupting
+-	    the network in times of congestion.
+-
+-	    The purpose of the nofeedback timer is to slow DCCP down when there
+-	    is serious network congestion: experimenting with larger values should
+-	    therefore not be performed on WANs.
+-
+ config IP_DCCP_TFRC_LIB
+ 	def_bool y if IP_DCCP_CCID3
+ 
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -461,12 +461,11 @@ done_computing_x:
+ 
+ 	/*
+ 	 * Update timeout interval for the nofeedback timer.
+-	 * We use a configuration option to increase the lower bound.
+-	 * This can help avoid triggering the nofeedback timer too
+-	 * often ('spinning') on LANs with small RTTs.
++	 * We use the current (per-route) value of the TCP RTO as lower bound
++	 * to slow down rate-halving on networks with small RTTs (loopback,
++	 * running DCCP in a virtual machine, Gbit ethernet, etc).
+ 	 */
+-	hc->tx_t_rto = max_t(u32, 4 * hc->tx_rtt, (CONFIG_IP_DCCP_CCID3_RTO *
+-						       (USEC_PER_SEC / 1000)));
++	hc->tx_t_rto = max(4 * hc->tx_rtt, USEC_PER_SEC/HZ * tcp_rto_min(sk));
+ 	/*
+ 	 * Schedule no feedback timer to expire in
+ 	 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
