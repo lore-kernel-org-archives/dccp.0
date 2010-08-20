@@ -1,7 +1,7 @@
-From: Eugen Dedu <Eugen.Dedu@pu-pm.univ-fcomte.fr>
-Date: Fri, 20 Aug 2010 08:46:23 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 20 Aug 2010 10:40:29 +0000
 Subject: Re: DCCP_BUG called
-Message-Id: <4C6E40DF.4090509@pu-pm.univ-fcomte.fr>
+Message-Id: <20100820104028.GA3438@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 References: <4C6D3DD8.4080606@pu-pm.univ-fcomte.fr>
 In-Reply-To: <4C6D3DD8.4080606@pu-pm.univ-fcomte.fr>
@@ -10,54 +10,32 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 20/08/10 07:15, Gerrit Renker wrote:
->>    sudo $TC qdisc add dev $IF root handle 1: htb default 10
->>    sudo $TC class add dev $IF parent 1: classid 1:10 htb rate $up_rate
->>    sudo $TC filter add dev $IF protocol ip parent 1:0 prio 1 u32 match ip
->> dst $dest flowid 1:10
->>    sudo $TC qdisc add dev $IF parent 1:10 handle 40: sfq perturb 10 limit 2
->>
->> taken from http://lartc.org/howto/, we receive many errors like this:
->>
->> [27799.691275] BUG: err=1 after ccid_hc_tx_packet_sent at
->> /build/buildd/linux-2.6.32/net/dccp/output.c:307/dccp_write_xmit()
->> [27799.691288]<IRQ>   [<ffffffffa0441db5>] dccp_write_xmit+0x165/0x310
->> [dccp]
->> [27799.691308]  [<ffffffffa0443ac0>] ? dccp_write_xmit_timer+0x0/0x80 [dccp]
->> [27799.691315]  [<ffffffffa0443b3a>] dccp_write_xmit_timer+0x7a/0x80 [dccp]
->>
->> We found that they are triggered by the following code in net/dccp/output.c:
->> 306   err = dccp_transmit_skb(sk, skb);
->> 307   ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, 0, len);
->> 308   if (err)
->> 309     DCCP_BUG("err=%d after ccid_hc_tx_packet_sent",
->> 310              err);
->>
->> Is there a way to fix to workaround that?
+>> I haven't verified this, but I am almost sure that the problem is rectified in the
+>> DCCP test tree which I would like to encourage you to use for all testing, since it
 >
-> The 'err = 1' is triggered because the qdisc can refuse to take a packet, so that
+> Thank you for your answer.  I have not yet tested with DCCP test tree  
+> indeed, but I see that the code involved is there too, i.e.:
 >
->   #define NET_XMIT_DROP           0x01    /* skb dropped                  */
+>  306  err = dccp_transmit_skb(sk, skb);
+>  307  ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, 0, len);
+>  308  if (err)
+>  309    DCCP_BUG("err=%d after ccid_hc_tx_packet_sent",
+>  310             err);
 >
-> is returned. Thus what you are seeing is not a real bug, but rather a misplaced
-> BUG statement.
->
-> I haven't verified this, but I am almost sure that the problem is rectified in the
-> DCCP test tree which I would like to encourage you to use for all testing, since it
 
-Thank you for your answer.  I have not yet tested with DCCP test tree 
-indeed, but I see that the code involved is there too, i.e.:
+Agree, in this case it will also trigger the BUG warning. It seems that it rather should be 
 
-  306  err = dccp_transmit_skb(sk, skb);
-  307  ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, 0, len);
-  308  if (err)
-  309    DCCP_BUG("err=%d after ccid_hc_tx_packet_sent",
-  310             err);
+   if (err < 0)
+      DCCP_BUG(...)
 
-and in dccp_transmit_skb():
+but I need to go through this at home. One reason why this is there is the congestion control.
 
-  139                 err = icsk->icsk_af_ops->queue_xmit(skb);
-  140                 return net_xmit_eval(err);
+The assumption in hc_tx_packet_sent() is normally that the packet has been sent, there is no
+second function to register packets that have not been sent. That case is treated as if the
+packet got lost in the network, i.e. the loss is registered later, via the receiver feedback.
 
--- 
-Eugen
+Hence it seems to me that we can remove this, or replace by a debug/warning statement.
+
+
+Thanks a lot for reporting the issue, I will reply again Monday.
+Gerrit
