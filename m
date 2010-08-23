@@ -1,99 +1,185 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 30 Aug 2010 05:23:11 +0000
-Subject: [PATCH 2/5] dccp ccid-2: Remove wrappers around sk_{reset,stop}_timer()
-Message-Id: <1283145794-5615-3-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 23 Aug 2010 05:41:38 +0000
+Subject: [PATCH 3/5] dccp ccid-2: Remove redundant sanity tests
+Message-Id: <1282542100-5799-4-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This removes the wrappers around the sk timer functions, since not much is
-gained from using them: the BUG_ON in start_rto_timer will never trigger
-since that function is called only if:
+This removes the ccid2_hc_tx_check_sanity function: it is redundant.
 
- * the RTO timer expires (rto_expire, and then timer_pending() is false);
- * in tx_packet_sent only if !timer_pending() (BUG_ON is redundant here);
- * previously in new_ack, after stopping the timer (timer_pending() false).
+Details:
+====
+The tx_check_sanity function performs three tests:
+ 1) it checks that the circular TX list is sorted
+    - in ascending order of sequence number (ccid2s_seq)
+    - and time (ccid2s_sent),
+    - in the direction from `tail' (hctx_seqt) to `head' (hctx_seqh);
+ 2) it ensures that the entire list has the length seqbufc * CCID2_SEQBUF_LEN;
+ 3) it ensures that pipe equals the number of packets that were not
+    marked `acked' (ccid2s_acked) between `tail' and `head'.
 
-Removing the wrappers also clears the way for eventually replacing the
-RTO timer with the icsk-retransmission-timer, as it is already part of the
-DCCP socket.
+The following argues that each of these tests is redundant, this can be verified
+by going through the code.
+
+(1) is not necessary, since both time and GSS increase from one packet to the
+next, so that subsequent insertions in tx_packet_sent (which advance the `head'
+pointer) will be in ascending order of time and sequence number.
+
+In (2), the length of the list is always equal to seqbufc times CCID2_SEQBUF_LEN
+(set to 1024) unless allocation caused an earlier failure, because:
+ * at initialisation (tx_init), there is one chunk of size 1024 and seqbufc=1;
+ * subsequent calls to tx_alloc_seq take place whenever head->next = tail in
+   tx_packet_sent; then a new chunk of size 1024 is inserted between head and
+   tail, and seqbufc is incremented by one.
+
+To show that (3) is redundant requires looking at two cases.
+
+The `pipe' variable of the TX socket is incremented only in tx_packet_sent, and
+decremented in tx_packet_recv.  When head = tail (TX history empty) then pipe
+should be 0, which is the case directly after initialisation and after a
+retransmission timeout has occurred (ccid2_hc_tx_rto_expire).
+
+The first case involves parsing Ack Vectors for packets recorded in the live
+portion of the buffer, between tail and head. For each packet marked by the
+receiver as received (state 0) or ECN-marked (state 1), pipe is decremented by
+one, so for all such packets the BUG_ON in tx_check_sanity will not trigger.
+
+The second case is the loss detection in the second half of tx_packet_recv,
+below the comment "Check for NUMDUPACK".
+
+The first while-loop here ensures that the sequence number of `seqp' is either
+above or equal to `high_ack', or otherwise equal to the highest sequence number
+sent so far (of the entry head->prev, as head points to the next unsent entry).
+The next while-loop ("while (1)") counts the number of acked packets starting
+from that position of seqp, going backwards in the direction from head->prev to
+tail. If NUMDUPACK=3 such packets were counted within this loop, `seqp' points
+to the last acknowledged packet of these, and the "if (done = NUMDUPACK)" block
+is entered next.
+The while-loop contained within that block in turn traverses the list backwards,
+from head to tail; the position of `seqp' is saved in the variable `last_acked'.
+For each packet not marked as `acked', a congestion event is triggered within
+the loop, and pipe is decremented. The loop terminates when `seqp' has reached
+`tail', whereupon tail is set to the position previously stored in `last_acked'.
+Thus, between `last_acked' and the previous position of `tail',
+ - pipe has been decremented earlier if the packet was marked as state 0 or 1;
+ - pipe was decremented if the packet was not marked as acked.
+That is, pipe has been decremented by the number of packets between `last_acked'
+and the previous position of `tail'. As a consequence, pipe now again reflects
+the number of packets which have not (yet) been acked between the new position
+of tail (at `last_acked') and head->prev, or 0 if head=tail. The result is that
+the BUG_ON condition in check_sanity will also not be triggered, hence the test
+(3) is also redundant.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid2.c |   28 +++-------------------------
- 1 files changed, 3 insertions(+), 25 deletions(-)
+ net/dccp/ccids/ccid2.c |   52 ------------------------------------------------
+ 1 files changed, 0 insertions(+), 52 deletions(-)
 
 --- a/net/dccp/ccids/ccid2.c
 +++ b/net/dccp/ccids/ccid2.c
-@@ -111,8 +111,6 @@ static void ccid2_change_l_ack_ratio(struct sock *sk, u32 val)
- 	dp->dccps_l_ack_ratio = val;
- }
- 
--static void ccid2_start_rto_timer(struct sock *sk);
+@@ -33,51 +33,8 @@
+ #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
+ static int ccid2_debug;
+ #define ccid2_pr_debug(format, a...)	DCCP_PR_DEBUG(ccid2_debug, format, ##a)
 -
- static void ccid2_hc_tx_rto_expire(unsigned long data)
- {
- 	struct sock *sk = (struct sock *)data;
-@@ -131,7 +129,7 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
- 	if (hc->tx_rto > DCCP_RTO_MAX)
- 		hc->tx_rto = DCCP_RTO_MAX;
- 
--	ccid2_start_rto_timer(sk);
-+	sk_reset_timer(sk, &hc->tx_rtotimer, jiffies + hc->tx_rto);
- 
- 	/* adjust pipe, cwnd etc */
- 	hc->tx_ssthresh = hc->tx_cwnd / 2;
-@@ -153,16 +151,6 @@ out:
- 	sock_put(sk);
- }
- 
--static void ccid2_start_rto_timer(struct sock *sk)
+-static void ccid2_hc_tx_check_sanity(const struct ccid2_hc_tx_sock *hc)
 -{
--	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
+-	int len = 0;
+-	int pipe = 0;
+-	struct ccid2_seq *seqp = hc->tx_seqh;
 -
--	ccid2_pr_debug("setting RTO timeout=%u\n", hc->tx_rto);
+-	/* there is data in the chain */
+-	if (seqp != hc->tx_seqt) {
+-		seqp = seqp->ccid2s_prev;
+-		len++;
+-		if (!seqp->ccid2s_acked)
+-			pipe++;
 -
--	BUG_ON(timer_pending(&hc->tx_rtotimer));
--	sk_reset_timer(sk, &hc->tx_rtotimer, jiffies + hc->tx_rto);
+-		while (seqp != hc->tx_seqt) {
+-			struct ccid2_seq *prev = seqp->ccid2s_prev;
+-
+-			len++;
+-			if (!prev->ccid2s_acked)
+-				pipe++;
+-
+-			/* packets are sent sequentially */
+-			BUG_ON(dccp_delta_seqno(seqp->ccid2s_seq,
+-						prev->ccid2s_seq ) >= 0);
+-			BUG_ON(time_before(seqp->ccid2s_sent,
+-					   prev->ccid2s_sent));
+-
+-			seqp = prev;
+-		}
+-	}
+-
+-	BUG_ON(pipe != hc->tx_pipe);
+-	ccid2_pr_debug("len of chain=%d\n", len);
+-
+-	do {
+-		seqp = seqp->ccid2s_prev;
+-		len++;
+-	} while (seqp != hc->tx_seqh);
+-
+-	ccid2_pr_debug("total len=%d\n", len);
+-	BUG_ON(len != hc->tx_seqbufc * CCID2_SEQBUF_LEN);
 -}
--
- static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
- {
- 	struct dccp_sock *dp = dccp_sk(sk);
-@@ -239,9 +227,7 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
- 	}
+ #else
+ #define ccid2_pr_debug(format, a...)
+-#define ccid2_hc_tx_check_sanity(hc)
  #endif
  
--	/* setup RTO timer */
--	if (!timer_pending(&hc->tx_rtotimer))
--		ccid2_start_rto_timer(sk);
-+	sk_reset_timer(sk, &hc->tx_rtotimer, jiffies + hc->tx_rto);
+ static int ccid2_hc_tx_alloc_seq(struct ccid2_hc_tx_sock *hc)
+@@ -178,8 +135,6 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
  
- #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
- 	do {
-@@ -320,14 +306,6 @@ out_invalid_option:
- 	return -1;
+ 	ccid2_pr_debug("RTO_EXPIRE\n");
+ 
+-	ccid2_hc_tx_check_sanity(hc);
+-
+ 	/* back-off timer */
+ 	hc->tx_rto <<= 1;
+ 
+@@ -204,7 +159,6 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
+ 	hc->tx_rpseq    = 0;
+ 	hc->tx_rpdupack = -1;
+ 	ccid2_change_l_ack_ratio(sk, 1);
+-	ccid2_hc_tx_check_sanity(hc);
+ out:
+ 	bh_unlock_sock(sk);
+ 	sock_put(sk);
+@@ -312,7 +266,6 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ 		}
+ 	} while (0);
+ 	ccid2_pr_debug("=====\n");
+-	ccid2_hc_tx_check_sanity(hc);
+ #endif
  }
  
--static void ccid2_hc_tx_kill_rto_timer(struct sock *sk)
--{
--	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
--
--	sk_stop_timer(sk, &hc->tx_rtotimer);
--	ccid2_pr_debug("deleted RTO timer\n");
--}
--
- /**
-  * ccid2_rtt_estimator - Sample RTT and compute RTO using RFC2988 algorithm
-  * This code is almost identical with TCP's tcp_rtt_estimator(), since
-@@ -692,7 +670,7 @@ static void ccid2_hc_tx_exit(struct sock *sk)
- 	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
- 	int i;
+@@ -510,7 +463,6 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	int done = 0;
+ 	unsigned int maxincr = 0;
  
--	ccid2_hc_tx_kill_rto_timer(sk);
-+	sk_stop_timer(sk, &hc->tx_rtotimer);
+-	ccid2_hc_tx_check_sanity(hc);
+ 	/* check reverse path congestion */
+ 	seqno = DCCP_SKB_CB(skb)->dccpd_seq;
  
- 	for (i = 0; i < hc->tx_seqbufc; i++)
- 		kfree(hc->tx_seqbuf[i]);
+@@ -694,8 +646,6 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 
+ 		hc->tx_seqt = hc->tx_seqt->ccid2s_next;
+ 	}
+-
+-	ccid2_hc_tx_check_sanity(hc);
+ }
+ 
+ static int ccid2_hc_tx_init(struct ccid *ccid, struct sock *sk)
+@@ -730,8 +680,6 @@ static int ccid2_hc_tx_init(struct ccid *ccid, struct sock *sk)
+ 	hc->tx_last_cong = jiffies;
+ 	setup_timer(&hc->tx_rtotimer, ccid2_hc_tx_rto_expire,
+ 			(unsigned long)sk);
+-
+-	ccid2_hc_tx_check_sanity(hc);
+ 	return 0;
+ }
+ 
