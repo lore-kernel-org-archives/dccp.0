@@ -1,7 +1,7 @@
-From: Eugen Dedu <Eugen.Dedu@pu-pm.univ-fcomte.fr>
-Date: Wed, 25 Aug 2010 13:21:08 +0000
+From: gerrit@erg.abdn.ac.uk
+Date: Thu, 26 Aug 2010 11:08:58 +0000
 Subject: Re: DCCP_BUG called
-Message-Id: <4C7518C4.9020603@pu-pm.univ-fcomte.fr>
+Message-Id: <40246.148.187.160.35.1282820938.squirrel@148.187.160.35>
 List-Id: <dccp.vger.kernel.org>
 References: <4C6D3DD8.4080606@pu-pm.univ-fcomte.fr>
 In-Reply-To: <4C6D3DD8.4080606@pu-pm.univ-fcomte.fr>
@@ -10,134 +10,59 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 23/08/10 07:29, Gerrit Renker wrote:
-> Eugen,-
->>>>     sudo $TC qdisc add dev $IF parent 1:10 handle 40: sfq perturb 10 limit 2
->>>>
->>>> taken from http://lartc.org/howto/, we receive many errors like this:
->>>>
->>>> [27799.691275] BUG: err=1 after ccid_hc_tx_packet_sent at
->>>> /build/buildd/linux-2.6.32/net/dccp/output.c:307/dccp_write_xmit()
->>>> [27799.691288]<IRQ>  [<ffffffffa0441db5>] dccp_write_xmit+0x165/0x310 [dccp]
->>>> [27799.691308]      [<ffffffffa0443ac0>] ? dccp_write_xmit_timer+0x0/0x80 [dccp]
->>>> [27799.691315]      [<ffffffffa0443b3a>] dccp_write_xmit_timer+0x7a/0x80 [dccp]
->>>>
->>>> We found that they are triggered by the following code in net/dccp/output.c:
->>>> 306   err = dccp_transmit_skb(sk, skb);
->>>> 307   ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, 0, len);
->>>> 308   if (err)
->>>> 309     DCCP_BUG("err=%d after ccid_hc_tx_packet_sent",
->>>> 310              err);
->>>>
->>>> Is there a way to fix to workaround that?
-> <snip>
->
->>> I haven't verified this, but I am almost sure that the problem is rectified in the
->>> DCCP test tree which I would like to encourage you to use for all testing, since it
->>
->> Thank you for your answer.  I have not yet tested with DCCP test tree
->> indeed, but I see that the code involved is there too, i.e.:
->>
->>   306  err = dccp_transmit_skb(sk, skb);
->>   307  ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, 0, len);
->>   308  if (err)
->>   309    DCCP_BUG("err=%d after ccid_hc_tx_packet_sent",
->>   310             err);
->>
-> The above is not in the test tree, please see below. Can you please double-check
-> that, after pulling the tree from git://eden-feed.erg.abdn.ac.uk/dccp_exp.git,
-> the subtree 'dccp' is checked out?
->
-> The 'master' branch of that tree is identical with netdev-2.6, which is why the
-> above two code parts are identical. The 'dccp' subtree is the actual DCCP test
-> tree, this in turn has the 'ccid4' subtree (which eventually will be integrated
-> into the test tree).
->
->
-> In the test tree the BUG has been demoted to a debug call,
->
->    286          err = dccp_transmit_skb(sk, skb);
->    287          if (err)
->    288                  dccp_pr_debug("transmit_skb() returned err=%d\n", err);
->    289          /*
->    290           * Register this one as sent even if an error occurred. To the remote
->    291           * end a local packet drop is indistinguishable from network loss, i.e.
->    292           * any local drop will eventually be reported via receiver feedback.
->    293           */
->    294          ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, len);
->
-> The return code will appear in the logs if /sys/module/dccp/parameters/dccp_debug = Y
-> and if either the queue_xmit() function pointer returned error<  0, qdisc returned a
-> positive NET_XMIT_.*, or  the device a positive NETDEV_TX_.* code (linux/netdevice.h).
->
-> DCCP here does not catch the case of local drop or congestion, as it is done by TCP
-> in net/ipv4/tcp_output.c:tcp_transmit_skb(), the corresponding passage is:
->
->     894          err = icsk->icsk_af_ops->queue_xmit(skb);
->     895          if (likely(err<= 0))
->     896                  return err;
->     897
->     898          tcp_enter_cwr(sk, 1);
->     899
->     900          return net_xmit_eval(err);
->
-> If TCP is not already in a loss state (TCP_CA_Open, TCP_CA_Disorder), this causes
-> a state transition to the CWR state, and 'CWR' is also signalled to an ECN-capable
-> receiver.
->
-> I believe that there was an earlier discussion about also catching local congestion
-> in DCCP, at least I see in that the reason why the above debug statement is still
-> there.
->
-> However, the response would need to be resolved in the TX CCID, since the handling of
-> loss and ECN depends on the individual CCID (RFC 4340, 12):
->   * in TFRC (RFC 5348, 4342, 5622):
->     -  without ECN a loss is detected 3 packets later (RFC 5348, 5.1);
->     -  the local loss of the packet can not be signalled via ECN in TFRC (CCID-3/4),
->        since only the "ECE" bit in the IP header is evaluated, which requires first
->        to deliver the packet (RFC 4342, RFC 5622);
->   * CCID-2 (RFC 4341) behaves in the same way, i.e.
->     - loss detected with a delay of 3 packets or
->     - packet received, but ECN-marked (ECE bit set);
->   * in both cases, ECN nonce sums are returned (1-bit field in CCID-3/4 Loss Intervals
->     option, or Ack Vector type 38/39 for CCID-2), however, as described in section 12.2
->     of RFC 4340, (local) packet drop destroys the ECN nonce.
->
-> Long story short -- hopefully in future there will be a way of doing something smart
-> in response to local drop, as currently done in TCP.
+> Let's say that qdisc on the sender allows 2Mb/s to get out.  A sender
+> application sends a file at 3Mb/s to DCCP.  Currently, DCCP "eats" it
+> completely, i.e. at 3Mb/s.  However, about 1Mb/s is "eaten" (lost)
+> locally because of qdisc, and only 2Mb/s are sent to the network.  DCCP
+> indeed sees that some packets are lost (the ones lost locally), that is
+> why it computes a rate ("computed transmit rate") of 2Mb/s indeed (we
+> printed it to the screen in our tests).  The problem is that DCCP "eats"
+> 3Mb/s instead of eating 2Mb/s.
 
-Hi,
+Up to here I agree; but there is nothing wrong here. DCCP would even
+"eat" 10Gbps if it were given large enough buffers. It is not a bug
+since the actuator for the sending rate is the output, not the input.
 
-And sorry to replay so late.
+It is made complicated since here are two control circuits wired in series:
+ * TFRC as rate-based protocol functions similar to a Token Bucket Filter;
+ * the Queueing Discipline attached to the output interface.
 
-In the test tree you pointed out DCCP_BUG is indeed changed to debug.
+There are three different speeds:
+ * the speed at which the application puts data into the socket (3Mbps)
+ * the output rate of DCCP (circa 2Mbps as printed)
+ * the target rate of the qdisc (also set to 2Mbps)
 
-I explained wrongly the problem in the original e-mail.  In our tests 
-the problem was not:
-- that DCCP_BUG was executed (this is not a bug in itself)
-- that the DCCP sender does not receive feedback about locally lost 
-packets (we assume it receives it, since computed transmit rate is good, 
-see below)
+You have not said whether the application uses constant bitrate, it looks
+as if. In this case the two control circuits interact
+ * initially TFRC will send at a higher rate (slow-start);
+ * to shape outgoing traffic, packets will be dropped at the outgoing
+   interface;
+ * the receiver (at the other end) will detect loss and feed it back
+ * TFRC will recompute its sending rate and adjust in proportion to
+   the experienced loss;
+ * this stabilizes at some point where TFRC has converged to about 2Mbps
 
-but it was the following:
 
-Let's say that qdisc on the sender allows 2Mb/s to get out.  A sender 
-application sends a file at 3Mb/s to DCCP.  Currently, DCCP "eats" it 
-completely, i.e. at 3Mb/s.  However, about 1Mb/s is "eaten" (lost) 
-locally because of qdisc, and only 2Mb/s are sent to the network.  DCCP 
-indeed sees that some packets are lost (the ones lost locally), that is 
-why it computes a rate ("computed transmit rate") of 2Mb/s indeed (we 
-printed it to the screen in our tests).  The problem is that DCCP "eats" 
-3Mb/s instead of eating 2Mb/s.  In fact, it seems to us that when a 
-packet is lost locally (DCCP_BUG called), the next available packet from 
-DCCP socket is immediately taken into account, as if the other had not 
-been "eaten" and had not been taken into account as a sent packet.
+> In fact, it seems to us that when a packet is lost locally (DCCP_BUG
+> called), the next available packet from DCCP socket is immediately
+> taken into account, as if the other had not been "eaten" and had not been
+> taken into account as a sent packet.
 
-Otherwise said : let's say that DCCP/TFRC (we have always used TFRC) 
-sends one packet each N ms.  Normally, when DCCP sends a packet, no 
-matter if it gets out or is lost locally, it should wait the interval of 
-time (N ms) before sending the next packet; but this does not happen 
-when a packet is lost *locally*.
+Yes that is what was trying to say: TCP feeds back local loss immediately
+(but also notifies the receiver via ECN CWR), whereas DCCP has to wait
+until the receiver reports the loss.
 
--- 
-Eugen
+But as per previous email, I think it is not a high-priority issue to
+provide a special case for local loss.
+
+For tests involving traffic shaping the recommendation on the list has
+been to use a separate "middlebox":
+
+http://www.linuxfoundation.org/collaborate/workgroups/networking/dccptesting#Network_emulation_setup
+
+
+Have you considered using dccp_probe to look at the other parameters --
+some information is on
+
+http://www.erg.abdn.ac.uk/users/gerrit/dccp/testing_dccp/#dccp_probe
+
