@@ -1,19 +1,25 @@
-From: David Miller <davem@davemloft.net>
-Date: Tue, 24 Aug 2010 03:15:01 +0000
-Subject: Re: netdev-2.6 [PATCH 0/5] dccp: ccid-2/3 code clean up; TCP RTT
-Message-Id: <20100823.201501.43015031.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 30 Aug 2010 05:23:09 +0000
+Subject: net-2.6 [PATCH 0/5] dccp: ccid-2 clean-up; code sharing between TCP and DCCP
+Message-Id: <1283145794-5615-1-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1282542100-5799-1-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1282542100-5799-1-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 23 Aug 2010 07:41:35 +0200
+Dave,
 
-> please would you consider consider the following DCCP CCID-2/3 set (applies to
-> netdev-2.6): it does code clean-up and adds a better RTO estimation to CCID-2.
+please can you have a look at the attached set from the DCCP test tree; it 
+tidies up CCID-2 code and implements sharing of code common to TCP and DCCP.
 
-Looks great, all applied to net-next-2.6, thanks!
+Patch #1: aligns CCID-2 timestamps with those used by TCP.
+Patch #2: removes redundant CCID-2 sk-timer functions.
+Patch #3: consolidates RFC3390 initial-window code common to TCP and CCID-2 
+	  (please note that this still uses the old numbers which have been
+	   updated by RFC 5681: I'll send a separate patch documenting that).
+Patch #4: shares the minimum-RTO code between TCP and CCID-2.
+Patch #5: shares the minimum-RTO code between TCP and CCID-3.
+
+All patches have been tested to compile independently and are at the top of
+git://eden-feed.erg.abdn.ac.uk/dccp_exp (subtree 'dccp').
