@@ -1,38 +1,92 @@
-From: Samuel Jero <sj323707@ohio.edu>
-Date: Fri, 30 Jul 2010 21:07:10 +0000
-Subject: Problems with idle DCCP connections
-Message-Id: <1280524030.9374.108.camel@sjerolaptop.homelinux.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 30 Aug 2010 05:23:12 +0000
+Subject: [PATCH 3/5] tcp/dccp: Consolidate common code for RFC 3390 conversion
+Message-Id: <1283145794-5615-4-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hello All,
+This patch consolidates initial-window code common to TCP and CCID-2:
+ * TCP uses RFC 3390 in a packet-oriented manner (tcp_input.c) and
+ * CCID-2 uses RFC 3390 in packet-oriented manner (RFC 4341).
 
-I am a researcher at Ohio University looking to encapsulate a special
-point-to-point Delay Tolerant Networking protocol in DCCP instead of UDP
-to take advantage of DCCP's congestion control.
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ include/net/tcp.h      |   15 +++++++++++++++
+ net/dccp/ccids/ccid2.c |    8 ++------
+ net/ipv4/tcp_input.c   |   17 ++---------------
+ 3 files changed, 19 insertions(+), 21 deletions(-)
 
-In attempting to set this up I have come across some very odd behavior
-from DCCP. My goal is to open one DCCP connection and then keep it open
-even when the encapsulated protocol is idle (this avoids having a
-three-way handshake for every packet sent). However, in my tests, DCCP
-clamps the sending rate down to three packets per second after a short
-idle period (a few seconds) and then never attempts to increase that
-rate. This seems to be a very unusual and counter-intuitive behavior.
-Has anyone else seen similar behavior? This seems to contradict RFC4341
-section 5.1 which says that CCID2 should slow start after an idle
-period. Is this not implemented yet or is it a bug?
-
-My test machines are running Ubuntu 10.04. Uname -a
-"2.6.32-24-generic-pae #38-Ubuntu SMP Mon Jul 5 10:54:21 UTC 2010 i686
-GNU/Linux". I have seen identical behavior with Ubuntu 9.10 (Linux
-2.6.31). I'm using CCID2 "TCP-like Congestion control" since I want as
-much bandwidth as possible, even if that means rapid fluctuations.
-
-Thanks.
-
-Sincerely,
-Samuel Jero
-
+--- a/include/net/tcp.h
++++ b/include/net/tcp.h
+@@ -789,6 +789,21 @@ static inline __u32 tcp_current_ssthresh(const struct sock *sk)
+ /* Use define here intentionally to get WARN_ON location shown at the caller */
+ #define tcp_verify_left_out(tp)	WARN_ON(tcp_left_out(tp) > tp->packets_out)
+ 
++/*
++ * Convert RFC 3390 larger initial window into an equivalent number of packets.
++ *
++ * John Heffner states:
++ *
++ *	The RFC specifies a window of no more than 4380 bytes
++ *	unless 2*MSS > 4380.  Reading the pseudocode in the RFC
++ *	is a bit misleading because they use a clamp at 4380 bytes
++ *	rather than a multiplier in the relevant range.
++ */
++static inline u32 rfc3390_bytes_to_packets(const u32 smss)
++{
++	return smss <= 1095 ? 4 : (smss > 1460 ? 2 : 3);
++}
++
+ extern void tcp_enter_cwr(struct sock *sk, const int set_ssthresh);
+ extern __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst);
+ 
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -641,12 +641,8 @@ static int ccid2_hc_tx_init(struct ccid *ccid, struct sock *sk)
+ 	/* RFC 4341, 5: initialise ssthresh to arbitrarily high (max) value */
+ 	hc->tx_ssthresh = ~0U;
+ 
+-	/*
+-	 * RFC 4341, 5: "The cwnd parameter is initialized to at most four
+-	 * packets for new connections, following the rules from [RFC3390]".
+-	 * We need to convert the bytes of RFC3390 into the packets of RFC 4341.
+-	 */
+-	hc->tx_cwnd = clamp(4380U / dp->dccps_mss_cache, 2U, 4U);
++	/* Use larger initial windows (RFC 4341, section 5). */
++	hc->tx_cwnd = rfc3390_bytes_to_packets(dp->dccps_mss_cache);
+ 
+ 	/* Make sure that Ack Ratio is enabled and within bounds. */
+ 	max_ratio = DIV_ROUND_UP(hc->tx_cwnd, 2);
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -805,25 +805,12 @@ void tcp_update_metrics(struct sock *sk)
+ 	}
+ }
+ 
+-/* Numbers are taken from RFC3390.
+- *
+- * John Heffner states:
+- *
+- *	The RFC specifies a window of no more than 4380 bytes
+- *	unless 2*MSS > 4380.  Reading the pseudocode in the RFC
+- *	is a bit misleading because they use a clamp at 4380 bytes
+- *	rather than use a multiplier in the relevant range.
+- */
+ __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst)
+ {
+ 	__u32 cwnd = (dst ? dst_metric(dst, RTAX_INITCWND) : 0);
+ 
+-	if (!cwnd) {
+-		if (tp->mss_cache > 1460)
+-			cwnd = 2;
+-		else
+-			cwnd = (tp->mss_cache > 1095) ? 3 : 4;
+-	}
++	if (!cwnd)
++		cwnd = rfc3390_bytes_to_packets(tp->mss_cache);
+ 	return min_t(__u32, cwnd, tp->snd_cwnd_clamp);
+ }
+ 
