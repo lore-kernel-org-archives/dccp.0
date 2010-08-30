@@ -1,119 +1,125 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 30 Aug 2010 05:23:14 +0000
-Subject: [PATCH 5/5] dccp ccid-3: use per-route RTO or TCP RTO as fallback
-Message-Id: <1283145794-5615-6-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 30 Aug 2010 05:23:10 +0000
+Subject: [PATCH 1/5] dccp ccid-2: Use u32 timestamps uniformly
+Message-Id: <1283145794-5615-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This makes RTAX_RTO_MIN also available to CCID-3, replacing the compile-time
-RTO lower bound with a per-route tunable value.
+Since CCID-2 is de facto a mini implementation of TCP, it makes sense to share
+as much code as possible.
 
-The original Kconfig option solved the problem that a very low RTT (in the
-order of HZ) can trigger too frequent and unnecessary reductions of the
-sending rate.
+Hence this patch aligns CCID-2 timestamping with TCP timestamping.
+This also halves the space consumption (on 64-bit systems).
 
-This tunable does not affect the initial RTO value of 2 seconds specified in
-RFC 5348, section 4.2 and Appendix B. But like the hardcoded Kconfig value,
-it allows to adapt to network conditions.
-
-The same effect as the original Kconfig option of 100ms is now achieved by
-
-> ip route replace to unicast 192.168.0.0/24 rto_min 100j dev eth0
-
-(assuming HZ00).
+The necessary include file <net/tcp.h> is already included by way of
+net/dccp.h. Redundant includes have been removed.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/Kconfig            |   31 -------------------------------
- net/dccp/ccids/ccid3.c            |   11 +++++------
- net/dccp/ccids/ccid3.h            |    2 +-
- Documentation/networking/dccp.txt |    3 +++
- 4 files changed, 9 insertions(+), 38 deletions(-)
+ net/dccp/ccids/ccid2.h |   15 ++++++++++-----
+ net/dccp/ccids/ccid2.c |   14 ++++++--------
+ 2 files changed, 16 insertions(+), 13 deletions(-)
 
---- a/net/dccp/ccids/Kconfig
-+++ b/net/dccp/ccids/Kconfig
-@@ -47,37 +47,6 @@ config IP_DCCP_CCID3_DEBUG
+--- a/net/dccp/ccids/ccid2.h
++++ b/net/dccp/ccids/ccid2.h
+@@ -18,18 +18,23 @@
+ #ifndef _DCCP_CCID2_H_
+ #define _DCCP_CCID2_H_
  
- 	  If in doubt, say N.
- 
--config IP_DCCP_CCID3_RTO
--	  int "Use higher bound for nofeedback timer"
--	  default 100
--	  depends on IP_DCCP_CCID3 && EXPERIMENTAL
--	  ---help---
--	    Use higher lower bound for nofeedback timer expiration.
--
--	    The TFRC nofeedback timer normally expires after the maximum of 4
--	    RTTs and twice the current send interval (RFC 3448, 4.3). On LANs
--	    with a small RTT this can mean a high processing load and reduced
--	    performance, since then the nofeedback timer is triggered very
--	    frequently.
--
--	    This option enables to set a higher lower bound for the nofeedback
--	    value. Values in units of milliseconds can be set here.
--
--	    A value of 0 disables this feature by enforcing the value specified
--	    in RFC 3448. The following values have been suggested as bounds for
--	    experimental use:
--		* 16-20ms to match the typical multimedia inter-frame interval
--		* 100ms as a reasonable compromise [default]
--		* 1000ms corresponds to the lower TCP RTO bound (RFC 2988, 2.4)
--
--	    The default of 100ms is a compromise between a large value for
--	    efficient DCCP implementations, and a small value to avoid disrupting
--	    the network in times of congestion.
--
--	    The purpose of the nofeedback timer is to slow DCCP down when there
--	    is serious network congestion: experimenting with larger values should
--	    therefore not be performed on WANs.
--
- config IP_DCCP_TFRC_LIB
- 	def_bool y if IP_DCCP_CCID3
- 
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -460,13 +460,12 @@ done_computing_x:
- 	sk->sk_write_space(sk);
- 
- 	/*
--	 * Update timeout interval for the nofeedback timer.
--	 * We use a configuration option to increase the lower bound.
--	 * This can help avoid triggering the nofeedback timer too
--	 * often ('spinning') on LANs with small RTTs.
-+	 * Update timeout interval for the nofeedback timer. In order to control
-+	 * rate halving on networks with very low RTTs (<= 1 ms), use per-route
-+	 * tunable RTAX_RTO_MIN value as the lower bound.
- 	 */
--	hc->tx_t_rto = max_t(u32, 4 * hc->tx_rtt, (CONFIG_IP_DCCP_CCID3_RTO *
--						       (USEC_PER_SEC / 1000)));
-+	hc->tx_t_rto = max_t(u32, 4 * hc->tx_rtt,
-+				  USEC_PER_SEC/HZ * tcp_rto_min(sk));
- 	/*
- 	 * Schedule no feedback timer to expire in
- 	 * max(t_RTO, 2 * s/X)  =  max(t_RTO, 2 * t_ipi)
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -42,7 +42,7 @@
- #include "lib/tfrc.h"
+-#include <linux/dccp.h>
+ #include <linux/timer.h>
+ #include <linux/types.h>
  #include "../ccid.h"
++#include "../dccp.h"
++
++/*
++ * CCID-2 timestamping faces the same issues as TCP timestamping.
++ * Hence we reuse/share as much of the code as possible.
++ */
++#define ccid2_time_stamp	tcp_time_stamp
++
+ /* NUMDUPACK parameter from RFC 4341, p. 6 */
+ #define NUMDUPACK	3
  
--/* Two seconds as per RFC 3448 4.2 */
-+/* Two seconds as per RFC 5348, 4.2 */
- #define TFRC_INITIAL_TIMEOUT	   (2 * USEC_PER_SEC)
+-struct sock;
+-
+ struct ccid2_seq {
+ 	u64			ccid2s_seq;
+-	unsigned long		ccid2s_sent;
++	u32			ccid2s_sent;
+ 	int			ccid2s_acked;
+ 	struct ccid2_seq	*ccid2s_prev;
+ 	struct ccid2_seq	*ccid2s_next;
+@@ -72,7 +77,7 @@ struct ccid2_hc_tx_sock {
  
- /* In usecs - half the scheduling granularity as per RFC3448 4.6 */
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -174,6 +174,9 @@ Per-route rto_min support
- 		> ip route change 10.0.0.0/24   rto_min 250j dev wlan0
- 		> ip route add    10.0.0.254/32 rto_min 800j dev wlan0
- 		> ip route show dev wlan0
-+	CCID-3 also supports the rto_min setting: it is used to define the lower
-+	bound for the expiry of the nofeedback timer. This can be useful on LANs
-+	with very low RTTs (e.g., loopback, Gbit ethernet).
+ 	u64			tx_rpseq;
+ 	int			tx_rpdupack;
+-	unsigned long		tx_last_cong;
++	u32			tx_last_cong;
+ 	u64			tx_high_ack;
+ };
+ 
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -25,8 +25,6 @@
+  */
+ #include <linux/slab.h>
+ #include "../feat.h"
+-#include "../ccid.h"
+-#include "../dccp.h"
+ #include "ccid2.h"
  
  
- Notes
+@@ -175,7 +173,7 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ 
+ 	hc->tx_seqh->ccid2s_seq   = dp->dccps_gss;
+ 	hc->tx_seqh->ccid2s_acked = 0;
+-	hc->tx_seqh->ccid2s_sent  = jiffies;
++	hc->tx_seqh->ccid2s_sent  = ccid2_time_stamp;
+ 
+ 	next = hc->tx_seqh->ccid2s_next;
+ 	/* check if we need to alloc more space */
+@@ -250,7 +248,7 @@ static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
+ 		struct ccid2_seq *seqp = hc->tx_seqt;
+ 
+ 		while (seqp != hc->tx_seqh) {
+-			ccid2_pr_debug("out seq=%llu acked=%d time=%lu\n",
++			ccid2_pr_debug("out seq=%llu acked=%d time=%u\n",
+ 				       (unsigned long long)seqp->ccid2s_seq,
+ 				       seqp->ccid2s_acked, seqp->ccid2s_sent);
+ 			seqp = seqp->ccid2s_next;
+@@ -431,19 +429,19 @@ static void ccid2_new_ack(struct sock *sk, struct ccid2_seq *seqp,
+ 	 * The cleanest solution is to not use the ccid2s_sent field at all
+ 	 * and instead use DCCP timestamps: requires changes in other places.
+ 	 */
+-	ccid2_rtt_estimator(sk, jiffies - seqp->ccid2s_sent);
++	ccid2_rtt_estimator(sk, ccid2_time_stamp - seqp->ccid2s_sent);
+ }
+ 
+ static void ccid2_congestion_event(struct sock *sk, struct ccid2_seq *seqp)
+ {
+ 	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
+ 
+-	if (time_before(seqp->ccid2s_sent, hc->tx_last_cong)) {
++	if ((s32)(seqp->ccid2s_sent - hc->tx_last_cong) < 0) {
+ 		ccid2_pr_debug("Multiple losses in an RTT---treating as one\n");
+ 		return;
+ 	}
+ 
+-	hc->tx_last_cong = jiffies;
++	hc->tx_last_cong = ccid2_time_stamp;
+ 
+ 	hc->tx_cwnd      = hc->tx_cwnd / 2 ? : 1U;
+ 	hc->tx_ssthresh  = max(hc->tx_cwnd, 2U);
+@@ -683,7 +681,7 @@ static int ccid2_hc_tx_init(struct ccid *ccid, struct sock *sk)
+ 
+ 	hc->tx_rto	 = DCCP_TIMEOUT_INIT;
+ 	hc->tx_rpdupack  = -1;
+-	hc->tx_last_cong = jiffies;
++	hc->tx_last_cong = ccid2_time_stamp;
+ 	setup_timer(&hc->tx_rtotimer, ccid2_hc_tx_rto_expire,
+ 			(unsigned long)sk);
+ 	return 0;
