@@ -1,32 +1,41 @@
-From: David Miller <davem@davemloft.net>
-Date: Tue, 21 Sep 2010 23:03:47 +0000
-Subject: Re: net-next-2.6 [PATCH 0/5] dccp: miscellaneous CCID fixes and
-Message-Id: <20100921.160347.193718359.davem@davemloft.net>
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Wed, 01 Sep 2010 05:23:55 +0000
+Subject: Re: [PATCH 3/5] tcp/dccp: Consolidate common code for RFC 3390
+Message-Id: <20100901052355.GA5379@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1285064938-5933-1-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1285064938-5933-1-git-send-email-gerrit@erg.abdn.ac.uk>
+References: <1283145794-5615-4-git-send-email-gerrit@erg.abdn.ac.uk>
+In-Reply-To: <1283145794-5615-4-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 21 Sep 2010 12:28:53 +0200
+| > This patch consolidates initial-window code common to TCP and CCID-2:
+| >  * TCP uses RFC 3390 in a packet-oriented manner (tcp_input.c) and
+| >  * CCID-2 uses RFC 3390 in packet-oriented manner (RFC 4341).
+...
+| > +static inline u32 rfc3390_bytes_to_packets(const u32 smss)
+| > +{
+| > +	return smss <= 1095 ? 4 : (smss > 1460 ? 2 : 3);
+| > +}
+| > +
+...
+| 
+| What is spelled out in tcp_select_initial_window might also need to follow 
+| the same logic?
+| 
+Thank you for paying attention, can you please have a look at the subsequent
+patch. I went through this yesterday and found that in 4 different places 
+there are 4 different interpretations of what RFC 3390 means.
 
-> please find attached a tested set of 2 + 3 cleanup patches; 
->  * the first two affect the DCCP CCID interface in general,
->  * the last three conclude the first set of CCID-3 patches.
-> 
->  Patch #1: allows the CCID option-parsing routines to see the packet type.
->  Patch #2: replaces magic CCID-specific numbers with symbolic constants.
->  Patch #3: removes a redundant CCID-3 state (thanks to Leandro Sales de Melo).
->  Patch #4: fixes several issues in computing the CCID-3 loss rate.
->  Patch #5: removes redundant CCID-3 TX 'options_received' struct.
-> 
-> The set has also been placed into a fresh (today's) copy of net-next-2.6, on
-> 
->     git://eden-feed.erg.abdn.ac.uk/net-next-2.6        [subtree 'dccp']
-> 
-> All patches have been tested and compile independently.    
+Having asked someone more familiar with IETF issues, it seems that the RFC 5681
+interpretation of RFC 3390 is now the 'official' one.
 
-All looks good, pulled, thanks Gerrit!
++------------+--------------------+--------------------+--------------------+--------------------+
+| Condition  |     RFC 2414       |        Linux       |       Linux        |     RFC 5681       |
+|            |     RFC 3390       |      tcp_input     |     tcp_output     |                    |
++------------+--------------------+--------------------+--------------------+--------------------+
+| 2 segments | 2190 < MSS         | 1460 < MSS         | 4380 < MSS         | 2190 < MSS         |
+| 3 segments | 1095 < MSS <= 1460 | 1095 < MSS <= 1460 | 1460 < MSS <= 4380 | 1095 < MSS <= 2190 |
+| 4 segments |        MSS <= 1095 |        MSS <= 1095 |        MSS <= 1460 |        MSS <= 1095 |
++------------+--------------------+--------------------+--------------------+--------------------+
