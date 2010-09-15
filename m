@@ -1,125 +1,190 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 15 Sep 2010 12:10:23 +0000
-Subject: [PATCH 3/3] dccp ccid-3: Simplify and consolidate tx_parse_options
-Message-Id: <1284552623-16283-4-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Wed, 15 Sep 2010 12:10:22 +0000
+Subject: [PATCH 2/3] dccp ccid-3: remove buggy RTT-sampling history lookup
+Message-Id: <1284552623-16283-3-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This simplifies and consolidates the TX option-parsing code:
+This removes the RTT-sampling function tfrc_tx_hist_rtt(), since
 
- 1. The Loss Intervals option is not currently used, so dead code related to
-    this option is removed. I am aware of no plans to support the option, but
-    if someone wants to implement it (e.g. for inter-op tests), it is better
-    to start afresh than having to also update currently unused code.
+ 1. it suffered from complex passing of return values (the return value both
+    indicated successful lookup while the value doubled as RTT sample);
 
- 2. The Loss Event and Receive Rate options have a lot of code in common (both
-    are 32 bit, both have same length etc.), so this is consolidated.
+ 2. when for some odd reason the sample value equalled 0, this triggered a bug
+    warning about "bogus Ack", due to the ambiguity of the return value;
 
- 3. The test against GSR is not necessary, because
-    - on first loading CCID3, ccid_new() zeroes out all fields in the socket;
-    - ccid3_hc_tx_packet_recv() treats 0 and ~0U equivalently, due to
+ 3. on a passive host which has not sent anything the TX history is empty and
+    thus will lead to unwanted "bogus Ack" warnings such as
+    ccid3_hc_tx_packet_recv: server(e7b7d518): DATAACK with bogus ACK-28197148
+    ccid3_hc_tx_packet_recv: server(e7b7d518): DATAACK with bogus ACK-26641606.
 
-	pinv = opt_recv->ccid3or_loss_event_rate;
-	if (pinv = ~0U || pinv = 0)
-		hctx->p = 0;
+The fix is to replace the implicit encoding by performing the steps manually.
 
-    - as a result, the sequence number field is removed from opt_recv.
+Furthermore, the "bogus Ack" warning has been removed, since it can actually be
+triggered due to several reasons (network reordering, old packet, (3) above),
+hence it is not very useful.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid3.h |    3 --
- net/dccp/ccids/ccid3.c |   57 +++++++++++------------------------------------
- 2 files changed, 14 insertions(+), 46 deletions(-)
+ net/dccp/ccids/ccid3.c              |   34 +++++++++++++++++-------------
+ net/dccp/ccids/lib/packet_history.c |   39 -----------------------------------
+ net/dccp/ccids/lib/packet_history.h |   22 +++++++++++++++++--
+ 3 files changed, 38 insertions(+), 57 deletions(-)
 
---- a/net/dccp/ccids/ccid3.h
-+++ b/net/dccp/ccids/ccid3.h
-@@ -68,9 +68,6 @@ enum ccid3_options {
- };
- 
- struct ccid3_options_received {
--	u64 ccid3or_seqno:48,
--	    ccid3or_loss_intervals_idx:16;
--	u16 ccid3or_loss_intervals_len;
- 	u32 ccid3or_loss_event_rate;
- 	u32 ccid3or_receive_rate;
- };
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -485,60 +485,31 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
- 				     unsigned char len, u16 idx,
- 				     unsigned char *value)
+@@ -370,6 +370,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
  {
--	int rc = 0;
--	const struct dccp_sock *dp = dccp_sk(sk);
  	struct ccid3_hc_tx_sock *hc = ccid3_hc_tx_sk(sk);
  	struct ccid3_options_received *opt_recv = &hc->tx_options_received;
- 	__be32 opt_val;
++	struct tfrc_tx_hist_entry *acked;
+ 	ktime_t now;
+ 	unsigned long t_nfb;
+ 	u32 pinv, r_sample;
+@@ -383,17 +384,24 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 	    hc->tx_state != TFRC_SSTATE_NO_FBACK)
+ 		return;
  
--	if (opt_recv->ccid3or_seqno != dp->dccps_gsr) {
--		opt_recv->ccid3or_seqno		     = dp->dccps_gsr;
--		opt_recv->ccid3or_loss_event_rate    = ~0;
--		opt_recv->ccid3or_loss_intervals_idx = 0;
--		opt_recv->ccid3or_loss_intervals_len = 0;
--		opt_recv->ccid3or_receive_rate	     = 0;
+-	now = ktime_get_real();
+-
+-	/* Estimate RTT from history if ACK number is valid */
+-	r_sample = tfrc_tx_hist_rtt(hc->tx_hist,
+-				    DCCP_SKB_CB(skb)->dccpd_ack_seq, now);
+-	if (r_sample = 0) {
+-		DCCP_WARN("%s(%p): %s with bogus ACK-%llu\n", dccp_role(sk), sk,
+-			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type),
+-			  (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq);
++	/*
++	 * Locate the acknowledged packet in the TX history.
++	 *
++	 * Returning "entry not found" here can for instance happen when
++	 *  - the host has not sent out anything (e.g. a passive server),
++	 *  - the Ack is outdated (packet with higher Ack number was received),
++	 *  - it is a bogus Ack (for a packet not sent on this connection).
++	 */
++	acked = tfrc_tx_hist_find_entry(hc->tx_hist, dccp_hdr_ack_seq(skb));
++	if (acked = NULL)
+ 		return;
 -	}
--
- 	switch (option) {
-+	case TFRC_OPT_RECEIVE_RATE:
- 	case TFRC_OPT_LOSS_EVENT_RATE:
- 		if (unlikely(len != 4)) {
--			DCCP_WARN("%s(%p), invalid len %d "
--				  "for TFRC_OPT_LOSS_EVENT_RATE\n",
--				  dccp_role(sk), sk, len);
--			rc = -EINVAL;
--		} else {
--			opt_val = get_unaligned((__be32 *)value);
--			opt_recv->ccid3or_loss_event_rate = ntohl(opt_val);
--			ccid3_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
--				       dccp_role(sk), sk,
--				       opt_recv->ccid3or_loss_event_rate);
-+			DCCP_WARN("%s(%p), invalid len %d for %u\n",
-+				  dccp_role(sk), sk, len, option);
-+			return -EINVAL;
- 		}
--		break;
--	case TFRC_OPT_LOSS_INTERVALS:
--		opt_recv->ccid3or_loss_intervals_idx = idx;
--		opt_recv->ccid3or_loss_intervals_len = len;
--		ccid3_pr_debug("%s(%p), LOSS_INTERVALS=(%u, %u)\n",
--			       dccp_role(sk), sk,
--			       opt_recv->ccid3or_loss_intervals_idx,
--			       opt_recv->ccid3or_loss_intervals_len);
--		break;
--	case TFRC_OPT_RECEIVE_RATE:
--		if (unlikely(len != 4)) {
--			DCCP_WARN("%s(%p), invalid len %d "
--				  "for TFRC_OPT_RECEIVE_RATE\n",
--				  dccp_role(sk), sk, len);
--			rc = -EINVAL;
--		} else {
--			opt_val = get_unaligned((__be32 *)value);
--			opt_recv->ccid3or_receive_rate = ntohl(opt_val);
-+		opt_val = ntohl(get_unaligned((__be32 *)value));
++	/* For the sake of RTT sampling, ignore/remove all older entries */
++	tfrc_tx_hist_purge(&acked->next);
 +
-+		if (option = TFRC_OPT_RECEIVE_RATE) {
-+			opt_recv->ccid3or_receive_rate = opt_val;
- 			ccid3_pr_debug("%s(%p), RECEIVE_RATE=%u\n",
--				       dccp_role(sk), sk,
--				       opt_recv->ccid3or_receive_rate);
-+				       dccp_role(sk), sk, opt_val);
-+		} else {
-+			opt_recv->ccid3or_loss_event_rate = opt_val;
-+			ccid3_pr_debug("%s(%p), LOSS_EVENT_RATE=%u\n",
-+				       dccp_role(sk), sk, opt_val);
- 		}
--		break;
- 	}
++	/* Update the moving average for the RTT estimate (RFC 3448, 4.3) */
++	now	  = ktime_get_real();
++	r_sample  = dccp_sample_rtt(sk, ktime_us_delta(now, acked->stamp));
++	hc->tx_rtt = tfrc_ewma(hc->tx_rtt, r_sample, 9);
+ 
+ 	/* Update receive rate in units of 64 * bytes/second */
+ 	hc->tx_x_recv = opt_recv->ccid3or_receive_rate;
+@@ -405,11 +413,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 		hc->tx_p = 0;
+ 	else				       /* can not exceed 100% */
+ 		hc->tx_p = scaled_div(1, pinv);
+-	/*
+-	 * Validate new RTT sample and update moving average
+-	 */
+-	r_sample = dccp_sample_rtt(sk, r_sample);
+-	hc->tx_rtt = tfrc_ewma(hc->tx_rtt, r_sample, 9);
++
+ 	/*
+ 	 * Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
+ 	 */
+--- a/net/dccp/ccids/lib/packet_history.h
++++ b/net/dccp/ccids/lib/packet_history.h
+@@ -40,12 +40,28 @@
+ #include <linux/slab.h>
+ #include "tfrc.h"
+ 
+-struct tfrc_tx_hist_entry;
++/**
++ *  tfrc_tx_hist_entry  -  Simple singly-linked TX history list
++ *  @next:  next oldest entry (LIFO order)
++ *  @seqno: sequence number of this entry
++ *  @stamp: send time of packet with sequence number @seqno
++ */
++struct tfrc_tx_hist_entry {
++	struct tfrc_tx_hist_entry *next;
++	u64			  seqno;
++	ktime_t			  stamp;
++};
++
++static inline struct tfrc_tx_hist_entry *
++	tfrc_tx_hist_find_entry(struct tfrc_tx_hist_entry *head, u64 seqno)
++{
++	while (head != NULL && head->seqno != seqno)
++		head = head->next;
++	return head;
++}
+ 
+ extern int  tfrc_tx_hist_add(struct tfrc_tx_hist_entry **headp, u64 seqno);
+ extern void tfrc_tx_hist_purge(struct tfrc_tx_hist_entry **headp);
+-extern u32  tfrc_tx_hist_rtt(struct tfrc_tx_hist_entry *head,
+-			     const u64 seqno, const ktime_t now);
+ 
+ /* Subtraction a-b modulo-16, respects circular wrap-around */
+ #define SUB16(a, b) (((a) + 16 - (b)) & 0xF)
+--- a/net/dccp/ccids/lib/packet_history.c
++++ b/net/dccp/ccids/lib/packet_history.c
+@@ -38,18 +38,6 @@
+ #include "packet_history.h"
+ #include "../../dccp.h"
+ 
+-/**
+- *  tfrc_tx_hist_entry  -  Simple singly-linked TX history list
+- *  @next:  next oldest entry (LIFO order)
+- *  @seqno: sequence number of this entry
+- *  @stamp: send time of packet with sequence number @seqno
+- */
+-struct tfrc_tx_hist_entry {
+-	struct tfrc_tx_hist_entry *next;
+-	u64			  seqno;
+-	ktime_t			  stamp;
+-};
 -
--	return rc;
-+	return 0;
+ /*
+  * Transmitter History Routines
+  */
+@@ -71,15 +59,6 @@ void tfrc_tx_packet_history_exit(void)
+ 	}
  }
  
- static int ccid3_hc_tx_init(struct ccid *ccid, struct sock *sk)
+-static struct tfrc_tx_hist_entry *
+-	tfrc_tx_hist_find_entry(struct tfrc_tx_hist_entry *head, u64 seqno)
+-{
+-	while (head != NULL && head->seqno != seqno)
+-		head = head->next;
+-
+-	return head;
+-}
+-
+ int tfrc_tx_hist_add(struct tfrc_tx_hist_entry **headp, u64 seqno)
+ {
+ 	struct tfrc_tx_hist_entry *entry = kmem_cache_alloc(tfrc_tx_hist_slab, gfp_any());
+@@ -107,24 +86,6 @@ void tfrc_tx_hist_purge(struct tfrc_tx_hist_entry **headp)
+ 	*headp = NULL;
+ }
+ 
+-u32 tfrc_tx_hist_rtt(struct tfrc_tx_hist_entry *head, const u64 seqno,
+-		     const ktime_t now)
+-{
+-	u32 rtt = 0;
+-	struct tfrc_tx_hist_entry *packet = tfrc_tx_hist_find_entry(head, seqno);
+-
+-	if (packet != NULL) {
+-		rtt = ktime_us_delta(now, packet->stamp);
+-		/*
+-		 * Garbage-collect older (irrelevant) entries:
+-		 */
+-		tfrc_tx_hist_purge(&packet->next);
+-	}
+-
+-	return rtt;
+-}
+-
+-
+ /*
+  *	Receiver History Routines
+  */
