@@ -1,190 +1,157 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Wed, 15 Sep 2010 12:10:22 +0000
-Subject: [PATCH 2/3] dccp ccid-3: remove buggy RTT-sampling history lookup
-Message-Id: <1284552623-16283-3-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Wed, 15 Sep 2010 12:10:21 +0000
+Subject: [PATCH 1/3] dccp ccid-3: A lower bound for the inter-packet scheduling algorithm
+Message-Id: <1284552623-16283-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This removes the RTT-sampling function tfrc_tx_hist_rtt(), since
+This fixes a subtle bug in the calculation of the inter-packet gap and shows
+that t_delta, as it is currently used, is not needed.
 
- 1. it suffered from complex passing of return values (the return value both
-    indicated successful lookup while the value doubled as RTT sample);
+The algorithm from RFC 5348, 8.3 below continually computes a send time t_nom,
+which is initialised with the current time t_now; t_gran = 1E6 / HZ specifies
+the scheduling granularity, s the packet size, and X the sending rate:
 
- 2. when for some odd reason the sample value equalled 0, this triggered a bug
-    warning about "bogus Ack", due to the ambiguity of the return value;
+  t_distance = t_nom - t_now;		// in microseconds
+  t_delta    = min(t_ipi, t_gran) / 2;	// `delta' parameter in microseconds
 
- 3. on a passive host which has not sent anything the TX history is empty and
-    thus will lead to unwanted "bogus Ack" warnings such as
-    ccid3_hc_tx_packet_recv: server(e7b7d518): DATAACK with bogus ACK-28197148
-    ccid3_hc_tx_packet_recv: server(e7b7d518): DATAACK with bogus ACK-26641606.
+  if (t_distance >= t_delta) {
+	reschedule after (t_distance / 1000) milliseconds;
+  } else {
+  	t_ipi  = s / X;			// inter-packet interval in usec
+	t_nom += t_ipi;			// compute the next send time
+	send packet now;
+  }
 
-The fix is to replace the implicit encoding by performing the steps manually.
+Problem:
+--------
+Rescheduling requires a conversion into milliseconds (sk_reset_timer()). The
+highest jiffy resolution with HZ00 is 1 millisecond, so using a higher
+granularity does not make much sense here.
 
-Furthermore, the "bogus Ack" warning has been removed, since it can actually be
-triggered due to several reasons (network reordering, old packet, (3) above),
-hence it is not very useful.
+As a consequence, values of t_distance < 1000 are truncated to 0. This issue
+has so far been resolved by using instead
+
+  if (t_distance >= t_delta + 1000)
+	reschedule after (t_distance / 1000) milliseconds;
+
+This is unnecessarily large, a lower bound is t_delta' = max(t_delta, 1000).
+And it implies a further simplification:
+
+ a) when HZ >= 500, then t_delta <= t_gran/2 = 10^6/(2*HZ) <= 1000, so that
+    t_delta' = MAX(1000, t_delta) = 1000 (constant value);
+
+ b) when HZ < 500, then t_delta = 1/2*MIN(rtt, t_ipi, t_gran) <= t_gran/2,
+    so that 1000 <= t_delta' <= t_gran/2.
+
+The maximum error of using a constant t_delta in (b) is less than half a jiffy.
+
+Fix:
+----
+The patch replaces t_delta with a constant, whose value depends on CONFIG_HZ,
+changing the above algorithm to:
+
+  if (t_distance >= t_delta')
+	reschedule after (t_distance / 1000) milliseconds;
+
+where t_delta' = 10^6/(2*HZ) if HZ < 500, and t_delta' = 1000 otherwise.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid3.c              |   34 +++++++++++++++++-------------
- net/dccp/ccids/lib/packet_history.c |   39 -----------------------------------
- net/dccp/ccids/lib/packet_history.h |   22 +++++++++++++++++--
- 3 files changed, 38 insertions(+), 57 deletions(-)
+ net/dccp/ccids/ccid3.h |   18 +++++++++++++-----
+ net/dccp/ccids/ccid3.c |   19 ++++++++-----------
+ 2 files changed, 21 insertions(+), 16 deletions(-)
 
+--- a/net/dccp/ccids/ccid3.h
++++ b/net/dccp/ccids/ccid3.h
+@@ -45,12 +45,22 @@
+ /* Two seconds as per RFC 5348, 4.2 */
+ #define TFRC_INITIAL_TIMEOUT	   (2 * USEC_PER_SEC)
+ 
+-/* In usecs - half the scheduling granularity as per RFC3448 4.6 */
+-#define TFRC_OPSYS_HALF_TIME_GRAN  (USEC_PER_SEC / (2 * HZ))
+-
+ /* Parameter t_mbi from [RFC 3448, 4.3]: backoff interval in seconds */
+ #define TFRC_T_MBI		   64
+ 
++/*
++ * The t_delta parameter (RFC 5348, 8.3): delays of less than %USEC_PER_MSEC are
++ * rounded down to 0, since sk_reset_timer() here uses millisecond granularity.
++ * Hence we can use a constant t_delta = %USEC_PER_MSEC when HZ >= 500. A coarse
++ * resolution of HZ < 500 means that the error is below one timer tick (t_gran)
++ * when using the constant t_delta  =  t_gran / 2  =  %USEC_PER_SEC / (2 * HZ).
++ */
++#if (HZ >= 500)
++# define TFRC_T_DELTA		   USEC_PER_MSEC
++#else
++# define TFRC_T_DELTA		   (USEC_PER_SEC / (2 * HZ))
++#endif
++
+ enum ccid3_options {
+ 	TFRC_OPT_LOSS_EVENT_RATE = 192,
+ 	TFRC_OPT_LOSS_INTERVALS	 = 193,
+@@ -90,7 +100,6 @@ enum ccid3_hc_tx_states {
+  * @tx_no_feedback_timer: Handle to no feedback timer
+  * @tx_t_ld:		  Time last doubled during slow start
+  * @tx_t_nom:		  Nominal send time of next packet
+- * @tx_delta:		  Send timer delta (RFC 3448, 4.6) in usecs
+  * @tx_hist:		  Packet history
+  * @tx_options_received:  Parsed set of retrieved options
+  */
+@@ -109,7 +118,6 @@ struct ccid3_hc_tx_sock {
+ 	struct timer_list		tx_no_feedback_timer;
+ 	ktime_t				tx_t_ld;
+ 	ktime_t				tx_t_nom;
+-	u32				tx_delta;
+ 	struct tfrc_tx_hist_entry	*tx_hist;
+ 	struct ccid3_options_received	tx_options_received;
+ };
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -370,6 +370,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- {
- 	struct ccid3_hc_tx_sock *hc = ccid3_hc_tx_sk(sk);
- 	struct ccid3_options_received *opt_recv = &hc->tx_options_received;
-+	struct tfrc_tx_hist_entry *acked;
- 	ktime_t now;
- 	unsigned long t_nfb;
- 	u32 pinv, r_sample;
-@@ -383,17 +384,24 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 	    hc->tx_state != TFRC_SSTATE_NO_FBACK)
- 		return;
+@@ -91,19 +91,16 @@ static inline u64 rfc3390_initial_rate(struct sock *sk)
+ 	return scaled_div(w_init << 6, hc->tx_rtt);
+ }
  
--	now = ktime_get_real();
--
--	/* Estimate RTT from history if ACK number is valid */
--	r_sample = tfrc_tx_hist_rtt(hc->tx_hist,
--				    DCCP_SKB_CB(skb)->dccpd_ack_seq, now);
--	if (r_sample = 0) {
--		DCCP_WARN("%s(%p): %s with bogus ACK-%llu\n", dccp_role(sk), sk,
--			  dccp_packet_name(DCCP_SKB_CB(skb)->dccpd_type),
--			  (unsigned long long)DCCP_SKB_CB(skb)->dccpd_ack_seq);
-+	/*
-+	 * Locate the acknowledged packet in the TX history.
-+	 *
-+	 * Returning "entry not found" here can for instance happen when
-+	 *  - the host has not sent out anything (e.g. a passive server),
-+	 *  - the Ack is outdated (packet with higher Ack number was received),
-+	 *  - it is a bogus Ack (for a packet not sent on this connection).
-+	 */
-+	acked = tfrc_tx_hist_find_entry(hc->tx_hist, dccp_hdr_ack_seq(skb));
-+	if (acked = NULL)
- 		return;
--	}
-+	/* For the sake of RTT sampling, ignore/remove all older entries */
-+	tfrc_tx_hist_purge(&acked->next);
-+
-+	/* Update the moving average for the RTT estimate (RFC 3448, 4.3) */
-+	now	  = ktime_get_real();
-+	r_sample  = dccp_sample_rtt(sk, ktime_us_delta(now, acked->stamp));
-+	hc->tx_rtt = tfrc_ewma(hc->tx_rtt, r_sample, 9);
- 
- 	/* Update receive rate in units of 64 * bytes/second */
- 	hc->tx_x_recv = opt_recv->ccid3or_receive_rate;
-@@ -405,11 +413,7 @@ static void ccid3_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		hc->tx_p = 0;
- 	else				       /* can not exceed 100% */
- 		hc->tx_p = scaled_div(1, pinv);
--	/*
--	 * Validate new RTT sample and update moving average
--	 */
--	r_sample = dccp_sample_rtt(sk, r_sample);
--	hc->tx_rtt = tfrc_ewma(hc->tx_rtt, r_sample, 9);
-+
- 	/*
- 	 * Update allowed sending rate X as per draft rfc3448bis-00, 4.2/3
- 	 */
---- a/net/dccp/ccids/lib/packet_history.h
-+++ b/net/dccp/ccids/lib/packet_history.h
-@@ -40,12 +40,28 @@
- #include <linux/slab.h>
- #include "tfrc.h"
- 
--struct tfrc_tx_hist_entry;
+-/*
+- * Recalculate t_ipi and delta (should be called whenever X changes)
 +/**
-+ *  tfrc_tx_hist_entry  -  Simple singly-linked TX history list
-+ *  @next:  next oldest entry (LIFO order)
-+ *  @seqno: sequence number of this entry
-+ *  @stamp: send time of packet with sequence number @seqno
-+ */
-+struct tfrc_tx_hist_entry {
-+	struct tfrc_tx_hist_entry *next;
-+	u64			  seqno;
-+	ktime_t			  stamp;
-+};
-+
-+static inline struct tfrc_tx_hist_entry *
-+	tfrc_tx_hist_find_entry(struct tfrc_tx_hist_entry *head, u64 seqno)
-+{
-+	while (head != NULL && head->seqno != seqno)
-+		head = head->next;
-+	return head;
-+}
- 
- extern int  tfrc_tx_hist_add(struct tfrc_tx_hist_entry **headp, u64 seqno);
- extern void tfrc_tx_hist_purge(struct tfrc_tx_hist_entry **headp);
--extern u32  tfrc_tx_hist_rtt(struct tfrc_tx_hist_entry *head,
--			     const u64 seqno, const ktime_t now);
- 
- /* Subtraction a-b modulo-16, respects circular wrap-around */
- #define SUB16(a, b) (((a) + 16 - (b)) & 0xF)
---- a/net/dccp/ccids/lib/packet_history.c
-+++ b/net/dccp/ccids/lib/packet_history.c
-@@ -38,18 +38,6 @@
- #include "packet_history.h"
- #include "../../dccp.h"
- 
--/**
-- *  tfrc_tx_hist_entry  -  Simple singly-linked TX history list
-- *  @next:  next oldest entry (LIFO order)
-- *  @seqno: sequence number of this entry
-- *  @stamp: send time of packet with sequence number @seqno
-- */
--struct tfrc_tx_hist_entry {
--	struct tfrc_tx_hist_entry *next;
--	u64			  seqno;
--	ktime_t			  stamp;
--};
--
- /*
-  * Transmitter History Routines
++ * ccid3_update_send_interval  -  Calculate new t_ipi = s / X_inst
++ * This respects the granularity of X_inst (64 * bytes/second).
   */
-@@ -71,15 +59,6 @@ void tfrc_tx_packet_history_exit(void)
- 	}
- }
- 
--static struct tfrc_tx_hist_entry *
--	tfrc_tx_hist_find_entry(struct tfrc_tx_hist_entry *head, u64 seqno)
--{
--	while (head != NULL && head->seqno != seqno)
--		head = head->next;
--
--	return head;
--}
--
- int tfrc_tx_hist_add(struct tfrc_tx_hist_entry **headp, u64 seqno)
+ static void ccid3_update_send_interval(struct ccid3_hc_tx_sock *hc)
  {
- 	struct tfrc_tx_hist_entry *entry = kmem_cache_alloc(tfrc_tx_hist_slab, gfp_any());
-@@ -107,24 +86,6 @@ void tfrc_tx_hist_purge(struct tfrc_tx_hist_entry **headp)
- 	*headp = NULL;
+-	/* Calculate new t_ipi = s / X_inst (X_inst is in 64 * bytes/second) */
+ 	hc->tx_t_ipi = scaled_div32(((u64)hc->tx_s) << 6, hc->tx_x);
+ 
+-	/* Calculate new delta by delta = min(t_ipi / 2, t_gran / 2) */
+-	hc->tx_delta = min_t(u32, hc->tx_t_ipi / 2, TFRC_OPSYS_HALF_TIME_GRAN);
+-
+-	ccid3_pr_debug("t_ipi=%u, delta=%u, s=%u, X=%u\n", hc->tx_t_ipi,
+-		       hc->tx_delta, hc->tx_s, (unsigned)(hc->tx_x >> 6));
++	ccid3_pr_debug("t_ipi=%u, s=%u, X=%u\n", hc->tx_t_ipi,
++		       hc->tx_s, (unsigned)(hc->tx_x >> 6));
  }
  
--u32 tfrc_tx_hist_rtt(struct tfrc_tx_hist_entry *head, const u64 seqno,
--		     const ktime_t now)
--{
--	u32 rtt = 0;
--	struct tfrc_tx_hist_entry *packet = tfrc_tx_hist_find_entry(head, seqno);
--
--	if (packet != NULL) {
--		rtt = ktime_us_delta(now, packet->stamp);
--		/*
--		 * Garbage-collect older (irrelevant) entries:
--		 */
--		tfrc_tx_hist_purge(&packet->next);
--	}
--
--	return rtt;
--}
--
--
- /*
-  *	Receiver History Routines
-  */
+ static u32 ccid3_hc_tx_idle_rtt(struct ccid3_hc_tx_sock *hc, ktime_t now)
+@@ -332,15 +329,15 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 		delay = ktime_us_delta(hc->tx_t_nom, now);
+ 		ccid3_pr_debug("delay=%ld\n", (long)delay);
+ 		/*
+-		 *	Scheduling of packet transmissions [RFC 3448, 4.6]
++		 *	Scheduling of packet transmissions (RFC 5348, 8.3)
+ 		 *
+ 		 * if (t_now > t_nom - delta)
+ 		 *       // send the packet now
+ 		 * else
+ 		 *       // send the packet in (t_nom - t_now) milliseconds.
+ 		 */
+-		if (delay - (s64)hc->tx_delta >= 1000)
+-			return (u32)delay / 1000L;
++		if (delay >= TFRC_T_DELTA)
++			return (u32)delay / USEC_PER_MSEC;
+ 
+ 		ccid3_hc_tx_update_win_count(hc, now);
+ 		break;
