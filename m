@@ -1,115 +1,165 @@
-From: Alexander Zimmermann <alexander.zimmermann@comsys.rwth-aachen.de>
-Date: Wed, 01 Sep 2010 07:05:23 +0000
-Subject: Re: [PATCH 3/5] tcp/dccp: Consolidate common code for RFC 3390
-Message-Id: <3679BD73-A7A2-415F-A508-AD12F3AFF0AD@comsys.rwth-aachen.de>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="Apple-Mail-7-74845882"
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Tue, 21 Sep 2010 10:28:54 +0000
+Subject: [PATCH 1/5] dccp: Add packet type information to CCID-specific option parsing
+Message-Id: <1285064938-5933-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
-References: <1283145794-5615-4-git-send-email-gerrit@erg.abdn.ac.uk>
-In-Reply-To: <1283145794-5615-4-git-send-email-gerrit@erg.abdn.ac.uk>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is an OpenPGP/MIME signed message (RFC 2440 and 3156)
---Apple-Mail-7-74845882
-Content-Transfer-Encoding: quoted-printable
-Content-Type: text/plain; charset=us-ascii
+This
+ 1. adds packet type information to ccid_hc_{rx,tx}_parse_options(). This is
+    necessary, since table 3 in RFC 4340, 5.8 leaves it to the CCIDs to state
+    which options may (not) appear on what packet type.
 
-Hi Gerrit,
+ 2. adds such a check for CCID-3's {Loss Event, Receive} Rate as specified in
+    RFC 4340 8.3 ("Receive Rate options MUST NOT be sent on DCCP-Data packets")
+    and 8.5 ("Loss Event Rate options MUST NOT be sent on DCCP-Data packets").
 
-Am 01.09.2010 um 07:23 schrieb Gerrit Renker:
+ 3. removes an unused argument `idx' from ccid_hc_{rx,tx}_parse_options(). This
+    is also no longer necessary, since the CCID-specific option-parsing routines
+    are passed every single parameter of the type-length-value option encoding.
 
-> | > This patch consolidates initial-window code common to TCP and =
-CCID-2:
-> | >  * TCP uses RFC 3390 in a packet-oriented manner (tcp_input.c) and
-> | >  * CCID-2 uses RFC 3390 in packet-oriented manner (RFC 4341).
-> ...
-> | > +static inline u32 rfc3390_bytes_to_packets(const u32 smss)
-> | > +{
-> | > +	return smss <=3D 1095 ? 4 : (smss > 1460 ? 2 : 3);
-> | > +}
-> | > +
-> ...
-> |=20
-> | What is spelled out in tcp_select_initial_window might also need to =
-follow=20
-> | the same logic?
-> |=20
-> Thank you for paying attention, can you please have a look at the =
-subsequent
-> patch. I went through this yesterday and found that in 4 different =
-places=20
-> there are 4 different interpretations of what RFC 3390 means.
->=20
-> Having asked someone more familiar with IETF issues, it seems that the =
-RFC 5681
-> interpretation of RFC 3390 is now the 'official' one.
->=20
-> =
-+------------+--------------------+--------------------+------------------=
---+--------------------+
-> | Condition  |     RFC 2414       |        Linux       |       Linux   =
-     |     RFC 5681       |
-> |            |     RFC 3390       |      tcp_input     |     =
-tcp_output     |                    |
-> =
-+------------+--------------------+--------------------+------------------=
---+--------------------+
-> | 2 segments | 2190 < MSS         | 1460 < MSS         | 4380 < MSS    =
-     | 2190 < MSS         |
-> | 3 segments | 1095 < MSS <=3D 1460 | 1095 < MSS <=3D 1460 | 1460 < =
-MSS <=3D 4380 | 1095 < MSS <=3D 2190 |
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccid.h        |   46 +++++++++++++++++++++++-----------------------
+ net/dccp/ccids/ccid3.c |   14 ++++++++------
+ net/dccp/options.c     |   16 ++++------------
+ 3 files changed, 35 insertions(+), 41 deletions(-)
 
-                              ^^^^^
-
-Are you sure about this?
-
-RFC3390 says (page 2):
- If (1095 bytes < MSS < 2190 bytes) then win <=3D 4380;
-
-So, IMO it should be 1095 < MSS < 2190 for 3 segments, and 2190 <=3D MSS =
-for 2 segments
-in the "RFC 3390" column.
-
-BTW: I think that we should not reference RFC2414, since RFC3390 =
-obsoletes it.
-
-Alex
-
-
-> | 4 segments |        MSS <=3D 1095 |        MSS <=3D 1095 |        =
-MSS <=3D 1460 |        MSS <=3D 1095 |
-> =
-+------------+--------------------+--------------------+------------------=
---+--------------------+
-> --
-> To unsubscribe from this list: send the line "unsubscribe netdev" in
-> the body of a message to majordomo@vger.kernel.org
-> More majordomo info at  http://vger.kernel.org/majordomo-info.html
-
-//
-// Dipl.-Inform. Alexander Zimmermann
-// Department of Computer Science, Informatik 4
-// RWTH Aachen University
-// Ahornstr. 55, 52056 Aachen, Germany
-// phone: (49-241) 80-21422, fax: (49-241) 80-22221
-// email: zimmermann@cs.rwth-aachen.de
-// web: http://www.umic-mesh.net
-//
-
-
---Apple-Mail-7-74845882
-content-type: application/pgp-signature; x-mac-type=70674453;
-	name=PGP.sig
-content-description: Signierter Teil der Nachricht
-content-disposition: inline; filename=PGP.sig
-content-transfer-encoding: 7bit
-
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.10 (Darwin)
-
-iEYEARECAAYFAkx9+zMACgkQdyiq39b9uS7bYwCfZLh3gBw368knZDBdh/Z0Rt4+
-9MoAnRJ/AYomX17hDynl5lCng2O8N7GE
-=FRfy
------END PGP SIGNATURE-----
-
---Apple-Mail-7-74845882--
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -62,18 +62,14 @@ struct ccid_operations {
+ 	void		(*ccid_hc_tx_exit)(struct sock *sk);
+ 	void		(*ccid_hc_rx_packet_recv)(struct sock *sk,
+ 						  struct sk_buff *skb);
+-	int		(*ccid_hc_rx_parse_options)(struct sock *sk,
+-						    unsigned char option,
+-						    unsigned char len, u16 idx,
+-						    unsigned char* value);
++	int		(*ccid_hc_rx_parse_options)(struct sock *sk, u8 pkt,
++						    u8 opt, u8 *val, u8 len);
+ 	int		(*ccid_hc_rx_insert_options)(struct sock *sk,
+ 						     struct sk_buff *skb);
+ 	void		(*ccid_hc_tx_packet_recv)(struct sock *sk,
+ 						  struct sk_buff *skb);
+-	int		(*ccid_hc_tx_parse_options)(struct sock *sk,
+-						    unsigned char option,
+-						    unsigned char len, u16 idx,
+-						    unsigned char* value);
++	int		(*ccid_hc_tx_parse_options)(struct sock *sk, u8 pkt,
++						    u8 opt, u8 *val, u8 len);
+ 	int		(*ccid_hc_tx_send_packet)(struct sock *sk,
+ 						  struct sk_buff *skb);
+ 	void		(*ccid_hc_tx_packet_sent)(struct sock *sk,
+@@ -168,27 +164,31 @@ static inline void ccid_hc_tx_packet_recv(struct ccid *ccid, struct sock *sk,
+ 		ccid->ccid_ops->ccid_hc_tx_packet_recv(sk, skb);
+ }
+ 
++/**
++ * ccid_hc_tx_parse_options  -  Parse CCID-specific options sent by the receiver
++ * @pkt: type of packet that @opt appears on (RFC 4340, 5.1)
++ * @opt: the CCID-specific option type (RFC 4340, 5.8 and 10.3)
++ * @val: value of @opt
++ * @len: length of @val in bytes
++ */
+ static inline int ccid_hc_tx_parse_options(struct ccid *ccid, struct sock *sk,
+-					   unsigned char option,
+-					   unsigned char len, u16 idx,
+-					   unsigned char* value)
++					   u8 pkt, u8 opt, u8 *val, u8 len)
+ {
+-	int rc = 0;
+-	if (ccid->ccid_ops->ccid_hc_tx_parse_options != NULL)
+-		rc = ccid->ccid_ops->ccid_hc_tx_parse_options(sk, option, len, idx,
+-						    value);
+-	return rc;
++	if (ccid->ccid_ops->ccid_hc_tx_parse_options = NULL)
++		return 0;
++	return ccid->ccid_ops->ccid_hc_tx_parse_options(sk, pkt, opt, val, len);
+ }
+ 
++/**
++ * ccid_hc_rx_parse_options  -  Parse CCID-specific options sent by the sender
++ * Arguments are analogous to ccid_hc_tx_parse_options()
++ */
+ static inline int ccid_hc_rx_parse_options(struct ccid *ccid, struct sock *sk,
+-					   unsigned char option,
+-					   unsigned char len, u16 idx,
+-					   unsigned char* value)
++					   u8 pkt, u8 opt, u8 *val, u8 len)
+ {
+-	int rc = 0;
+-	if (ccid->ccid_ops->ccid_hc_rx_parse_options != NULL)
+-		rc = ccid->ccid_ops->ccid_hc_rx_parse_options(sk, option, len, idx, value);
+-	return rc;
++	if (ccid->ccid_ops->ccid_hc_rx_parse_options = NULL)
++		return 0;
++	return ccid->ccid_ops->ccid_hc_rx_parse_options(sk, pkt, opt, val, len);
+ }
+ 
+ static inline int ccid_hc_rx_insert_options(struct ccid *ccid, struct sock *sk,
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -481,9 +481,8 @@ done_computing_x:
+ 			   jiffies + usecs_to_jiffies(t_nfb));
+ }
+ 
+-static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
+-				     unsigned char len, u16 idx,
+-				     unsigned char *value)
++static int ccid3_hc_tx_parse_options(struct sock *sk, u8 packet_type,
++				     u8 option, u8 *optval, u8 optlen)
+ {
+ 	struct ccid3_hc_tx_sock *hc = ccid3_hc_tx_sk(sk);
+ 	struct ccid3_options_received *opt_recv = &hc->tx_options_received;
+@@ -492,12 +491,15 @@ static int ccid3_hc_tx_parse_options(struct sock *sk, unsigned char option,
+ 	switch (option) {
+ 	case TFRC_OPT_RECEIVE_RATE:
+ 	case TFRC_OPT_LOSS_EVENT_RATE:
+-		if (unlikely(len != 4)) {
++		/* Must be ignored on Data packets, cf. RFC 4342 8.3 and 8.5 */
++		if (packet_type = DCCP_PKT_DATA)
++			break;
++		if (unlikely(optlen != 4)) {
+ 			DCCP_WARN("%s(%p), invalid len %d for %u\n",
+-				  dccp_role(sk), sk, len, option);
++				  dccp_role(sk), sk, optlen, option);
+ 			return -EINVAL;
+ 		}
+-		opt_val = ntohl(get_unaligned((__be32 *)value));
++		opt_val = ntohl(get_unaligned((__be32 *)optval));
+ 
+ 		if (option = TFRC_OPT_RECEIVE_RATE) {
+ 			opt_recv->ccid3or_receive_rate = opt_val;
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -226,23 +226,15 @@ int dccp_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
+ 			dccp_pr_debug("%s rx opt: ELAPSED_TIME=%d\n",
+ 				      dccp_role(sk), elapsed_time);
+ 			break;
+-		case 128 ... 191: {
+-			const u16 idx = value - options;
+-
++		case 128 ... 191:
+ 			if (ccid_hc_rx_parse_options(dp->dccps_hc_rx_ccid, sk,
+-						     opt, len, idx,
+-						     value) != 0)
++						     pkt_type, opt, value, len))
+ 				goto out_invalid_option;
+-		}
+ 			break;
+-		case 192 ... 255: {
+-			const u16 idx = value - options;
+-
++		case 192 ... 255:
+ 			if (ccid_hc_tx_parse_options(dp->dccps_hc_tx_ccid, sk,
+-						     opt, len, idx,
+-						     value) != 0)
++						     pkt_type, opt, value, len))
+ 				goto out_invalid_option;
+-		}
+ 			break;
+ 		default:
+ 			DCCP_CRIT("DCCP(%p): option %d(len=%d) not "
