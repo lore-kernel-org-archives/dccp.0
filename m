@@ -1,100 +1,83 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 28 Oct 2010 05:16:28 +0000
-Subject: [PATCH 4/4] dccp ccid-2: Stop polling
-Message-Id: <1288242988-5333-5-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Tue, 12 Oct 2010 05:15:48 +0000
+Subject: [PATCH 3/6] dccp: remove unused argument in CCID tx function
+Message-Id: <1286860551-6809-4-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This updates CCID-2 to use the CCID dequeuing mechanism, converting from
-previous continuous-polling to a now event-driven mechanism.
+This removes the argument `more' from ccid_hc_tx_packet_sent, since it was
+nowhere used in the entire code.
+
+(Btw, this argument was not even used in the original KAME code where the
+ function initially came from; compare the variable moreToSend in the
+ freebsd61-dccp-kame-28.08.2006.patch kept by Emmanuel Lochin.)
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/ccids/ccid2.c |   23 +++++++++++++++--------
- net/dccp/ccids/ccid2.h |    5 +++++
- 2 files changed, 20 insertions(+), 8 deletions(-)
+ net/dccp/ccid.h        |    6 +++---
+ net/dccp/ccids/ccid2.c |    2 +-
+ net/dccp/ccids/ccid3.c |    3 +--
+ net/dccp/output.c      |    2 +-
+ 4 files changed, 6 insertions(+), 7 deletions(-)
 
---- a/net/dccp/ccids/ccid2.h
-+++ b/net/dccp/ccids/ccid2.h
-@@ -81,6 +81,11 @@ struct ccid2_hc_tx_sock {
- 	u64			tx_high_ack;
- };
- 
-+static inline bool ccid2_cwnd_network_limited(struct ccid2_hc_tx_sock *hc)
-+{
-+	return hc->tx_pipe >= hc->tx_cwnd;
-+}
-+
- struct ccid2_hc_rx_sock {
- 	int	rx_data;
- };
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -78,12 +78,9 @@ static int ccid2_hc_tx_alloc_seq(struct ccid2_hc_tx_sock *hc)
- 
- static int ccid2_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
- {
--	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
--
--	if (hc->tx_pipe < hc->tx_cwnd)
--		return 0;
--
--	return 1; /* XXX CCID should dequeue when ready instead of polling */
-+	if (ccid2_cwnd_network_limited(ccid2_hc_tx_sk(sk)))
-+		return CCID_PACKET_WILL_DEQUEUE_LATER;
-+	return CCID_PACKET_SEND_AT_ONCE;
+--- a/net/dccp/ccid.h
++++ b/net/dccp/ccid.h
+@@ -73,7 +73,7 @@ struct ccid_operations {
+ 	int		(*ccid_hc_tx_send_packet)(struct sock *sk,
+ 						  struct sk_buff *skb);
+ 	void		(*ccid_hc_tx_packet_sent)(struct sock *sk,
+-						  int more, unsigned int len);
++						  unsigned int len);
+ 	void		(*ccid_hc_rx_get_info)(struct sock *sk,
+ 					       struct tcp_info *info);
+ 	void		(*ccid_hc_tx_get_info)(struct sock *sk,
+@@ -144,10 +144,10 @@ static inline int ccid_hc_tx_send_packet(struct ccid *ccid, struct sock *sk,
  }
  
- static void ccid2_change_l_ack_ratio(struct sock *sk, u32 val)
-@@ -115,6 +112,7 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
+ static inline void ccid_hc_tx_packet_sent(struct ccid *ccid, struct sock *sk,
+-					  int more, unsigned int len)
++					  unsigned int len)
  {
- 	struct sock *sk = (struct sock *)data;
- 	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
-+	const bool sender_was_blocked = ccid2_cwnd_network_limited(hc);
+ 	if (ccid->ccid_ops->ccid_hc_tx_packet_sent != NULL)
+-		ccid->ccid_ops->ccid_hc_tx_packet_sent(sk, more, len);
++		ccid->ccid_ops->ccid_hc_tx_packet_sent(sk, len);
+ }
  
- 	bh_lock_sock(sk);
- 	if (sock_owned_by_user(sk)) {
-@@ -129,8 +127,6 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
- 	if (hc->tx_rto > DCCP_RTO_MAX)
- 		hc->tx_rto = DCCP_RTO_MAX;
- 
--	sk_reset_timer(sk, &hc->tx_rtotimer, jiffies + hc->tx_rto);
--
- 	/* adjust pipe, cwnd etc */
- 	hc->tx_ssthresh = hc->tx_cwnd / 2;
- 	if (hc->tx_ssthresh < 2)
-@@ -146,6 +142,12 @@ static void ccid2_hc_tx_rto_expire(unsigned long data)
- 	hc->tx_rpseq    = 0;
- 	hc->tx_rpdupack = -1;
- 	ccid2_change_l_ack_ratio(sk, 1);
-+
-+	/* if we were blocked before, we may now send cwnd=1 packet */
-+	if (sender_was_blocked)
-+		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
-+	/* restart backed-off timer */
-+	sk_reset_timer(sk, &hc->tx_rtotimer, jiffies + hc->tx_rto);
- out:
- 	bh_unlock_sock(sk);
+ static inline void ccid_hc_rx_packet_recv(struct ccid *ccid, struct sock *sk,
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -151,7 +151,7 @@ out:
  	sock_put(sk);
-@@ -434,6 +436,7 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ }
+ 
+-static void ccid2_hc_tx_packet_sent(struct sock *sk, int more, unsigned int len)
++static void ccid2_hc_tx_packet_sent(struct sock *sk, unsigned int len)
  {
  	struct dccp_sock *dp = dccp_sk(sk);
  	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
-+	const bool sender_was_blocked = ccid2_cwnd_network_limited(hc);
- 	u64 ackno, seqno;
- 	struct ccid2_seq *seqp;
- 	unsigned char *vector;
-@@ -631,6 +634,10 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 		sk_stop_timer(sk, &hc->tx_rtotimer);
- 	else
- 		sk_reset_timer(sk, &hc->tx_rtotimer, jiffies + hc->tx_rto);
-+
-+	/* check if incoming Acks allow pending packets to be sent */
-+	if (sender_was_blocked && !ccid2_cwnd_network_limited(hc))
-+		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -351,8 +351,7 @@ static int ccid3_hc_tx_send_packet(struct sock *sk, struct sk_buff *skb)
+ 	return 0;
  }
  
- static int ccid2_hc_tx_init(struct ccid *ccid, struct sock *sk)
+-static void ccid3_hc_tx_packet_sent(struct sock *sk, int more,
+-				    unsigned int len)
++static void ccid3_hc_tx_packet_sent(struct sock *sk, unsigned int len)
+ {
+ 	struct ccid3_hc_tx_sock *hc = ccid3_hc_tx_sk(sk);
+ 
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -304,7 +304,7 @@ void dccp_write_xmit(struct sock *sk, int block)
+ 				dcb->dccpd_type = DCCP_PKT_DATA;
+ 
+ 			err = dccp_transmit_skb(sk, skb);
+-			ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, 0, len);
++			ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, len);
+ 			if (err)
+ 				DCCP_BUG("err=%d after ccid_hc_tx_packet_sent",
+ 					 err);
