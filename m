@@ -1,147 +1,270 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 12 Oct 2010 05:15:46 +0000
-Subject: [PATCH 1/6] dccp: fix the adjustments to AWL and SWL
-Message-Id: <1286860551-6809-2-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 28 Oct 2010 05:16:27 +0000
+Subject: [PATCH 3/4] dccp: Refine the wait-for-ccid mechanism
+Message-Id: <1288242988-5333-4-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This fixes a problem and a potential loophole with regard to seqno/ackno
-validity: currently the initial adjustments to AWL/SWL are only performed
-once at the begin of the connection, during the handshake.
+This extends the existing wait-for-ccid routine so that it may be used with
+different types of CCID, addressing the following problems:
 
-Since the Sequence Window feature is always greater than Wmin2 (7.5.2),
-it is however necessary to perform these adjustments at least for the first
-W/W' (variables as per 7.5.1) packets in the lifetime of a connection.
+ 1) The queue-drain mechanism only works with rate-based CCIDs. If CCID-2 for
+    example has a full TX queue and becomes network-limited just as the
+    application wants to close, then waiting for CCID-2 to become unblocked
+    could lead to an indefinite  delay (i.e., application "hangs").
+ 2) Since each TX CCID in turn uses a feedback mechanism, there may be changes
+    in its sending policy while the queue is being drained. This can lead to
+    further delays during which the application will not be able to terminate.
+ 3) The minimum wait time for CCID-3/4 can be expected to be the queue length
+    times the current inter-packet delay. For example if tx_qlen0 and a delay
+    of 15 ms is used for each packet, then the application would have to wait
+    for a minimum of 1.5 seconds before being allowed to exit.
+ 4) There is no way for the user/application to control this behaviour. It would
+    be good to use the timeout argument of dccp_close() as an upper bound. Then
+    the maximum time that an application is willing to wait for its CCIDs to can
+    be set via the SO_LINGER option.
 
-This requirement is complicated by the fact that W/W' can change at any time
-during the lifetime of a connection.
+These problems are addressed by giving the CCID a grace period of up to the
+`timeout' value.
 
-Therefore it is better to perform that safety check each time SWL/AWL are
-updated, as implemented by the patch.
+The wait-for-ccid function is, as before, used when the application
+ (a) has read all the data in its receive buffer and
+ (b) if SO_LINGER was set with a non-zero linger time, or
+ (c) the socket is either in the OPEN (active close) or in the PASSIVE_CLOSEREQ
+     state (client application closes after receiving CloseReq).
 
-A second problem solved by this patch is that the remote/local Sequence Window
-feature values (which set the bounds for AWL/SWL/SWH) are undefined until the
-feature negotiation has completed.
-
-During the initial handshake we have more stringent sequence number protection;
-the changes added by this patch effect that {A,S}W{L,H} are within the correct
-bounds at the instant that feature negotiation completes (since the SeqWin
-feature activation handlers call dccp_update_gsr/gss()).
+In addition, there is a catch-all case of __skb_queue_purge() after waiting for
+the CCID. This is necessary since the write queue may still have data when
+ (a) the host has been passively-closed,
+ (b) abnormal termination (unread data, zero linger time),
+ (c) wait-for-ccid could not finish within the given time limit.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/dccp.h      |   20 ++++++++++++++++++++
- net/dccp/input.c     |   18 ++++++------------
- net/dccp/minisocks.c |   30 +++++++++---------------------
- 3 files changed, 35 insertions(+), 33 deletions(-)
+ net/dccp/dccp.h   |    5 +-
+ net/dccp/output.c |  115 ++++++++++++++++++++++++++++++-----------------------
+ net/dccp/proto.c  |   21 +++++++++-
+ net/dccp/timer.c  |    2 +-
+ 4 files changed, 89 insertions(+), 54 deletions(-)
 
 --- a/net/dccp/dccp.h
 +++ b/net/dccp/dccp.h
-@@ -414,6 +414,23 @@ static inline void dccp_update_gsr(struct sock *sk, u64 seq)
- 	dp->dccps_gsr = seq;
- 	/* Sequence validity window depends on remote Sequence Window (7.5.1) */
- 	dp->dccps_swl = SUB48(ADD48(dp->dccps_gsr, 1), dp->dccps_r_seq_win / 4);
+@@ -243,8 +243,9 @@ extern void dccp_reqsk_send_ack(struct sock *sk, struct sk_buff *skb,
+ extern void dccp_send_sync(struct sock *sk, const u64 seq,
+ 			   const enum dccp_pkt_type pkt_type);
+ 
+-extern void dccp_write_xmit(struct sock *sk, int block);
+-extern void dccp_write_space(struct sock *sk);
++extern void   dccp_write_xmit(struct sock *sk);
++extern void   dccp_write_space(struct sock *sk);
++extern void   dccp_flush_write_queue(struct sock *sk, long *time_budget);
+ 
+ extern void dccp_init_xmit_timers(struct sock *sk);
+ static inline void dccp_clear_xmit_timers(struct sock *sk)
+--- a/net/dccp/output.c
++++ b/net/dccp/output.c
+@@ -209,49 +209,29 @@ void dccp_write_space(struct sock *sk)
+ }
+ 
+ /**
+- * dccp_wait_for_ccid - Wait for ccid to tell us we can send a packet
++ * dccp_wait_for_ccid  -  Await CCID send permission
+  * @sk:    socket to wait for
+- * @skb:   current skb to pass on for waiting
+- * @delay: sleep timeout in milliseconds (> 0)
+- * This function is called by default when the socket is closed, and
+- * when a non-zero linger time is set on the socket. For consistency
++ * @delay: timeout in jiffies
++ * This is used by CCIDs which need to delay the send time in process context.
+  */
+-static int dccp_wait_for_ccid(struct sock *sk, struct sk_buff *skb, int delay)
++static int dccp_wait_for_ccid(struct sock *sk, unsigned long delay)
+ {
+-	struct dccp_sock *dp = dccp_sk(sk);
+ 	DEFINE_WAIT(wait);
+-	unsigned long jiffdelay;
+-	int rc;
+-
+-	do {
+-		dccp_pr_debug("delayed send by %d msec\n", delay);
+-		jiffdelay = msecs_to_jiffies(delay);
+-
+-		prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
++	long remaining;
+ 
+-		sk->sk_write_pending++;
+-		release_sock(sk);
+-		schedule_timeout(jiffdelay);
+-		lock_sock(sk);
+-		sk->sk_write_pending--;
++	prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
++	sk->sk_write_pending++;
++	release_sock(sk);
+ 
+-		if (sk->sk_err)
+-			goto do_error;
+-		if (signal_pending(current))
+-			goto do_interrupted;
++	remaining = schedule_timeout(delay);
+ 
+-		rc = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb);
+-	} while ((delay = rc) > 0);
+-out:
++	lock_sock(sk);
++	sk->sk_write_pending--;
+ 	finish_wait(sk_sleep(sk), &wait);
+-	return rc;
+-
+-do_error:
+-	rc = -EPIPE;
+-	goto out;
+-do_interrupted:
+-	rc = -EINTR;
+-	goto out;
++
++	if (signal_pending(current) || sk->sk_err)
++		return -1;
++	return remaining;
+ }
+ 
+ /**
+@@ -305,7 +285,53 @@ static void dccp_xmit_packet(struct sock *sk)
+ 	ccid_hc_tx_packet_sent(dp->dccps_hc_tx_ccid, sk, len);
+ }
+ 
+-void dccp_write_xmit(struct sock *sk, int block)
++/**
++ * dccp_flush_write_queue  -  Drain queue at end of connection
++ * Since dccp_sendmsg queues packets without waiting for them to be sent, it may
++ * happen that the TX queue is not empty at the end of a connection. We give the
++ * HC-sender CCID a grace period of up to @time_budget jiffies. If this function
++ * returns with a non-empty write queue, it will be purged later.
++ */
++void dccp_flush_write_queue(struct sock *sk, long *time_budget)
++{
++	struct dccp_sock *dp = dccp_sk(sk);
++	struct sk_buff *skb;
++	long delay, rc;
++
++	while (*time_budget > 0 && (skb = skb_peek(&sk->sk_write_queue))) {
++		rc = ccid_hc_tx_send_packet(dp->dccps_hc_tx_ccid, sk, skb);
++
++		switch (ccid_packet_dequeue_eval(rc)) {
++		case CCID_PACKET_WILL_DEQUEUE_LATER:
++			/*
++			 * If the CCID determines when to send, the next sending
++			 * time is unknown or the CCID may not even send again
++			 * (e.g. remote host crashes or lost Ack packets).
++			 */
++			DCCP_WARN("CCID did not manage to send all packets\n");
++			return;
++		case CCID_PACKET_DELAY:
++			delay = msecs_to_jiffies(rc);
++			if (delay > *time_budget)
++				return;
++			rc = dccp_wait_for_ccid(sk, delay);
++			if (rc < 0)
++				return;
++			*time_budget -= (delay - rc);
++			/* check again if we can send now */
++			break;
++		case CCID_PACKET_SEND_AT_ONCE:
++			dccp_xmit_packet(sk);
++			break;
++		case CCID_PACKET_ERR:
++			skb_dequeue(&sk->sk_write_queue);
++			kfree_skb(skb);
++			dccp_pr_debug("packet discarded due to err=%ld\n", rc);
++		}
++	}
++}
++
++void dccp_write_xmit(struct sock *sk)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 	struct sk_buff *skb;
+@@ -317,19 +343,9 @@ void dccp_write_xmit(struct sock *sk, int block)
+ 		case CCID_PACKET_WILL_DEQUEUE_LATER:
+ 			return;
+ 		case CCID_PACKET_DELAY:
+-			if (!block) {
+-				sk_reset_timer(sk, &dp->dccps_xmit_timer,
+-						msecs_to_jiffies(rc)+jiffies);
+-				return;
+-			}
+-			rc = dccp_wait_for_ccid(sk, skb, rc);
+-			if (rc && rc != -EINTR) {
+-				DCCP_BUG("err=%d after dccp_wait_for_ccid", rc);
+-				skb_dequeue(&sk->sk_write_queue);
+-				kfree_skb(skb);
+-				break;
+-			}
+-			/* fall through */
++			sk_reset_timer(sk, &dp->dccps_xmit_timer,
++				       jiffies + msecs_to_jiffies(rc));
++			return;
+ 		case CCID_PACKET_SEND_AT_ONCE:
+ 			dccp_xmit_packet(sk);
+ 			break;
+@@ -648,7 +664,6 @@ void dccp_send_close(struct sock *sk, const int active)
+ 		DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_CLOSE;
+ 
+ 	if (active) {
+-		dccp_write_xmit(sk, 1);
+ 		dccp_skb_entail(sk, skb);
+ 		dccp_transmit_skb(sk, skb_clone(skb, prio));
+ 		/*
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -726,7 +726,13 @@ int dccp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
+ 		goto out_discard;
+ 
+ 	skb_queue_tail(&sk->sk_write_queue, skb);
+-	dccp_write_xmit(sk,0);
 +	/*
-+	 * Adjust SWL so that it is not below ISR. In contrast to RFC 4340,
-+	 * 7.5.1 we perform this check beyond the initial handshake: W/W' are
-+	 * always > 32, so for the first W/W' packets in the lifetime of a
-+	 * connection we always have to adjust SWL.
-+	 * A second reason why we are doing this is that the window depends on
-+	 * the feature-remote value of Sequence Window: nothing stops the peer
-+	 * from updating this value while we are busy adjusting SWL for the
-+	 * first W packets (we would have to count from scratch again then).
-+	 * Therefore it is safer to always make sure that the Sequence Window
-+	 * is not artificially extended by a peer who grows SWL downwards by
-+	 * continually updating the feature-remote Sequence-Window.
-+	 * If sequence numbers wrap it is bad luck. But that will take a while
-+	 * (48 bit), and this measure prevents Sequence-number attacks.
++	 * The xmit_timer is set if the TX CCID is rate-based and will expire
++	 * when congestion control permits to release further packets into the
++	 * network. Window-based CCIDs do not use this timer.
 +	 */
-+	if (before48(dp->dccps_swl, dp->dccps_isr))
-+		dp->dccps_swl = dp->dccps_isr;
- 	dp->dccps_swh = ADD48(dp->dccps_gsr, (3 * dp->dccps_r_seq_win) / 4);
++	if (!timer_pending(&dp->dccps_xmit_timer))
++		dccp_write_xmit(sk);
+ out_release:
+ 	release_sock(sk);
+ 	return rc ? : len;
+@@ -951,9 +957,22 @@ void dccp_close(struct sock *sk, long timeout)
+ 		/* Check zero linger _after_ checking for unread data. */
+ 		sk->sk_prot->disconnect(sk, 0);
+ 	} else if (sk->sk_state != DCCP_CLOSED) {
++		/*
++		 * Normal connection termination. May need to wait if there are
++		 * still packets in the TX queue that are delayed by the CCID.
++		 */
++		dccp_flush_write_queue(sk, &timeout);
+ 		dccp_terminate_connection(sk);
+ 	}
+ 
++	/*
++	 * Flush write queue. This may be necessary in several cases:
++	 * - we have been closed by the peer but still have application data;
++	 * - abortive termination (unread data or zero linger time),
++	 * - normal termination but queue could not be flushed within time limit
++	 */
++	__skb_queue_purge(&sk->sk_write_queue);
++
+ 	sk_stream_wait_close(sk, timeout);
+ 
+ adjudge_to_death:
+--- a/net/dccp/timer.c
++++ b/net/dccp/timer.c
+@@ -249,7 +249,7 @@ static void dccp_write_xmitlet(unsigned long data)
+ 	if (sock_owned_by_user(sk))
+ 		sk_reset_timer(sk, &dccp_sk(sk)->dccps_xmit_timer, jiffies + 1);
+ 	else
+-		dccp_write_xmit(sk, 0);
++		dccp_write_xmit(sk);
+ 	bh_unlock_sock(sk);
  }
  
-@@ -424,6 +441,9 @@ static inline void dccp_update_gss(struct sock *sk, u64 seq)
- 	dp->dccps_gss = seq;
- 	/* Ack validity window depends on local Sequence Window value (7.5.1) */
- 	dp->dccps_awl = SUB48(ADD48(dp->dccps_gss, 1), dp->dccps_l_seq_win);
-+	/* Adjust AWL so that it is not below ISS - see comment above for SWL */
-+	if (before48(dp->dccps_awl, dp->dccps_iss))
-+		dp->dccps_awl = dp->dccps_iss;
- 	dp->dccps_awh = dp->dccps_gss;
- }
- 
---- a/net/dccp/input.c
-+++ b/net/dccp/input.c
-@@ -441,20 +441,14 @@ static int dccp_rcv_request_sent_state_process(struct sock *sk,
- 		kfree_skb(sk->sk_send_head);
- 		sk->sk_send_head = NULL;
- 
--		dp->dccps_isr = DCCP_SKB_CB(skb)->dccpd_seq;
--		dccp_update_gsr(sk, dp->dccps_isr);
- 		/*
--		 * SWL and AWL are initially adjusted so that they are not less than
--		 * the initial Sequence Numbers received and sent, respectively:
--		 *	SWL := max(GSR + 1 - floor(W/4), ISR),
--		 *	AWL := max(GSS - W' + 1, ISS).
--		 * These adjustments MUST be applied only at the beginning of the
--		 * connection.
--		 *
--		 * AWL was adjusted in dccp_v4_connect -acme
-+		 * Set ISR, GSR from packet. ISS was set in dccp_v{4,6}_connect
-+		 * and GSS in dccp_transmit_skb(). Setting AWL/AWH and SWL/SWH
-+		 * is done as part of activating the feature values below, since
-+		 * these settings depend on the local/remote Sequence Window
-+		 * features, which were undefined or not confirmed until now.
- 		 */
--		dccp_set_seqno(&dp->dccps_swl,
--			       max48(dp->dccps_swl, dp->dccps_isr));
-+		dp->dccps_gsr = dp->dccps_isr = DCCP_SKB_CB(skb)->dccpd_seq;
- 
- 		dccp_sync_mss(sk, icsk->icsk_pmtu_cookie);
- 
---- a/net/dccp/minisocks.c
-+++ b/net/dccp/minisocks.c
-@@ -121,30 +121,18 @@ struct sock *dccp_create_openreq_child(struct sock *sk,
- 		 *
- 		 *    Choose S.ISS (initial seqno) or set from Init Cookies
- 		 *    Initialize S.GAR := S.ISS
--		 *    Set S.ISR, S.GSR, S.SWL, S.SWH from packet or Init Cookies
--		 */
--		newdp->dccps_gar = newdp->dccps_iss = dreq->dreq_iss;
--		dccp_update_gss(newsk, dreq->dreq_iss);
--
--		newdp->dccps_isr = dreq->dreq_isr;
--		dccp_update_gsr(newsk, dreq->dreq_isr);
--
--		/*
--		 * SWL and AWL are initially adjusted so that they are not less than
--		 * the initial Sequence Numbers received and sent, respectively:
--		 *	SWL := max(GSR + 1 - floor(W/4), ISR),
--		 *	AWL := max(GSS - W' + 1, ISS).
--		 * These adjustments MUST be applied only at the beginning of the
--		 * connection.
-+		 *    Set S.ISR, S.GSR from packet (or Init Cookies)
-+		 *
-+		 *    Setting AWL/AWH and SWL/SWH happens as part of the feature
-+		 *    activation below, as these windows all depend on the local
-+		 *    and remote Sequence Window feature values (7.5.2).
- 		 */
--		dccp_set_seqno(&newdp->dccps_swl,
--			       max48(newdp->dccps_swl, newdp->dccps_isr));
--		dccp_set_seqno(&newdp->dccps_awl,
--			       max48(newdp->dccps_awl, newdp->dccps_iss));
-+		newdp->dccps_gss = newdp->dccps_iss = dreq->dreq_iss;
-+		newdp->dccps_gar = newdp->dccps_iss;
-+		newdp->dccps_gsr = newdp->dccps_isr = dreq->dreq_isr;
- 
- 		/*
--		 * Activate features after initialising the sequence numbers,
--		 * since CCID initialisation may depend on GSS, ISR, ISS etc.
-+		 * Activate features: initialise CCIDs, sequence windows etc.
- 		 */
- 		if (dccp_feat_activate_values(newsk, &dreq->dreq_featneg)) {
- 			/* It is still raw copy of parent, so invalidate
