@@ -1,49 +1,87 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 10 Dec 2010 11:59:31 +0000
-Subject: [PATCH 1/1] dccp: remove unused macros
-Message-Id: <1291982371-5666-2-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 06 Dec 2010 07:44:04 +0000
+Subject: [PATCH 2/2] dccp qpolicy: Parameter checking of cmsg qpolicy parameters
+Message-Id: <1291621444-5927-3-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Shan Wei <shanwei@cn.fujitsu.com>
+From: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
 
-Remove macros which have been unused since the initial implementation
-(commit 7c657876b63cb1d8a2ec06f8fc6c37bb8412e66c, [DCCP]: Initial
- implementation from Tue Aug 9 20:14:34 2005 -0700).
+Ensure that cmsg->cmsg_type value is valid for qpolicy
+that is currently in use.
 
-Signed-off-by: Shan Wei <shanwei@cn.fujitsu.com>
-Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: Tomasz Grobelny <tomasz@grobelny.oswiecenia.net>
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/dccp.h |    8 --------
- 1 files changed, 0 insertions(+), 8 deletions(-)
+ net/dccp/dccp.h    |    1 +
+ net/dccp/proto.c   |    4 ++++
+ net/dccp/qpolicy.c |   23 +++++++++++++++++------
+ 3 files changed, 22 insertions(+), 6 deletions(-)
 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 48ad5d9..4508705 100644
 --- a/net/dccp/dccp.h
 +++ b/net/dccp/dccp.h
-@@ -93,9 +93,6 @@ extern void dccp_time_wait(struct sock *sk, int state, int timeo);
- #define DCCP_FALLBACK_RTT	(USEC_PER_SEC / 5)
- #define DCCP_SANE_RTT_MAX	(3 * USEC_PER_SEC)
- 
--/* Maximal interval between probes for local resources.  */
--#define DCCP_RESOURCE_PROBE_INTERVAL ((unsigned)(HZ / 2U))
--
- /* sysctl variables for DCCP */
- extern int  sysctl_dccp_request_retries;
- extern int  sysctl_dccp_retries1;
-@@ -203,12 +200,7 @@ struct dccp_mib {
- DECLARE_SNMP_STAT(struct dccp_mib, dccp_statistics);
- #define DCCP_INC_STATS(field)	    SNMP_INC_STATS(dccp_statistics, field)
- #define DCCP_INC_STATS_BH(field)    SNMP_INC_STATS_BH(dccp_statistics, field)
--#define DCCP_INC_STATS_USER(field)  SNMP_INC_STATS_USER(dccp_statistics, field)
- #define DCCP_DEC_STATS(field)	    SNMP_DEC_STATS(dccp_statistics, field)
--#define DCCP_ADD_STATS_BH(field, val) \
--			SNMP_ADD_STATS_BH(dccp_statistics, field, val)
--#define DCCP_ADD_STATS_USER(field, val)	\
--			SNMP_ADD_STATS_USER(dccp_statistics, field, val)
+@@ -251,6 +251,7 @@ extern bool		dccp_qpolicy_full(struct sock *sk);
+ extern void		dccp_qpolicy_drop(struct sock *sk, struct sk_buff *skb);
+ extern struct sk_buff	*dccp_qpolicy_top(struct sock *sk);
+ extern struct sk_buff	*dccp_qpolicy_pop(struct sock *sk);
++extern bool		dccp_qpolicy_param_ok(struct sock *sk, __be32 param);
  
  /*
-  * 	Checksumming routines
+  * TX Packet Output and TX Timers
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -726,6 +726,10 @@ static int dccp_msghdr_parse(struct msghdr *msg, struct sk_buff *skb)
+ 		if (cmsg->cmsg_level != SOL_DCCP)
+ 			continue;
+ 
++		if (cmsg->cmsg_type <= DCCP_SCM_QPOLICY_MAX &&
++		    !dccp_qpolicy_param_ok(skb->sk, cmsg->cmsg_type))
++			return -EINVAL;
++
+ 		switch (cmsg->cmsg_type) {
+ 		case DCCP_SCM_PRIORITY:
+ 			if (cmsg->cmsg_len != CMSG_LEN(sizeof(__u32)))
+--- a/net/dccp/qpolicy.c
++++ b/net/dccp/qpolicy.c
+@@ -73,17 +73,20 @@ static struct dccp_qpolicy_operations {
+ 	void		(*push)	(struct sock *sk, struct sk_buff *skb);
+ 	bool		(*full) (struct sock *sk);
+ 	struct sk_buff*	(*top)  (struct sock *sk);
++	__be32		params;
+ 
+ } qpol_table[DCCPQ_POLICY_MAX] = {
+ 	[DCCPQ_POLICY_SIMPLE] = {
+-		.push = qpolicy_simple_push,
+-		.full = qpolicy_simple_full,
+-		.top  = qpolicy_simple_top,
++		.push   = qpolicy_simple_push,
++		.full   = qpolicy_simple_full,
++		.top    = qpolicy_simple_top,
++		.params = 0,
+ 	},
+ 	[DCCPQ_POLICY_PRIO] = {
+-		.push = qpolicy_simple_push,
+-		.full = qpolicy_prio_full,
+-		.top  = qpolicy_prio_best_skb,
++		.push   = qpolicy_simple_push,
++		.full   = qpolicy_prio_full,
++		.top    = qpolicy_prio_best_skb,
++		.params = DCCP_SCM_PRIORITY,
+ 	},
+ };
+ 
+@@ -124,3 +127,11 @@ struct sk_buff *dccp_qpolicy_pop(struct sock *sk)
+ 	}
+ 	return skb;
+ }
++
++bool dccp_qpolicy_param_ok(struct sock *sk, __be32 param)
++{
++	/* check if exactly one bit is set */
++	if (!param || (param & (param - 1)))
++		return false;
++	return (qpol_table[dccp_sk(sk)->dccps_qpolicy].params & param) = param;
++}
