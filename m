@@ -1,12 +1,23 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 07 Jan 2011 11:35:30 +0000
-Subject: [PATCH 3/3] dccp: make upper bound for seq_window consistent on 32/64 bit
-Message-Id: <1294400130-5604-4-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Tue, 04 Jan 2011 11:53:44 +0000
+Subject: test-tree [Patch 1/1] dccp: fix inconsistency of seq_win between
+Message-Id: <20110104115344.GC3566@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
+
+This came up recently in a comment on dccp@vger. Following this up showed that
+ * unsigned long on 64 bit systems can be 8 bytes
+   Here the upper bound of 2^46-1 is neither checked nor enforced, causing
+   connections to silently fail.
+ * unsigned long on 32 bit systems is 4 bytes
+   This limits the maximum upper bound to 2^32-1.
+
+The fix is to enforce the same limit of 2^32-1 on both systems, and document it.
+>>>>>>>>>>>>>>>>>>>>>>>> Patch <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+dccp: make upper bound for seq_window consistent on 32/64 bit
 
 The 'seq_window' sysctl sets the initial value for the DCCP Sequence Window,
 which may range from 32..2^46-1 (RFC 4340, 7.5.2). The patch sets the upper
@@ -18,8 +29,7 @@ Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
  Documentation/networking/dccp.txt |    1 +
  net/dccp/sysctl.c                 |    4 +++-
- 2 files changed, 4 insertions(+), 1 deletions(-)
-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
 --- a/Documentation/networking/dccp.txt
 +++ b/Documentation/networking/dccp.txt
 @@ -167,6 +167,7 @@ rx_ccid = 2
@@ -42,7 +52,7 @@ Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
  
  static struct ctl_table dccp_default_table[] = {
  	{
-@@ -31,6 +32,7 @@ static struct ctl_table dccp_default_table[] = {
+@@ -31,6 +32,7 @@ static struct ctl_table dccp_default_tab
  		.mode		= 0644,
  		.proc_handler	= proc_doulongvec_minmax,
  		.extra1		= &seqw_min,		/* RFC 4340, 7.5.2 */
@@ -50,3 +60,5 @@ Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
  	},
  	{
  		.procname	= "rx_ccid",
+
+-- 
