@@ -1,64 +1,35 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 04 Jan 2011 11:53:44 +0000
-Subject: test-tree [Patch 1/1] dccp: fix inconsistency of seq_win between
-Message-Id: <20110104115344.GC3566@gerrit.erg.abdn.ac.uk>
+Date: Fri, 07 Jan 2011 11:35:29 +0000
+Subject: [PATCH 2/3] dccp: fix bug in updating the GSR
+Message-Id: <1294400130-5604-3-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This came up recently in a comment on dccp@vger. Following this up showed that
- * unsigned long on 64 bit systems can be 8 bytes
-   Here the upper bound of 2^46-1 is neither checked nor enforced, causing
-   connections to silently fail.
- * unsigned long on 32 bit systems is 4 bytes
-   This limits the maximum upper bound to 2^32-1.
+From: Samuel Jero <sj323707@ohio.edu>
 
-The fix is to enforce the same limit of 2^32-1 on both systems, and document it.
->>>>>>>>>>>>>>>>>>>>>>>> Patch <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-dccp: make upper bound for seq_window consistent on 32/64 bit
+Currently dccp_check_seqno allows any valid packet to update the Greatest
+Sequence Number Received, even if that packet's sequence number is less than
+the current GSR. This patch adds a check to make sure that the new packet's
+sequence number is greater than GSR.
 
-The 'seq_window' sysctl sets the initial value for the DCCP Sequence Window,
-which may range from 32..2^46-1 (RFC 4340, 7.5.2). The patch sets the upper
-bound consistently to 2^32-1 on both 32 and 64 bit systems, which should be
-sufficient - with a RTT of 1sec and 1-byte packets, a seq_window of 2^32-1
-corresponds to a link speed of 34 Gbps.
-
+Signed-off-by: Samuel Jero <sj323707@ohio.edu>
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- Documentation/networking/dccp.txt |    1 +
- net/dccp/sysctl.c                 |    4 +++-
- 2 files changed, 4 insertions(+), 1 deletion(-)
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -167,6 +167,7 @@ rx_ccid = 2
- seq_window = 100
- 	The initial sequence window (sec. 7.5.2) of the sender. This influences
- 	the local ackno validity and the remote seqno validity windows (7.5.1).
-+	Values in the range Wmin = 32 (RFC 4340, 7.5.2) up to 2^32-1 can be set.
- 
- tx_qlen = 5
- 	The size of the transmit buffer in packets. A value of 0 corresponds
---- a/net/dccp/sysctl.c
-+++ b/net/dccp/sysctl.c
-@@ -21,7 +21,8 @@
- /* Boundary values */
- static int		zero     = 0,
- 			u8_max   = 0xFF;
--static unsigned long	seqw_min = 32;
-+static unsigned long	seqw_min = DCCPF_SEQ_WMIN,
-+			seqw_max = 0xFFFFFFFF;		/* maximum on 32 bit */
- 
- static struct ctl_table dccp_default_table[] = {
- 	{
-@@ -31,6 +32,7 @@ static struct ctl_table dccp_default_tab
- 		.mode		= 0644,
- 		.proc_handler	= proc_doulongvec_minmax,
- 		.extra1		= &seqw_min,		/* RFC 4340, 7.5.2 */
-+		.extra2		= &seqw_max,
- 	},
- 	{
- 		.procname	= "rx_ccid",
+ net/dccp/dccp.h |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
 
--- 
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -426,7 +426,8 @@ static inline void dccp_update_gsr(struct sock *sk, u64 seq)
+ {
+ 	struct dccp_sock *dp = dccp_sk(sk);
+ 
+-	dp->dccps_gsr = seq;
++	if (after48(seq, dp->dccps_gsr))
++		dp->dccps_gsr = seq;
+ 	/* Sequence validity window depends on remote Sequence Window (7.5.1) */
+ 	dp->dccps_swl = SUB48(ADD48(dp->dccps_gsr, 1), dp->dccps_r_seq_win / 4);
+ 	/*
