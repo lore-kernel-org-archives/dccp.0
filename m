@@ -1,47 +1,33 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 31 Jan 2011 12:06:40 +0000
-Subject: Re: CCID 2 will increase Congestion Window > Sequence Window
-Message-Id: <20110131120640.GD3641@gerrit.erg.abdn.ac.uk>
+From: Shan Wei <shanwei@cn.fujitsu.com>
+Date: Thu, 20 Jan 2011 09:12:54 +0000
+Subject: [PATCH clean-up] dccp: clean up unused DCCP_STATE_MASK definition
+Message-Id: <4D37FC96.9000407@cn.fujitsu.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1296445413.3066.26.camel@jero-laptop>
-In-Reply-To: <1296445413.3066.26.camel@jero-laptop>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-fCBJbiBkb2luZyBzb21lIERDQ1AgdGVzdGluZywgSSBoYXZlIGlkZW50aWZpZWQgYSBidWcgaW4g
-dGhlIENDSUQgMgp8IGltcGxlbWVudGF0aW9uLiAgUmlnaHQgbm93LCBDQ0lEIDIgd2lsbCB3aWxs
-aW5nbHkgaW5jcmVhc2UgaXQncwp8IGNvbmdlc3Rpb24gd2luZG93ICh0aGUgbnVtYmVyIG9mIHBh
-Y2tldHMgaXQgdHJpZXMgdG8ga2VlcCBpbiB0aGUKfCBuZXR3b3JrKSBncmVhdGVyIHRoYW4gdGhl
-IHNlcXVlbmNlIHdpbmRvdy4gIFRoaXMsIG9mIGNvdXJzZSwgY2F1c2VzCnwgYWNrbm93bGVkZ21l
-bnRzIGZyb20gdGhlIHJlY2VpdmVyIHRvIGJlIGRlZW1lZCBzZXF1ZW5jZSBpbnZhbGlkIHdoaWNo
-CnwgY2F1c2VzIGEgU3luYy9TeW5jQWNrIGV4Y2hhbmdlLiBJbiBhdCBsZWFzdCBvbmUgdGVzdCwg
-dGhpcyBoYXMgcmVzdWx0ZWQKfCBpbiBhIGxvc3Mgb2YgMS8zcmQgb2YgdGhlIGJhbmR3aWR0aCBi
-ZWNhdXNlIG9mIHJlcGVhdGVkIFN5bmMvU3luY0Fjawp8IGV4Y2hhbmdlcy4gSSBhbSB3b3JraW5n
-IG9uIGEgcGF0Y2g7IGhvd2V2ZXIsIEkgYW0gaW50ZXJlc3RlZCB0byBrbm93IGlmCnwgYW55b25l
-IGVsc2UgaGFzIHNlZW4gc2ltaWxhciBwcm9ibGVtcyBhbmQvb3IgaXMgd29ya2luZyBvbiBhIHNv
-bHV0aW9uLi4uCnwgClRoZSBwcm9ibGVtIGlzIGtub3duIGFuZCB0aGUgZml4IHNvIGZhciBpcyB1
-Z2x5ICgic2ltcGx5IGluY3JlYXNlIHRoZQp2YWx1ZSBvZiB0aGUgc2VxX3dpbmRvdyBzeXNjdGwg
-dG8gYW4gaW1wcm9iYWJseSBoaWdoIHZhbHVlIikuCgpMaW1pdGluZyB0aGUgY3duZCB0byB0aGUg
-dmFsdWUgb2Ygc2VxX3dpbmRvdyB3b3VsZCBiZSBvbmUgd2F5LiBXaXRoCnJlZ2FyZCB0byBhIHJl
-Y2VudCBjaGFuZ2UgSSB3YXMgYWxzbyB0aGlua2luZyB3aGV0aGVyIGEgcGVyLWNvbm5lY3Rpb24K
-c29ja2V0IG9wdGlvbiBmb3Igc2VxX3dpbmRvdyB3b3VsZCBtYWtlIHNlbnNlLCB3aGljaCBvdmVy
-cmlkZXMgc2VxX3dpbmRvdwoodGFraW5nIHU2NC91NDggdmFsdWVzKS4KClRoZSB3aG9sZSB0aGlu
-ZyBpcyBjb21wbGljYXRlZCBzaW5jZSB0aHJlZSB2YXJpYWJsZXMgY29uc3RyYWluIGVhY2ggb3Ro
-ZXI6CiBhKSBBY2NvcmRpbmcgdG8gUkZDIDQzNDAsIDcuNS4yLCAKICAgICAgc2VxX3dpbmRvdyA9
-fiA1ICogY3duZAogYikgYWNrX3JhdGlvIG11c3QgYmUgbGVzcyB0aGFuIG9yIGVxdWFsIHRvIGNl
-aWwoY3duZC8yKSAoYWxyZWFkeSBkb25lKQogCklmIDUgKiBjd25kID49IGN1cnJlbnRfc2VxX3dp
-bmRvdywgd2Ugc2hvdWxkIGJlIHNlbmRpbmcgYW4gTk4gb3B0aW9uIHRvCnRoZSByZW1vdGUgcGVl
-ciB0byBpbmZvcm0gYWJvdXQgdGhpcyBjaGFuZ2UuIFRoZXJlIGlzIGFscmVhZHkgc3VwcG9ydCBm
-b3IKdGhpcyBzaWduYWxsaW5nIGluIHRoZSB0ZXN0IHRyZWUsCgpodHRwOi8vZWRlbi1mZWVkLmVy
-Zy5hYmRuLmFjLnVrL2NnaS1iaW4vZ2l0d2ViLmNnaT9w3GNwX2V4cC5naXQ7YT1jb21taXRkaWZm
-O2ijOWUzMGUwOWE5ZTMxZGRlYWRjNDRkNGEyYmFlZjRlYWM0Y2RlMjUKClRoZSBzYW1lIHNob3Vs
-ZCBhY3R1YWxseSBiZSBkb25lIGZvciAoYiksIGJ1dCBpdCBpcyBjdXJyZW50bHkgZGlzYWJsZWQs
-IHNpbmNlCml0IHdhcyBmb3VuZCB0byBtaXNiZWhhdmUgKHJlLWFjdGl2YXRpbmcgaXQgcmVxdWly
-ZXMgb25seSB0byBkaXNhYmxlIHRoZQpwcmVwcm9jZXNzb3IgY29uZGl0aW9uYWwpLgoKSSB0aGlu
-ayB0aGF0IHNlbmRpbmcgYW4gdXBkYXRlIHdvdWxkIGJlIHRoZSByaWdodCB0aGluZyB0byBkby4K
-CkdlcnJpdAotLQpUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMgbGlzdDogc2VuZCB0aGUgbGluZSAi
-dW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJvZHkgb2YgYSBtZXNzYWdlIHRvIG1ham9yZG9tb0B2
-Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRvbW8gaW5mbyBhdCAgaHR0cDovL3ZnZXIua2VybmVs
-Lm9yZy9tYWpvcmRvbW8taW5mby5odG1s
+Remove unused DCCP_STATE_MASK macro.
+
+
+Signed-off-by: Shan Wei <shanwei@cn.fujitsu.com>
+---
+ include/linux/dccp.h |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
+
+diff --git a/include/linux/dccp.h b/include/linux/dccp.h
+index 010e2d8..d638e85 100644
+--- a/include/linux/dccp.h
++++ b/include/linux/dccp.h
+@@ -279,8 +279,6 @@ enum dccp_state {
+ 	DCCP_MAX_STATES
+ };
+ 
+-#define DCCP_STATE_MASK 0x1f
+-
+ enum {
+ 	DCCPF_OPEN	      = TCPF_ESTABLISHED,
+ 	DCCPF_REQUESTING      = TCPF_SYN_SENT,
+-- 
+1.6.3.3
