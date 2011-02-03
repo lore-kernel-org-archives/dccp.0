@@ -1,127 +1,90 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 28 Feb 2011 11:21:40 +0000
-Subject: Re: dccp: null-pointer dereference on close
-Message-Id: <20110228112140.GA3620@gerrit.erg.abdn.ac.uk>
+From: David Miller <davem@davemloft.net>
+Date: Thu, 03 Feb 2011 01:07:50 +0000
+Subject: [PATCH] tcp: Increase the initial congestion window to 10.
+Message-Id: <20110202.170750.229739784.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
-References: <20110226174505.GB3609@localhost>
-In-Reply-To: <20110226174505.GB3609@localhost>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-T24gMzIvNjQgYml0IHg4NiBwcm9ibGVtIHNvIGZhciBub3Qgc2Vlbi4KClByb2JsZW0gc2VlbXMg
-dG8gYmUgdGhhdCAKCjE0MCAgICAgICAgdHctPnR3X3RiID0gaWNzay0+aWNza19iaW5kX2hhc2gg
-aXMgTlVMTCBpbiBfX2luZXRfdHdza19oYXNoZGFuY2UoKQoxNDEgICAgICAgIFdBUk5fT04oIWlj
-c2stPmljc2tfYmluZF9oYXNoKTsgCgpXaWxsIGJlIGxvb2tpbmcgYXQgdGhpcyBsYXRlciBvbiB0
-b2RheSAtIGFueSBoaW50cyBob3cgdG8gcmVwcm9kdWNlIHdvdWxkIGJlIGFwcHJlY2lhdGVkLgoK
-R2Vycml0CgpRdW90aW5nIEpvaGFuIEhvdm9sZDoKfCBIaSwKfCAKfCBJIHRyaWdnZXJlZCB0aGUg
-bnVsbC1wb2ludGVyIGRlcmVmZXJlbmNlIGJlbG93IHdoZW4gY2xvc2luZyBhIGRjY3AKfCBzb2Nr
-ZXQgb24gMi42LjM3IHRoZSBvdGhlciBkYXkuIFRoZSByZWNlaXZlIHBhdGggaXMgaGl0IGR1cmlu
-Zwp8IGNsb3NlLCBhbmQgdGhlIHNvY2tldCBoYXMgYWxyZWFkeSBiZWVuIHVuaGFzaGVkIGluIGRj
-Y3Bfc2V0X3N0YXRlIGZyb20KfCBkY2NwX2Nsb3NlLgp8IAp8IFRoYW5rcywKfCBKb2hhbgp8IAp8
-IAp8IHJvb3RAb3Zlcm86fiMgWzg0MTQwLjEyODYzMV0gLS0tLS0tLS0tLS0tWyBjdXQgaGVyZSBd
-LS0tLS0tLS0tLS0tCnwgWzg0MTQwLjEzMzU3NV0gV0FSTklORzogYXQgbmV0L2lwdjQvaW5ldF90
-aW1ld2FpdF9zb2NrLmM6MTQxIF9faW5ldF90d3NrX2hhc2hkYW5jZSsweDQ4LzB4MTI4KCkKfCBb
-ODQxNDAuMTQyNTE3XSBNb2R1bGVzIGxpbmtlZCBpbjogYXJjNCBlY2IgY2FybDkxNzAgcnQyODcw
-c3RhKEMpIG1hYzgwMjExIHI4NzEydShDKSBjcmNfY2NpdHQgYWgKfCBbODQxNDAuMTUxNzk0XSBb
-PGMwMDM4ODUwPl0gKHVud2luZF9iYWNrdHJhY2UrMHgwLzB4ZWMpIGZyb20gWzxjMDA1NTM2ND5d
-ICh3YXJuX3Nsb3dwYXRoX2NvbW1vbikKfCBbODQxNDAuMTYxNzQzXSBbPGMwMDU1MzY0Pl0gKHdh
-cm5fc2xvd3BhdGhfY29tbW9uKzB4NGMvMHg2NCkgZnJvbSBbPGMwMDU1Mzk4Pl0gKHdhcm5fc2xv
-d3BhdGhfbikKfCBbODQxNDAuMTcxOTY2XSBbPGMwMDU1Mzk4Pl0gKHdhcm5fc2xvd3BhdGhfbnVs
-bCsweDFjLzB4MjQpIGZyb20gWzxjMDJiNzJkMD5dIChfX2luZXRfdHdza19oYXNoZCkKfCBbODQx
-NDAuMTgyMzczXSBbPGMwMmI3MmQwPl0gKF9faW5ldF90d3NrX2hhc2hkYW5jZSsweDQ4LzB4MTI4
-KSBmcm9tIFs8YzAzMWNhYTA+XSAoZGNjcF90aW1lX3dhaSkKfCBbODQxNDAuMTkyNDEzXSBbPGMw
-MzFjYWEwPl0gKGRjY3BfdGltZV93YWl0KzB4NDAvMHhjOCkgZnJvbSBbPGMwMzFjMTVjPl0gKGRj
-Y3BfcmN2X3N0YXRlX3Byb2NlcykKfCBbODQxNDAuMjAyNjM2XSBbPGMwMzFjMTVjPl0gKGRjY3Bf
-cmN2X3N0YXRlX3Byb2Nlc3MrMHgxMjAvMHg1MzgpIGZyb20gWzxjMDMyNjA5Yz5dIChkY2NwX3Y0
-X2RvXykKfCBbODQxNDAuMjEzMDQzXSBbPGMwMzI2MDljPl0gKGRjY3BfdjRfZG9fcmN2KzB4MTFj
-LzB4MTRjKSBmcm9tIFs8YzAyODY1OTQ+XSAocmVsZWFzZV9zb2NrKzB4YWMvMCkKfCBbODQxNDAu
-MjIyNDQyXSBbPGMwMjg2NTk0Pl0gKHJlbGVhc2Vfc29jaysweGFjLzB4MTEwKSBmcm9tIFs8YzAz
-MWZkMzQ+XSAoZGNjcF9jbG9zZSsweDI4Yy8weDM4MCkKfCBbODQxNDAuMjMxNDc1XSBbPGMwMzFm
-ZDM0Pl0gKGRjY3BfY2xvc2UrMHgyOGMvMHgzODApIGZyb20gWzxjMDJkOWE3OD5dIChpbmV0X3Jl
-bGVhc2UrMHg2NC8weDcwKQp8IFs4NDE0MC4yNDAzODZdIFs8YzAyZDlhNzg+XSAoaW5ldF9yZWxl
-YXNlKzB4NjQvMHg3MCkgZnJvbSBbPGMwMjg0ZGRjPl0gKHNvY2tfcmVsZWFzZSsweDI0LzB4Yjgp
-CnwgWzg0MTQwLjI0OTMyOF0gWzxjMDI4NGRkYz5dIChzb2NrX3JlbGVhc2UrMHgyNC8weGI4KSBm
-cm9tIFs8YzAyODRlOTQ+XSAoc29ja19jbG9zZSsweDI0LzB4MzQpCnwgWzg0MTQwLjI1ODA4N10g
-WzxjMDI4NGU5ND5dIChzb2NrX2Nsb3NlKzB4MjQvMHgzNCkgZnJvbSBbPGMwMGMyZTRjPl0gKGZw
-dXQrMHgxMDgvMHgxZjQpCnwgWzg0MTQwLjI2NjI5Nl0gWzxjMDBjMmU0Yz5dIChmcHV0KzB4MTA4
-LzB4MWY0KSBmcm9tIFs8YzAwYzAxMDQ+XSAoZmlscF9jbG9zZSsweDcwLzB4N2MpCnwgWzg0MTQw
-LjI3NDUwNV0gWzxjMDBjMDEwND5dIChmaWxwX2Nsb3NlKzB4NzAvMHg3YykgZnJvbSBbPGMwMGMw
-MWM0Pl0gKHN5c19jbG9zZSsweGI0LzB4MTBjKQp8IFs4NDE0MC4yODMwODFdIFs8YzAwYzAxYzQ+
-XSAoc3lzX2Nsb3NlKzB4YjQvMHgxMGMpIGZyb20gWzxjMDAzM2E4MD5dIChyZXRfZmFzdF9zeXNj
-YWxsKzB4MC8weDMwKQp8IFs4NDE0MC4yOTIxMTRdIC0tLVsgZW5kIHRyYWNlIGI4ODc3ZWM5ZDU0
-MmMzMmUgXS0tLQp8IFs4NDE0MC4yOTY5OTddIFVuYWJsZSB0byBoYW5kbGUga2VybmVsIE5VTEwg
-cG9pbnRlciBkZXJlZmVyZW5jZSBhdCB2aXJ0dWFsIGFkZHJlc3MgMDAwMDAwMTAKfCBbODQxNDAu
-MzA1NTQxXSBwZ2QgPSBjZWRiMDAwMAp8IFs4NDE0MC4zMDg0MTBdIFswMDAwMDAxMF0gKnBnZI5k
-MjIwMzEsICpwdGUAMDAwMDAwLCAqcHB0ZQAwMDAwMDAKfCBbODQxNDAuMzE1MDMyXSBJbnRlcm5h
-bCBlcnJvcjogT29wczogMTcgWyMxXSBQUkVFTVBUCnwgWzg0MTQwLjMyMDAwN10gbGFzdCBzeXNm
-cyBmaWxlOiAvc3lzL2tlcm5lbC91ZXZlbnRfc2VxbnVtCnwgWzg0MTQwLjMyNTQwOF0gTW9kdWxl
-cyBsaW5rZWQgaW46IGFyYzQgZWNiIGNhcmw5MTcwIHJ0Mjg3MHN0YShDKSBtYWM4MDIxMSByODcx
-MnUoQykgY3JjX2NjaXR0IGFoCnwgWzg0MTQwLjMzNDUzM10gQ1BVOiAwICAgIFRhaW50ZWQ6IEcg
-ICAgICAgIFdDICAgKDIuNi4zNysgIzQ3KQp8IFs4NDE0MC4zNDAzMzJdIFBDIGlzIGF0IF9faW5l
-dF90d3NrX2hhc2hkYW5jZSsweDRjLzB4MTI4CnwgWzg0MTQwLjM0NTY0Ml0gTFIgaXMgYXQgd2Fy
-bl9zbG93cGF0aF9udWxsKzB4MWMvMHgyNAp8IFs4NDE0MC4zNTA2MTZdIHBjIDogWzxjMDJiNzJk
-ND5dICAgIGxyIDogWzxjMDA1NTM5OD5dICAgIHBzcjogNjAwMDAwMTMKfCBbODQxNDAuMzUwNjE2
-XSBzcCA6IGNlOTc1ZTY4ICBpcCA6IGNlOTc1ZGI4ICBmcCA6IGNmYmM1YzAwCnwgWzg0MTQwLjM2
-MjcwMV0gcjEwOiBjZmEzZTQwMCAgcjkgOiBjZmJjNWMxOCAgcjggOiAwMDAwMDAwMAp8IFs4NDE0
-MC4zNjgyMjVdIHI3IDogMDAwMDAwMDYgIHI2IDogY2ZhOTYxMTAgIHI1IDogY2ZhM2U0MDAgIHI0
-IDogY2ZiNTQwMDAKfCBbODQxNDAuMzc1MDkxXSByMyA6IDAwMDAwMDAyICByMiA6IDAwMDAwMDA2
-ICByMSA6IDAwMDAwMDAwICByMCA6IDAwMDAwMDAwCnwgWzg0MTQwLjM4MTk4OF0gRmxhZ3M6IG5a
-Q3YgIElSUXMgb24gIEZJUXMgb24gIE1vZGUgU1ZDXzMyICBJU0EgQVJNICBTZWdtZW50IHVzZXIK
-fCBbODQxNDAuMzg5NDk1XSBDb250cm9sOiAxMGM1Mzg3ZCAgVGFibGU6IDhlZGIwMDE5ICBEQUM6
-IDAwMDAwMDE1CnwgWzg0MTQwLjM5NTUzOF0gUHJvY2VzcyBiZTJwX2N0cmwgKHBpZDogMjIwNywg
-c3RhY2sgbGltaXQgPSAweGNlOTc0MmYwKQp8IFs4NDE0MC40MDIxNjBdIFN0YWNrOiAoMHhjZTk3
-NWU2OCB0byAweGNlOTc2MDAwKQp8IFs4NDE0MC40MDY3MzhdIDVlNjA6ICAgICAgICAgICAgICAg
-ICAgIGNmYjU0MDAwIDAwMDAwMTgwIGNmYTNlNDAwIGMwMzFjYWEwIDAwMDAwMDA3IGNmYmM1YzAw
-CnwgWzg0MTQwLjQxNTM3NF0gNWU4MDogY2ZiYzk4MjQgMDAwMDAwMjAgMDAwMDAwMDcgYzAzMWMx
-NWMgMDAwMDAwMDAgMDAwMDAwMjIgMDAwMDAwMDAgMDAwMDAwMDgKfCBbODQxNDAuNDI0MDExXSA1
-ZWEwOiAwMDAwMDAwMSBjZmJjNWMwMCBjZmJjNWMwMCBjZmEzZTQwMCBjZmJjOTgyNCAwMDAwMDAw
-MCAwMDAwMDAwMSBjMDRjMTFiOAp8IFs4NDE0MC40MzI2MTddIDVlYzA6IGJlOGZmYzFjIGMwMzI2
-MDljIGZhMjAwMDAwIGMwMDMzNjA4IGNmYTNlNDAwIGNmYTNlN2IwIGJlOGZmYzFjIGNlOTc1ZWU4
-CnwgWzg0MTQwLjQ0MTI1M10gNWVlMDogYmU4ZmZjMWMgY2ZiYzVjMDAgY2ZhM2U0MDAgY2U5NzQw
-MDAgMDAwMDAwMDAgYzAyODY1OTQgY2ZhM2U0NzQgY2ZhM2U0MDAKfCBbODQxNDAuNDQ5ODU5XSA1
-ZjAwOiBjZmEzZTQwOCAwMDAwMDAwNyBjZjQ4N2MyMCBjZjgwNTg0MCBjZjYwY2EwMCBjMDMxZmQz
-NCAwMDAwMDAwMCAwMDAwMDAwMAp8IFs4NDE0MC40NTg0OTZdIDVmMjA6IGNmYjIwMjg4IGNmYTNl
-NDAwIGNmNDg3YzAwIDAwMDAwMDA4IDAwMDAwMDAwIGMwMmQ5YTc4IDAwMDAwMDAzIDAwMDAwMDAw
-CnwgWzg0MTQwLjQ2NzEwMl0gNWY0MDogY2Y0ODdjMDAgYzAyODRkZGMgMDAwMDAwMDAgY2ZiMjAy
-ODggY2ZiMjAyODAgYzAyODRlOTQgMDAwMDAwMDAgYzAwYzJlNGMKfCBbODQxNDAuNDc1NzM4XSA1
-ZjYwOiAwMDAwMDAwMCAwMDAwMDAwMCBjZmIyMDI4MCAwMDAwMDAwMCBjZmJjNTBjMCAwMDAwMDAw
-NiBjMDAzM2MwNCBjZTk3NDAwMAp8IFs4NDE0MC40ODQzNzVdIDVmODA6IDAwMDAwMDAwIGMwMGMw
-MTA0IDAwMDAwMDA0IGNmYmM1MGMwIGNmYjIwMjgwIGMwMGMwMWM0IDQwMGExMDAwIDAwMDAwMDAw
-CnwgWzg0MTQwLjQ5Mjk4MF0gNWZhMDogMDAwMDg5MWMgYzAwMzNhODAgNDAwYTEwMDAgMDAwMDAw
-MDAgMDAwMDAwMDQgMDAwMDAwMDAgNDAzZDMwMTQgMDAwMDAwMDAKfCBbODQxNDAuNTAxNjE3XSA1
-ZmMwOiA0MDBhMTAwMCAwMDAwMDAwMCAwMDAwODkxYyAwMDAwMDAwNiAwMDAwMDAwMCAwMDAwMDAw
-MCA0MDBhOTAwMCBiZThmZmMxYwp8IFs4NDE0MC41MTAyMjNdIDVmZTA6IDAwMDAwMDAwIGJlOGZm
-YmUwIDAwMDA5NTg0IDQwMzYzMjBjIDYwMDAwMDEwIDAwMDAwMDA0IDAwMDA1MTUzIGJmMGZhN2Qw
-CnwgWzg0MTQwLjUxODg1OV0gWzxjMDJiNzJkND5dIChfX2luZXRfdHdza19oYXNoZGFuY2UrMHg0
-Yy8weDEyOCkgZnJvbSBbPGMwMzFjYWEwPl0gKGRjY3BfdGltZV93YWkpCnwgWzg0MTQwLjUyODg2
-OV0gWzxjMDMxY2FhMD5dIChkY2NwX3RpbWVfd2FpdCsweDQwLzB4YzgpIGZyb20gWzxjMDMxYzE1
-Yz5dIChkY2NwX3Jjdl9zdGF0ZV9wcm9jZXMpCnwgWzg0MTQwLjUzOTA2Ml0gWzxjMDMxYzE1Yz5d
-IChkY2NwX3Jjdl9zdGF0ZV9wcm9jZXNzKzB4MTIwLzB4NTM4KSBmcm9tIFs8YzAzMjYwOWM+XSAo
-ZGNjcF92NF9kb18pCnwgWzg0MTQwLjU0OTQwN10gWzxjMDMyNjA5Yz5dIChkY2NwX3Y0X2RvX3Jj
-disweDExYy8weDE0YykgZnJvbSBbPGMwMjg2NTk0Pl0gKHJlbGVhc2Vfc29jaysweGFjLzApCnwg
-Wzg0MTQwLjU1ODc3Nl0gWzxjMDI4NjU5ND5dIChyZWxlYXNlX3NvY2srMHhhYy8weDExMCkgZnJv
-bSBbPGMwMzFmZDM0Pl0gKGRjY3BfY2xvc2UrMHgyOGMvMHgzODApCnwgWzg0MTQwLjU2Nzc3OV0g
-WzxjMDMxZmQzND5dIChkY2NwX2Nsb3NlKzB4MjhjLzB4MzgwKSBmcm9tIFs8YzAyZDlhNzg+XSAo
-aW5ldF9yZWxlYXNlKzB4NjQvMHg3MCkKfCBbODQxNDAuNTc2NjYwXSBbPGMwMmQ5YTc4Pl0gKGlu
-ZXRfcmVsZWFzZSsweDY0LzB4NzApIGZyb20gWzxjMDI4NGRkYz5dIChzb2NrX3JlbGVhc2UrMHgy
-NC8weGI4KQp8IFs4NDE0MC41ODU1NzFdIFs8YzAyODRkZGM+XSAoc29ja19yZWxlYXNlKzB4MjQv
-MHhiOCkgZnJvbSBbPGMwMjg0ZTk0Pl0gKHNvY2tfY2xvc2UrMHgyNC8weDM0KQp8IFs4NDE0MC41
-OTQyOTldIFs8YzAyODRlOTQ+XSAoc29ja19jbG9zZSsweDI0LzB4MzQpIGZyb20gWzxjMDBjMmU0
-Yz5dIChmcHV0KzB4MTA4LzB4MWY0KQp8IFs4NDE0MC42MDI0NDddIFs8YzAwYzJlNGM+XSAoZnB1
-dCsweDEwOC8weDFmNCkgZnJvbSBbPGMwMGMwMTA0Pl0gKGZpbHBfY2xvc2UrMHg3MC8weDdjKQp8
-IFs4NDE0MC42MTA2MjZdIFs8YzAwYzAxMDQ+XSAoZmlscF9jbG9zZSsweDcwLzB4N2MpIGZyb20g
-WzxjMDBjMDFjND5dIChzeXNfY2xvc2UrMHhiNC8weDEwYykKfCBbODQxNDAuNjE5MTcxXSBbPGMw
-MGMwMWM0Pl0gKHN5c19jbG9zZSsweGI0LzB4MTBjKSBmcm9tIFs8YzAwMzNhODA+XSAocmV0X2Zh
-c3Rfc3lzY2FsbCsweDAvMHgzMCkKfCBbODQxNDAuNjI4MTQzXSBDb2RlOiBlNTlmMDBkYyBlM2Ew
-MTA4ZCBlYmY2NzgyYSBlNTk0MTA0NCAoZTU5MTIwMTApIAp8IFs4NDE0MC42MzQ2NDNdIC0tLVsg
-ZW5kIHRyYWNlIGI4ODc3ZWM5ZDU0MmMzMmYgXS0tLQp8IFs4NDE0MC42Mzk1MjZdIEtlcm5lbCBw
-YW5pYyAtIG5vdCBzeW5jaW5nOiBGYXRhbCBleGNlcHRpb24gaW4gaW50ZXJydXB0CnwgCnwgLS0K
-fCBUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMgbGlzdDogc2VuZCB0aGUgbGluZSAidW5zdWJzY3Jp
-YmUgZGNjcCIgaW4KfCB0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2Vy
-bmVsLm9yZwp8IE1vcmUgbWFqb3Jkb21vIGluZm8gYXQgIGh0dHA6Ly92Z2VyLmtlcm5lbC5vcmcv
-bWFqb3Jkb21vLWluZm8uaHRtbAp8IAoKLS0gCi0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBs
-aXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNjcmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1l
-c3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2VybmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0
-ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21ham9yZG9tby1pbmZvLmh0bWw=
+
+Signed-off-by: David S. Miller <davem@davemloft.net>
+---
+
+I've left the DCCP code to keep using RFC3390 logic, if they
+wish to adopt this change in their code they can do so by
+simply deleting the rfc33390_bytes_to_packets() function and
+using TCP_INIT_CWND in their assignment.
+
+ include/net/tcp.h      |   12 +++---------
+ net/dccp/ccids/ccid2.c |    9 +++++++++
+ net/ipv4/tcp_input.c   |    2 +-
+ 3 files changed, 13 insertions(+), 10 deletions(-)
+
+diff --git a/include/net/tcp.h b/include/net/tcp.h
+index 9179111..7118668 100644
+--- a/include/net/tcp.h
++++ b/include/net/tcp.h
+@@ -196,6 +196,9 @@ extern void tcp_time_wait(struct sock *sk, int state, int timeo);
+ /* TCP thin-stream limits */
+ #define TCP_THIN_LINEAR_RETRIES 6       /* After 6 linear retries, do exp. backoff */
+ 
++/* TCP initial congestion window */
++#define TCP_INIT_CWND		10
++
+ extern struct inet_timewait_death_row tcp_death_row;
+ 
+ /* sysctl variables for tcp */
+@@ -799,15 +802,6 @@ static inline __u32 tcp_current_ssthresh(const struct sock *sk)
+ /* Use define here intentionally to get WARN_ON location shown at the caller */
+ #define tcp_verify_left_out(tp)	WARN_ON(tcp_left_out(tp) > tp->packets_out)
+ 
+-/*
+- * Convert RFC 3390 larger initial window into an equivalent number of packets.
+- * This is based on the numbers specified in RFC 5681, 3.1.
+- */
+-static inline u32 rfc3390_bytes_to_packets(const u32 smss)
+-{
+-	return smss <= 1095 ? 4 : (smss > 2190 ? 2 : 3);
+-}
+-
+ extern void tcp_enter_cwr(struct sock *sk, const int set_ssthresh);
+ extern __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst);
+ 
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index e96d5e8..fadecd2 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -583,6 +583,15 @@ done:
+ 	dccp_ackvec_parsed_cleanup(&hc->tx_av_chunks);
+ }
+ 
++/*
++ * Convert RFC 3390 larger initial window into an equivalent number of packets.
++ * This is based on the numbers specified in RFC 5681, 3.1.
++ */
++static inline u32 rfc3390_bytes_to_packets(const u32 smss)
++{
++	return smss <= 1095 ? 4 : (smss > 2190 ? 2 : 3);
++}
++
+ static int ccid2_hc_tx_init(struct ccid *ccid, struct sock *sk)
+ {
+ 	struct ccid2_hc_tx_sock *hc = ccid_priv(ccid);
+diff --git a/net/ipv4/tcp_input.c b/net/ipv4/tcp_input.c
+index eb7f82e..2f692ce 100644
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -817,7 +817,7 @@ __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst)
+ 	__u32 cwnd = (dst ? dst_metric(dst, RTAX_INITCWND) : 0);
+ 
+ 	if (!cwnd)
+-		cwnd = rfc3390_bytes_to_packets(tp->mss_cache);
++		cwnd = TCP_INIT_CWND;
+ 	return min_t(__u32, cwnd, tp->snd_cwnd_clamp);
+ }
+ 
+-- 
+1.7.4
+
