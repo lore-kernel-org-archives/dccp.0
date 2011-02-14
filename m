@@ -1,85 +1,68 @@
 From: Samuel Jero <sj323707@ohio.edu>
-Date: Sat, 26 Feb 2011 02:09:38 +0000
-Subject: Re: [PATCH 2/4] dccp: Send Confirm Options Only Once
-Message-Id: <1298686178.11418.62.camel@jero-laptop>
+Date: Mon, 14 Feb 2011 01:49:06 +0000
+Subject: Proposed NN Feature handling modification
+Message-Id: <1297648146.9816.149.camel@jero-laptop>
 MIME-Version: 1
-Content-Type: multipart/mixed; boundary="=-nO9BNoepYU/3U0eKevsd"
+Content-Type: multipart/mixed; boundary="=-yBN+aVExk7tOSU+nafBb"
 List-Id: <dccp.vger.kernel.org>
-References: <1297647877.9816.145.camel@jero-laptop>
-In-Reply-To: <1297647877.9816.145.camel@jero-laptop>
 To: dccp@vger.kernel.org
 
---=-nO9BNoepYU/3U0eKevsd
+--=-yBN+aVExk7tOSU+nafBb
 Content-Type: text/plain; charset="UTF-8"
 Content-Transfer-Encoding: quoted-printable
 
-If a connection is in the OPEN state, then remove Feature Negotiation
-Confirm Options from the list of options to send after they are sent
-once. Confirm options are NOT supposed to be retransmitted and are ONLY
-supposed to be sent in response to a Change Option (RFC 4340 6.2).
+All,
 
-When combined with feature negotiation code that would reset the
-connection on an feature negotiation value that didn't match the most
-recently sent value, this issue will cause a connection reset on the
-second feature negotiation for any given NN feature.
+In putting together the set of patches that I just submitted, I noticed
+a less than desirable by-product of the way NN features are currently
+handled. However, the reasons for handling them in this way are spelled
+out in one of the function comments, so before submitted a patch to
+change that, I figured I should throw my findings out on the list.
 
-Note: Patch #3 (Don't Reset on Confirm for Old NN Feature Values), fixed
-the other side of this issue by ignoring values that don't match the
-most recent.
+Right now, the the sender starts using the new value for an NN option as
+soon as that option is sent (really, as soon as
+dccp_feat_signal_nn_change is called). The justification presented in a
+comment is as follows: "values are activated immediately after
+validation, i.e. we don't wait for the Confirm: either the value is
+accepted by the peer (and then the waiting is futile), or it is not
+(Reset or empty Confirm). We don't accept empty Confirms - transmitted
+values are validated, and the peer "MUST accept any valid value" (RFC
+4340, 6.3.2)."
 
----=20
+However, what I have noticed is that this causes a potential problem
+with the Ack Ratio Feature. Specifically, this means that for 1/2 RTT
+the sender thinks each Ack represents a different number of packets than
+the receiver actually means each ack to represent. This is the time
+during which that feature negotiation travels between the sender and the
+receiver.
 
-I have modified this patch to only remove confirm options when the
-connection is in the OPEN state. This will allow confirm options to be
-retransmitted during PARTOPEN to provide durability at that point.
+In practice, the Appropriate Byte Counting implemented in CCID 2
+prevents any real problem, but a similar situation could crop up with
+other NN options.
+
+My recommendation is to wait until the Confirm has been received to
+alter the value of an NN feature. This eliminates the problem above and
+has the advantage that it follows RFC 4340 (section 6.6.1). Further,
+making this change should require little code change.
+
+Comments?
+
 
 Samuel Jero
+Internetworking Research Group
+Ohio University
 
----
-Signed-off-by: Samuel Jero
-diff --git a/net/dccp/feat.c b/net/dccp/feat.c
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -690,11 +678,22 @@ int dccp_feat_insert_opts(struct dccp_sock *dp, struc=
-t dccp_request_sock *dreq,
- 			return -1;
- 		if (pos->needs_mandatory && dccp_insert_option_mandatory(skb))
- 			return -1;
--		/*
--		 * Enter CHANGING after transmitting the Change option (6.6.2).
--		 */
--		if (pos->state =3D=3D FEAT_INITIALISING)
--			pos->state =3D FEAT_CHANGING;
-+
-+		if (skb->sk->sk_state =3D=3D DCCP_OPEN &&
-+			(opt =3D=3D DCCPO_CONFIRM_R || opt =3D=3D DCCPO_CONFIRM_L)) {
-+			/*
-+			 * Confirms don't get retransmitted (6.6.3) once the
-+			 * connection is in state OPEN
-+			 */
-+			dccp_feat_list_pop(pos);
-+		} else {
-+			/*
-+			 * Enter CHANGING after transmitting the Change
-+			 * option (6.6.2).
-+			 */
-+			if (pos->state =3D=3D FEAT_INITIALISING)
-+				pos->state =3D FEAT_CHANGING;
-+		}
- 	}
- 	return 0;
- }
 
---=-nO9BNoepYU/3U0eKevsd
+--=-yBN+aVExk7tOSU+nafBb
 Content-Type: application/pgp-signature; name="signature.asc"
 Content-Description: This is a digitally signed message part
 
 -----BEGIN PGP SIGNATURE-----
 Version: GnuPG v1.4.10 (GNU/Linux)
 
-iEYEABECAAYFAk1oYN4ACgkQEwoGUlJjrt9ZWACgjGa9nbYhlBBxuBSp5Zb10l2R
-QAAAoJS1T7CrswP11pwi/S/eYi0ApB9O
-=wG9z
+iEYEABECAAYFAk1Yig0ACgkQEwoGUlJjrt9PKQCfRc4t/TSQzeEQM1x6yRxF029q
+ousAoLwsKw1Ch5k63lvzoMXQ21Iy6J46
+=IAaF
 -----END PGP SIGNATURE-----
 
---=-nO9BNoepYU/3U0eKevsd--
+--=-yBN+aVExk7tOSU+nafBb--
