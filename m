@@ -1,60 +1,65 @@
 From: Samuel Jero <sj323707@ohio.edu>
-Date: Thu, 24 Feb 2011 05:25:40 +0000
-Subject: Re: [PATCH 0/4]  dccp: Congestion Window > Sequence Window
-Message-Id: <1298525140.23100.150.camel@jero-laptop>
+Date: Mon, 14 Feb 2011 01:44:37 +0000
+Subject: [PATCH 2/4] dccp: Send Confirm Options Only Once
+Message-Id: <1297647877.9816.145.camel@jero-laptop>
 MIME-Version: 1
-Content-Type: multipart/mixed; boundary="=-dqCfqC6DhtysrFUQMFUu"
+Content-Type: multipart/mixed; boundary="=-xXmVLq1SqxRO4dC9fbpH"
 List-Id: <dccp.vger.kernel.org>
-References: <1297647741.9816.143.camel@jero-laptop>
-In-Reply-To: <1297647741.9816.143.camel@jero-laptop>
 To: dccp@vger.kernel.org
 
---=-dqCfqC6DhtysrFUQMFUu
+--=-xXmVLq1SqxRO4dC9fbpH
 Content-Type: text/plain; charset="UTF-8"
 Content-Transfer-Encoding: quoted-printable
 
->The only patch that has an issue is #2: this reintroduces a problem which
-> occurred earlier when performing feature negotiation during the initial
-> handshake. Since your patch set targets feature negotiation in establishe=
-d
-> state, there should be a way to enable both - i.e. keep the old behaviour
-> for the initial, and use the new one for the established state.
+Remove Feature Negotiation Confirm Options from the list of options to
+send after they are sent once because such options are NOT supposed to
+be retransmitted and are ONLY supposed to be sent in response to a
+Change Option (RFC 4340 6.2).
 
-I'm working on slightly modifying the patch to fix this issue. Will
-repost shortly.
+---
 
-> Other issues that would be good to resolve before uploading the patches:
->  * some have minor codingstyle issues, I am ok to fix stuff up to some
->    degree; but please consider scripts/checkpatch.pl
+Signed-off-by: Samuel Jero
+diff --git a/net/dccp/feat.c b/net/dccp/feat.c
+index 6f2bc96..ab85f23 100644
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -690,11 +690,18 @@ int dccp_feat_insert_opts(struct dccp_sock *dp, struc=
+t dccp_request_sock *dreq,
+ 			return -1;
+ 		if (pos->needs_mandatory && dccp_insert_option_mandatory(skb))
+ 			return -1;
+-		/*
+-		 * Enter CHANGING after transmitting the Change option (6.6.2).
+-		 */
+-		if (pos->state =3D=3D FEAT_INITIALISING)
+-			pos->state =3D FEAT_CHANGING;
++
++		if (opt =3D=3D DCCPO_CONFIRM_R || opt =3D=3D DCCPO_CONFIRM_L) {
++			/*Confirms don't get retransmitted (6.6.3)*/
++			dccp_feat_list_pop(pos);
++		} else {
++			/*
++			 * Enter CHANGING after transmitting
++			 * the Change option (6.6.2).
++			 */
++			if (pos->state =3D=3D FEAT_INITIALISING)
++				pos->state =3D FEAT_CHANGING;
++		}
+ 	}
+ 	return 0;
+ }
 
-I actually did run that script over these patches, and the script
-reported no problems. I've re-read the codingstyle document and don't
-see anything clearly wrong. What am I doing that's not standard coding
-style?
 
->  * could you add comments (short descriptions) about conditions you obser=
-ved,
->    or add pointers to documentation webpages in the commit message? It he=
-lps
->    in future discussions to come back on track faster.
-
-I'll do that. Right now, I'm making the changes you suggested to the
-patches. I hope to repost them shortly.
-
-Samuel Jero
-Internetworking Research Group
-Ohio University
-
---=-dqCfqC6DhtysrFUQMFUu
+--=-xXmVLq1SqxRO4dC9fbpH
 Content-Type: application/pgp-signature; name="signature.asc"
 Content-Description: This is a digitally signed message part
 
 -----BEGIN PGP SIGNATURE-----
 Version: GnuPG v1.4.10 (GNU/Linux)
 
-iEYEABECAAYFAk1l69AACgkQEwoGUlJjrt/p5wCgkaGjJm2gszZ7gau5yMU39uRn
-JKgAnRhRmeCsEwX7CWAUyiU+G7ImZzEZ
-=CrqD
+iEYEABECAAYFAk1YiQEACgkQEwoGUlJjrt+RZwCgrsRTyXShRmlR+hJHxnLS4+Fc
+YUEAn3BKOnn2tFOR+e3d1OWX2Fde4SEq
+=8AHe
 -----END PGP SIGNATURE-----
 
---=-dqCfqC6DhtysrFUQMFUu--
+--=-xXmVLq1SqxRO4dC9fbpH--
