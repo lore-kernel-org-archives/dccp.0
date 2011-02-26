@@ -1,146 +1,113 @@
-From: Samuel Jero <sj323707@ohio.edu>
-Date: Sat, 26 Feb 2011 02:05:39 +0000
-Subject: Re: [PATCH 1/4] dccp: Prevent Congestion Window > Sequence Window
-Message-Id: <1298685939.11418.58.camel@jero-laptop>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="=-IJrqPo7UJpU4TdFmSfhQ"
+From: Johan Hovold <jhovold@gmail.com>
+Date: Sat, 26 Feb 2011 17:45:05 +0000
+Subject: dccp: null-pointer dereference on close
+Message-Id: <20110226174505.GB3609@localhost>
 List-Id: <dccp.vger.kernel.org>
-References: <1297647802.9816.144.camel@jero-laptop>
-In-Reply-To: <1297647802.9816.144.camel@jero-laptop>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
---=-IJrqPo7UJpU4TdFmSfhQ
-Content-Type: text/plain; charset="UTF-8"
-Content-Transfer-Encoding: quoted-printable
-
-Add a check to prevent CCID 2 from increasing the Congestion Window
-greater than the Sequence Window.
-
-When the congestion window becomes bigger than the sequence window CCID
-2 will attempt to keep more data in the network than the DCCP sequence
-window code considers possible. This results in the sequence window code
-issuing a sync, thereby inducing needless overhead. Further, if this
-occurs at the sender, CCID 2 will never detect the problem because th
-Acks it receives will indicate no losses. I have seen this cause a drop
-of 1/3rd in throughput for a connection.
-
-Also add code to adjust the sequence window to be about 5 times the
-number of packets in the network (RFC 4340 7.5.2) and to adjust the Ack
-Ratio so that the remote sequence window will hold about 5 times the
-number of packets in the network. This allows the congestion window to
-increase correctly without being limited by the sequence window.
-
-
----=20
-Signed-off-by: Samuel Jero
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -106,6 +106,27 @@ static void ccid2_change_l_ack_ratio(struct sock *sk, =
-u32 val)
-=20
- 	ccid2_pr_debug("changing local ack ratio to %u\n", val);
- 	dp->dccps_l_ack_ratio =3D val;
-+	dccp_feat_signal_nn_change(sk, DCCPF_ACK_RATIO, val);
-+	return;
-+}
-+
-+static void ccid2_change_l_seq_window(struct sock *sk, u64 val)
-+{
-+	struct dccp_sock *dp =3D dccp_sk(sk);
-+
-+	if (val < DCCPF_SEQ_WMIN)
-+			val =3D DCCPF_SEQ_WMIN;
-+
-+	if (val > DCCPF_SEQ_WMAX)
-+			val =3D DCCPF_SEQ_WMAX;
-+
-+	if (val =3D=3D dp->dccps_l_seq_win)
-+			return;
-+
-+	dp->dccps_l_seq_win =3D val;
-+	dccp_feat_signal_nn_change(sk,
-+			DCCPF_SEQUENCE_WINDOW, dp->dccps_l_seq_win);
-+	return;
- }
-=20
- static void ccid2_hc_tx_rto_expire(unsigned long data)
-@@ -418,17 +468,37 @@ static void ccid2_new_ack(struct sock *sk, struct cci=
-d2_seq *seqp,
- 			  unsigned int *maxincr)
- {
- 	struct ccid2_hc_tx_sock *hc =3D ccid2_hc_tx_sk(sk);
--
--	if (hc->tx_cwnd < hc->tx_ssthresh) {
--		if (*maxincr > 0 && ++hc->tx_packets_acked =3D=3D 2) {
--			hc->tx_cwnd +=3D 1;
--			*maxincr    -=3D 1;
--			hc->tx_packets_acked =3D 0;
-+	struct dccp_sock *dp =3D dccp_sk(sk);
-+	int r_seq_used =3D hc->tx_cwnd/dp->dccps_l_ack_ratio;
-+
-+	if ((hc->tx_cwnd < dp->dccps_l_seq_win) &&
-+				(r_seq_used < dp->dccps_r_seq_win)) {
-+		if (hc->tx_cwnd < hc->tx_ssthresh) {
-+			if (*maxincr > 0 && ++hc->tx_packets_acked =3D=3D 2) {
-+				hc->tx_cwnd +=3D 1;
-+				*maxincr    -=3D 1;
-+				hc->tx_packets_acked =3D 0;
-+			}
-+		} else if (++hc->tx_packets_acked >=3D hc->tx_cwnd) {
-+				hc->tx_cwnd +=3D 1;
-+				hc->tx_packets_acked =3D 0;
- 		}
--	} else if (++hc->tx_packets_acked >=3D hc->tx_cwnd) {
--			hc->tx_cwnd +=3D 1;
--			hc->tx_packets_acked =3D 0;
- 	}
-+
-+	/*
-+	 * Adjust the local sequence window and the ack ratio to allow about
-+	 * 5 times the number of packets in the network (RFC 4340 7.5.2)
-+	 */
-+	if (r_seq_used*CCID2_WIN_CHANGE_FACTOR >=3D dp->dccps_r_seq_win)
-+		ccid2_change_l_ack_ratio(sk, dp->dccps_l_ack_ratio*2);
-+	else if (r_seq_used*CCID2_WIN_CHANGE_FACTOR < (dp->dccps_r_seq_win/2))
-+		ccid2_change_l_ack_ratio(sk, dp->dccps_l_ack_ratio/2 ? : 1U);
-+
-+	if (hc->tx_cwnd*CCID2_WIN_CHANGE_FACTOR >=3D dp->dccps_l_seq_win)
-+			ccid2_change_l_seq_window(sk, dp->dccps_l_seq_win*2);
-+	else if (hc->tx_cwnd*CCID2_WIN_CHANGE_FACTOR < (dp->dccps_l_seq_win/2))
-+			ccid2_change_l_seq_window(sk, dp->dccps_l_seq_win/2);
-+
- 	/*
- 	 * FIXME: RTT is sampled several times per acknowledgment (for each
- 	 * entry in the Ack Vector), instead of once per Ack (as in TCP SACK).
-diff --git a/net/dccp/ccids/ccid2.h b/net/dccp/ccids/ccid2.h
---- a/net/dccp/ccids/ccid2.h
-+++ b/net/dccp/ccids/ccid2.h
-@@ -43,6 +43,12 @@ struct ccid2_seq {
- #define CCID2_SEQBUF_LEN 1024
- #define CCID2_SEQBUF_MAX 128
-=20
-+/*
-+ * Multiple of congestion window to keep the sequence window at
-+ * (RFC 4340 7.5.2)
-+ */
-+#define CCID2_WIN_CHANGE_FACTOR 5
-+
- /**
-  * struct ccid2_hc_tx_sock - CCID2 TX half connection
-  * @tx_{cwnd,ssthresh,pipe}: as per RFC 4341, section 5
-
-
---=-IJrqPo7UJpU4TdFmSfhQ
-Content-Type: application/pgp-signature; name="signature.asc"
-Content-Description: This is a digitally signed message part
-
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.10 (GNU/Linux)
-
-iEYEABECAAYFAk1oX+8ACgkQEwoGUlJjrt8vOQCfSoF0zpTr7M9dXPhbjF6aZBor
-ydMAoKm7QSiLo8XhUOhGWlv0CTZ2kTm4
-=p+Yn
------END PGP SIGNATURE-----
-
---=-IJrqPo7UJpU4TdFmSfhQ--
+SGksCgpJIHRyaWdnZXJlZCB0aGUgbnVsbC1wb2ludGVyIGRlcmVmZXJlbmNlIGJlbG93IHdoZW4g
+Y2xvc2luZyBhIGRjY3AKc29ja2V0IG9uIDIuNi4zNyB0aGUgb3RoZXIgZGF5LiBUaGUgcmVjZWl2
+ZSBwYXRoIGlzIGhpdCBkdXJpbmcKY2xvc2UsIGFuZCB0aGUgc29ja2V0IGhhcyBhbHJlYWR5IGJl
+ZW4gdW5oYXNoZWQgaW4gZGNjcF9zZXRfc3RhdGUgZnJvbQpkY2NwX2Nsb3NlLgoKVGhhbmtzLApK
+b2hhbgoKCnJvb3RAb3Zlcm86fiMgWzg0MTQwLjEyODYzMV0gLS0tLS0tLS0tLS0tWyBjdXQgaGVy
+ZSBdLS0tLS0tLS0tLS0tCls4NDE0MC4xMzM1NzVdIFdBUk5JTkc6IGF0IG5ldC9pcHY0L2luZXRf
+dGltZXdhaXRfc29jay5jOjE0MSBfX2luZXRfdHdza19oYXNoZGFuY2UrMHg0OC8weDEyOCgpCls4
+NDE0MC4xNDI1MTddIE1vZHVsZXMgbGlua2VkIGluOiBhcmM0IGVjYiBjYXJsOTE3MCBydDI4NzBz
+dGEoQykgbWFjODAyMTEgcjg3MTJ1KEMpIGNyY19jY2l0dCBhaApbODQxNDAuMTUxNzk0XSBbPGMw
+MDM4ODUwPl0gKHVud2luZF9iYWNrdHJhY2UrMHgwLzB4ZWMpIGZyb20gWzxjMDA1NTM2ND5dICh3
+YXJuX3Nsb3dwYXRoX2NvbW1vbikKWzg0MTQwLjE2MTc0M10gWzxjMDA1NTM2ND5dICh3YXJuX3Ns
+b3dwYXRoX2NvbW1vbisweDRjLzB4NjQpIGZyb20gWzxjMDA1NTM5OD5dICh3YXJuX3Nsb3dwYXRo
+X24pCls4NDE0MC4xNzE5NjZdIFs8YzAwNTUzOTg+XSAod2Fybl9zbG93cGF0aF9udWxsKzB4MWMv
+MHgyNCkgZnJvbSBbPGMwMmI3MmQwPl0gKF9faW5ldF90d3NrX2hhc2hkKQpbODQxNDAuMTgyMzcz
+XSBbPGMwMmI3MmQwPl0gKF9faW5ldF90d3NrX2hhc2hkYW5jZSsweDQ4LzB4MTI4KSBmcm9tIFs8
+YzAzMWNhYTA+XSAoZGNjcF90aW1lX3dhaSkKWzg0MTQwLjE5MjQxM10gWzxjMDMxY2FhMD5dIChk
+Y2NwX3RpbWVfd2FpdCsweDQwLzB4YzgpIGZyb20gWzxjMDMxYzE1Yz5dIChkY2NwX3Jjdl9zdGF0
+ZV9wcm9jZXMpCls4NDE0MC4yMDI2MzZdIFs8YzAzMWMxNWM+XSAoZGNjcF9yY3Zfc3RhdGVfcHJv
+Y2VzcysweDEyMC8weDUzOCkgZnJvbSBbPGMwMzI2MDljPl0gKGRjY3BfdjRfZG9fKQpbODQxNDAu
+MjEzMDQzXSBbPGMwMzI2MDljPl0gKGRjY3BfdjRfZG9fcmN2KzB4MTFjLzB4MTRjKSBmcm9tIFs8
+YzAyODY1OTQ+XSAocmVsZWFzZV9zb2NrKzB4YWMvMCkKWzg0MTQwLjIyMjQ0Ml0gWzxjMDI4NjU5
+ND5dIChyZWxlYXNlX3NvY2srMHhhYy8weDExMCkgZnJvbSBbPGMwMzFmZDM0Pl0gKGRjY3BfY2xv
+c2UrMHgyOGMvMHgzODApCls4NDE0MC4yMzE0NzVdIFs8YzAzMWZkMzQ+XSAoZGNjcF9jbG9zZSsw
+eDI4Yy8weDM4MCkgZnJvbSBbPGMwMmQ5YTc4Pl0gKGluZXRfcmVsZWFzZSsweDY0LzB4NzApCls4
+NDE0MC4yNDAzODZdIFs8YzAyZDlhNzg+XSAoaW5ldF9yZWxlYXNlKzB4NjQvMHg3MCkgZnJvbSBb
+PGMwMjg0ZGRjPl0gKHNvY2tfcmVsZWFzZSsweDI0LzB4YjgpCls4NDE0MC4yNDkzMjhdIFs8YzAy
+ODRkZGM+XSAoc29ja19yZWxlYXNlKzB4MjQvMHhiOCkgZnJvbSBbPGMwMjg0ZTk0Pl0gKHNvY2tf
+Y2xvc2UrMHgyNC8weDM0KQpbODQxNDAuMjU4MDg3XSBbPGMwMjg0ZTk0Pl0gKHNvY2tfY2xvc2Ur
+MHgyNC8weDM0KSBmcm9tIFs8YzAwYzJlNGM+XSAoZnB1dCsweDEwOC8weDFmNCkKWzg0MTQwLjI2
+NjI5Nl0gWzxjMDBjMmU0Yz5dIChmcHV0KzB4MTA4LzB4MWY0KSBmcm9tIFs8YzAwYzAxMDQ+XSAo
+ZmlscF9jbG9zZSsweDcwLzB4N2MpCls4NDE0MC4yNzQ1MDVdIFs8YzAwYzAxMDQ+XSAoZmlscF9j
+bG9zZSsweDcwLzB4N2MpIGZyb20gWzxjMDBjMDFjND5dIChzeXNfY2xvc2UrMHhiNC8weDEwYykK
+Wzg0MTQwLjI4MzA4MV0gWzxjMDBjMDFjND5dIChzeXNfY2xvc2UrMHhiNC8weDEwYykgZnJvbSBb
+PGMwMDMzYTgwPl0gKHJldF9mYXN0X3N5c2NhbGwrMHgwLzB4MzApCls4NDE0MC4yOTIxMTRdIC0t
+LVsgZW5kIHRyYWNlIGI4ODc3ZWM5ZDU0MmMzMmUgXS0tLQpbODQxNDAuMjk2OTk3XSBVbmFibGUg
+dG8gaGFuZGxlIGtlcm5lbCBOVUxMIHBvaW50ZXIgZGVyZWZlcmVuY2UgYXQgdmlydHVhbCBhZGRy
+ZXNzIDAwMDAwMDEwCls4NDE0MC4zMDU1NDFdIHBnZCA9IGNlZGIwMDAwCls4NDE0MC4zMDg0MTBd
+IFswMDAwMDAxMF0gKnBnZI5kMjIwMzEsICpwdGUAMDAwMDAwLCAqcHB0ZQAwMDAwMDAKWzg0MTQw
+LjMxNTAzMl0gSW50ZXJuYWwgZXJyb3I6IE9vcHM6IDE3IFsjMV0gUFJFRU1QVApbODQxNDAuMzIw
+MDA3XSBsYXN0IHN5c2ZzIGZpbGU6IC9zeXMva2VybmVsL3VldmVudF9zZXFudW0KWzg0MTQwLjMy
+NTQwOF0gTW9kdWxlcyBsaW5rZWQgaW46IGFyYzQgZWNiIGNhcmw5MTcwIHJ0Mjg3MHN0YShDKSBt
+YWM4MDIxMSByODcxMnUoQykgY3JjX2NjaXR0IGFoCls4NDE0MC4zMzQ1MzNdIENQVTogMCAgICBU
+YWludGVkOiBHICAgICAgICBXQyAgICgyLjYuMzcrICM0NykKWzg0MTQwLjM0MDMzMl0gUEMgaXMg
+YXQgX19pbmV0X3R3c2tfaGFzaGRhbmNlKzB4NGMvMHgxMjgKWzg0MTQwLjM0NTY0Ml0gTFIgaXMg
+YXQgd2Fybl9zbG93cGF0aF9udWxsKzB4MWMvMHgyNApbODQxNDAuMzUwNjE2XSBwYyA6IFs8YzAy
+YjcyZDQ+XSAgICBsciA6IFs8YzAwNTUzOTg+XSAgICBwc3I6IDYwMDAwMDEzCls4NDE0MC4zNTA2
+MTZdIHNwIDogY2U5NzVlNjggIGlwIDogY2U5NzVkYjggIGZwIDogY2ZiYzVjMDAKWzg0MTQwLjM2
+MjcwMV0gcjEwOiBjZmEzZTQwMCAgcjkgOiBjZmJjNWMxOCAgcjggOiAwMDAwMDAwMApbODQxNDAu
+MzY4MjI1XSByNyA6IDAwMDAwMDA2ICByNiA6IGNmYTk2MTEwICByNSA6IGNmYTNlNDAwICByNCA6
+IGNmYjU0MDAwCls4NDE0MC4zNzUwOTFdIHIzIDogMDAwMDAwMDIgIHIyIDogMDAwMDAwMDYgIHIx
+IDogMDAwMDAwMDAgIHIwIDogMDAwMDAwMDAKWzg0MTQwLjM4MTk4OF0gRmxhZ3M6IG5aQ3YgIElS
+UXMgb24gIEZJUXMgb24gIE1vZGUgU1ZDXzMyICBJU0EgQVJNICBTZWdtZW50IHVzZXIKWzg0MTQw
+LjM4OTQ5NV0gQ29udHJvbDogMTBjNTM4N2QgIFRhYmxlOiA4ZWRiMDAxOSAgREFDOiAwMDAwMDAx
+NQpbODQxNDAuMzk1NTM4XSBQcm9jZXNzIGJlMnBfY3RybCAocGlkOiAyMjA3LCBzdGFjayBsaW1p
+dCA9IDB4Y2U5NzQyZjApCls4NDE0MC40MDIxNjBdIFN0YWNrOiAoMHhjZTk3NWU2OCB0byAweGNl
+OTc2MDAwKQpbODQxNDAuNDA2NzM4XSA1ZTYwOiAgICAgICAgICAgICAgICAgICBjZmI1NDAwMCAw
+MDAwMDE4MCBjZmEzZTQwMCBjMDMxY2FhMCAwMDAwMDAwNyBjZmJjNWMwMApbODQxNDAuNDE1Mzc0
+XSA1ZTgwOiBjZmJjOTgyNCAwMDAwMDAyMCAwMDAwMDAwNyBjMDMxYzE1YyAwMDAwMDAwMCAwMDAw
+MDAyMiAwMDAwMDAwMCAwMDAwMDAwOApbODQxNDAuNDI0MDExXSA1ZWEwOiAwMDAwMDAwMSBjZmJj
+NWMwMCBjZmJjNWMwMCBjZmEzZTQwMCBjZmJjOTgyNCAwMDAwMDAwMCAwMDAwMDAwMSBjMDRjMTFi
+OApbODQxNDAuNDMyNjE3XSA1ZWMwOiBiZThmZmMxYyBjMDMyNjA5YyBmYTIwMDAwMCBjMDAzMzYw
+OCBjZmEzZTQwMCBjZmEzZTdiMCBiZThmZmMxYyBjZTk3NWVlOApbODQxNDAuNDQxMjUzXSA1ZWUw
+OiBiZThmZmMxYyBjZmJjNWMwMCBjZmEzZTQwMCBjZTk3NDAwMCAwMDAwMDAwMCBjMDI4NjU5NCBj
+ZmEzZTQ3NCBjZmEzZTQwMApbODQxNDAuNDQ5ODU5XSA1ZjAwOiBjZmEzZTQwOCAwMDAwMDAwNyBj
+ZjQ4N2MyMCBjZjgwNTg0MCBjZjYwY2EwMCBjMDMxZmQzNCAwMDAwMDAwMCAwMDAwMDAwMApbODQx
+NDAuNDU4NDk2XSA1ZjIwOiBjZmIyMDI4OCBjZmEzZTQwMCBjZjQ4N2MwMCAwMDAwMDAwOCAwMDAw
+MDAwMCBjMDJkOWE3OCAwMDAwMDAwMyAwMDAwMDAwMApbODQxNDAuNDY3MTAyXSA1ZjQwOiBjZjQ4
+N2MwMCBjMDI4NGRkYyAwMDAwMDAwMCBjZmIyMDI4OCBjZmIyMDI4MCBjMDI4NGU5NCAwMDAwMDAw
+MCBjMDBjMmU0YwpbODQxNDAuNDc1NzM4XSA1ZjYwOiAwMDAwMDAwMCAwMDAwMDAwMCBjZmIyMDI4
+MCAwMDAwMDAwMCBjZmJjNTBjMCAwMDAwMDAwNiBjMDAzM2MwNCBjZTk3NDAwMApbODQxNDAuNDg0
+Mzc1XSA1ZjgwOiAwMDAwMDAwMCBjMDBjMDEwNCAwMDAwMDAwNCBjZmJjNTBjMCBjZmIyMDI4MCBj
+MDBjMDFjNCA0MDBhMTAwMCAwMDAwMDAwMApbODQxNDAuNDkyOTgwXSA1ZmEwOiAwMDAwODkxYyBj
+MDAzM2E4MCA0MDBhMTAwMCAwMDAwMDAwMCAwMDAwMDAwNCAwMDAwMDAwMCA0MDNkMzAxNCAwMDAw
+MDAwMApbODQxNDAuNTAxNjE3XSA1ZmMwOiA0MDBhMTAwMCAwMDAwMDAwMCAwMDAwODkxYyAwMDAw
+MDAwNiAwMDAwMDAwMCAwMDAwMDAwMCA0MDBhOTAwMCBiZThmZmMxYwpbODQxNDAuNTEwMjIzXSA1
+ZmUwOiAwMDAwMDAwMCBiZThmZmJlMCAwMDAwOTU4NCA0MDM2MzIwYyA2MDAwMDAxMCAwMDAwMDAw
+NCAwMDAwNTE1MyBiZjBmYTdkMApbODQxNDAuNTE4ODU5XSBbPGMwMmI3MmQ0Pl0gKF9faW5ldF90
+d3NrX2hhc2hkYW5jZSsweDRjLzB4MTI4KSBmcm9tIFs8YzAzMWNhYTA+XSAoZGNjcF90aW1lX3dh
+aSkKWzg0MTQwLjUyODg2OV0gWzxjMDMxY2FhMD5dIChkY2NwX3RpbWVfd2FpdCsweDQwLzB4Yzgp
+IGZyb20gWzxjMDMxYzE1Yz5dIChkY2NwX3Jjdl9zdGF0ZV9wcm9jZXMpCls4NDE0MC41MzkwNjJd
+IFs8YzAzMWMxNWM+XSAoZGNjcF9yY3Zfc3RhdGVfcHJvY2VzcysweDEyMC8weDUzOCkgZnJvbSBb
+PGMwMzI2MDljPl0gKGRjY3BfdjRfZG9fKQpbODQxNDAuNTQ5NDA3XSBbPGMwMzI2MDljPl0gKGRj
+Y3BfdjRfZG9fcmN2KzB4MTFjLzB4MTRjKSBmcm9tIFs8YzAyODY1OTQ+XSAocmVsZWFzZV9zb2Nr
+KzB4YWMvMCkKWzg0MTQwLjU1ODc3Nl0gWzxjMDI4NjU5ND5dIChyZWxlYXNlX3NvY2srMHhhYy8w
+eDExMCkgZnJvbSBbPGMwMzFmZDM0Pl0gKGRjY3BfY2xvc2UrMHgyOGMvMHgzODApCls4NDE0MC41
+Njc3NzldIFs8YzAzMWZkMzQ+XSAoZGNjcF9jbG9zZSsweDI4Yy8weDM4MCkgZnJvbSBbPGMwMmQ5
+YTc4Pl0gKGluZXRfcmVsZWFzZSsweDY0LzB4NzApCls4NDE0MC41NzY2NjBdIFs8YzAyZDlhNzg+
+XSAoaW5ldF9yZWxlYXNlKzB4NjQvMHg3MCkgZnJvbSBbPGMwMjg0ZGRjPl0gKHNvY2tfcmVsZWFz
+ZSsweDI0LzB4YjgpCls4NDE0MC41ODU1NzFdIFs8YzAyODRkZGM+XSAoc29ja19yZWxlYXNlKzB4
+MjQvMHhiOCkgZnJvbSBbPGMwMjg0ZTk0Pl0gKHNvY2tfY2xvc2UrMHgyNC8weDM0KQpbODQxNDAu
+NTk0Mjk5XSBbPGMwMjg0ZTk0Pl0gKHNvY2tfY2xvc2UrMHgyNC8weDM0KSBmcm9tIFs8YzAwYzJl
+NGM+XSAoZnB1dCsweDEwOC8weDFmNCkKWzg0MTQwLjYwMjQ0N10gWzxjMDBjMmU0Yz5dIChmcHV0
+KzB4MTA4LzB4MWY0KSBmcm9tIFs8YzAwYzAxMDQ+XSAoZmlscF9jbG9zZSsweDcwLzB4N2MpCls4
+NDE0MC42MTA2MjZdIFs8YzAwYzAxMDQ+XSAoZmlscF9jbG9zZSsweDcwLzB4N2MpIGZyb20gWzxj
+MDBjMDFjND5dIChzeXNfY2xvc2UrMHhiNC8weDEwYykKWzg0MTQwLjYxOTE3MV0gWzxjMDBjMDFj
+ND5dIChzeXNfY2xvc2UrMHhiNC8weDEwYykgZnJvbSBbPGMwMDMzYTgwPl0gKHJldF9mYXN0X3N5
+c2NhbGwrMHgwLzB4MzApCls4NDE0MC42MjgxNDNdIENvZGU6IGU1OWYwMGRjIGUzYTAxMDhkIGVi
+ZjY3ODJhIGU1OTQxMDQ0IChlNTkxMjAxMCkgCls4NDE0MC42MzQ2NDNdIC0tLVsgZW5kIHRyYWNl
+IGI4ODc3ZWM5ZDU0MmMzMmYgXS0tLQpbODQxNDAuNjM5NTI2XSBLZXJuZWwgcGFuaWMgLSBub3Qg
+c3luY2luZzogRmF0YWwgZXhjZXB0aW9uIGluIGludGVycnVwdAoKLS0KVG8gdW5zdWJzY3JpYmUg
+ZnJvbSB0aGlzIGxpc3Q6IHNlbmQgdGhlIGxpbmUgInVuc3Vic2NyaWJlIGRjY3AiIGluCnRoZSBi
+b2R5IG9mIGEgbWVzc2FnZSB0byBtYWpvcmRvbW9Admdlci5rZXJuZWwub3JnCk1vcmUgbWFqb3Jk
+b21vIGluZm8gYXQgIGh0dHA6Ly92Z2VyLmtlcm5lbC5vcmcvbWFqb3Jkb21vLWluZm8uaHRtbA==
