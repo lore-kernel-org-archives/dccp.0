@@ -1,98 +1,83 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 28 Feb 2011 11:24:49 +0000
-Subject: Re: Proposed NN Feature handling modification
-Message-Id: <20110228112449.GD3620@gerrit.erg.abdn.ac.uk>
+From: Samuel Jero <sj323707@ohio.edu>
+Date: Sat, 26 Feb 2011 02:15:53 +0000
+Subject: [PATCH 5/4] dccp:  Always Send Newest NN Feature Value
+Message-Id: <1298686553.11418.70.camel@jero-laptop>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="=-8Sw8QenM7+SLI3h3Ba/E"
 List-Id: <dccp.vger.kernel.org>
-References: <1297648146.9816.149.camel@jero-laptop>
-In-Reply-To: <1297648146.9816.149.camel@jero-laptop>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-Quoting Samuel Jero:
-| > | My recommendation is to wait until the Confirm has been received to
-| > | alter the value of an NN feature. This eliminates the problem above a=
-nd
-| > | has the advantage that it follows RFC 4340 (section 6.6.1). Further,
-| > | making this change should require little code change.
-| > |=20
-| > I like the solution introduced in patch #3 because it is simple: Change
-| > options are retransmitted until the correct Confirm option comes in,
-| > instead of resetting the connection. It is an instance of the robustness
-| > principle - the peer can send any outdated/reordered Confirm option.
-|=20
-| Patches #2 and 3 (and another patch I will send shortly) make the
-| current method usable. Without them, NN feature negotiation in an
-| ongoing connection causes the connection to be reset.
-|=20
-Thank you for sending the updates. I have applied them to the current tree,
-please check them. Here are the changes that I made:
+--=-8Sw8QenM7+SLI3h3Ba/E
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
 
-  Patch #1: only whitespace changes. When looking over this patch I noted a=
- problem
-            with setting the local sequence window directly: this is also d=
-one in=20
-            feat.c:dccp_hdlr_seq_win() - in particular, also adjusting GSS,=
- AWL, AWH.
-            Please see discussion below, this is related.
-  Patch #4: I think your patch set has tackled some of the problems mention=
-ed
-            in the FIXME that it removes. It would be good to find out what
-            remains to be tackled, to eventually remove the #ifdef.
-  Patch #5: Added a dccp_feat_list_pop(entry) in case the new value overwri=
-tes
-            an existing one. Otherwise there would be multiple ChangeL opti=
-ons
-            in the same packet, with differing values. Please also see belo=
-w.
+At the moment, the DCCP feature negotiation code will ignore a CCID
+request to change an NN feature value if a negotiation for that feature
+is already underway. This patch changes that behavior to always accept
+and negotiate the value from a CCID. This aligns with RFC 4340 6.6.3 and
+prevents a nasty bug described below.
 
-  http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dsho=
-rtlog;h=DCcp
+I have observed the current behavior to cause problems when the sending
+application goes idle in the middle of negotiating a new Ack Ratio value
+(CCID 2). When the application starts sending again, CCID 2 will reset
+the congestion window to much smaller value. If this value is less than
+the Ack Ratio, CCID 2 will attempt to change the Ack Ratio. CCID 2 will
+successfully set the local Ack Ratio variable, but the Feature
+Negotiation code not send the new value because the Ack Ratio is in the
+process of being changed. This causes perpetual RTO timeouts from which
+the connection will never recover.
 
-| However, I wouldn't consider them a fix for what I'm talking about here.
-| The fact is that with the current code the sender thinks the receiver
-| has the new value of the feature while the feature is being negotiated.
-|=20
-I think this was my fault: the RFC says in 6.6.1 that values MUST not be ch=
-anged
-until they are confirmed by the peer. When this is taken as a prerequisite,=
- the
-complexity you mentioned below and the weird cases of two ends being in a l=
-imbo
-state will not appear.
+---
 
-I am therefore sending an RFC patch separately. Although I have tried it br=
-iefly
-with some Speex-streaming yesterday, I have not yet applied it to the test =
-tree:
-could you give this one a brief spin with your test setup?
+This patch should have been included with the initial set of 4 since it
+is a result of enabling feature negotiation. However,the testing I did
+for those 4 consisted solely of Iperf. Since, it never has pauses in the
+data stream, I didn't notice this bug.=20
 
-If it works out as expected, I think this will give a simpler (and more con=
-formant)
-solution.
+I have spent most of this week testing these changes using an
+application that does have idle periods in the data stream (in addition
+to Iperf). As a result, this bug only came to light after I had
+submitted those four patches.
 
-| Particularly for the Ack Ratio this can be confusing because the sender
-| would interpret the acks from the receiver using the new ack ratio. The
-| first half RTT of those would be from the old ack ratio. This would
-| cause inappropriate changes in the congestion window/pipe except for
-| appropriate byte counting which, I believe, mitigates that.
-|=20
-| It just seems to me that there should be a better way to do this;
-| something that's clearer and easier to understand/debug.=20
-|=20
-I wonder if there are any corner cases with waiting for the ConfirmR option=
- before
-activating the case: if not, the case is simpler, and I think we can then e=
-ven=20
-remove the following (changed) segment.
+My apologies for not testing my patches better...=20
 
-        entry =3D dccp_feat_list_lookup(fn, feat, 1);
-        if (entry !=3D NULL) {
-                if (entry->val.nn =3D fval.nn)
-                        return 0;
-                dccp_pr_debug("Clobbering existing NN entry %llu -> %llu\n",
-                              (unsigned long long)entry->val.nn,
-                              (unsigned long long)nn_val);
-                dccp_feat_list_pop(entry);
-        }
+Samuel Jero
+Internetworking Research Group
+Ohio University
+
+---
+Signed-off-by: Samuel Jero
+diff --git a/net/dccp/feat.c b/net/dccp/feat.c
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -797,13 +797,8 @@ int dccp_feat_signal_nn_change(struct sock *sk, u8 fea=
+t, u64 nn_val)
+ 		return -EINVAL;
+=20
+ 	entry =3D dccp_feat_list_lookup(fn, feat, 1);
+-	if (entry !=3D NULL) {
+-		dccp_pr_debug("Ignoring %llu, entry %llu exists in state %s\n",
+-			      (unsigned long long)nn_val,
+-			      (unsigned long long)entry->val.nn,
+-			      dccp_feat_sname[entry->state]);
++	if (entry && entry->val.nn =3D=3D fval.nn)
+ 		return 0;
+-	}
+
+        if (dccp_feat_activate(sk, feat, 1, &fval))
+                return -EADV;
+
+
+--=-8Sw8QenM7+SLI3h3Ba/E
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: This is a digitally signed message part
+
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.10 (GNU/Linux)
+
+iEYEABECAAYFAk1oYlUACgkQEwoGUlJjrt9clwCgir1CpdFqBxp4cnocbFyFMEN2
+fm4An0q8Pju+aXUhMdMplPXi9ni206e5
+=B5cx
+-----END PGP SIGNATURE-----
+
+--=-8Sw8QenM7+SLI3h3Ba/E--
