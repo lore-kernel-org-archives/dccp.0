@@ -1,73 +1,85 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Tue, 22 Feb 2011 11:33:59 +0000
+From: Samuel Jero <sj323707@ohio.edu>
+Date: Sat, 26 Feb 2011 02:09:38 +0000
 Subject: Re: [PATCH 2/4] dccp: Send Confirm Options Only Once
-Message-Id: <20110222113359.GC3962@gerrit.erg.abdn.ac.uk>
+Message-Id: <1298686178.11418.62.camel@jero-laptop>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="=-nO9BNoepYU/3U0eKevsd"
 List-Id: <dccp.vger.kernel.org>
 References: <1297647877.9816.145.camel@jero-laptop>
 In-Reply-To: <1297647877.9816.145.camel@jero-laptop>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Quoting Samuel Jero:
-| Remove Feature Negotiation Confirm Options from the list of options to
-| send after they are sent once because such options are NOT supposed to
-| be retransmitted and are ONLY supposed to be sent in response to a
-| Change Option (RFC 4340 6.2).
-| 
+--=-nO9BNoepYU/3U0eKevsd
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
 
-| --- a/net/dccp/feat.c
-| +++ b/net/dccp/feat.c
-| @@ -690,11 +690,18 @@ int dccp_feat_insert_opts(struct dccp_sock *dp, struct dccp_request_sock *dreq,
-|  			return -1;
-|  		if (pos->needs_mandatory && dccp_insert_option_mandatory(skb))
-|  			return -1;
-| -		/*
-| -		 * Enter CHANGING after transmitting the Change option (6.6.2).
-| -		 */
-| -		if (pos->state = FEAT_INITIALISING)
-| -			pos->state = FEAT_CHANGING;
-| +
-| +		if (opt = DCCPO_CONFIRM_R || opt = DCCPO_CONFIRM_L) {
-| +			/*Confirms don't get retransmitted (6.6.3)*/
-| +			dccp_feat_list_pop(pos);
-| +		} else {
-| +			/*
-| +			 * Enter CHANGING after transmitting
-| +			 * the Change option (6.6.2).
-| +			 */
-| +			if (pos->state = FEAT_INITIALISING)
-| +				pos->state = FEAT_CHANGING;
-| +		}
+If a connection is in the OPEN state, then remove Feature Negotiation
+Confirm Options from the list of options to send after they are sent
+once. Confirm options are NOT supposed to be retransmitted and are ONLY
+supposed to be sent in response to a Change Option (RFC 4340 6.2).
 
-Your thinking is correct, but this needs more work.
+When combined with feature negotiation code that would reset the
+connection on an feature negotiation value that didn't match the most
+recently sent value, this issue will cause a connection reset on the
+second feature negotiation for any given NN feature.
 
-In fact your code is almost the same as the one that had been reverted earlier:
+Note: Patch #3 (Don't Reset on Confirm for Old NN Feature Values), fixed
+the other side of this issue by ignoring values that don't match the
+most recent.
 
-               if (pos->state = FEAT_INITIALISING)
-	               pos->state = FEAT_CHANGING;
-	       else if (pos->needs_confirm && dreq = NULL)
-	               dccp_feat_list_pop(pos);
+---=20
 
-where the else-if part has been removed since it lead to several bugs when packets
-got lost during the initial handshake. The problem is that client and server have
-only 3 packets to get it right, if only 1 packet gets lost, and then retransmitted,
-the negotiation does not complete.
+I have modified this patch to only remove confirm options when the
+connection is in the OPEN state. This will allow confirm options to be
+retransmitted during PARTOPEN to provide durability at that point.
 
-( This part was only one half of the change, the other is in proto.c:dccp_set_state()
+Samuel Jero
 
-		/* Client retransmits all Confirm options until entering OPEN */
-		 if (oldstate = DCCP_PARTOPEN)
-                        dccp_feat_list_purge(&dccp_sk(sk)->dccps_featneg);
-)
+---
+Signed-off-by: Samuel Jero
+diff --git a/net/dccp/feat.c b/net/dccp/feat.c
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -690,11 +678,22 @@ int dccp_feat_insert_opts(struct dccp_sock *dp, struc=
+t dccp_request_sock *dreq,
+ 			return -1;
+ 		if (pos->needs_mandatory && dccp_insert_option_mandatory(skb))
+ 			return -1;
+-		/*
+-		 * Enter CHANGING after transmitting the Change option (6.6.2).
+-		 */
+-		if (pos->state =3D=3D FEAT_INITIALISING)
+-			pos->state =3D FEAT_CHANGING;
++
++		if (skb->sk->sk_state =3D=3D DCCP_OPEN &&
++			(opt =3D=3D DCCPO_CONFIRM_R || opt =3D=3D DCCPO_CONFIRM_L)) {
++			/*
++			 * Confirms don't get retransmitted (6.6.3) once the
++			 * connection is in state OPEN
++			 */
++			dccp_feat_list_pop(pos);
++		} else {
++			/*
++			 * Enter CHANGING after transmitting the Change
++			 * option (6.6.2).
++			 */
++			if (pos->state =3D=3D FEAT_INITIALISING)
++				pos->state =3D FEAT_CHANGING;
++		}
+ 	}
+ 	return 0;
+ }
 
-It seems to me that what you would like to do is to send Confirm options only once
-in established state? Then the dccp_feat_list_pop() should be state-dependent, i.e.
- only apply in states > PARTOPEN. Otherwise, we will have the same bugs for the
-initial feature negotiation that had already been fixed. This is documented on:
+--=-nO9BNoepYU/3U0eKevsd
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: This is a digitally signed message part
 
- http://eden-feed.erg.abdn.ac.uk/dccp/notes/feature_negotiation/why_retransmit_confirms
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.10 (GNU/Linux)
 
-Connection-state dependent handling of negotiation options is in dccp_feat_parse_options(),
-don't have a patch to accomplish both the above at the moment.
+iEYEABECAAYFAk1oYN4ACgkQEwoGUlJjrt9ZWACgjGa9nbYhlBBxuBSp5Zb10l2R
+QAAAoJS1T7CrswP11pwi/S/eYi0ApB9O
+=wG9z
+-----END PGP SIGNATURE-----
+
+--=-nO9BNoepYU/3U0eKevsd--
