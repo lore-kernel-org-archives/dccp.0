@@ -1,34 +1,51 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 11 Mar 2011 11:30:17 +0000
+From: Samuel Jero <sj323707@ohio.edu>
+Date: Sun, 13 Mar 2011 19:50:44 +0000
 Subject: Re: [Patch 1/1] dccp: CCID2 increment cwnd correctly
-Message-Id: <20110311113017.GA4876@gerrit.erg.abdn.ac.uk>
+Message-Id: <1300045844.31664.121.camel@jero-laptop>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="=-pGDwk8n8kMZhrM2aPJlL"
 List-Id: <dccp.vger.kernel.org>
 References: <1299562278.7569.82.camel@jero-laptop>
 In-Reply-To: <1299562278.7569.82.camel@jero-laptop>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-| However, in slow start CCID2 performs this test to increment cwnd every
-| second ack:
-| ++hc->tx_packets_acked =3D 2
-| Unfortunately, this will be incorrect, if cwnd previous to the idle
-| period was larger than 2 and if tx_packets_acked was close to cwnd. For
-| example: cwndP and tx_packets_ackedE.
-|=20
-| In this case, the current code, will increment tx_packets_acked until it
-| equals two, which will only be once tx_packets_acked (an unsigned 32bit
-| int) overflows.
-|=20
-| My fix is simply to change that test for tx_packets_acked greater than
-| or equal to two in slow start.
-|=20
-Excellent catch, thank you very much. This has also been added to the test =
-tree.
+--=-pGDwk8n8kMZhrM2aPJlL
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
 
-Would you be ok with me reusing the commit message as a comment - or if you
-like, you can also send an update.
+> | My fix is simply to change that test for tx_packets_acked greater than
+> | or equal to two in slow start.
+> |=20
+> Excellent catch, thank you very much. This has also been added to the tes=
+t tree.
+>=20
+> Would you be ok with me reusing the commit message as a comment - or if y=
+ou
+> like, you can also send an update.
 
-http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=DCcp_exp.git;a=3Dcommi=
-tdiff;h=F7095cb6dc9b85adb42c23c22b8938589c9965e8
+I don't think that a comment is really needed here. I don't see that
+anyone looking at this code at some point in the future would say "why
+did they use >=3D there?" Particularly, since the test (in congestion
+avoidance state) four lines later also uses >=3D without explanation.
+
+I would consider using >=3D in this situation (testing for a value of an
+incrementing variable) to be good coding practice even if it wasn't
+strictly necessary.
+
+Samuel Jero
+Internetworking Research Group
+Ohio University
+
+--=-pGDwk8n8kMZhrM2aPJlL
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: This is a digitally signed message part
+
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.10 (GNU/Linux)
+
+iEYEABECAAYFAk19IA4ACgkQEwoGUlJjrt9XWwCfeyaNxhn0I1TEBi3DVeOWy+da
+iSgAoJNdHUYH7MQVXD95rwxNLpJOb5rW
+=z9tj
+-----END PGP SIGNATURE-----
+
+--=-pGDwk8n8kMZhrM2aPJlL--
