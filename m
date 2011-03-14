@@ -1,107 +1,154 @@
-From: Samuel Jero <sj323707@ohio.edu>
-Date: Sun, 13 Mar 2011 20:34:57 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 14 Mar 2011 11:55:01 +0000
 Subject: Re: dccp test-tree [RFC] [Patch 1/1] dccp: Only activate NN values
-Message-Id: <1300048497.31664.158.camel@jero-laptop>
+Message-Id: <20110314115501.GB4631@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1
-Content-Type: multipart/mixed; boundary="=-7KgV/HWSe59bxYmzFkyy"
+Content-Type: multipart/mixed; boundary="k1lZvvs/B4yU6o8G"
 List-Id: <dccp.vger.kernel.org>
 References: <20110228112511.GE3620@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20110228112511.GE3620@gerrit.erg.abdn.ac.uk>
 To: dccp@vger.kernel.org
 
---=-7KgV/HWSe59bxYmzFkyy
-Content-Type: text/plain; charset="UTF-8"
-Content-Transfer-Encoding: quoted-printable
 
-> Well done, this looks good. I did some minor editing:
->  * whitespace/formatting/comments,
->  * simplification/subsumption,
->  * function should not be called for non-NN or non-known
->    feature, hence turned that into a DCCP_BUG() condition.
+--k1lZvvs/B4yU6o8G
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
 
-Okay
-
->=20
-> | 2)In a situation where the ack ratio has to be reduced because of an
-> |    RTO, idle period, or loss, CCID-2 now sets the ack ratio to half of =
-the
-> |    congestion window (or 1 if that's zero) instead of to the congestion
-> |    window. This should reduce the problems if one ack is lost (we have =
-to
-> |    lose two acks to not acknowledge an entire congestion window and tri=
-gger
-> |    RTO)
-> |=20
-> I think this makes for a separate patch, and it would be good to commenti=
-fy
-> the above into the code; please also see 3(b) below.
-
-Separate patch coming shortly. Will add comment describing the
-situation.
-
-> Some work still remains to be done:
->=20
->  1) Since ccid2_ack_ratio_next(sk) is just a wrapper around
->     dccp_feat_get_nn_next_val(sk, DCCPF_ACK_RATIO), ok to
->     use this instead?
-
-It's just fine to use dccp_feat_get_nn_next_val() instead. My primary
-reason for creating ccid2_ack_ratio_next() was to keep line lengths
-down.
-
->  2) Analogously, for the local sequence window feature the
->     dccp_feat_get_nn_next_val() is not used, it uses the
->     current value:
->     if (val !=3D dp->dccps_l_seq_win)
-> 	dccp_feat_signal_nn_change(sk, DCCPF_SEQUENCE_WINDOW, val);
-
-That should also be updated to use dccp_feat_get_nn_next_val(sk,
-DCCPF_SEQUENCE_WINDOW)
-
->  3) There is room for some refactoring:
->     a) dccp_feat_signal_nn_change() always implies also in part
->        dccp_feat_get_nn_next_val(): if the latter function returns
->        the same value as the supposedly 'new' one, it is not
->        necessary to start a new negotiation. So all the repeated
->        tests could be folded into that function.
+Thank you for the comments, there is also some update (attached).
 
 
-The problem here is that the ack ratio should only be changed after a
-loss, idle period, etc if the new cwnd is going to be less than the
-(negotiating) ack ratio. We need to call dccp_feat_get_nn_next_val() to
-decide whether we need to adjust the ack ratio or not.
+| > Well done, this looks good. I did some minor editing:
+| >  * whitespace/formatting/comments,
+| >  * simplification/subsumption,
+| >  * function should not be called for non-NN or non-known
+| >    feature, hence turned that into a DCCP_BUG() condition.
+| 
+| Okay
+| 
+I revised this some more, the function remains the same, but it is shorter 
+http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=dccp_exp.git;a=commitdiff;h=94da7d70003e8185fe189146f336db72c8fa1f0b
 
-We don't want to change the ack ratio every time we have a loss, etc.
-Doing so will result in pointless negotiations and more fluctuations in
-the ack ratio, neither of which is desirable.
+(If there is disagreement regarding allowing a get_nn_ function to query non-nn
+ features, I will add the test for type == NN back in.)
 
->     b) The following pattern appears three times in ccid2.c:
-> 	if (ccid2_ack_ratio_next(sk) > hc->tx_cwnd)
-> 		ccid2_change_l_ack_ratio(sk, hc->tx_cwnd/2 ? : 1U);
->        Perhaps this can, as some other parts of this patch set, be
->        refactored (e.g. the CCID-2 part is already a separate patch).
 
-I'll create a function for this code. Coming in separate patch.
->=20
-> Other than the minor edits I have left your patch as is, i.e. I have
-> not yet performed changes (1) and (2), awaiting your opinion on that.
+| >  1) Since ccid2_ack_ratio_next(sk) is just a wrapper around
+| >     dccp_feat_get_nn_next_val(sk, DCCPF_ACK_RATIO), ok to
+| >     use this instead?
+| 
+| It's just fine to use dccp_feat_get_nn_next_val() instead. My primary
+| reason for creating ccid2_ack_ratio_next() was to keep line lengths
+| down.
+| 
+Perhaps a shorter name, e.g.    dccp_feat_nn_get()
+(since it returns either the current or next value, and there is no other
+ accessor function defined).
 
-Go ahead with 1) and 2).  I'll send out a new patch for 3 (b) shortly.
 
-Samuel Jero
-Internetworking Research Group
-Ohio University
 
---=-7KgV/HWSe59bxYmzFkyy
-Content-Type: application/pgp-signature; name="signature.asc"
-Content-Description: This is a digitally signed message part
+| >  3) There is room for some refactoring:
+| >     a) dccp_feat_signal_nn_change() always implies also in part
+| >        dccp_feat_get_nn_next_val(): if the latter function returns
+| >        the same value as the supposedly 'new' one, it is not
+| >        necessary to start a new negotiation. So all the repeated
+| >        tests could be folded into that function.
+| 
+| 
+| The problem here is that the ack ratio should only be changed after a
+| loss, idle period, etc if the new cwnd is going to be less than the
+| (negotiating) ack ratio. We need to call dccp_feat_get_nn_next_val() to
+| decide whether we need to adjust the ack ratio or not.
+|
+That is a good point, maybe I need to reread the patch again. From what I saw,
+dccp_nn_get_next_val() is so far only called immediately before changing the
+value, whereas the above comment hints more at a peek/read-only functionality.
 
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.10 (GNU/Linux)
+This understanding was also the basis of the attached patch - actually I was
+quite happy since its use further simplified the interface.
 
-iEYEABECAAYFAk19Km4ACgkQEwoGUlJjrt9b/gCfcMIlQTaopjZLL8P1d2CT7ova
-w3YAn0XmFq3oZlzJ1HAbuaik4vE9rX6v
-=pLWv
------END PGP SIGNATURE-----
+I think once the above is resolved (which also includes the point below), then
+there is quite a good milestone for ccid-2.
 
---=-7KgV/HWSe59bxYmzFkyy--
+| We don't want to change the ack ratio every time we have a loss, etc.
+| Doing so will result in pointless negotiations and more fluctuations in
+| the ack ratio, neither of which is desirable.
+| 
+Agree, having done some testing over the weekend I found that some kind of
+hysteresis would be desirable.
+
+I don't know if blocking the Ack Ratio code is the reason, but during the
+initial slow-start there were ChangeL requests for Sequence Window on nearly
+every packet, which seems too much.
+
+If low_threshold == high_threshold, it oscillates. I think you have already done
+some work on this in the code using CCID2_WIN_CHANGE_FACTOR.
+
+During steady state of the connection I did not see many ChangeL requests. 
+
+--k1lZvvs/B4yU6o8G
+Content-Type: text/x-diff; charset=us-ascii
+Content-Disposition: attachment; filename="simplify_dynamic_nn_negotation.diff"
+
+dccp ccid-2: use new interface to refactor dynamic negotiation
+
+Using the new function dccp_feat_get_nn_next_val(), this simplifies existing
+code to not trigger a new negotiation if the requested new value equals the
+old one.
+---
+ net/dccp/ccids/ccid2.c |   22 +++++-----------------
+ net/dccp/feat.c        |    5 +++--
+ 2 files changed, 8 insertions(+), 19 deletions(-)
+
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -815,10 +815,11 @@ int dccp_feat_signal_nn_change(struct so
+ 	    !dccp_feat_is_valid_nn_val(feat, nn_val))
+ 		return -EINVAL;
+ 
++	if (nn_val == dccp_feat_get_nn_next_val(sk, feat))
++		return 0;	/* already set or negotiation under way */
++
+ 	entry = dccp_feat_list_lookup(fn, feat, 1);
+ 	if (entry != NULL) {
+-		if (entry->val.nn == fval.nn)
+-			return 0;
+ 		dccp_pr_debug("Clobbering existing NN entry %llu -> %llu\n",
+ 			      (unsigned long long)entry->val.nn,
+ 			      (unsigned long long)nn_val);
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -102,27 +102,15 @@ static void ccid2_change_l_ack_ratio(str
+ 		DCCP_WARN("Limiting Ack Ratio (%u) to %u\n", val, max_ratio);
+ 		val = max_ratio;
+ 	}
+-	if (val > DCCPF_ACK_RATIO_MAX)
+-		val = DCCPF_ACK_RATIO_MAX;
+-
+-	if (val == ccid2_ack_ratio_next(sk))
+-		return;
+-
+-	ccid2_pr_debug("changing local ack ratio to %u\n", val);
+-	dccp_feat_signal_nn_change(sk, DCCPF_ACK_RATIO, val);
++	dccp_feat_signal_nn_change(sk, DCCPF_ACK_RATIO,
++				   min_t(u32, val, DCCPF_ACK_RATIO_MAX));
+ }
+ 
+ static void ccid2_change_l_seq_window(struct sock *sk, u64 val)
+ {
+-	struct dccp_sock *dp = dccp_sk(sk);
+-
+-	if (val < DCCPF_SEQ_WMIN)
+-		val = DCCPF_SEQ_WMIN;
+-	if (val > DCCPF_SEQ_WMAX)
+-		val = DCCPF_SEQ_WMAX;
+-
+-	if (val != dp->dccps_l_seq_win)
+-		dccp_feat_signal_nn_change(sk, DCCPF_SEQUENCE_WINDOW, val);
++	dccp_feat_signal_nn_change(sk, DCCPF_SEQUENCE_WINDOW,
++				   clamp_val(val, DCCPF_SEQ_WMIN,
++						  DCCPF_SEQ_WMAX));
+ }
+ 
+ static void ccid2_hc_tx_rto_expire(unsigned long data)
+
+--k1lZvvs/B4yU6o8G--
