@@ -1,139 +1,125 @@
-From: Samuel Jero <sj323707@ohio.edu>
-Date: Tue, 15 Mar 2011 04:53:11 +0000
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Fri, 18 Mar 2011 11:30:52 +0000
 Subject: Re: dccp test-tree [RFC] [Patch 1/1] dccp: Only activate NN values
-Message-Id: <1300164791.20638.64.camel@jero-laptop>
+Message-Id: <20110318113052.GA5508@gerrit.erg.abdn.ac.uk>
 MIME-Version: 1
-Content-Type: multipart/mixed; boundary="=-up0mA8RipvzCOMYowYOh"
+Content-Type: multipart/mixed; boundary="cNdxnHkX5QqsyA0e"
 List-Id: <dccp.vger.kernel.org>
 References: <20110228112511.GE3620@gerrit.erg.abdn.ac.uk>
 In-Reply-To: <20110228112511.GE3620@gerrit.erg.abdn.ac.uk>
 To: dccp@vger.kernel.org
 
---=-up0mA8RipvzCOMYowYOh
-Content-Type: text/plain; charset="UTF-8"
-Content-Transfer-Encoding: quoted-printable
 
-> I revised this some more, the function remains the same, but it is shorte=
-r=20
-> http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=3Ddccp_exp.git;a=3Dc=
-ommitdiff;h=3D94da7d70003e8185fe189146f336db72c8fa1f0b
->=20
-> (If there is disagreement regarding allowing a get_nn_ function to query =
-non-nn
->  features, I will add the test for type =3D=3D NN back in.)
+--cNdxnHkX5QqsyA0e
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
 
-I think the test for NN features should be added back in. If we allow
-the function to be called for non-NN features, we need to include more
-code to return the correct values for non-NN features. In either the
-negotiating or non-negating state, the current code will return bad
-values for non-NN features.
+I have revised the patch set addressing the following comments of this thread:
 
-Further, since non-NN features are indeterminate until we receive the
-confirm, I don't see that a get_ function for those features would ever
-be useful.
+ 1) Renamed function to dccp_feat_nn_get().
+ 2) Added test to ensure that function is called for NN
+    features back in.
+ 3) Replaced ccid2_ack_ratio_next() with calls to that
+    function (dccp_feat_nn_get(sk, DCCPF_ACK_RATIO)).
+ 4) Replaced check for dccps_l_seq_win in ccid2_change_l_seq_window 
+    with call to dccp_feat_nn_get(sk, DCCPF_SEQUENCE_WINDOW)
+    (for similar calls see separate, attached patch).
+ 5) De-inlined ccid2_ack_ratio_next() wrapper as discussed.
+ 6) Updated remaining patches with regard to 1-4.
+ 
+In (4) I created a separate patch. You mentioned earlier replacing references to
+local seq_window with a call to the accessor function, these were the remaining
+references, I noticed no regression.
 
+This is all in the test tree, just uploaded 2.6.38
+     git://eden-feed.erg.abdn.ac.uk/dccp_exp	[subtree 'dccp']
 
-> | >  1) Since ccid2_ack_ratio_next(sk) is just a wrapper around
-> | >     dccp_feat_get_nn_next_val(sk, DCCPF_ACK_RATIO), ok to
-> | >     use this instead?
-> |=20
-> | It's just fine to use dccp_feat_get_nn_next_val() instead. My primary
-> | reason for creating ccid2_ack_ratio_next() was to keep line lengths
-> | down.
-> |=20
-> Perhaps a shorter name, e.g.    dccp_feat_nn_get()
-> (since it returns either the current or next value, and there is no other
->  accessor function defined).
+| > I don't know if blocking the Ack Ratio code is the reason, but during the
+| > initial slow-start there were ChangeL requests for Sequence Window on nearly
+| > every packet, which seems too much.
+| 
+| Right now, Change's are sent on every packet until the matching Confirm
+| is received. That will be the cause of most of the Change's you are
+| seeing.
+| 
+| The other thing is that at the beginning of a connection the sequence
+| window will be reduced and then increased. The initial window of 100
+| packets is too wide for 5*cwnd at the start of the connection. So the
+| window will be reduced as low as it will go at the very beginning of the
+| connection. However, as slow start picks up, cwnd will increase and the
+| sequence window will as well.
+| 
+| I've seen the above behavior, but haven't thought of an effective
+| solution (nor am I sure that we need a solution). Capping the minimum
+| sequence window at the default (100 packets) would solve this, but that
+| doesn't seem like a great solution.
+| 
+| > 
+| > If low_threshold == high_threshold, it oscillates. I think you have already done
+| > some work on this in the code using CCID2_WIN_CHANGE_FACTOR.
+| 
+| I'm not entirely certain what low_threshold and high_threshold you are
+| talking about. I have not seen sequence window oscillations other as the
+| congestion window oscillates in congestion avoidance as is expected.
+|
+I meant a Schmitt Trigger like behaviour:
+ * low_threshold: to change from lower value to higher value 
+ * hi_threshold:  to revert from higher value back to lower value
+In these electronic devices there is a gap between low and hi, to avoid fluctuations.
+Also audio effect gates have a similar setting.
 
-A shorter name is probably a good idea. dccp_feat_nn_get() seems fine.
+With regard to your comment about the 100 packets at the begin, I was wondering if
+the connection could not grossly exaggerate, or maybe even use the 100 packets.
 
+But all that is not a big deal, stuff for fine-tuning the now much better ccid2 
+engine. 
 
-> | >  3) There is room for some refactoring:
-> | >     a) dccp_feat_signal_nn_change() always implies also in part
-> | >        dccp_feat_get_nn_next_val(): if the latter function returns
-> | >        the same value as the supposedly 'new' one, it is not
-> | >        necessary to start a new negotiation. So all the repeated
-> | >        tests could be folded into that function.
-> |=20
-> | The problem here is that the ack ratio should only be changed after a
-> | loss, idle period, etc if the new cwnd is going to be less than the
-> | (negotiating) ack ratio. We need to call dccp_feat_get_nn_next_val() to
-> | decide whether we need to adjust the ack ratio or not.
-> |
-> That is a good point, maybe I need to reread the patch again. From what I=
- saw,
-> dccp_nn_get_next_val() is so far only called immediately before changing =
-the
-> value, whereas the above comment hints more at a peek/read-only functiona=
-lity.
->=20
-> This understanding was also the basis of the attached patch - actually I =
-was
-> quite happy since its use further simplified the interface.
+Thank you for all your good work. The comments helped a great deal too.
 
-The patch you attached looks fine.
+--cNdxnHkX5QqsyA0e
+Content-Type: text/x-diff; charset=us-ascii
+Content-Disposition: attachment; filename="remaining_l_seq_win_refs.diff"
 
-The additional calls to dccp_nn_get_next_val() are made just before we
-call ccid2_change_l_ack_ratio() when we have a loss, idle period, or
-application limited period.=20
+dccp ccid-2: replace remaining references to local Sequence Window value
 
-These are the sections of code that you recommended become a separate
-patch. I have re-factored that code slightly to reduce code duplication
-and will send out that patch immediately after this email.
+This replaces the remaining references to dccps_l_seq_win with the corresponding
+call to retrieve the current (STABLE if not in negotiation, CHANGING if being
+negotiated) value of the feature-local sequence window.
 
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid2.c |   12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
 
-> | We don't want to change the ack ratio every time we have a loss, etc.
-> | Doing so will result in pointless negotiations and more fluctuations in
-> | the ack ratio, neither of which is desirable.
-> |=20
-> Agree, having done some testing over the weekend I found that some kind o=
-f
-> hysteresis would be desirable.
->=20
-> I don't know if blocking the Ack Ratio code is the reason, but during the
-> initial slow-start there were ChangeL requests for Sequence Window on nea=
-rly
-> every packet, which seems too much.
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -441,10 +441,10 @@ static void ccid2_new_ack(struct sock *s
+ {
+ 	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
+ 	struct dccp_sock *dp = dccp_sk(sk);
++	u64 l_seq_win = dccp_feat_nn_get(sk, DCCPF_SEQUENCE_WINDOW);
+ 	int r_seq_used = hc->tx_cwnd / dp->dccps_l_ack_ratio;
+ 
+-	if (hc->tx_cwnd < dp->dccps_l_seq_win &&
+-	    r_seq_used < dp->dccps_r_seq_win) {
++	if (hc->tx_cwnd < l_seq_win && r_seq_used < dp->dccps_r_seq_win) {
+ 		if (hc->tx_cwnd < hc->tx_ssthresh) {
+ 			if (*maxincr > 0 && ++hc->tx_packets_acked >= 2) {
+ 				hc->tx_cwnd += 1;
+@@ -466,10 +466,10 @@ static void ccid2_new_ack(struct sock *s
+ 	else if (r_seq_used * CCID2_WIN_CHANGE_FACTOR < dp->dccps_r_seq_win/2)
+ 		ccid2_change_l_ack_ratio(sk, dp->dccps_l_ack_ratio / 2 ? : 1U);
+ 
+-	if (hc->tx_cwnd * CCID2_WIN_CHANGE_FACTOR >= dp->dccps_l_seq_win)
+-		ccid2_change_l_seq_window(sk, dp->dccps_l_seq_win * 2);
+-	else if (hc->tx_cwnd * CCID2_WIN_CHANGE_FACTOR < dp->dccps_l_seq_win/2)
+-		ccid2_change_l_seq_window(sk, dp->dccps_l_seq_win / 2);
++	if (hc->tx_cwnd * CCID2_WIN_CHANGE_FACTOR >= l_seq_win)
++		ccid2_change_l_seq_window(sk, l_seq_win * 2);
++	else if (hc->tx_cwnd * CCID2_WIN_CHANGE_FACTOR < l_seq_win / 2)
++		ccid2_change_l_seq_window(sk, l_seq_win / 2);
+ 
+ 	/*
+ 	 * FIXME: RTT is sampled several times per acknowledgment (for each
 
-Right now, Change's are sent on every packet until the matching Confirm
-is received. That will be the cause of most of the Change's you are
-seeing.
-
-The other thing is that at the beginning of a connection the sequence
-window will be reduced and then increased. The initial window of 100
-packets is too wide for 5*cwnd at the start of the connection. So the
-window will be reduced as low as it will go at the very beginning of the
-connection. However, as slow start picks up, cwnd will increase and the
-sequence window will as well.
-
-I've seen the above behavior, but haven't thought of an effective
-solution (nor am I sure that we need a solution). Capping the minimum
-sequence window at the default (100 packets) would solve this, but that
-doesn't seem like a great solution.
-
->=20
-> If low_threshold =3D=3D high_threshold, it oscillates. I think you have a=
-lready done
-> some work on this in the code using CCID2_WIN_CHANGE_FACTOR.
-
-I'm not entirely certain what low_threshold and high_threshold you are
-talking about. I have not seen sequence window oscillations other as the
-congestion window oscillates in congestion avoidance as is expected.
-
-Samuel Jero
-Internetworking Research Group
-Ohio University
-
---=-up0mA8RipvzCOMYowYOh
-Content-Type: application/pgp-signature; name="signature.asc"
-Content-Description: This is a digitally signed message part
-
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.10 (GNU/Linux)
-
-iEYEABECAAYFAk1+8LMACgkQEwoGUlJjrt8KxACfVbEhgzAfYb+N2iRJDrfB2Kfp
-oz4AniTH04AOdXCGkR4lukaSrd+07Ykw
-=BYTl
------END PGP SIGNATURE-----
-
---=-up0mA8RipvzCOMYowYOh--
+--cNdxnHkX5QqsyA0e--
