@@ -1,31 +1,34 @@
-From: David Miller <davem@davemloft.net>
-Date: Fri, 06 May 2011 20:04:47 +0000
-Subject: Re: [PATCH] dccp: handle invalid feature options length
-Message-Id: <20110506.130447.183054252.davem@davemloft.net>
+From: Ivo Calado <ivo.calado@ee.ufcg.edu.br>
+Date: Sun, 12 Jun 2011 13:12:43 +0000
+Subject: Doubt about DCCP_SOCKOPT_GET_CUR_MPS
+Message-Id: <BANLkTikMe4KHb1tDvb7_XCsvwsLvvqN=1w@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1304688438.29544.16.camel@dan>
-In-Reply-To: <1304688438.29544.16.camel@dan>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Fri, 6 May 2011 21:57:33 +0200
+Hi guys, I'm dealing with a doubt to retrieve the current PMTU. I'm
+calling the getsockopt syscall with DCCP_SOCKOPT_GET_CUR_MPS option. I
+tried such operation in both sides with the socket opened. however,
+I'm always getting the same value: 0.  I'm running this in loopback
+interface.
+     Is that right for such network interface?
 
-> Quoting Dan Rosenberg:
-> | A length of zero (after subtracting two for the type and len fields) for
-> | the DCCPO_{CHANGE,CONFIRM}_{L,R} options will cause an underflow due to
-> | the subtraction.  The subsequent code may read past the end of the
-> | options value buffer when parsing.  I'm unsure of what the consequences
-> | of this might be, but it's probably not good.
-> | 
-> Please disregard my earlier message, I erred.
-> Dan is right, his patch is correct and definitively valid.
-> A length of 0 would be cast to 0xff and then cause buffer overrun.
-> 
-> | Signed-off-by: Dan Rosenberg <drosenberg@vsecurity.com>
-> | Cc: stable@kernel.org
-> Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Regards
+[]'s
 
-Great, I'll apply this, thanks!
+--
+Ivo Calado
+PhD candidate in Electrical Engineering
+Embedded Systems and Pervasive Computing Lab - http://embeddedlab.org
+Electrical Engineering Department - http://dee.ufcg.edu.br/
+Federal University of Campina Grande - http://www.ufcg.edu.br
+Professor of the Federal Institute of Education, Science and
+Technology of Alagoas - http://ifal.edu.br
+
+PGP: 0xD7C3860A pgp.mit.edu
+Putt's Law:
+=A0 =A0 =A0=A0 Technology is dominated by two types of people:
+=A0 =A0 =A0 =A0 =A0 =A0 =A0=A0 Those who understand what they do not manage.
+=A0 =A0 =A0 =A0 =A0 =A0 =A0=A0 Those who manage what they do not understand.
