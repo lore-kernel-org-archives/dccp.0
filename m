@@ -1,55 +1,134 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 25 Jul 2011 13:36:33 +0000
-Subject: [PATCH 4/7] dccp ccid-2: use feature-negotiation to report Ack Ratio changes
-Message-Id: <1311600996-6712-5-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 04 Jul 2011 19:01:14 +0000
+Subject: [PATCH 1/6] dccp: Clean up slow-path input processing
+Message-Id: <1309806079-21604-2-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This uses the new feature-negotiation framework to signal Ack Ratio changes,
-as required by RFC 4341, sec. 6.1.2.
+This patch rearranges the order of statements of the slow-path input processing
+(i.e. any other state than OPEN), to resolve the following issues.
 
-That raises some problems with CCID-2, which at the moment can not cope
-gracefully with Ack Ratios > 1. Since these issues are not directly related
-to feature negotiation, they are marked by a FIXME.
+ 1. Dependencies: the order of statements now better matches RFC 4340, 8.5, i.e.
+    step 7 is before step 9 (previously 9 was before 7), and parsing options in
+    step 8 (which may consume resources) now comes after step 7.
+ 2. Sequence number checks are omitted if in state LISTEN/REQUEST, due to the
+    note underneath the table in RFC 4340, 7.5.3.
+    As a result, CCID processing is now indeed confined to OPEN/PARTOPEN states,
+    i.e. congestion control is performed only on the flow of data packets. This
+    avoids pathological cases of doing congestion control on those messages
+    which set up and terminate the connection.
+ 3. Packets are now passed on to Ack Vector / CCID processing only after
+    - step 7  (receive unexpected packets),
+    - step 9  (receive Reset),
+    - step 13 (receive CloseReq),
+    - step 14 (receive Close)
+    and only if the state is PARTOPEN. This simplifies CCID processing:
+    - in LISTEN/CLOSED the CCIDs are non-existent;
+    - in RESPOND/REQUEST the CCIDs have not yet been negotiated;
+    - in CLOSEREQ and active-CLOSING the node has already closed this socket;
+    - in passive-CLOSING the client is waiting for its Reset.
+    In the last case, RFC 4340, 8.3 leaves it open to ignore further incoming
+    data, which is the approach taken here.
 
 Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: Samuel Jero <sj323707@ohio.edu>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.uk>
 ---
- net/dccp/ccids/ccid2.c |   10 +++++++++-
- net/dccp/proto.c       |    1 -
- 2 files changed, 9 insertions(+), 2 deletions(-)
+ net/dccp/input.c |   61 ++++++++++++++++++++++++++---------------------------
+ 1 files changed, 30 insertions(+), 31 deletions(-)
 
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -184,7 +184,6 @@ int dccp_init_sock(struct sock *sk, const __u8 ctl_sock_initialized)
- 	dp->dccps_rate_last	= jiffies;
- 	dp->dccps_role		= DCCP_ROLE_UNDEFINED;
- 	dp->dccps_service	= DCCP_SERVICE_CODE_IS_ABSENT;
--	dp->dccps_l_ack_ratio	= dp->dccps_r_ack_ratio = 1;
- 	dp->dccps_tx_qlen	= sysctl_dccp_tx_qlen;
- 
- 	dccp_init_xmit_timers(sk);
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -494,8 +494,16 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
- 			if (hc->tx_rpdupack >= NUMDUPACK) {
- 				hc->tx_rpdupack = -1; /* XXX lame */
- 				hc->tx_rpseq    = 0;
--
-+#ifdef __CCID2_COPES_GRACEFULLY_WITH_ACK_CONGESTION_CONTROL__
-+				/*
-+				 * FIXME: Ack Congestion Control is broken; in
-+				 * the current state instabilities occurred with
-+				 * Ack Ratios greater than 1; causing hang-ups
-+				 * and long RTO timeouts. This needs to be fixed
-+				 * before opening up dynamic changes. -- gerrit
-+				 */
- 				ccid2_change_l_ack_ratio(sk, 2 * dp->dccps_l_ack_ratio);
-+#endif
- 			}
- 		}
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -619,20 +619,31 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+ 		return 1;
  	}
+ 
+-	if (sk->sk_state != DCCP_REQUESTING && sk->sk_state != DCCP_RESPOND) {
+-		if (dccp_check_seqno(sk, skb))
+-			goto discard;
+-
+-		/*
+-		 * Step 8: Process options and mark acknowledgeable
+-		 */
+-		if (dccp_parse_options(sk, NULL, skb))
+-			return 1;
++	/* Step 6: Check sequence numbers (omitted in LISTEN/REQUEST state) */
++	if (sk->sk_state != DCCP_REQUESTING && dccp_check_seqno(sk, skb))
++		goto discard;
+ 
+-		dccp_handle_ackvec_processing(sk, skb);
+-		dccp_deliver_input_to_ccids(sk, skb);
++	/*
++	 *   Step 7: Check for unexpected packet types
++	 *      If (S.is_server and P.type = Response)
++	 *	    or (S.is_client and P.type = Request)
++	 *	    or (S.state = RESPOND and P.type = Data),
++	 *	  Send Sync packet acknowledging P.seqno
++	 *	  Drop packet and return
++	 */
++	if ((dp->dccps_role != DCCP_ROLE_CLIENT &&
++	     dh->dccph_type = DCCP_PKT_RESPONSE) ||
++	    (dp->dccps_role = DCCP_ROLE_CLIENT &&
++	     dh->dccph_type = DCCP_PKT_REQUEST) ||
++	    (sk->sk_state = DCCP_RESPOND && dh->dccph_type = DCCP_PKT_DATA)) {
++		dccp_send_sync(sk, dcb->dccpd_seq, DCCP_PKT_SYNC);
++		goto discard;
+ 	}
+ 
++	/*  Step 8: Process options */
++	if (dccp_parse_options(sk, NULL, skb))
++		return 1;
++
+ 	/*
+ 	 *  Step 9: Process Reset
+ 	 *	If P.type = Reset,
+@@ -640,31 +651,15 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+ 	 *		S.state := TIMEWAIT
+ 	 *		Set TIMEWAIT timer
+ 	 *		Drop packet and return
+-	*/
++	 */
+ 	if (dh->dccph_type = DCCP_PKT_RESET) {
+ 		dccp_rcv_reset(sk, skb);
+ 		return 0;
+-		/*
+-		 *   Step 7: Check for unexpected packet types
+-		 *      If (S.is_server and P.type = Response)
+-		 *	    or (S.is_client and P.type = Request)
+-		 *	    or (S.state = RESPOND and P.type = Data),
+-		 *	  Send Sync packet acknowledging P.seqno
+-		 *	  Drop packet and return
+-		 */
+-	} else if ((dp->dccps_role != DCCP_ROLE_CLIENT &&
+-		    dh->dccph_type = DCCP_PKT_RESPONSE) ||
+-		    (dp->dccps_role = DCCP_ROLE_CLIENT &&
+-		     dh->dccph_type = DCCP_PKT_REQUEST) ||
+-		    (sk->sk_state = DCCP_RESPOND &&
+-		     dh->dccph_type = DCCP_PKT_DATA)) {
+-		dccp_send_sync(sk, dcb->dccpd_seq, DCCP_PKT_SYNC);
+-		goto discard;
+-	} else if (dh->dccph_type = DCCP_PKT_CLOSEREQ) {
++	} else if (dh->dccph_type = DCCP_PKT_CLOSEREQ) {	/* Step 13 */
+ 		if (dccp_rcv_closereq(sk, skb))
+ 			return 0;
+ 		goto discard;
+-	} else if (dh->dccph_type = DCCP_PKT_CLOSE) {
++	} else if (dh->dccph_type = DCCP_PKT_CLOSE) {		/* Step 14 */
+ 		if (dccp_rcv_close(sk, skb))
+ 			return 0;
+ 		goto discard;
+@@ -679,8 +674,12 @@ int dccp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
+ 		__kfree_skb(skb);
+ 		return 0;
+ 
+-	case DCCP_RESPOND:
+ 	case DCCP_PARTOPEN:
++		/* Step 8: if using Ack Vectors, mark packet acknowledgeable */
++		dccp_handle_ackvec_processing(sk, skb);
++		dccp_deliver_input_to_ccids(sk, skb);
++		/* fall through */
++	case DCCP_RESPOND:
+ 		queued = dccp_rcv_respond_partopen_state_process(sk, skb,
+ 								 dh, len);
+ 		break;
