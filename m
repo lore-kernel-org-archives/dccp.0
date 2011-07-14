@@ -1,159 +1,82 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 25 Jul 2011 13:36:31 +0000
-Subject: [PATCH 2/7] dccp: support for exchanging of NN options in established state 2/2
-Message-Id: <1311600996-6712-3-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Thu, 14 Jul 2011 13:42:35 +0000
+Subject: [PATCH 07/07] dccp ccid-2: check ack ratio when reducing cwnd
+Message-Id: <1310650955-5159-8-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patch adds the receiver side and the (fast-path) activation part for
-dynamic changes of non-negotiable (NN) parameters in (PART)OPEN state.
+From: Samuel Jero <sj323707@ohio.edu>
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+This patch causes CCID-2 to check the ack ratio after reducing the congestion
+window. If the ack ratio is greater than the congestion window, it is
+reduced. This prevents timeouts caused by an ack ratio larger than the
+congestion window.
+
+In this situation, we choose to set the ack ratio to half the congestion window
+(or one if that's zero) so that if we loose one ack we don't trigger a timeout.
+
 Signed-off-by: Samuel Jero <sj323707@ohio.edu>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.uk>
+Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/feat.c |  116 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 116 insertions(+), 0 deletions(-)
+ net/dccp/ccids/ccid2.c |   26 +++++++++++++++++++++++---
+ 1 files changed, 23 insertions(+), 3 deletions(-)
 
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -344,6 +344,20 @@ static int __dccp_feat_activate(struct sock *sk, const int idx,
- 	return dccp_feat_table[idx].activation_hdlr(sk, val, rx);
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -101,6 +101,24 @@ static void ccid2_change_l_ack_ratio(struct sock *sk, u32 val)
+ 				   min_t(u32, val, DCCPF_ACK_RATIO_MAX));
  }
  
-+/**
-+ * dccp_feat_activate  -  Activate feature value on socket
-+ * @sk: fully connected DCCP socket (after handshake is complete)
-+ * @feat_num: feature to activate, one of %dccp_feature_numbers
-+ * @local: whether local (1) or remote (0) @feat_num is meant
-+ * @fval: the value (SP or NN) to activate, or NULL to use the default value
-+ * For general use this function is preferable over __dccp_feat_activate().
-+ */
-+static int dccp_feat_activate(struct sock *sk, u8 feat_num, bool local,
-+			      dccp_feat_val const *fval)
++static void ccid2_check_l_ack_ratio(struct sock *sk)
 +{
-+	return __dccp_feat_activate(sk, dccp_feat_index(feat_num), local, fval);
++	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
++
++	/*
++	 * After a loss, idle period, application limited period, or RTO we
++	 * need to check that the ack ratio is still less than the congestion
++	 * window. Otherwise, we will send an entire congestion window of
++	 * packets and got no response because we haven't sent ack ratio
++	 * packets yet.
++	 * If the ack ratio does need to be reduced, we reduce it to half of
++	 * the congestion window (or 1 if that's zero) instead of to the
++	 * congestion window. This prevents problems if one ack is lost.
++	 */
++	if (dccp_feat_nn_get(sk, DCCPF_ACK_RATIO) > hc->tx_cwnd)
++		ccid2_change_l_ack_ratio(sk, hc->tx_cwnd/2 ? : 1U);
 +}
 +
- /* Test for "Req'd" feature (RFC 4340, 6.4) */
- static inline int dccp_feat_must_be_understood(u8 feat_num)
+ static void ccid2_change_l_seq_window(struct sock *sk, u64 val)
  {
-@@ -1252,6 +1266,100 @@ confirmation_failed:
+ 	dccp_feat_signal_nn_change(sk, DCCPF_SEQUENCE_WINDOW,
+@@ -187,6 +205,8 @@ static void ccid2_cwnd_application_limited(struct sock *sk, const u32 now)
+ 	}
+ 	hc->tx_cwnd_used  = 0;
+ 	hc->tx_cwnd_stamp = now;
++
++	ccid2_check_l_ack_ratio(sk);
  }
  
- /**
-+ * dccp_feat_handle_nn_established  -  Fast-path reception of NN options
-+ * @sk:		socket of an established DCCP connection
-+ * @mandatory:	whether @opt was preceded by a Mandatory option
-+ * @opt:	%DCCPO_CHANGE_L | %DCCPO_CONFIRM_R (NN only)
-+ * @feat:	NN number, one of %dccp_feature_numbers
-+ * @val:	NN value
-+ * @len:	length of @val in bytes
-+ * This function combines the functionality of change_recv/confirm_recv, with
-+ * the following differences (reset codes are the same):
-+ *    - cleanup after receiving the Confirm;
-+ *    - values are directly activated after successful parsing;
-+ *    - deliberately restricted to NN features.
-+ * The restriction to NN features is essential since SP features can have non-
-+ * predictable outcomes (depending on the remote configuration), and are inter-
-+ * dependent (CCIDs for instance cause further dependencies).
-+ */
-+static u8 dccp_feat_handle_nn_established(struct sock *sk, u8 mandatory, u8 opt,
-+					  u8 feat, u8 *val, u8 len)
-+{
-+	struct list_head *fn = &dccp_sk(sk)->dccps_featneg;
-+	const bool local = (opt = DCCPO_CONFIRM_R);
-+	struct dccp_feat_entry *entry;
-+	u8 type = dccp_feat_type(feat);
-+	dccp_feat_val fval;
+ /* This borrows the code of tcp_cwnd_restart() */
+@@ -205,6 +225,8 @@ static void ccid2_cwnd_restart(struct sock *sk, const u32 now)
+ 
+ 	hc->tx_cwnd_stamp = now;
+ 	hc->tx_cwnd_used  = 0;
 +
-+	dccp_feat_print_opt(opt, feat, val, len, mandatory);
-+
-+	/* Ignore non-mandatory unknown and non-NN features */
-+	if (type = FEAT_UNKNOWN) {
-+		if (local && !mandatory)
-+			return 0;
-+		goto fast_path_unknown;
-+	} else if (type != FEAT_NN) {
-+		return 0;
-+	}
-+
-+	/*
-+	 * We don't accept empty Confirms, since in fast-path feature
-+	 * negotiation the values are enabled immediately after sending
-+	 * the Change option.
-+	 * Empty Changes on the other hand are invalid (RFC 4340, 6.1).
-+	 */
-+	if (len = 0 || len > sizeof(fval.nn))
-+		goto fast_path_unknown;
-+
-+	if (opt = DCCPO_CHANGE_L) {
-+		fval.nn = dccp_decode_value_var(val, len);
-+		if (!dccp_feat_is_valid_nn_val(feat, fval.nn))
-+			goto fast_path_unknown;
-+
-+		if (dccp_feat_push_confirm(fn, feat, local, &fval) ||
-+		    dccp_feat_activate(sk, feat, local, &fval))
-+			return DCCP_RESET_CODE_TOO_BUSY;
-+
-+		/* set the `Ack Pending' flag to piggyback a Confirm */
-+		inet_csk_schedule_ack(sk);
-+
-+	} else if (opt = DCCPO_CONFIRM_R) {
-+		entry = dccp_feat_list_lookup(fn, feat, local);
-+		if (entry = NULL || entry->state != FEAT_CHANGING)
-+			return 0;
-+
-+		fval.nn = dccp_decode_value_var(val, len);
-+		/*
-+		 * Just ignore a value that doesn't match our current value.
-+		 * If the option changes twice within two RTTs, then at least
-+		 * one CONFIRM will be received for the old value after a
-+		 * new CHANGE was sent.
-+		 */
-+		if (fval.nn != entry->val.nn)
-+			return 0;
-+
-+		/* Only activate after receiving the Confirm option (6.6.1). */
-+		dccp_feat_activate(sk, feat, local, &fval);
-+
-+		/* It has been confirmed - so remove the entry */
-+		dccp_feat_list_pop(entry);
-+
-+	} else {
-+		DCCP_WARN("Received illegal option %u\n", opt);
-+		goto fast_path_failed;
-+	}
-+	return 0;
-+
-+fast_path_unknown:
-+	if (!mandatory)
-+		return dccp_push_empty_confirm(fn, feat, local);
-+
-+fast_path_failed:
-+	return mandatory ? DCCP_RESET_CODE_MANDATORY_ERROR
-+			 : DCCP_RESET_CODE_OPTION_ERROR;
-+}
-+
-+/**
-  * dccp_feat_parse_options  -  Process Feature-Negotiation Options
-  * @sk: for general use and used by the client during connection setup
-  * @dreq: used by the server during connection setup
-@@ -1286,6 +1394,14 @@ int dccp_feat_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
- 			return dccp_feat_confirm_recv(fn, mandatory, opt, feat,
- 						      val, len, server);
- 		}
-+		break;
-+	/*
-+	 *	Support for exchanging NN options on an established connection.
-+	 */
-+	case DCCP_OPEN:
-+	case DCCP_PARTOPEN:
-+		return dccp_feat_handle_nn_established(sk, mandatory, opt, feat,
-+						       val, len);
- 	}
- 	return 0;	/* ignore FN options in all other states */
++	ccid2_check_l_ack_ratio(sk);
  }
+ 
+ static void ccid2_hc_tx_packet_sent(struct sock *sk, unsigned int len)
+@@ -461,9 +483,7 @@ static void ccid2_congestion_event(struct sock *sk, struct ccid2_seq *seqp)
+ 	hc->tx_cwnd      = hc->tx_cwnd / 2 ? : 1U;
+ 	hc->tx_ssthresh  = max(hc->tx_cwnd, 2U);
+ 
+-	/* Avoid spurious timeouts resulting from Ack Ratio > cwnd */
+-	if (dccp_sk(sk)->dccps_l_ack_ratio > hc->tx_cwnd)
+-		ccid2_change_l_ack_ratio(sk, hc->tx_cwnd);
++	ccid2_check_l_ack_ratio(sk);
+ }
+ 
+ static int ccid2_hc_tx_parse_options(struct sock *sk, u8 packet_type,
