@@ -1,182 +1,78 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 14 Jul 2011 13:42:30 +0000
-Subject: [PATCH 02/07] dccp: support for exchanging of NN options in established state 2/2
-Message-Id: <1310650955-5159-3-git-send-email-gerrit@erg.abdn.ac.uk>
+From: Samuel Jero <sj323707@ohio.edu>
+Date: Sat, 16 Jul 2011 17:47:14 +0000
+Subject: Re: [PATCH 02/07] dccp: support for exchanging of NN options in established
+Message-Id: <4E21CEA2.8030509@ohio.edu>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="------------enigF977201071956EE24C8F152A"
 List-Id: <dccp.vger.kernel.org>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+References: <1310650955-5159-3-git-send-email-gerrit@erg.abdn.ac.uk>
+In-Reply-To: <1310650955-5159-3-git-send-email-gerrit@erg.abdn.ac.uk>
 To: dccp@vger.kernel.org
 
-This patch provides support for the reception of NN options in (PART)OPEN state.
-It is a combination of change_recv() and confirm_recv(), specifically geared
-towards receiving the `fast-path' NN options.
+--------------enigF977201071956EE24C8F152A
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
+You have my Signed-off-by for this patch. I would recommend making a
+minor change in one of the comments. See below.
 
-**** EDITORIAL: patches merged into this one from earlier iterations ***********
-dccp: Don't Reset On Confirm for Old NN Feature Values
-
-The Current DCCP code resets the connection when it encounters a Confirm
-for an NN feature with a value that doesn't match the most recent Change
-sent. However, this causes unneeded resets if an NN option changes twice
-within two RTTs. Further, this would break on the multiple Change
-options for a feature in one packet example in RFC4340 6.6.1.
-
-This patch modifies the code to simply ignore such a Confirm Option.
+On 07/14/2011 09:42 AM, Gerrit Renker wrote:
+> This patch provides support for the reception of NN options in (PART)OP=
+EN state.
+> It is a combination of change_recv() and confirm_recv(), specifically g=
+eared
+> towards receiving the `fast-path' NN options.
+>=20
+> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+> Acked-by: Ian McDonald <ian.mcdonald@jandi.co.nz>
 
 Signed-off-by: Samuel Jero <sj323707@ohio.edu>
-**** EDITORIAL: patches merged into this one from earlier iterations ***********
-dccp: Only activate NN values after receiving the Confirm option
 
-This defers changing local values using exchange of NN options in established
-connection state by only activating the value after receiving the Confirm
-option, as mandated by RFC 4340, 6.6.1.
+>   * dccp_feat_parse_options  -  Process Feature-Negotiation Options
+>   * @sk: for general use and used by the client during connection setup=
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-**** EDITORIAL: patches merged into this one from earlier iterations ***********
----
- net/dccp/feat.c |  117 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 files changed, 117 insertions(+), 0 deletions(-)
+>   * @dreq: used by the server during connection setup
+> @@ -1286,6 +1394,15 @@ int dccp_feat_parse_options(struct sock *sk, str=
+uct dccp_request_sock *dreq,
+>  			return dccp_feat_confirm_recv(fn, mandatory, opt, feat,
+>  						      val, len, server);
+>  		}
+> +		break;
+> +	/*
+> +	 *	Support for exchanging NN options on an established connection
+> +	 *	This is currently restricted to Ack Ratio (RFC 4341, 6.1.2)
+> +	 */
 
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -344,6 +344,20 @@ static int __dccp_feat_activate(struct sock *sk, const int idx,
- 	return dccp_feat_table[idx].activation_hdlr(sk, val, rx);
- }
- 
-+/**
-+ * dccp_feat_activate  -  Activate feature value on socket
-+ * @sk: fully connected DCCP socket (after handshake is complete)
-+ * @feat_num: feature to activate, one of %dccp_feature_numbers
-+ * @local: whether local (1) or remote (0) @feat_num is meant
-+ * @fval: the value (SP or NN) to activate, or NULL to use the default value
-+ * For general use this function is preferable over __dccp_feat_activate().
-+ */
-+static int dccp_feat_activate(struct sock *sk, u8 feat_num, bool local,
-+			      dccp_feat_val const *fval)
-+{
-+	return __dccp_feat_activate(sk, dccp_feat_index(feat_num), local, fval);
-+}
-+
- /* Test for "Req'd" feature (RFC 4340, 6.4) */
- static inline int dccp_feat_must_be_understood(u8 feat_num)
- {
-@@ -1252,6 +1266,100 @@ confirmation_failed:
- }
- 
- /**
-+ * dccp_feat_handle_nn_established  -  Fast-path reception of NN options
-+ * @sk:		socket of an established DCCP connection
-+ * @mandatory:	whether @opt was preceded by a Mandatory option
-+ * @opt:	%DCCPO_CHANGE_L | %DCCPO_CONFIRM_R (NN only)
-+ * @feat:	NN number, one of %dccp_feature_numbers
-+ * @val:	NN value
-+ * @len:	length of @val in bytes
-+ * This function combines the functionality of change_recv/confirm_recv, with
-+ * the following differences (reset codes are the same):
-+ *    - cleanup after receiving the Confirm;
-+ *    - values are directly activated after successful parsing;
-+ *    - deliberately restricted to NN features.
-+ * The restriction to NN features is essential since SP features can have non-
-+ * predictable outcomes (depending on the remote configuration), and are inter-
-+ * dependent (CCIDs for instance cause further dependencies).
-+ */
-+static u8 dccp_feat_handle_nn_established(struct sock *sk, u8 mandatory, u8 opt,
-+					  u8 feat, u8 *val, u8 len)
-+{
-+	struct list_head *fn = &dccp_sk(sk)->dccps_featneg;
-+	const bool local = (opt = DCCPO_CONFIRM_R);
-+	struct dccp_feat_entry *entry;
-+	u8 type = dccp_feat_type(feat);
-+	dccp_feat_val fval;
-+
-+	dccp_feat_print_opt(opt, feat, val, len, mandatory);
-+
-+	/* Ignore non-mandatory unknown and non-NN features */
-+	if (type = FEAT_UNKNOWN) {
-+		if (local && !mandatory)
-+			return 0;
-+		goto fast_path_unknown;
-+	} else if (type != FEAT_NN) {
-+		return 0;
-+	}
-+
-+	/*
-+	 * We don't accept empty Confirms, since in fast-path feature
-+	 * negotiation the values are enabled immediately after sending
-+	 * the Change option.
-+	 * Empty Changes on the other hand are invalid (RFC 4340, 6.1).
-+	 */
-+	if (len = 0 || len > sizeof(fval.nn))
-+		goto fast_path_unknown;
-+
-+	if (opt = DCCPO_CHANGE_L) {
-+		fval.nn = dccp_decode_value_var(val, len);
-+		if (!dccp_feat_is_valid_nn_val(feat, fval.nn))
-+			goto fast_path_unknown;
-+
-+		if (dccp_feat_push_confirm(fn, feat, local, &fval) ||
-+		    dccp_feat_activate(sk, feat, local, &fval))
-+			return DCCP_RESET_CODE_TOO_BUSY;
-+
-+		/* set the `Ack Pending' flag to piggyback a Confirm */
-+		inet_csk_schedule_ack(sk);
-+
-+	} else if (opt = DCCPO_CONFIRM_R) {
-+		entry = dccp_feat_list_lookup(fn, feat, local);
-+		if (entry = NULL || entry->state != FEAT_CHANGING)
-+			return 0;
-+
-+		fval.nn = dccp_decode_value_var(val, len);
-+		/*
-+		 * Just ignore a value that doesn't match our current value.
-+		 * If the option changes twice within two RTTs, then at least
-+		 * one CONFIRM will be received for the old value after a
-+		 * new CHANGE was sent.
-+		 */
-+		if (fval.nn != entry->val.nn)
-+			return 0;
-+
-+		/* Only activate after receiving the Confirm option (6.6.1). */
-+		dccp_feat_activate(sk, feat, local, &fval);
-+
-+		/* It has been confirmed - so remove the entry */
-+		dccp_feat_list_pop(entry);
-+
-+	} else {
-+		DCCP_WARN("Received illegal option %u\n", opt);
-+		goto fast_path_failed;
-+	}
-+	return 0;
-+
-+fast_path_unknown:
-+	if (!mandatory)
-+		return dccp_push_empty_confirm(fn, feat, local);
-+
-+fast_path_failed:
-+	return mandatory ? DCCP_RESET_CODE_MANDATORY_ERROR
-+			 : DCCP_RESET_CODE_OPTION_ERROR;
-+}
-+
-+/**
-  * dccp_feat_parse_options  -  Process Feature-Negotiation Options
-  * @sk: for general use and used by the client during connection setup
-  * @dreq: used by the server during connection setup
-@@ -1286,6 +1394,15 @@ int dccp_feat_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
- 			return dccp_feat_confirm_recv(fn, mandatory, opt, feat,
- 						      val, len, server);
- 		}
-+		break;
-+	/*
-+	 *	Support for exchanging NN options on an established connection
-+	 *	This is currently restricted to Ack Ratio (RFC 4341, 6.1.2)
-+	 */
-+	case DCCP_OPEN:
-+	case DCCP_PARTOPEN:
-+		return dccp_feat_handle_nn_established(sk, mandatory, opt, feat,
-+						       val, len);
- 	}
- 	return 0;	/* ignore FN options in all other states */
- }
+This comment is out of date. We now process Sequence Window updates
+dynamically. I would remove the second line.
+
+> +	case DCCP_OPEN:
+> +	case DCCP_PARTOPEN:
+> +		return dccp_feat_handle_nn_established(sk, mandatory, opt, feat,
+> +						       val, len);
+>  	}
+>  	return 0;	/* ignore FN options in all other states */
+>  }
+
+
+
+Samuel Jero
+Internetworking Research Group
+Ohio University
+
+
+--------------enigF977201071956EE24C8F152A
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: OpenPGP digital signature
+Content-Disposition: attachment; filename="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.11 (GNU/Linux)
+Comment: Using GnuPG with Mozilla - http://enigmail.mozdev.org/
+
+iEYEARECAAYFAk4hzqYACgkQEwoGUlJjrt+sFACgrzI5Cj171ejrvKEczaGStNaI
+0VoAn1RvZ2LYXAx1WX1C4Z2Zjs0IdsZs
+=qY3D
+-----END PGP SIGNATURE-----
+
+--------------enigF977201071956EE24C8F152A--
