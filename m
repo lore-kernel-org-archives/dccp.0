@@ -1,7 +1,7 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 14 Jul 2011 13:42:31 +0000
-Subject: [PATCH 03/07] dccp: send Confirm options only once
-Message-Id: <1310650955-5159-4-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 25 Jul 2011 13:36:32 +0000
+Subject: [PATCH 3/7] dccp: send Confirm options only once
+Message-Id: <1311600996-6712-4-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -10,15 +10,10 @@ To: dccp@vger.kernel.org
 
 From: Samuel Jero <sj323707@ohio.edu>
 
-If a connection is in the OPEN state, then remove Feature Negotiation Confirm
-Options from the list of options to send after they are sent once. Confirm
-options are NOT supposed to be retransmitted and are ONLY supposed to be
-sent in response to a Change Option (RFC 4340 6.2).
-
-When combined with feature negotiation code that would reset the connection on
-an feature negotiation value that didn't match the most recently sent value,
-this issue will cause a connection reset on the second feature negotiation
-for any given NN feature.
+If a connection is in the OPEN state, remove feature negotiation Confirm
+options from the list of options after sending them once; as such options
+are NOT supposed to be retransmitted and are ONLY supposed to be sent in
+response to a Change option (RFC 4340 6.2).
 
 Signed-off-by: Samuel Jero <sj323707@ohio.edu>
 Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
