@@ -1,82 +1,55 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 14 Jul 2011 13:42:35 +0000
-Subject: [PATCH 07/07] dccp ccid-2: check ack ratio when reducing cwnd
-Message-Id: <1310650955-5159-8-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 25 Jul 2011 13:36:33 +0000
+Subject: [PATCH 4/7] dccp ccid-2: use feature-negotiation to report Ack Ratio changes
+Message-Id: <1311600996-6712-5-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Samuel Jero <sj323707@ohio.edu>
+This uses the new feature-negotiation framework to signal Ack Ratio changes,
+as required by RFC 4341, sec. 6.1.2.
 
-This patch causes CCID-2 to check the ack ratio after reducing the congestion
-window. If the ack ratio is greater than the congestion window, it is
-reduced. This prevents timeouts caused by an ack ratio larger than the
-congestion window.
+That raises some problems with CCID-2, which at the moment can not cope
+gracefully with Ack Ratios > 1. Since these issues are not directly related
+to feature negotiation, they are marked by a FIXME.
 
-In this situation, we choose to set the ack ratio to half the congestion window
-(or one if that's zero) so that if we loose one ack we don't trigger a timeout.
-
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Signed-off-by: Samuel Jero <sj323707@ohio.edu>
-Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Acked-by: Ian McDonald <ian.mcdonald@jandi.co.uk>
 ---
- net/dccp/ccids/ccid2.c |   26 +++++++++++++++++++++++---
- 1 files changed, 23 insertions(+), 3 deletions(-)
+ net/dccp/ccids/ccid2.c |   10 +++++++++-
+ net/dccp/proto.c       |    1 -
+ 2 files changed, 9 insertions(+), 2 deletions(-)
 
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -184,7 +184,6 @@ int dccp_init_sock(struct sock *sk, const __u8 ctl_sock_initialized)
+ 	dp->dccps_rate_last	= jiffies;
+ 	dp->dccps_role		= DCCP_ROLE_UNDEFINED;
+ 	dp->dccps_service	= DCCP_SERVICE_CODE_IS_ABSENT;
+-	dp->dccps_l_ack_ratio	= dp->dccps_r_ack_ratio = 1;
+ 	dp->dccps_tx_qlen	= sysctl_dccp_tx_qlen;
+ 
+ 	dccp_init_xmit_timers(sk);
 --- a/net/dccp/ccids/ccid2.c
 +++ b/net/dccp/ccids/ccid2.c
-@@ -101,6 +101,24 @@ static void ccid2_change_l_ack_ratio(struct sock *sk, u32 val)
- 				   min_t(u32, val, DCCPF_ACK_RATIO_MAX));
- }
- 
-+static void ccid2_check_l_ack_ratio(struct sock *sk)
-+{
-+	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
-+
-+	/*
-+	 * After a loss, idle period, application limited period, or RTO we
-+	 * need to check that the ack ratio is still less than the congestion
-+	 * window. Otherwise, we will send an entire congestion window of
-+	 * packets and got no response because we haven't sent ack ratio
-+	 * packets yet.
-+	 * If the ack ratio does need to be reduced, we reduce it to half of
-+	 * the congestion window (or 1 if that's zero) instead of to the
-+	 * congestion window. This prevents problems if one ack is lost.
-+	 */
-+	if (dccp_feat_nn_get(sk, DCCPF_ACK_RATIO) > hc->tx_cwnd)
-+		ccid2_change_l_ack_ratio(sk, hc->tx_cwnd/2 ? : 1U);
-+}
-+
- static void ccid2_change_l_seq_window(struct sock *sk, u64 val)
- {
- 	dccp_feat_signal_nn_change(sk, DCCPF_SEQUENCE_WINDOW,
-@@ -187,6 +205,8 @@ static void ccid2_cwnd_application_limited(struct sock *sk, const u32 now)
+@@ -494,8 +494,16 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
+ 			if (hc->tx_rpdupack >= NUMDUPACK) {
+ 				hc->tx_rpdupack = -1; /* XXX lame */
+ 				hc->tx_rpseq    = 0;
+-
++#ifdef __CCID2_COPES_GRACEFULLY_WITH_ACK_CONGESTION_CONTROL__
++				/*
++				 * FIXME: Ack Congestion Control is broken; in
++				 * the current state instabilities occurred with
++				 * Ack Ratios greater than 1; causing hang-ups
++				 * and long RTO timeouts. This needs to be fixed
++				 * before opening up dynamic changes. -- gerrit
++				 */
+ 				ccid2_change_l_ack_ratio(sk, 2 * dp->dccps_l_ack_ratio);
++#endif
+ 			}
+ 		}
  	}
- 	hc->tx_cwnd_used  = 0;
- 	hc->tx_cwnd_stamp = now;
-+
-+	ccid2_check_l_ack_ratio(sk);
- }
- 
- /* This borrows the code of tcp_cwnd_restart() */
-@@ -205,6 +225,8 @@ static void ccid2_cwnd_restart(struct sock *sk, const u32 now)
- 
- 	hc->tx_cwnd_stamp = now;
- 	hc->tx_cwnd_used  = 0;
-+
-+	ccid2_check_l_ack_ratio(sk);
- }
- 
- static void ccid2_hc_tx_packet_sent(struct sock *sk, unsigned int len)
-@@ -461,9 +483,7 @@ static void ccid2_congestion_event(struct sock *sk, struct ccid2_seq *seqp)
- 	hc->tx_cwnd      = hc->tx_cwnd / 2 ? : 1U;
- 	hc->tx_ssthresh  = max(hc->tx_cwnd, 2U);
- 
--	/* Avoid spurious timeouts resulting from Ack Ratio > cwnd */
--	if (dccp_sk(sk)->dccps_l_ack_ratio > hc->tx_cwnd)
--		ccid2_change_l_ack_ratio(sk, hc->tx_cwnd);
-+	ccid2_check_l_ack_ratio(sk);
- }
- 
- static int ccid2_hc_tx_parse_options(struct sock *sk, u8 packet_type,
