@@ -1,66 +1,53 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 04 Jul 2011 19:01:15 +0000
-Subject: [PATCH 2/6] dccp: combine the functionality of enqeueing and cloning
-Message-Id: <1309806079-21604-3-git-send-email-gerrit@erg.abdn.ac.uk>
+Date: Mon, 25 Jul 2011 13:36:35 +0000
+Subject: [PATCH 6/7] dccp ccid-2: increment cwnd correctly
+Message-Id: <1311600996-6712-7-git-send-email-gerrit@erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Realising the following call pattern,
- * first dccp_entail() is called to enqueue a new skb and
- * then skb_clone() is called to transmit a clone of that skb,
-this patch integrates both into the same function.
+From: Samuel Jero <sj323707@ohio.edu>
 
-Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+This patch fixes an issue where CCID-2 will not increase the congestion
+window for numerous RTTs after an idle period, application-limited period,
+or a loss once the algorithm is in Congestion Avoidance.
+
+What happens is that, when CCID-2 is in Congestion Avoidance mode, it will
+increase hc->tx_packets_acked by one for every packet and will increment cwnd
+every cwnd packets. However, if there is now an idle period in the connection,
+cwnd will be reduced, possibly below the slow start threshold. This will
+cause the connection to go into Slow Start. However, in Slow Start CCID-2
+performs this test to increment cwnd every second ack:
+
+	++hc->tx_packets_acked = 2
+
+Unfortunately, this will be incorrect, if cwnd previous to the idle period
+was larger than 2 and if tx_packets_acked was close to cwnd. For example:
+	cwndP  and  tx_packets_ackedE.
+
+In this case, the current code, will increment tx_packets_acked until it
+equals two, which will only be once tx_packets_acked (an unsigned 32-bit
+integer) overflows.
+
+My fix is simply to change that test for tx_packets_acked greater than or
+equal to two in slow start.
+
+Signed-off-by: Samuel Jero <sj323707@ohio.edu>
+Acked-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 ---
- net/dccp/output.c |   14 +++++++-------
- 1 files changed, 7 insertions(+), 7 deletions(-)
+ net/dccp/ccids/ccid2.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
 
---- a/net/dccp/output.c
-+++ b/net/dccp/output.c
-@@ -27,11 +27,13 @@ static inline void dccp_event_ack_sent(struct sock *sk)
- 	inet_csk_clear_xmit_timer(sk, ICSK_TIME_DACK);
- }
- 
--static void dccp_skb_entail(struct sock *sk, struct sk_buff *skb)
-+/* enqueue @skb on sk_send_head for retransmission, return clone to send now */
-+static struct sk_buff *dccp_skb_entail(struct sock *sk, struct sk_buff *skb)
- {
- 	skb_set_owner_w(skb, sk);
- 	WARN_ON(sk->sk_send_head);
- 	sk->sk_send_head = skb;
-+	return skb_clone(sk->sk_send_head, gfp_any());
- }
- 
- /*
-@@ -552,8 +554,7 @@ int dccp_connect(struct sock *sk)
- 
- 	DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_REQUEST;
- 
--	dccp_skb_entail(sk, skb);
--	dccp_transmit_skb(sk, skb_clone(skb, GFP_KERNEL));
-+	dccp_transmit_skb(sk, dccp_skb_entail(sk, skb));
- 	DCCP_INC_STATS(DCCP_MIB_ACTIVEOPENS);
- 
- 	/* Timer for repeating the REQUEST until an answer. */
-@@ -678,8 +679,7 @@ void dccp_send_close(struct sock *sk, const int active)
- 		DCCP_SKB_CB(skb)->dccpd_type = DCCP_PKT_CLOSE;
- 
- 	if (active) {
--		dccp_skb_entail(sk, skb);
--		dccp_transmit_skb(sk, skb_clone(skb, prio));
-+		skb = dccp_skb_entail(sk, skb);
- 		/*
- 		 * Retransmission timer for active-close: RFC 4340, 8.3 requires
- 		 * to retransmit the Close/CloseReq until the CLOSING/CLOSEREQ
-@@ -692,6 +692,6 @@ void dccp_send_close(struct sock *sk, const int active)
- 		 */
- 		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
- 					  DCCP_TIMEOUT_INIT, DCCP_RTO_MAX);
--	} else
--		dccp_transmit_skb(sk, skb);
-+	}
-+	dccp_transmit_skb(sk, skb);
- }
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -411,7 +411,7 @@ static void ccid2_new_ack(struct sock *sk, struct ccid2_seq *seqp,
+ 	if (hc->tx_cwnd < dp->dccps_l_seq_win &&
+ 	    r_seq_used < dp->dccps_r_seq_win) {
+ 		if (hc->tx_cwnd < hc->tx_ssthresh) {
+-			if (*maxincr > 0 && ++hc->tx_packets_acked = 2) {
++			if (*maxincr > 0 && ++hc->tx_packets_acked >= 2) {
+ 				hc->tx_cwnd += 1;
+ 				*maxincr    -= 1;
+ 				hc->tx_packets_acked = 0;
