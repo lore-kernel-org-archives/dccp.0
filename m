@@ -1,32 +1,20 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 01 Aug 2011 14:43:37 +0000
+From: David Miller <davem@davemloft.net>
+Date: Tue, 02 Aug 2011 00:37:38 +0000
 Subject: Re: net-next-2.6 [PATCH 0/7] dccp: add support for dynamic
-Message-Id: <20110801144337.GA4955@gerrit.erg.abdn.ac.uk>
+Message-Id: <20110801.173738.409817579425216279.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
 References: <1311600996-6712-1-git-send-email-gerrit@erg.abdn.ac.uk>
 In-Reply-To: <1311600996-6712-1-git-send-email-gerrit@erg.abdn.ac.uk>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-UXVvdGluZyBEYXZpZCBTLiBNaWxsZXI6CnwgRnJvbTogR2Vycml0IFJlbmtlciA8Z2Vycml0QGVy
-Zy5hYmRuLmFjLnVrPgp8IERhdGU6IE1vbiwgMjUgSnVsIDIwMTEgMDc6MzY6MjkgLTA2MDAKfCAK
-fCA+IEkgaGF2ZSBhbHNvIHBsYWNlZCB0aGlzIGluIGludG8gYSBmcmVzaCAodG9kYXkncykgY29w
-eSBvZiBuZXQtbmV4dC0yLjYsIG9uCnwgPiAKfCA+ICAgICBnaXQ6Ly9lZGVuLWZlZWQuZXJnLmFi
-ZG4uYWMudWsvbmV0LW5leHQtMi42ICAgICAgICBbc3VidHJlZSAnZGNjcCddCnwgCnwgSSBkaWQg
-YSB0ZXN0IHB1bGwgYW5kIHRoaXMgVVJMIGRvZXNuJ3Qgd29yazoKfCAKfCAKU29ycnksIEkgbXVz
-dCBoYXZlIGNsb2JiZXJlZCBzb21ldGhpbmcgZHVyaW5nIGEgc3Vic2VxdWVudCB1cGRhdGUgbGFz
-dCB3ZWVrLiAKCkkgaGF2ZSBqdXN0IHJlZ2VuZXJhdGVkIHRoZSB3aG9sZSB0cmVlIGZyb20gc2Ny
-YXRjaCwgaW5jbHVkaW5nIHRoZSAnZGNjcCcgc3ViLWJyYW5jaCwKdXNpbmcgIHRvZGF5J3MgbmV0
-LW5leHQtMi42LCBkb3VibGUtY2hlY2tpbmcgaXQgcnVubmluZyAKICBnaXQgbHMtcmVtb3RlIGdp
-dDovL2VkZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9uZXQtbmV4dC0yLjYgIGRjY3AKYW5kIGRvaW5n
-IGEgdGVzdC1wdWxsIG9mIHRoZSBkY2NwIHN1Yi10cmVlLgoKCkNhbiB5b3UgcGxlYXNlIGNvbnNp
-ZGVyIHB1bGxpbmcgYWdhaW4sIGZyb20KCiAgICBnaXQ6Ly9lZGVuLWZlZWQuZXJnLmFiZG4uYWMu
-dWsvbmV0LW5leHQtMi42CQlbc3ViLXRyZWUgJ2RjY3AnXQoKClRoZSBwYXRjaCBsaXN0aW5nIG9m
-IHRoaXMgc2V0IGlzIGF0CiAgaHR0cDovL2VkZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9jZ2ktYmlu
-L2dpdHdlYi5jZ2k/cD1uZXQtbmV4dC0yLjYuZ2l0O2E9bG9nO2jcY3AKCgpUaGFuayB5b3UgZm9y
-IHRoZSB1cGRhdGUKR2Vycml0Ci0tIAotLQpUbyB1bnN1YnNjcmliZSBmcm9tIHRoaXMgbGlzdDog
-c2VuZCB0aGUgbGluZSAidW5zdWJzY3JpYmUgZGNjcCIgaW4KdGhlIGJvZHkgb2YgYSBtZXNzYWdl
-IHRvIG1ham9yZG9tb0B2Z2VyLmtlcm5lbC5vcmcKTW9yZSBtYWpvcmRvbW8gaW5mbyBhdCAgaHR0
-cDovL3ZnZXIua2VybmVsLm9yZy9tYWpvcmRvbW8taW5mby5odG1s
+From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date: Mon, 1 Aug 2011 08:43:37 -0600
+
+> Can you please consider pulling again, from
+> 
+>     git://eden-feed.erg.abdn.ac.uk/net-next-2.6		[sub-tree 'dccp']
+
+That works, pulled and queued up, thanks.
