@@ -1,46 +1,60 @@
-From: Samuel Jero <sj323707@ohio.edu>
-Date: Mon, 27 Feb 2012 05:33:13 +0000
-Subject: Re: [PATCH] Allow Acknowledgment of all valid Response packets
-Message-Id: <4F4B1599.5000700@ohio.edu>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="------------enig854D2038B9AEA529E6D784C0"
+From: Ian McDonald <ian.mcdonald@jandi.co.uk>
+Date: Thu, 02 Feb 2012 16:38:07 +0000
+Subject: Re: Bug on CCID 3 of DCCP
+Message-Id: <CAG_KctrYctZVKLbhNhWv00ZYLwn0RZRtb_-4aQQDtrsfHGMivQ@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <4F33555B.6070607@ohio.edu>
-In-Reply-To: <4F33555B.6070607@ohio.edu>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
---------------enig854D2038B9AEA529E6D784C0
-Content-Type: text/plain; charset=ISO-8859-1
-Content-Transfer-Encoding: quoted-printable
+Hi Jordi
 
-> I have had time to go over the patch. Thanks a lot for submitting it, t=
-he previous
-> implementation was indeed not correct. I made a few small updates, addi=
-ng comments
-> and between48(), please have a look at=20
->     http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=3Ddccp_exp.git=
-;a=3Dcommitdiff;h=3D2526d0c75d6ef8b5bf4bb326155b03d9cc727610
+I am not actively working on this code at present so sending to
+dccp@vger.kernel.org.
 
-Looks good. Good catch on the between48()'s.
+You will get asked a few questions so will ask them to you now:
+- what version of kernel are you using?
+- have you tried Gerrit's development code?
 
-Samuel Jero
-Internetworking Research Group
-Ohio University
+The other thing with an experimental area of the Linux kernel is that
+if you are lucky someone will respond, otherwise you might need to
+learn the code and try and fix yourself. If you do not wish to do this
+you might wish to engage a professional firm. I went and fixed much of
+the code because I had problems I needed to resolve, for example.
 
+If I do get time then I may look at it, but highly unlikely I am afraid.
 
+Regards
 
---------------enig854D2038B9AEA529E6D784C0
-Content-Type: application/pgp-signature; name="signature.asc"
-Content-Description: OpenPGP digital signature
-Content-Disposition: attachment; filename="signature.asc"
+Ian
 
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1.4.11 (GNU/Linux)
-Comment: Using GnuPG with Mozilla - http://enigmail.mozdev.org/
-
-iEYEARECAAYFAk9LFZkACgkQEwoGUlJjrt+KbgCgsXK7bDulPAl9+t8NUsYV+yBZ
-NOsAoJ3sezXSIRRYwj4MQKlNvTYcsCo3
-=vacn
------END PGP SIGNATURE-----
-
---------------enig854D2038B9AEA529E6D784C0--
+On 2 February 2012 15:48, Jordi Salvador <salvador@wingsformedia.com> wrote:
+>
+> Hello Mr. McDonald:
+>
+> We are developing an application on Linux which sends data using the
+> DCCP protocol with CCID 3. Sometimes, while sending data, we get a bug
+> message, originated in net/dccp/ccids/ccid3.c, line 240, and then the
+> system freezes. Looking at the kernel source code we find the
+> following:
+>
+> BUG_ON(hc->tx_p && !hc->tx_x_calc);
+>
+> We haven't been able to reproduce that bug (it just happens randomly),
+> and we don't exactly understand the meaning of the condition that
+> triggers the bug, nor how that condition may hold true. Could you
+> point out us some ideas which could help us to understand why we are
+> experiencing that bug and to understand its meaning?
+>
+> Thank you in advance.
+> --
+> Jordi Salvador
+> +34934980980
+> +34660842146
+> salvador@wingsformedia.com
+>
+> Warning: This e-mail is privileged, confidential and contains private
+> information. Any reading, retention, distribution or copying of this
+> communication by any person other than its intended recipient is
+> prohibited.
