@@ -1,31 +1,27 @@
-From: Ian McDonald <ian.mcdonald@jandi.co.uk>
-Date: Mon, 27 Feb 2012 08:48:43 +0000
-Subject: Re: Bug on CCID 3 of DCCP
-Message-Id: <CAG_KctoBk=E0y-7DHr6GkGt5ZUdmYaw88RJmzSmOcBtFat_TnQ@mail.gmail.com>
+From: Developer Man <flydevteam@gmail.com>
+Date: Fri, 24 Feb 2012 13:08:04 +0000
+Subject: RTT info gets stuck
+Message-Id: <CAASEuDw1Tq3kznzWEzzD+W-=U-m+C2NBHRLp76zkVuONspMhVQ@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <CAG_KctrYctZVKLbhNhWv00ZYLwn0RZRtb_-4aQQDtrsfHGMivQ@mail.gmail.com>
-In-Reply-To: <CAG_KctrYctZVKLbhNhWv00ZYLwn0RZRtb_-4aQQDtrsfHGMivQ@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 27 February 2012 02:05, Gerrit Renker <gerrit@erg.abdn.ac.uk> wrote:
->
-> Hi Ian,
-> | Would suggest that patch is worth pushing upstreams then as quickly as
-> we can...
-> |
-> I went through the code again and found that X_calc = 0 does not cause
-> harm, due
-> to clamping to s/t_mbi. My suggestion is to remove this BUG_ON and to test
-> instead
-> if t_ipi = 0 (since this would allow flooding of network).
->
-> Patch is in the next email, test tree has been updated, also CCID-4 has
-> now
-> the same change (removed X_calc BUG_ON, added t_ipi=0 BUG_ON).
->
-> Gerrit
+Hello,
 
-Even better strategy!
+While logging the values of the dccp statistics (the fields "x_recv",
+"rtt" and "p" of the structure tfrc_rx_info) we have noticed that the
+values of RTT get stuck at some point and they never change again.
+Is that normal?
+
+This is our set up:
+We have 2 machines connected by 3 ppp interfaces. For each interface
+we create a dccp connection and we log the rx_info at the receiver.
+We log about 5 minutes of connection and we can see that in the first
+60 seconds all 3 RTT measurements get stuck (each one at a different
+value and in different time)
+
+Thank you!
+
+Victor
