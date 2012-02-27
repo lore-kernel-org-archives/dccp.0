@@ -1,49 +1,41 @@
 From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Thu, 22 Sep 2011 02:50:05 +0000
-Subject: dccp test-tree [ANNOUNCE] dccp: DCCP-Cubic / CCID-5 subtree
-Message-Id: <20110922025005.GA17896@gerrit.erg.abdn.ac.uk>
+Date: Mon, 27 Feb 2012 02:05:54 +0000
+Subject: [PATCH 1/1] dccp ccid-3: replace incorrect BUG_ON
+Message-Id: <20120227020554.GB14246@gerrit.erg.abdn.ac.uk>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Thanks to Ivo for implementing DCCP-Cubic (aka CCID-249, aka CCID-5).
+dccp ccid-3: replace incorrect BUG_ON
 
-I have added a new subtree for CCID-249 at
+This replaces an unjustified BUG_ON(), which could get triggered under normal
+conditions: X_calc can be 0 when p > 0. X would in this case be set to the
+minimum, s/t_mbi. Its replacement avoids t_ipi = 0 (unbounded sending rate).
 
-   git://eden-feed.erg.abdn.ac.uk/dccp_exp  [subtree `ccid5']
+Thanks to Jordi, Victor and Xavier who reported this.
 
-Patch based on net-2.6 is at
-   http://eden-feed.erg.abdn.ac.uk/latest-dccp-ccid5-test-tree.diff.gz
+Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/ccids/ccid3.c |    3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
 
-Tarball based on net-2.6 is at
-   http://eden-feed.erg.abdn.ac.uk/latest-dccp-ccid5-test-tree.tar.bz2
-
-after fixing some whitespace issues in the patch. I will keep it in synch
-with the rest of the test tree, please do send any updates you find for CCID-5.
-
-           =====================
-           Short HOWTO on installing and using CCID-5
-           =====================
-
-To clone the ccid5 tree,
-
-   git checkout -b ccid5
-   git pull git://eden-feed.erg.abdn.ac.uk/dccp_exp +ccid5:ccid5
-
-When recompiling the dccp module, set
-
-   CONFIG_IP_DCCP_CCID5=y
-   CONFIG_IP_DCCP_CCID5_DEBUG=y
-
-After installation and modprobing the dccp module, set
-
-  echo 249 > /proc/sys/net/dccp/default/tx_ccid
-  echo 249 > /proc/sys/net/dccp/default/rx_ccid 
-
-to use the CCID-5 (resp. CCID-249) module.
-
-On 1Gbit ethernet, I measured up to 776 Mbps with iperf,
-on a noisy 2.4Ghz 802.11g it was still 13.7 Mbps.
-
+--- a/net/dccp/ccids/ccid3.c
++++ b/net/dccp/ccids/ccid3.c
+@@ -98,6 +98,7 @@ static void ccid3_update_send_interval(s
+ {
+ 	hc->tx_t_ipi = scaled_div32(((u64)hc->tx_s) << 6, hc->tx_x);
+ 
++	DCCP_BUG_ON(hc->tx_t_ipi = 0);
+ 	ccid3_pr_debug("t_ipi=%u, s=%u, X=%u\n", hc->tx_t_ipi,
+ 		       hc->tx_s, (unsigned)(hc->tx_x >> 6));
+ }
+@@ -236,8 +237,6 @@ static void ccid3_hc_tx_no_feedback_time
+ 		 *
+ 		 *  Note that X_recv is scaled by 2^6 while X_calc is not
+ 		 */
+-		BUG_ON(hc->tx_p && !hc->tx_x_calc);
+-
+ 		if (hc->tx_x_calc > (hc->tx_x_recv >> 5))
+ 			hc->tx_x_recv  				max(hc->tx_x_recv / 2,
