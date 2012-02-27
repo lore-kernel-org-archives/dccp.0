@@ -1,25 +1,46 @@
-From: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Date: Mon, 27 Feb 2012 02:13:55 +0000
+From: Samuel Jero <sj323707@ohio.edu>
+Date: Mon, 27 Feb 2012 05:33:13 +0000
 Subject: Re: [PATCH] Allow Acknowledgment of all valid Response packets
-Message-Id: <20120227021355.GC14246@gerrit.erg.abdn.ac.uk>
+Message-Id: <4F4B1599.5000700@ohio.edu>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="------------enig854D2038B9AEA529E6D784C0"
 List-Id: <dccp.vger.kernel.org>
 References: <4F33555B.6070607@ohio.edu>
 In-Reply-To: <4F33555B.6070607@ohio.edu>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-SGkgU2FtdWVsLAoKSSBoYXZlIGhhZCB0aW1lIHRvIGdvIG92ZXIgdGhlIHBhdGNoLiBUaGFua3Mg
-YSBsb3QgZm9yIHN1Ym1pdHRpbmcgaXQsIHRoZSBwcmV2aW91cwppbXBsZW1lbnRhdGlvbiB3YXMg
-aW5kZWVkIG5vdCBjb3JyZWN0LiBJIG1hZGUgYSBmZXcgc21hbGwgdXBkYXRlcywgYWRkaW5nIGNv
-bW1lbnRzCmFuZCBiZXR3ZWVuNDgoKSwgcGxlYXNlIGhhdmUgYSBsb29rIGF0IAogICAgaHR0cDov
-L2VkZW4tZmVlZC5lcmcuYWJkbi5hYy51ay9jZ2ktYmluL2dpdHdlYi5jZ2k/cNxjcF9leHAuZ2l0
-O2E9Y29tbWl0ZGlmZjtoJTI2ZDBjNzVkNmVmOGI1YmY0YmIzMjYxNTViMDNkOWNjNzI3NjEwCgpB
-bHNvIHRlc3RlZCB0aGUgcmVzdWx0IGJ5IHN1cHByZXNzaW5nIHRoZSBSZXNwb25zZSBzbyB0aGF0
-IFJlcXVlc3QgZ290IHR3aWNlIHN1Ym1pdHRlZCAodjQpLgpDb25uZWN0aW9uIHdhcyBzdWNjZXNz
-ZnVsbHkgZXN0YWJsaXNoZWQgd2hlbiB0aGUgdGhpcmQgUmVxdWVzdCBjYW1lIGluLgoKR2Vycml0
-Ci0tClRvIHVuc3Vic2NyaWJlIGZyb20gdGhpcyBsaXN0OiBzZW5kIHRoZSBsaW5lICJ1bnN1YnNj
-cmliZSBkY2NwIiBpbgp0aGUgYm9keSBvZiBhIG1lc3NhZ2UgdG8gbWFqb3Jkb21vQHZnZXIua2Vy
-bmVsLm9yZwpNb3JlIG1ham9yZG9tbyBpbmZvIGF0ICBodHRwOi8vdmdlci5rZXJuZWwub3JnL21h
-am9yZG9tby1pbmZvLmh0bWw=
+--------------enig854D2038B9AEA529E6D784C0
+Content-Type: text/plain; charset=ISO-8859-1
+Content-Transfer-Encoding: quoted-printable
+
+> I have had time to go over the patch. Thanks a lot for submitting it, t=
+he previous
+> implementation was indeed not correct. I made a few small updates, addi=
+ng comments
+> and between48(), please have a look at=20
+>     http://eden-feed.erg.abdn.ac.uk/cgi-bin/gitweb.cgi?p=3Ddccp_exp.git=
+;a=3Dcommitdiff;h=3D2526d0c75d6ef8b5bf4bb326155b03d9cc727610
+
+Looks good. Good catch on the between48()'s.
+
+Samuel Jero
+Internetworking Research Group
+Ohio University
+
+
+
+--------------enig854D2038B9AEA529E6D784C0
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Description: OpenPGP digital signature
+Content-Disposition: attachment; filename="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.11 (GNU/Linux)
+Comment: Using GnuPG with Mozilla - http://enigmail.mozdev.org/
+
+iEYEARECAAYFAk9LFZkACgkQEwoGUlJjrt+KbgCgsXK7bDulPAl9+t8NUsYV+yBZ
+NOsAoJ3sezXSIRRYwj4MQKlNvTYcsCo3
+=vacn
+-----END PGP SIGNATURE-----
+
+--------------enig854D2038B9AEA529E6D784C0--
