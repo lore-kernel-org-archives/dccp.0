@@ -1,25 +1,173 @@
-From: David Miller <davem@davemloft.net>
-Date: Sat, 14 Apr 2012 19:29:26 +0000
-Subject: Re: [PATCH net-next] inet: makes syn_ack_timeout mandatory
-Message-Id: <20120414.152926.446676650978105923.davem@davemloft.net>
+From: Christoph Paasch <christoph.paasch@uclouvain.be>
+Date: Thu, 13 Dec 2012 21:49:23 +0000
+Subject: [PATCH] Fix: kmemleak in tcp_v4/6_syn_recv_sock and dccp_v4/6_request_recv_sock
+Message-Id: <1355435363-12766-1-git-send-email-christoph.paasch@uclouvain.be>
 List-Id: <dccp.vger.kernel.org>
-References: <1334304965.5300.8713.camel@edumazet-glaptop>
-In-Reply-To: <1334304965.5300.8713.camel@edumazet-glaptop>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Eric Dumazet <eric.dumazet@gmail.com>
-Date: Fri, 13 Apr 2012 10:16:05 +0200
+If in either of the above functions inet_csk_route_child_sock() or
+__inet_inherit_port() fails, the newsk will not be freed:
 
-> From: : Eric Dumazet <edumazet@google.com>
-> 
-> There are two struct request_sock_ops providers, tcp and dccp.
-> 
-> inet_csk_reqsk_queue_prune() can avoid testing syn_ack_timeout being
-> NULL if we make it non NULL like syn_ack_timeout
-> 
-> Signed-off-by: Eric Dumazet <edumazet@google.com>
+unreferenced object 0xffff88022e8a92c0 (size 1592):
+  comm "softirq", pid 0, jiffies 4294946244 (age 726.160s)
+  hex dump (first 32 bytes):
+    0a 01 01 01 0a 01 01 02 00 00 00 00 a7 cc 16 00  ................
+    02 00 03 01 00 00 00 00 00 00 00 00 00 00 00 00  ................
+  backtrace:
+    [<ffffffff8153d190>] kmemleak_alloc+0x21/0x3e
+    [<ffffffff810ab3e7>] kmem_cache_alloc+0xb5/0xc5
+    [<ffffffff8149b65b>] sk_prot_alloc.isra.53+0x2b/0xcd
+    [<ffffffff8149b784>] sk_clone_lock+0x16/0x21e
+    [<ffffffff814d711a>] inet_csk_clone_lock+0x10/0x7b
+    [<ffffffff814ebbc3>] tcp_create_openreq_child+0x21/0x481
+    [<ffffffff814e8fa5>] tcp_v4_syn_recv_sock+0x3a/0x23b
+    [<ffffffff814ec5ba>] tcp_check_req+0x29f/0x416
+    [<ffffffff814e8e10>] tcp_v4_do_rcv+0x161/0x2bc
+    [<ffffffff814eb917>] tcp_v4_rcv+0x6c9/0x701
+    [<ffffffff814cea9f>] ip_local_deliver_finish+0x70/0xc4
+    [<ffffffff814cec20>] ip_local_deliver+0x4e/0x7f
+    [<ffffffff814ce9f8>] ip_rcv_finish+0x1fc/0x233
+    [<ffffffff814cee68>] ip_rcv+0x217/0x267
+    [<ffffffff814a7bbe>] __netif_receive_skb+0x49e/0x553
+    [<ffffffff814a7cc3>] netif_receive_skb+0x50/0x82
 
-Applied.
+This happens, because sk_clone_lock initializes sk_refcnt to 2, and thus
+a single sock_put() is not enough to free the memory. Additionally, things
+like xfrm, memcg, cookie_values,... may have been initialized.
+We have to free them properly.
+
+This is fixed by forcing a call to tcp_done(), ending up in
+inet_csk_destroy_sock, doing the final sock_put(). tcp_done() is necessary,
+because it ends up doing all the cleanup on xfrm, memcg, cookie_values,
+xfrm,...
+
+Before calling tcp_done, we have to set the socket to SOCK_DEAD, to
+force it entering inet_csk_destroy_sock. To avoid the warning in
+inet_csk_destroy_sock, inet_num has to be set to 0.
+As inet_csk_destroy_sock does a dec on orphan_count, we first have to
+increase it.
+
+Calling tcp_done() allows us to remove the calls to
+tcp_clear_xmit_timer() and tcp_cleanup_congestion_control().
+
+A similar approach is taken for dccp by calling dccp_done().
+
+This probably should be backported to kernels >= 3.0 as it is in the
+kernel since 0e734419923bd (ipv4: Use inet_csk_route_child_sock() in
+DCCP and TCP.).
+
+Signed-off-by: Christoph Paasch <christoph.paasch@uclouvain.be>
+---
+ include/net/inet_connection_sock.h |    1 +
+ net/dccp/ipv4.c                    |    4 ++--
+ net/dccp/ipv6.c                    |    3 ++-
+ net/ipv4/inet_connection_sock.c    |   16 ++++++++++++++++
+ net/ipv4/tcp_ipv4.c                |    6 ++----
+ net/ipv6/tcp_ipv6.c                |    3 ++-
+ 6 files changed, 25 insertions(+), 8 deletions(-)
+
+diff --git a/include/net/inet_connection_sock.h b/include/net/inet_connection_sock.h
+index ba1d361..1832927 100644
+--- a/include/net/inet_connection_sock.h
++++ b/include/net/inet_connection_sock.h
+@@ -318,6 +318,7 @@ extern void inet_csk_reqsk_queue_prune(struct sock *parent,
+ 				       const unsigned long max_rto);
+ 
+ extern void inet_csk_destroy_sock(struct sock *sk);
++extern void inet_csk_prepare_forced_close(struct sock *sk);
+ 
+ /*
+  * LISTEN is a special case for poll..
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 176ecdb..4f9f5eb 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -439,8 +439,8 @@ exit:
+ 	NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_LISTENDROPS);
+ 	return NULL;
+ put_and_exit:
+-	bh_unlock_sock(newsk);
+-	sock_put(newsk);
++	inet_csk_prepare_forced_close(newsk);
++	dccp_done(newsk);
+ 	goto exit;
+ }
+ 
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index 56840b2..6e05981 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -585,7 +585,8 @@ static struct sock *dccp_v6_request_recv_sock(struct sock *sk,
+ 	newinet->inet_rcv_saddr = LOOPBACK4_IPV6;
+ 
+ 	if (__inet_inherit_port(sk, newsk) < 0) {
+-		sock_put(newsk);
++		inet_csk_prepare_forced_close(newsk);
++		dccp_done(newsk);
+ 		goto out;
+ 	}
+ 	__inet6_hash(newsk, NULL);
+diff --git a/net/ipv4/inet_connection_sock.c b/net/ipv4/inet_connection_sock.c
+index 2026542..d0670f0 100644
+--- a/net/ipv4/inet_connection_sock.c
++++ b/net/ipv4/inet_connection_sock.c
+@@ -710,6 +710,22 @@ void inet_csk_destroy_sock(struct sock *sk)
+ }
+ EXPORT_SYMBOL(inet_csk_destroy_sock);
+ 
++/* This function allows to force a closure of a socket after the call to
++ * tcp/dccp_create_openreq_child().
++ */
++void inet_csk_prepare_forced_close(struct sock *sk)
++{
++	/* sk_clone_lock locked the socket and set refcnt to 2 */
++	bh_unlock_sock(sk);
++	sock_put(sk);
++
++	/* The below has to be done to allow calling inet_csk_destroy_sock */
++	sock_set_flag(sk, SOCK_DEAD);
++	percpu_counter_inc(sk->sk_prot->orphan_count);
++	inet_sk(sk)->inet_num = 0;
++}
++EXPORT_SYMBOL(inet_csk_prepare_forced_close);
++
+ int inet_csk_listen_start(struct sock *sk, const int nr_table_entries)
+ {
+ 	struct inet_sock *inet = inet_sk(sk);
+diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
+index 1ed2307..54139fa 100644
+--- a/net/ipv4/tcp_ipv4.c
++++ b/net/ipv4/tcp_ipv4.c
+@@ -1767,10 +1767,8 @@ exit:
+ 	NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_LISTENDROPS);
+ 	return NULL;
+ put_and_exit:
+-	tcp_clear_xmit_timers(newsk);
+-	tcp_cleanup_congestion_control(newsk);
+-	bh_unlock_sock(newsk);
+-	sock_put(newsk);
++	inet_csk_prepare_forced_close(newsk);
++	tcp_done(newsk);
+ 	goto exit;
+ }
+ EXPORT_SYMBOL(tcp_v4_syn_recv_sock);
+diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
+index 6565cf5..93825dd 100644
+--- a/net/ipv6/tcp_ipv6.c
++++ b/net/ipv6/tcp_ipv6.c
+@@ -1288,7 +1288,8 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
+ #endif
+ 
+ 	if (__inet_inherit_port(sk, newsk) < 0) {
+-		sock_put(newsk);
++		inet_csk_prepare_forced_close(newsk);
++		tcp_done(newsk);
+ 		goto out;
+ 	}
+ 	__inet6_hash(newsk, NULL);
+-- 
+1.7.10.4
+
