@@ -1,38 +1,39 @@
-From: Vlad Yasevich <vyasevich@gmail.com>
-Date: Tue, 19 Nov 2013 15:25:45 +0000
-Subject: Re: [PATCH 2/2] ipv6: use sk_v6_copy_addrs when memcpy struct ipv6_pinfo
-Message-Id: <528B82F9.6000708@gmail.com>
+From: Wang Weidong <wangweidong1@huawei.com>
+Date: Tue, 19 Nov 2013 02:47:26 +0000
+Subject: [PATCH 1/2] ipv6: add helper function for copy addrs from old sock
+Message-Id: <1384829247-8624-2-git-send-email-wangweidong1@huawei.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1384829247-8624-3-git-send-email-wangweidong1@huawei.com>
-In-Reply-To: <1384829247-8624-3-git-send-email-wangweidong1@huawei.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 11/19/2013 09:23 AM, Eric Dumazet wrote:
-> On Tue, 2013-11-19 at 12:35 +0100, Daniel Borkmann wrote:
->> On 11/19/2013 05:00 AM, Eric Dumazet wrote:
->>> On Mon, 2013-11-18 at 19:58 -0800, Eric Dumazet wrote:
->>>
->>>> But sctp is not tcp ;)
->>>>
->>>> sctp_copy_sock() is doing some clever/partial copy of the socket, so
->>>> please fix it ;)
->>>>
->>>> No idea why it's not doing the normal copy of the socket.
->>>
->>> BTW, not doing the full copy means for example that SO_MAX_PACING_RATE
->>> is broken for SCTP.
->>
->> Yep, indeed. Looking into it ...
-> 
-> It might be the time to finally use inet_csk_clone_lock() in SCTP.
-> 
-> 
+Add sk_v6_copy_addrs for copying sk_v6_daddr and sk_v6_rcv_saddr, it
+will be used in the coming patch.
 
-I can see sk_clone_lock() since SCTP doesn't use icsk sockets.  Need
-to study the code a bit.
+Signed-off-by: Wang Weidong <wangweidong1@huawei.com>
+---
+ include/net/sock.h | 6 ++++++
+ 1 file changed, 6 insertions(+)
 
--vlad
+diff --git a/include/net/sock.h b/include/net/sock.h
+index e3a18ff..9be2b9f 100644
+--- a/include/net/sock.h
++++ b/include/net/sock.h
+@@ -442,6 +442,12 @@ struct sock {
+ #define SK_CAN_REUSE	1
+ #define SK_FORCE_REUSE	2
+ 
++static inline void sk_v6_copy_addrs(struct sock *newsk, struct sock *oldsk)
++{
++	newsk->sk_v6_daddr = oldsk->sk_v6_daddr;
++	newsk->sk_v6_rcv_saddr = oldsk->sk_v6_rcv_saddr;
++}
++
+ static inline int sk_peek_offset(struct sock *sk, int flags)
+ {
+ 	if ((flags & MSG_PEEK) && (sk->sk_peek_off >= 0))
+-- 
+1.7.12
+
 
