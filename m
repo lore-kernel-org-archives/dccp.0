@@ -1,35 +1,66 @@
-From: David Miller <davem@davemloft.net>
-Date: Fri, 20 Dec 2013 00:26:22 +0000
-Subject: Re: [PATCH 1/1][net-next] dccp: catch failed request_module call in dccp_probe init
-Message-Id: <20131219.192622.834123418473103745.davem@davemloft.net>
+From: Stephen Hemminger <stephen@networkplumber.org>
+Date: Mon, 16 Dec 2013 19:29:56 +0000
+Subject: [PATCH net-next 10/10] dccp: remove dead code
+Message-Id: <20131216112956.420cf54d@nehalam.linuxnetplumber.net>
 List-Id: <dccp.vger.kernel.org>
-References: <20131217192433.168b39ef@liptov.cs.ualberta.ca>
-In-Reply-To: <20131217192433.168b39ef@liptov.cs.ualberta.ca>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Wang Weidong <wangweidong1@huawei.com>
-Date: Wed, 18 Dec 2013 10:38:36 +0800
+This function is defined but not used.
+Remove it now, can come back when used.
 
-> On 2013/12/18 10:24, Gerrit Renker wrote:
->> Hi Wang,
->> 
->> thank you for the patch, please find refactored version below, changes are
->>  (a) if request_module fails, return its error code instead of the previous ret,
->>  (b) refactor code -- setup_jprobe becomes superfluous.
->> 
->> Please add your signed off if ok, since it is essentially your patch.
->> 
->>>>>>>>>>>>>>>>>>>>>>>>> Wang's patch revised <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
->> dccp: catch failed request_module call in dccp_probe init
->> 
->> Check the return value of request_module during dccp_probe initialisation,
->> bail out if that call fails.
->> 
->> Signed-off-by: Gerrit Renker <gerrit@erg.abdn.ac.uk>
- ...
-> Signed-off-by: Wang Weidong <wangweidong1@huawei.com>
+Signed-off-by: Stephen Hemminger <stephen@networkplumber.org>
 
-Applied, thanks.
+--- a/net/dccp/dccp.h	2013-10-23 21:23:03.044671179 -0700
++++ b/net/dccp/dccp.h	2013-12-16 10:52:33.667013589 -0800
+@@ -479,7 +479,6 @@ void dccp_feat_list_purge(struct list_he
+ 
+ int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
+ int dccp_insert_options_rsk(struct dccp_request_sock *, struct sk_buff *);
+-int dccp_insert_option_elapsed_time(struct sk_buff *skb, u32 elapsed);
+ u32 dccp_timestamp(void);
+ void dccp_timestamping_init(void);
+ int dccp_insert_option(struct sk_buff *skb, unsigned char option,
+--- a/net/dccp/options.c	2013-10-06 14:48:24.962449886 -0700
++++ b/net/dccp/options.c	2013-12-16 10:52:53.266746098 -0800
+@@ -343,38 +343,6 @@ static inline int dccp_elapsed_time_len(
+ 	return elapsed_time = 0 ? 0 : elapsed_time <= 0xFFFF ? 2 : 4;
+ }
+ 
+-/* FIXME: This function is currently not used anywhere */
+-int dccp_insert_option_elapsed_time(struct sk_buff *skb, u32 elapsed_time)
+-{
+-	const int elapsed_time_len = dccp_elapsed_time_len(elapsed_time);
+-	const int len = 2 + elapsed_time_len;
+-	unsigned char *to;
+-
+-	if (elapsed_time_len = 0)
+-		return 0;
+-
+-	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
+-		return -1;
+-
+-	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
+-
+-	to    = skb_push(skb, len);
+-	*to++ = DCCPO_ELAPSED_TIME;
+-	*to++ = len;
+-
+-	if (elapsed_time_len = 2) {
+-		const __be16 var16 = htons((u16)elapsed_time);
+-		memcpy(to, &var16, 2);
+-	} else {
+-		const __be32 var32 = htonl(elapsed_time);
+-		memcpy(to, &var32, 4);
+-	}
+-
+-	return 0;
+-}
+-
+-EXPORT_SYMBOL_GPL(dccp_insert_option_elapsed_time);
+-
+ static int dccp_insert_option_timestamp(struct sk_buff *skb)
+ {
+ 	__be32 now = htonl(dccp_timestamp());
