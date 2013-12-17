@@ -1,66 +1,41 @@
-From: Stephen Hemminger <stephen@networkplumber.org>
-Date: Mon, 16 Dec 2013 19:29:56 +0000
-Subject: [PATCH net-next 10/10] dccp: remove dead code
-Message-Id: <20131216112956.420cf54d@nehalam.linuxnetplumber.net>
+From: Wang Weidong <wangweidong1@huawei.com>
+Date: Tue, 17 Dec 2013 12:30:17 +0000
+Subject: [PATCH net-next] dccp: add check request_moduls in setup_jprobe
+Message-Id: <52B043D9.9090808@huawei.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This function is defined but not used.
-Remove it now, can come back when used.
+when register_jprobe failed, we will try request_module. But some
+time request_module will failed such as the dccp is not exist. so
+check the request_module for avoiding do register_jprobe again.
 
-Signed-off-by: Stephen Hemminger <stephen@networkplumber.org>
+Signed-off-by: Wang Weidong <wangweidong1@huawei.com>
+---
+ net/dccp/probe.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
 
---- a/net/dccp/dccp.h	2013-10-23 21:23:03.044671179 -0700
-+++ b/net/dccp/dccp.h	2013-12-16 10:52:33.667013589 -0800
-@@ -479,7 +479,6 @@ void dccp_feat_list_purge(struct list_he
+diff --git a/net/dccp/probe.c b/net/dccp/probe.c
+index 4c6bdf9..53158d2 100644
+--- a/net/dccp/probe.c
++++ b/net/dccp/probe.c
+@@ -157,9 +157,12 @@ static __init int setup_jprobe(void)
+ 	int ret = register_jprobe(&dccp_send_probe);
  
- int dccp_insert_options(struct sock *sk, struct sk_buff *skb);
- int dccp_insert_options_rsk(struct dccp_request_sock *, struct sk_buff *);
--int dccp_insert_option_elapsed_time(struct sk_buff *skb, u32 elapsed);
- u32 dccp_timestamp(void);
- void dccp_timestamping_init(void);
- int dccp_insert_option(struct sk_buff *skb, unsigned char option,
---- a/net/dccp/options.c	2013-10-06 14:48:24.962449886 -0700
-+++ b/net/dccp/options.c	2013-12-16 10:52:53.266746098 -0800
-@@ -343,38 +343,6 @@ static inline int dccp_elapsed_time_len(
- 	return elapsed_time = 0 ? 0 : elapsed_time <= 0xFFFF ? 2 : 4;
+ 	if (ret) {
+-		request_module("dccp");
++		if (request_module("dccp"))
++			goto out;
+ 		ret = register_jprobe(&dccp_send_probe);
+ 	}
++
++out:
+ 	return ret;
  }
  
--/* FIXME: This function is currently not used anywhere */
--int dccp_insert_option_elapsed_time(struct sk_buff *skb, u32 elapsed_time)
--{
--	const int elapsed_time_len = dccp_elapsed_time_len(elapsed_time);
--	const int len = 2 + elapsed_time_len;
--	unsigned char *to;
--
--	if (elapsed_time_len = 0)
--		return 0;
--
--	if (DCCP_SKB_CB(skb)->dccpd_opt_len + len > DCCP_MAX_OPT_LEN)
--		return -1;
--
--	DCCP_SKB_CB(skb)->dccpd_opt_len += len;
--
--	to    = skb_push(skb, len);
--	*to++ = DCCPO_ELAPSED_TIME;
--	*to++ = len;
--
--	if (elapsed_time_len = 2) {
--		const __be16 var16 = htons((u16)elapsed_time);
--		memcpy(to, &var16, 2);
--	} else {
--		const __be32 var32 = htonl(elapsed_time);
--		memcpy(to, &var32, 4);
--	}
--
--	return 0;
--}
--
--EXPORT_SYMBOL_GPL(dccp_insert_option_elapsed_time);
--
- static int dccp_insert_option_timestamp(struct sk_buff *skb)
- {
- 	__be32 now = htonl(dccp_timestamp());
+-- 
+1.7.12
+
+
