@@ -1,32 +1,44 @@
-From: David Miller <davem@davemloft.net>
-Date: Thu, 22 May 2014 19:33:13 +0000
-Subject: Re: [PATCH linux-next] net/dccp/timer.c: use 'u64' instead of 's64' to avoid compiler's warning
-Message-Id: <20140522.153313.958087444510569794.davem@davemloft.net>
+From: Wang Weidong <wangweidong1@huawei.com>
+Date: Tue, 13 May 2014 02:57:58 +0000
+Subject: [PATCH net-next] dccp: make the request_retries minimum is 1
+Message-Id: <53718A36.1040907@huawei.com>
 List-Id: <dccp.vger.kernel.org>
-References: <537BF116.9000900@gmail.com>
-In-Reply-To: <537BF116.9000900@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-RnJvbTogQ2hlbiBHYW5nIDxnYW5nLmNoZW4uNWk1akBnbWFpbC5jb20+DQpEYXRlOiBXZWQsIDIx
-IE1heSAyMDE0IDA4OjE5OjM0ICswODAwDQoNCj4gJ2RjY3BfdGltZXN0YW1wX3NlZWQnIGlzIGlu
-aXRpYWxpemVkIG9uY2UgYnkga3RpbWVfZ2V0X3JlYWwoKSBpbg0KPiBkY2NwX3RpbWVzdGFtcGlu
-Z19pbml0KCkuIEl0IGlzIGFsd2F5cyBsZXNzIHRoYW4ga3RpbWVfZ2V0X3JlYWwoKQ0KPiBpbiBk
-Y2NwX3RpbWVzdGFtcCgpLg0KPiANCj4gVGhlbiwga3RpbWVfdXNfZGVsdGEoKSBpbiBkY2NwX3Rp
-bWVzdGFtcCgpIHdpbGwgYWx3YXlzIHJldHVybiBwb3NpdGl2ZQ0KPiBudW1iZXIuIFNvIGNhbiB1
-c2UgbWFudWFsIHR5cGUgY2FzdCB0byBsZXQgY29tcGlsZXIgYW5kIGRvX2RpdigpIGtub3cNCj4g
-YWJvdXQgaXQgdG8gYXZvaWQgd2FybmluZy4NCj4gDQo+IFRoZSByZWxhdGVkIHdhcm5pbmcgKHdp
-dGggYWxsbW9kY29uZmlnIHVuZGVyIHVuaWNvcmUzMik6DQo+IA0KPiAgICAgQ0MgW01dICBuZXQv
-ZGNjcC90aW1lci5vDQo+ICAgbmV0L2RjY3AvdGltZXIuYzogSW4gZnVuY3Rpb24goWRjY3BfdGlt
-ZXN0YW1wojoNCj4gICBuZXQvZGNjcC90aW1lci5jOjI4NTogd2FybmluZzogY29tcGFyaXNvbiBv
-ZiBkaXN0aW5jdCBwb2ludGVyIHR5cGVzIGxhY2tzIGEgY2FzdA0KPiANCj4gDQo+IFNpZ25lZC1v
-ZmYtYnk6IENoZW4gR2FuZyA8Z2FuZy5jaGVuLjVpNWpAZ21haWwuY29tPg0KDQpBcHBsaWVkIHRv
-IG5ldC1uZXh0LCB0aGFua3MuDQoNCkJ1dCB0aGF0IHR5cGUgY2hlY2sgaW4gaW5jbHVkZS9hc20t
-Z2VuZXJpYy9kaXY2NC5oIGlzIGJvZ3VzLCBpdCBzaG91bGQNCmJlIGNoZWNraW5nIHNpemVvZihY
-KSA9PSA4IHJhdGhlciB0aGFuIHRoZSB0eXBlIHRoaW5nLCBpdCBqdXN0IHdhbnRzIHRvDQptYWtl
-IHN1cmUgdGhhdCB0aGUgdmFsdWUgaXMgNjQtYml0IHJlZ2FyZGxlc3Mgb2YgaXQncyBzaWduZWRu
-ZXNzLg0KDQpUaGUgYXJjaCBsb2NhbCBpbXBsZW1lbnRhdGlvbnMgZG8gbm90IGRvIHRoaXMsIGFu
-ZCB0aGF0J3Mgd2h5IHZlcnkgZmV3DQpvdGhlciBwZW9wbGUgbm90aWNlIHRoaXMgd2FybmluZy4N
-Cg=
+In Documentation/networking/dccp.txt points that request_retries
+should be greater than 0. So make the extra1 to be &one instead
+of &zero.
+
+Signed-off-by: Wang Weidong <wangweidong1@huawei.com>
+---
+ net/dccp/sysctl.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/net/dccp/sysctl.c b/net/dccp/sysctl.c
+index 607ab71..53731e4 100644
+--- a/net/dccp/sysctl.c
++++ b/net/dccp/sysctl.c
+@@ -20,6 +20,7 @@
+ 
+ /* Boundary values */
+ static int		zero     = 0,
++			one      = 1,
+ 			u8_max   = 0xFF;
+ static unsigned long	seqw_min = DCCPF_SEQ_WMIN,
+ 			seqw_max = 0xFFFFFFFF;		/* maximum on 32 bit */
+@@ -58,7 +59,7 @@ static struct ctl_table dccp_default_table[] = {
+ 		.maxlen		= sizeof(sysctl_dccp_request_retries),
+ 		.mode		= 0644,
+ 		.proc_handler	= proc_dointvec_minmax,
+-		.extra1		= &zero,
++		.extra1		= &one,
+ 		.extra2		= &u8_max,
+ 	},
+ 	{
+-- 
+1.7.12
+
+
