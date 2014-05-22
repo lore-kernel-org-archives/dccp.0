@@ -1,46 +1,32 @@
-From: Chen Gang <gang.chen.5i5j@gmail.com>
-Date: Wed, 21 May 2014 00:19:34 +0000
-Subject: [PATCH linux-next] net/dccp/timer.c: use 'u64' instead of 's64' to avoid compiler's warning
-Message-Id: <537BF116.9000900@gmail.com>
+From: David Miller <davem@davemloft.net>
+Date: Thu, 22 May 2014 19:33:13 +0000
+Subject: Re: [PATCH linux-next] net/dccp/timer.c: use 'u64' instead of 's64' to avoid compiler's warning
+Message-Id: <20140522.153313.958087444510569794.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
+References: <537BF116.9000900@gmail.com>
+In-Reply-To: <537BF116.9000900@gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="windows-1252"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-'dccp_timestamp_seed' is initialized once by ktime_get_real() in
-dccp_timestamping_init(). It is always less than ktime_get_real()
-in dccp_timestamp().
-
-Then, ktime_us_delta() in dccp_timestamp() will always return positive
-number. So can use manual type cast to let compiler and do_div() know
-about it to avoid warning.
-
-The related warning (with allmodconfig under unicore32):
-
-    CC [M]  net/dccp/timer.o
-  net/dccp/timer.c: In function =91dccp_timestamp=92:
-  net/dccp/timer.c:285: warning: comparison of distinct pointer types lacks=
- a cast
-
-
-Signed-off-by: Chen Gang <gang.chen.5i5j@gmail.com>
----
- net/dccp/timer.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
-
-diff --git a/net/dccp/timer.c b/net/dccp/timer.c
-index 16f0b22..1cd46a3 100644
---- a/net/dccp/timer.c
-+++ b/net/dccp/timer.c
-@@ -280,7 +280,7 @@ static ktime_t dccp_timestamp_seed;
-  */
- u32 dccp_timestamp(void)
- {
--	s64 delta =3D ktime_us_delta(ktime_get_real(), dccp_timestamp_seed);
-+	u64 delta =3D (u64)ktime_us_delta(ktime_get_real(), dccp_timestamp_seed);
-=20
- 	do_div(delta, 10);
- 	return delta;
---=20
-1.9.2.459.g68773ac
+RnJvbTogQ2hlbiBHYW5nIDxnYW5nLmNoZW4uNWk1akBnbWFpbC5jb20+DQpEYXRlOiBXZWQsIDIx
+IE1heSAyMDE0IDA4OjE5OjM0ICswODAwDQoNCj4gJ2RjY3BfdGltZXN0YW1wX3NlZWQnIGlzIGlu
+aXRpYWxpemVkIG9uY2UgYnkga3RpbWVfZ2V0X3JlYWwoKSBpbg0KPiBkY2NwX3RpbWVzdGFtcGlu
+Z19pbml0KCkuIEl0IGlzIGFsd2F5cyBsZXNzIHRoYW4ga3RpbWVfZ2V0X3JlYWwoKQ0KPiBpbiBk
+Y2NwX3RpbWVzdGFtcCgpLg0KPiANCj4gVGhlbiwga3RpbWVfdXNfZGVsdGEoKSBpbiBkY2NwX3Rp
+bWVzdGFtcCgpIHdpbGwgYWx3YXlzIHJldHVybiBwb3NpdGl2ZQ0KPiBudW1iZXIuIFNvIGNhbiB1
+c2UgbWFudWFsIHR5cGUgY2FzdCB0byBsZXQgY29tcGlsZXIgYW5kIGRvX2RpdigpIGtub3cNCj4g
+YWJvdXQgaXQgdG8gYXZvaWQgd2FybmluZy4NCj4gDQo+IFRoZSByZWxhdGVkIHdhcm5pbmcgKHdp
+dGggYWxsbW9kY29uZmlnIHVuZGVyIHVuaWNvcmUzMik6DQo+IA0KPiAgICAgQ0MgW01dICBuZXQv
+ZGNjcC90aW1lci5vDQo+ICAgbmV0L2RjY3AvdGltZXIuYzogSW4gZnVuY3Rpb24goWRjY3BfdGlt
+ZXN0YW1wojoNCj4gICBuZXQvZGNjcC90aW1lci5jOjI4NTogd2FybmluZzogY29tcGFyaXNvbiBv
+ZiBkaXN0aW5jdCBwb2ludGVyIHR5cGVzIGxhY2tzIGEgY2FzdA0KPiANCj4gDQo+IFNpZ25lZC1v
+ZmYtYnk6IENoZW4gR2FuZyA8Z2FuZy5jaGVuLjVpNWpAZ21haWwuY29tPg0KDQpBcHBsaWVkIHRv
+IG5ldC1uZXh0LCB0aGFua3MuDQoNCkJ1dCB0aGF0IHR5cGUgY2hlY2sgaW4gaW5jbHVkZS9hc20t
+Z2VuZXJpYy9kaXY2NC5oIGlzIGJvZ3VzLCBpdCBzaG91bGQNCmJlIGNoZWNraW5nIHNpemVvZihY
+KSA9PSA4IHJhdGhlciB0aGFuIHRoZSB0eXBlIHRoaW5nLCBpdCBqdXN0IHdhbnRzIHRvDQptYWtl
+IHN1cmUgdGhhdCB0aGUgdmFsdWUgaXMgNjQtYml0IHJlZ2FyZGxlc3Mgb2YgaXQncyBzaWduZWRu
+ZXNzLg0KDQpUaGUgYXJjaCBsb2NhbCBpbXBsZW1lbnRhdGlvbnMgZG8gbm90IGRvIHRoaXMsIGFu
+ZCB0aGF0J3Mgd2h5IHZlcnkgZmV3DQpvdGhlciBwZW9wbGUgbm90aWNlIHRoaXMgd2FybmluZy4N
+Cg=
