@@ -1,90 +1,91 @@
 From: Chen Gang <gang.chen.5i5j@gmail.com>
-Date: Thu, 22 May 2014 01:14:17 +0000
-Subject: Re: =?UTF-8?B?5Zue5aSN77yaIFJlOiDlm57lpI3vvJogW1BBVENIIGxpbnV4LW4=?= =?UTF-8?B?ZXh0XSBuZXQvZGNjcC90a
-Message-Id: <537D4F69.6050705@gmail.com>
+Date: Fri, 23 May 2014 01:43:35 +0000
+Subject: Re: =?UTF-8?B?5Zue5aSN77yaIFJlOiBbUEFUQ0ggbGludXgtbmV4dF0gbmV0L2Q=?= =?UTF-8?B?Y2NwL3RpbWVyLmM6IHVzZ
+Message-Id: <537EA7C7.8040708@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 8bit
 To: dccp@vger.kernel.org
 
-
-
-On 05/22/2014 09:06 AM, 管雪涛 wrote:
+On 05/23/2014 07:58 AM, 管雪涛 wrote:
 > 
-> ----- Chen Gang <gang.chen.5i5j@gmail.com> 写道：
->> On 05/22/2014 08:26 AM, 管雪涛 wrote:
->>>
->>> ----- Chen Gang <gang.chen.5i5j@gmail.com> 写道：
->>>> 'dccp_timestamp_seed' is initialized once by ktime_get_real() in
->>>> dccp_timestamping_init(). It is always less than ktime_get_real()
->>>> in dccp_timestamp().
->>>>
->>>> Then, ktime_us_delta() in dccp_timestamp() will always return positive
->>>> number. So can use manual type cast to let compiler and do_div() know
->>>> about it to avoid warning.
->>>>
->>>> The related warning (with allmodconfig under unicore32):
->>>>
->>>>     CC [M]  net/dccp/timer.o
->>>>   net/dccp/timer.c: In function ‘dccp_timestamp’:
->>>>   net/dccp/timer.c:285: warning: comparison of distinct pointer types lacks a cast
->>>>
->>>>
->>>> Signed-off-by: Chen Gang <gang.chen.5i5j@gmail.com>
->>>> ---
->>>>  net/dccp/timer.c | 2 +-
->>>>  1 file changed, 1 insertion(+), 1 deletion(-)
->>>>
->>>> diff --git a/net/dccp/timer.c b/net/dccp/timer.c
->>>> index 16f0b22..1cd46a3 100644
->>>> --- a/net/dccp/timer.c
->>>> +++ b/net/dccp/timer.c
->>>> @@ -280,7 +280,7 @@ static ktime_t dccp_timestamp_seed;
->>>>   */
->>>>  u32 dccp_timestamp(void)
->>>>  {
->>>> -	s64 delta = ktime_us_delta(ktime_get_real(), dccp_timestamp_seed);
->>>> +	u64 delta = (u64)ktime_us_delta(ktime_get_real(), dccp_timestamp_seed);
->>>
->>> Do you assume that delta should be very small?
->>> Otherwise, return value will be different if data type is changed.
->>>
+> ----- David Miller <davem@davemloft.net> 写道：
+>> From: Chen Gang <gang.chen.5i5j@gmail.com>
+>> Date: Wed, 21 May 2014 08:19:34 +0800
 >>
->> 'u64' is a very very large number. after calculation, if it is based on
->> nano second (although I am not quite sure whether it is based on it).
+>>> 'dccp_timestamp_seed' is initialized once by ktime_get_real() in
+>>> dccp_timestamping_init(). It is always less than ktime_get_real()
+>>> in dccp_timestamp().
+>>>
+>>> Then, ktime_us_delta() in dccp_timestamp() will always return positive
+>>> number. So can use manual type cast to let compiler and do_div() know
+>>> about it to avoid warning.
+>>>
+>>> The related warning (with allmodconfig under unicore32):
+>>>
+>>>     CC [M]  net/dccp/timer.o
+>>>   net/dccp/timer.c: In function ‘dccp_timestamp’:
+>>>   net/dccp/timer.c:285: warning: comparison of distinct pointer types lacks a cast
+>>>
+>>>
+>>> Signed-off-by: Chen Gang <gang.chen.5i5j@gmail.com>
 >>
->>         a hour,            3,600,000,000,000ns
->>         a day,            90,000,000,000,000ns
->>         a year,       50,000,000,000,000,000ns
->>         10 years,    500,000,000,000,000,000ns
->>         100 years, 5,000,000,000,000,000,000ns
->>         4G * 4G = 16,000,000,000,000,000,000ns
+>> Applied to net-next, thanks.
 >>
->> So we can assume it will never overflow for 'u64'.
+
+Thank you for your work.
+
+>> But that type check in include/asm-generic/div64.h is bogus, it should
+>> be checking sizeof(X) = 8 rather than the type thing, it just wants to
+>> make sure that the value is 64-bit regardless of it's signedness.
+>>
+>> The arch local implementations do not do this, and that's why very few
+>> other people notice this warning.
 > 
-> However, return value of dccp_timestamp function is u32.
+> Arch-dependent codes implement it with unsigned long long type.
+> And, every warning should not be ignored.
 > 
 
-After check the function comments.
+Yeah, we have to let do_div() no touch (especially for 32-bit machine,
+which the highest bit is checked). The related code in
+"include/asm-generic/div64.h":
 
-/**
- * dccp_timestamp  -  10s of microseconds time source
- * Returns the number of 10s of microseconds since loading DCCP. This is native
- * DCCP time difference format (RFC 4340, sec. 13).
- * Please note: This will wrap around about circa every 11.9 hours.
- */
+ 23 #if BITS_PER_LONG = 64
+ 24
+ 25 # define do_div(n,base) ({                                      \
+ 26         uint32_t __base = (base);                               \
+ 27         uint32_t __rem;                                         \
+ 28         __rem = ((uint64_t)(n)) % __base;                       \
+ 29         (n) = ((uint64_t)(n)) / __base;                         \
+ 30         __rem;                                                  \
+ 31  })
+ 32
+ 33 #elif BITS_PER_LONG = 32
+ 34
+ 35 extern uint32_t __div64_32(uint64_t *dividend, uint32_t divisor);
+ 36
+ 37 /* The unnecessary pointer compare is there
+ 38  * to check for type safety (n must be 64bit)
+ 39  */
+ 40 # define do_div(n,base) ({                              \
+ 41         uint32_t __base = (base);                       \
+ 42         uint32_t __rem;                                 \
+ 43         (void)(((typeof((n)) *)0) = ((uint64_t *)0));  \
+ 44         if (likely(((n) >> 32) = 0)) {                 \
+ 45                 __rem = (uint32_t)(n) % __base;         \
+ 46                 (n) = (uint32_t)(n) / __base;           \
+ 47         } else                                          \
+ 48                 __rem = __div64_32(&(n), __base);       \
+ 49         __rem;                                          \
+ 50  })
 
-So, it is still acceptable, although it is truncated into 'u32' before return.
 
->>
->>
->> Thanks.
->> -- 
->> Chen Gang
->>
->> Open, share, and attitude like air, water, and life which God blessed
+And for division operation, architectures are signed/unsigned
+sensitive, e.g. div_u64() and div_s64(), they are different.
 
+
+Thanks.
 -- 
 Chen Gang
 
