@@ -1,35 +1,38 @@
-From: David Miller <davem@davemloft.net>
-Date: Sat, 09 Jul 2016 22:15:07 +0000
-Subject: Re: [PATCH net] dccp: avoid deadlock in dccp_v4_ctl_send_reset
-Message-Id: <20160709.181507.1107002266440808218.davem@davemloft.net>
+From: Baole Ni <baolex.ni@intel.com>
+Date: Tue, 02 Aug 2016 12:16:05 +0000
+Subject: [PATCH 1094/1285] Replace numeric parameter like 0444 with macro
+Message-Id: <20160802121605.23066-1-baolex.ni@intel.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1467968637.17638.44.camel@edumazet-glaptop3.roam.corp.google.com>
-In-Reply-To: <1467968637.17638.44.camel@edumazet-glaptop3.roam.corp.google.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Eric Dumazet <eric.dumazet@gmail.com>
-Date: Fri, 08 Jul 2016 11:03:57 +0200
+I find that the developers often just specified the numeric value
+when calling a macro which is defined with a parameter for access permission.
+As we know, these numeric value for access permission have had the corresponding macro,
+and that using macro can improve the robustness and readability of the code,
+thus, I suggest replacing the numeric parameter with the macro.
 
-> From: Eric Dumazet <edumazet@google.com>
-> 
-> In the prep work I did before enabling BH while handling socket backlog,
-> I missed two points in DCCP :
-> 
-> 1) dccp_v4_ctl_send_reset() uses bh_lock_sock(), assuming BH were
-> blocked. It is not anymore always true.
-> 
-> 2) dccp_v4_route_skb() was using __IP_INC_STATS() instead of
->   IP_INC_STATS()
-> 
-> A similar fix was done for TCP, in commit 47dcc20a39d0
-> ("ipv4: tcp: ip_send_unicast_reply() is not BH safe")
-> 
-> Fixes: 7309f8821fd6 ("dccp: do not assume DCCP code is non preemptible")
-> Fixes: 5413d1babe8f ("net: do not block BH while processing socket backlog")
-> Signed-off-by: Eric Dumazet <edumazet@google.com>
-> Reported-by: Dmitry Vyukov <dvyukov@google.com>
+Signed-off-by: Chuansheng Liu <chuansheng.liu@intel.com>
+Signed-off-by: Baole Ni <baolex.ni@intel.com>
+---
+ net/dccp/ccids/lib/tfrc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-Applied and queued up for -stable, thanks.
+diff --git a/net/dccp/ccids/lib/tfrc.c b/net/dccp/ccids/lib/tfrc.c
+index 62b5828..9cf730c 100644
+--- a/net/dccp/ccids/lib/tfrc.c
++++ b/net/dccp/ccids/lib/tfrc.c
+@@ -9,7 +9,7 @@
+ 
+ #ifdef CONFIG_IP_DCCP_TFRC_DEBUG
+ bool tfrc_debug;
+-module_param(tfrc_debug, bool, 0644);
++module_param(tfrc_debug, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+ MODULE_PARM_DESC(tfrc_debug, "Enable TFRC debug messages");
+ #endif
+ 
+-- 
+2.9.2
+
