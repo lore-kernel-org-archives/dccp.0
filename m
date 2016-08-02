@@ -1,7 +1,7 @@
 From: Baole Ni <baolex.ni@intel.com>
-Date: Tue, 02 Aug 2016 12:16:10 +0000
-Subject: [PATCH 1095/1285] Replace numeric parameter like 0444 with macro
-Message-Id: <20160802121610.23133-1-baolex.ni@intel.com>
+Date: Tue, 02 Aug 2016 12:15:52 +0000
+Subject: [PATCH 1092/1285] Replace numeric parameter like 0444 with macro
+Message-Id: <20160802121552.22930-1-baolex.ni@intel.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -17,28 +17,30 @@ thus, I suggest replacing the numeric parameter with the macro.
 Signed-off-by: Chuansheng Liu <chuansheng.liu@intel.com>
 Signed-off-by: Baole Ni <baolex.ni@intel.com>
 ---
- net/dccp/proto.c | 4 ++--
+ net/dccp/ccids/ccid2.c | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)
 
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 41e6580..dc0eb00 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -1093,12 +1093,12 @@ static inline void dccp_mib_exit(void)
- }
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index f053198..6d301ee 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -175,7 +175,7 @@ out:
+  *	Congestion window validation (RFC 2861).
+  */
+ static bool ccid2_do_cwv = true;
+-module_param(ccid2_do_cwv, bool, 0644);
++module_param(ccid2_do_cwv, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+ MODULE_PARM_DESC(ccid2_do_cwv, "Perform RFC2861 Congestion Window Validation");
  
- static int thash_entries;
--module_param(thash_entries, int, 0444);
-+module_param(thash_entries, int, S_IRUSR | S_IRGRP | S_IROTH);
- MODULE_PARM_DESC(thash_entries, "Number of ehash buckets");
+ /**
+@@ -779,6 +779,6 @@ struct ccid_operations ccid2_ops = {
+ };
  
- #ifdef CONFIG_IP_DCCP_DEBUG
- bool dccp_debug;
--module_param(dccp_debug, bool, 0644);
-+module_param(dccp_debug, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
- MODULE_PARM_DESC(dccp_debug, "Enable debug messages");
- 
- EXPORT_SYMBOL_GPL(dccp_debug);
+ #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
+-module_param(ccid2_debug, bool, 0644);
++module_param(ccid2_debug, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+ MODULE_PARM_DESC(ccid2_debug, "Enable CCID-2 debug messages");
+ #endif
 -- 
 2.9.2
 
