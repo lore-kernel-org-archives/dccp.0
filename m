@@ -1,7 +1,7 @@
 From: Eric Dumazet <eric.dumazet@gmail.com>
-Date: Mon, 24 Oct 2016 12:47:40 +0000
+Date: Mon, 24 Oct 2016 12:52:35 +0000
 Subject: Re: net/dccp: warning in dccp_set_state
-Message-Id: <1477313260.7065.104.camel@edumazet-glaptop3.roam.corp.google.com>
+Message-Id: <1477313555.7065.105.camel@edumazet-glaptop3.roam.corp.google.com>
 List-Id: <dccp.vger.kernel.org>
 References: <CAAeHK+zBgPzp9KBCJb7_Q2Nm3n+t5HeuFwEFCDDc7cw234nREA@mail.gmail.com>
 In-Reply-To: <CAAeHK+zBgPzp9KBCJb7_Q2Nm3n+t5HeuFwEFCDDc7cw234nREA@mail.gmail.com>
@@ -10,68 +10,73 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Mon, 2016-10-24 at 14:23 +0200, Andrey Konovalov wrote:
-> Hi,
+On Mon, 2016-10-24 at 05:47 -0700, Eric Dumazet wrote:
+> On Mon, 2016-10-24 at 14:23 +0200, Andrey Konovalov wrote:
+> > Hi,
+> > 
+> > I've got the following error report while running the syzkaller fuzzer:
+> > 
+> > WARNING: CPU: 1 PID: 21072 at net/dccp/proto.c:83 dccp_set_state+0x229/0x290
+> > Kernel panic - not syncing: panic_on_warn set ...
+> > 
+> > CPU: 1 PID: 21072 Comm: syz-executor Not tainted 4.9.0-rc1+ #293
+> > Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Bochs 01/01/2011
+> >  ffff88003d4c7738 ffffffff81b474f4 0000000000000003 dffffc0000000000
+> >  ffffffff844f8b00 ffff88003d4c7804 ffff88003d4c7800 ffffffff8140c06a
+> >  0000000041b58ab3 ffffffff8479ab7d ffffffff8140beae ffffffff8140cd00
+> > Call Trace:
+> >  [<     inline     >] __dump_stack lib/dump_stack.c:15
+> >  [<ffffffff81b474f4>] dump_stack+0xb3/0x10f lib/dump_stack.c:51
+> >  [<ffffffff8140c06a>] panic+0x1bc/0x39d kernel/panic.c:179
+> >  [<ffffffff8111125c>] __warn+0x1cc/0x1f0 kernel/panic.c:542
+> >  [<ffffffff8111144c>] warn_slowpath_null+0x2c/0x40 kernel/panic.c:585
+> >  [<ffffffff8389e5d9>] dccp_set_state+0x229/0x290 net/dccp/proto.c:83
+> >  [<ffffffff838a0aa2>] dccp_close+0x612/0xc10 net/dccp/proto.c:1016
+> >  [<ffffffff8316bf1f>] inet_release+0xef/0x1c0 net/ipv4/af_inet.c:415
+> >  [<ffffffff82b6e89e>] sock_release+0x8e/0x1d0 net/socket.c:570
+> >  [<ffffffff82b6e9f6>] sock_close+0x16/0x20 net/socket.c:1017
+> >  [<ffffffff815256ad>] __fput+0x29d/0x720 fs/file_table.c:208
+> >  [<ffffffff81525bb5>] ____fput+0x15/0x20 fs/file_table.c:244
+> >  [<ffffffff811727d8>] task_work_run+0xf8/0x170 kernel/task_work.c:116
+> >  [<     inline     >] exit_task_work include/linux/task_work.h:21
+> >  [<ffffffff8111bc53>] do_exit+0x883/0x2ac0 kernel/exit.c:828
+> >  [<ffffffff811221fe>] do_group_exit+0x10e/0x340 kernel/exit.c:931
+> >  [<ffffffff81143c94>] get_signal+0x634/0x15a0 kernel/signal.c:2307
+> >  [<ffffffff81054aad>] do_signal+0x8d/0x1a30 arch/x86/kernel/signal.c:807
+> >  [<ffffffff81003a05>] exit_to_usermode_loop+0xe5/0x130
+> > arch/x86/entry/common.c:156
+> >  [<     inline     >] prepare_exit_to_usermode arch/x86/entry/common.c:190
+> >  [<ffffffff81006298>] syscall_return_slowpath+0x1a8/0x1e0
+> > arch/x86/entry/common.c:259
+> >  [<ffffffff83fc1a62>] entry_SYSCALL_64_fastpath+0xc0/0xc2
+> > Dumping ftrace buffer:
+> >    (ftrace buffer empty)
+> > Kernel Offset: disabled
+> > 
+> > On commit 1a1891d762d6e64daf07b5be4817e3fbb29e3c59 (Oct 18).
 > 
-> I've got the following error report while running the syzkaller fuzzer:
+> Not sure we we keep around DCCP. David could we kill it ?
 > 
-> WARNING: CPU: 1 PID: 21072 at net/dccp/proto.c:83 dccp_set_state+0x229/0x290
-> Kernel panic - not syncing: panic_on_warn set ...
+> TCP seems to have an additional check, missing in DCCP.
 > 
-> CPU: 1 PID: 21072 Comm: syz-executor Not tainted 4.9.0-rc1+ #293
-> Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Bochs 01/01/2011
->  ffff88003d4c7738 ffffffff81b474f4 0000000000000003 dffffc0000000000
->  ffffffff844f8b00 ffff88003d4c7804 ffff88003d4c7800 ffffffff8140c06a
->  0000000041b58ab3 ffffffff8479ab7d ffffffff8140beae ffffffff8140cd00
-> Call Trace:
->  [<     inline     >] __dump_stack lib/dump_stack.c:15
->  [<ffffffff81b474f4>] dump_stack+0xb3/0x10f lib/dump_stack.c:51
->  [<ffffffff8140c06a>] panic+0x1bc/0x39d kernel/panic.c:179
->  [<ffffffff8111125c>] __warn+0x1cc/0x1f0 kernel/panic.c:542
->  [<ffffffff8111144c>] warn_slowpath_null+0x2c/0x40 kernel/panic.c:585
->  [<ffffffff8389e5d9>] dccp_set_state+0x229/0x290 net/dccp/proto.c:83
->  [<ffffffff838a0aa2>] dccp_close+0x612/0xc10 net/dccp/proto.c:1016
->  [<ffffffff8316bf1f>] inet_release+0xef/0x1c0 net/ipv4/af_inet.c:415
->  [<ffffffff82b6e89e>] sock_release+0x8e/0x1d0 net/socket.c:570
->  [<ffffffff82b6e9f6>] sock_close+0x16/0x20 net/socket.c:1017
->  [<ffffffff815256ad>] __fput+0x29d/0x720 fs/file_table.c:208
->  [<ffffffff81525bb5>] ____fput+0x15/0x20 fs/file_table.c:244
->  [<ffffffff811727d8>] task_work_run+0xf8/0x170 kernel/task_work.c:116
->  [<     inline     >] exit_task_work include/linux/task_work.h:21
->  [<ffffffff8111bc53>] do_exit+0x883/0x2ac0 kernel/exit.c:828
->  [<ffffffff811221fe>] do_group_exit+0x10e/0x340 kernel/exit.c:931
->  [<ffffffff81143c94>] get_signal+0x634/0x15a0 kernel/signal.c:2307
->  [<ffffffff81054aad>] do_signal+0x8d/0x1a30 arch/x86/kernel/signal.c:807
->  [<ffffffff81003a05>] exit_to_usermode_loop+0xe5/0x130
-> arch/x86/entry/common.c:156
->  [<     inline     >] prepare_exit_to_usermode arch/x86/entry/common.c:190
->  [<ffffffff81006298>] syscall_return_slowpath+0x1a8/0x1e0
-> arch/x86/entry/common.c:259
->  [<ffffffff83fc1a62>] entry_SYSCALL_64_fastpath+0xc0/0xc2
-> Dumping ftrace buffer:
->    (ftrace buffer empty)
-> Kernel Offset: disabled
+> diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+> index 41e65804ddf5..9fe25bf63296 100644
+> --- a/net/dccp/proto.c
+> +++ b/net/dccp/proto.c
+> @@ -1009,6 +1009,10 @@ void dccp_close(struct sock *sk, long timeout)
+>  		__kfree_skb(skb);
+>  	}
+>  
+> +	/* If socket has been already reset kill it. */
+> +	if (sk->sk_state = DCCP_CLOSED)
+> +		goto adjudge_to_death;
+> +
+>  	if (data_was_unread) {
+>  		/* Unread data was tossed, send an appropriate Reset Code */
+>  		DCCP_WARN("ABORT with %u bytes unread\n", data_was_unread);
 > 
-> On commit 1a1891d762d6e64daf07b5be4817e3fbb29e3c59 (Oct 18).
 
-Not sure we we keep around DCCP. David could we kill it ?
-
-TCP seems to have an additional check, missing in DCCP.
-
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 41e65804ddf5..9fe25bf63296 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -1009,6 +1009,10 @@ void dccp_close(struct sock *sk, long timeout)
- 		__kfree_skb(skb);
- 	}
- 
-+	/* If socket has been already reset kill it. */
-+	if (sk->sk_state = DCCP_CLOSED)
-+		goto adjudge_to_death;
-+
- 	if (data_was_unread) {
- 		/* Unread data was tossed, send an appropriate Reset Code */
- 		DCCP_WARN("ABORT with %u bytes unread\n", data_was_unread);
+The equivalent tcp fix was : 
+https://git.kernel.org/cgit/linux/kernel/git/davem/net.git/commit/?idV5b7b2d2e632b5792879c0c9cccdd9eecd31195
 
 
