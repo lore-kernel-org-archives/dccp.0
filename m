@@ -1,37 +1,52 @@
-From: Baole Ni <baolex.ni@intel.com>
-Date: Tue, 02 Aug 2016 12:15:59 +0000
-Subject: [PATCH 1093/1285] Replace numeric parameter like 0444 with macro
-Message-Id: <20160802121559.22998-1-baolex.ni@intel.com>
+From: Andrey Konovalov <andreyknvl@google.com>
+Date: Mon, 24 Oct 2016 12:23:06 +0000
+Subject: net/dccp: warning in dccp_set_state
+Message-Id: <CAAeHK+zBgPzp9KBCJb7_Q2Nm3n+t5HeuFwEFCDDc7cw234nREA@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-I find that the developers often just specified the numeric value
-when calling a macro which is defined with a parameter for access permission.
-As we know, these numeric value for access permission have had the corresponding macro,
-and that using macro can improve the robustness and readability of the code,
-thus, I suggest replacing the numeric parameter with the macro.
+Hi,
 
-Signed-off-by: Chuansheng Liu <chuansheng.liu@intel.com>
-Signed-off-by: Baole Ni <baolex.ni@intel.com>
----
- net/dccp/ccids/ccid3.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+I've got the following error report while running the syzkaller fuzzer:
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 119c043..f668e5b 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -865,6 +865,6 @@ struct ccid_operations ccid3_ops = {
- };
- 
- #ifdef CONFIG_IP_DCCP_CCID3_DEBUG
--module_param(ccid3_debug, bool, 0644);
-+module_param(ccid3_debug, bool, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
- MODULE_PARM_DESC(ccid3_debug, "Enable CCID-3 debug messages");
- #endif
--- 
-2.9.2
+WARNING: CPU: 1 PID: 21072 at net/dccp/proto.c:83 dccp_set_state+0x229/0x290
+Kernel panic - not syncing: panic_on_warn set ...
 
+CPU: 1 PID: 21072 Comm: syz-executor Not tainted 4.9.0-rc1+ #293
+Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Bochs 01/01/2011
+ ffff88003d4c7738 ffffffff81b474f4 0000000000000003 dffffc0000000000
+ ffffffff844f8b00 ffff88003d4c7804 ffff88003d4c7800 ffffffff8140c06a
+ 0000000041b58ab3 ffffffff8479ab7d ffffffff8140beae ffffffff8140cd00
+Call Trace:
+ [<     inline     >] __dump_stack lib/dump_stack.c:15
+ [<ffffffff81b474f4>] dump_stack+0xb3/0x10f lib/dump_stack.c:51
+ [<ffffffff8140c06a>] panic+0x1bc/0x39d kernel/panic.c:179
+ [<ffffffff8111125c>] __warn+0x1cc/0x1f0 kernel/panic.c:542
+ [<ffffffff8111144c>] warn_slowpath_null+0x2c/0x40 kernel/panic.c:585
+ [<ffffffff8389e5d9>] dccp_set_state+0x229/0x290 net/dccp/proto.c:83
+ [<ffffffff838a0aa2>] dccp_close+0x612/0xc10 net/dccp/proto.c:1016
+ [<ffffffff8316bf1f>] inet_release+0xef/0x1c0 net/ipv4/af_inet.c:415
+ [<ffffffff82b6e89e>] sock_release+0x8e/0x1d0 net/socket.c:570
+ [<ffffffff82b6e9f6>] sock_close+0x16/0x20 net/socket.c:1017
+ [<ffffffff815256ad>] __fput+0x29d/0x720 fs/file_table.c:208
+ [<ffffffff81525bb5>] ____fput+0x15/0x20 fs/file_table.c:244
+ [<ffffffff811727d8>] task_work_run+0xf8/0x170 kernel/task_work.c:116
+ [<     inline     >] exit_task_work include/linux/task_work.h:21
+ [<ffffffff8111bc53>] do_exit+0x883/0x2ac0 kernel/exit.c:828
+ [<ffffffff811221fe>] do_group_exit+0x10e/0x340 kernel/exit.c:931
+ [<ffffffff81143c94>] get_signal+0x634/0x15a0 kernel/signal.c:2307
+ [<ffffffff81054aad>] do_signal+0x8d/0x1a30 arch/x86/kernel/signal.c:807
+ [<ffffffff81003a05>] exit_to_usermode_loop+0xe5/0x130
+arch/x86/entry/common.c:156
+ [<     inline     >] prepare_exit_to_usermode arch/x86/entry/common.c:190
+ [<ffffffff81006298>] syscall_return_slowpath+0x1a8/0x1e0
+arch/x86/entry/common.c:259
+ [<ffffffff83fc1a62>] entry_SYSCALL_64_fastpath+0xc0/0xc2
+Dumping ftrace buffer:
+   (ftrace buffer empty)
+Kernel Offset: disabled
+
+On commit 1a1891d762d6e64daf07b5be4817e3fbb29e3c59 (Oct 18).
