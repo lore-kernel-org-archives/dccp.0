@@ -1,89 +1,207 @@
 From: Andrey Konovalov <andreyknvl@google.com>
-Date: Mon, 24 Oct 2016 13:41:34 +0000
-Subject: Re: net/dccp: warning in dccp_set_state
-Message-Id: <CAAeHK+y5XmobRWLkiQLkYdogafQRSJM7X5Katc-3KDQ8fFP9Qw@mail.gmail.com>
+Date: Sat, 29 Oct 2016 00:40:14 +0000
+Subject: net/dccp: warning in dccp_feat_clone_sp_val/__might_sleep
+Message-Id: <CAAeHK+z-SAq-YhHarfc94dguyXCJ_tv8n=ZVdLTRsYEy0cK-pQ@mail.gmail.com>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="001a114119ece2e4ae053ff637f3"
 List-Id: <dccp.vger.kernel.org>
-References: <CAAeHK+zBgPzp9KBCJb7_Q2Nm3n+t5HeuFwEFCDDc7cw234nREA@mail.gmail.com>
-In-Reply-To: <CAAeHK+zBgPzp9KBCJb7_Q2Nm3n+t5HeuFwEFCDDc7cw234nREA@mail.gmail.com>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Eric,
+--001a114119ece2e4ae053ff637f3
+Content-Type: text/plain; charset=UTF-8
 
-I can confirm that with your patch the warning goes away.
+Hi,
 
-Tested-by: Andrey Konovalov <andreyknvl@google.com>
+I've got the following error report while running the syzkaller fuzzer:
 
-On Mon, Oct 24, 2016 at 2:52 PM, Eric Dumazet <eric.dumazet@gmail.com> wrote:
-> On Mon, 2016-10-24 at 05:47 -0700, Eric Dumazet wrote:
->> On Mon, 2016-10-24 at 14:23 +0200, Andrey Konovalov wrote:
->> > Hi,
->> >
->> > I've got the following error report while running the syzkaller fuzzer:
->> >
->> > WARNING: CPU: 1 PID: 21072 at net/dccp/proto.c:83 dccp_set_state+0x229/0x290
->> > Kernel panic - not syncing: panic_on_warn set ...
->> >
->> > CPU: 1 PID: 21072 Comm: syz-executor Not tainted 4.9.0-rc1+ #293
->> > Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Bochs 01/01/2011
->> >  ffff88003d4c7738 ffffffff81b474f4 0000000000000003 dffffc0000000000
->> >  ffffffff844f8b00 ffff88003d4c7804 ffff88003d4c7800 ffffffff8140c06a
->> >  0000000041b58ab3 ffffffff8479ab7d ffffffff8140beae ffffffff8140cd00
->> > Call Trace:
->> >  [<     inline     >] __dump_stack lib/dump_stack.c:15
->> >  [<ffffffff81b474f4>] dump_stack+0xb3/0x10f lib/dump_stack.c:51
->> >  [<ffffffff8140c06a>] panic+0x1bc/0x39d kernel/panic.c:179
->> >  [<ffffffff8111125c>] __warn+0x1cc/0x1f0 kernel/panic.c:542
->> >  [<ffffffff8111144c>] warn_slowpath_null+0x2c/0x40 kernel/panic.c:585
->> >  [<ffffffff8389e5d9>] dccp_set_state+0x229/0x290 net/dccp/proto.c:83
->> >  [<ffffffff838a0aa2>] dccp_close+0x612/0xc10 net/dccp/proto.c:1016
->> >  [<ffffffff8316bf1f>] inet_release+0xef/0x1c0 net/ipv4/af_inet.c:415
->> >  [<ffffffff82b6e89e>] sock_release+0x8e/0x1d0 net/socket.c:570
->> >  [<ffffffff82b6e9f6>] sock_close+0x16/0x20 net/socket.c:1017
->> >  [<ffffffff815256ad>] __fput+0x29d/0x720 fs/file_table.c:208
->> >  [<ffffffff81525bb5>] ____fput+0x15/0x20 fs/file_table.c:244
->> >  [<ffffffff811727d8>] task_work_run+0xf8/0x170 kernel/task_work.c:116
->> >  [<     inline     >] exit_task_work include/linux/task_work.h:21
->> >  [<ffffffff8111bc53>] do_exit+0x883/0x2ac0 kernel/exit.c:828
->> >  [<ffffffff811221fe>] do_group_exit+0x10e/0x340 kernel/exit.c:931
->> >  [<ffffffff81143c94>] get_signal+0x634/0x15a0 kernel/signal.c:2307
->> >  [<ffffffff81054aad>] do_signal+0x8d/0x1a30 arch/x86/kernel/signal.c:807
->> >  [<ffffffff81003a05>] exit_to_usermode_loop+0xe5/0x130
->> > arch/x86/entry/common.c:156
->> >  [<     inline     >] prepare_exit_to_usermode arch/x86/entry/common.c:190
->> >  [<ffffffff81006298>] syscall_return_slowpath+0x1a8/0x1e0
->> > arch/x86/entry/common.c:259
->> >  [<ffffffff83fc1a62>] entry_SYSCALL_64_fastpath+0xc0/0xc2
->> > Dumping ftrace buffer:
->> >    (ftrace buffer empty)
->> > Kernel Offset: disabled
->> >
->> > On commit 1a1891d762d6e64daf07b5be4817e3fbb29e3c59 (Oct 18).
->>
->> Not sure we we keep around DCCP. David could we kill it ?
->>
->> TCP seems to have an additional check, missing in DCCP.
->>
->> diff --git a/net/dccp/proto.c b/net/dccp/proto.c
->> index 41e65804ddf5..9fe25bf63296 100644
->> --- a/net/dccp/proto.c
->> +++ b/net/dccp/proto.c
->> @@ -1009,6 +1009,10 @@ void dccp_close(struct sock *sk, long timeout)
->>               __kfree_skb(skb);
->>       }
->>
->> +     /* If socket has been already reset kill it. */
->> +     if (sk->sk_state = DCCP_CLOSED)
->> +             goto adjudge_to_death;
->> +
->>       if (data_was_unread) {
->>               /* Unread data was tossed, send an appropriate Reset Code */
->>               DCCP_WARN("ABORT with %u bytes unread\n", data_was_unread);
->>
->
-> The equivalent tcp fix was :
-> https://git.kernel.org/cgit/linux/kernel/git/davem/net.git/commit/?idV5b7b2d2e632b5792879c0c9cccdd9eecd31195
->
->
+------------[ cut here ]------------
+WARNING: CPU: 0 PID: 4608 at kernel/sched/core.c:7724
+__might_sleep+0x14c/0x1a0 kernel/sched/core.c:7719
+do not call blocking ops when !TASK_RUNNING; state=1 set at
+[<ffffffff811f5a5c>] prepare_to_wait+0xbc/0x210
+kernel/sched/wait.c:178
+Modules linked in:
+CPU: 0 PID: 4608 Comm: syz-executor Not tainted 4.9.0-rc2+ #320
+Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Bochs 01/01/2011
+ ffff88006625f7a0 ffffffff81b46914 ffff88006625f818 0000000000000000
+ ffffffff84052960 0000000000000000 ffff88006625f7e8 ffffffff81111237
+ ffff88006aceac00 ffffffff00001e2c ffffed000cc4beff ffffffff84052960
+Call Trace:
+ [<     inline     >] __dump_stack lib/dump_stack.c:15
+ [<ffffffff81b46914>] dump_stack+0xb3/0x10f lib/dump_stack.c:51
+ [<ffffffff81111237>] __warn+0x1a7/0x1f0 kernel/panic.c:550
+ [<ffffffff8111132c>] warn_slowpath_fmt+0xac/0xd0 kernel/panic.c:565
+ [<ffffffff811922fc>] __might_sleep+0x14c/0x1a0 kernel/sched/core.c:7719
+ [<     inline     >] slab_pre_alloc_hook mm/slab.h:393
+ [<     inline     >] slab_alloc_node mm/slub.c:2634
+ [<     inline     >] slab_alloc mm/slub.c:2716
+ [<ffffffff81508da0>] __kmalloc_track_caller+0x150/0x2a0 mm/slub.c:4240
+ [<ffffffff8146be14>] kmemdup+0x24/0x50 mm/util.c:113
+ [<ffffffff8388b2cf>] dccp_feat_clone_sp_val.part.5+0x4f/0xe0
+net/dccp/feat.c:374
+ [<     inline     >] dccp_feat_clone_sp_val net/dccp/feat.c:1141
+ [<     inline     >] dccp_feat_change_recv net/dccp/feat.c:1141
+ [<ffffffff8388d491>] dccp_feat_parse_options+0xaa1/0x13d0 net/dccp/feat.c:1411
+ [<ffffffff83894f01>] dccp_parse_options+0x721/0x1010 net/dccp/options.c:128
+ [<ffffffff83891280>] dccp_rcv_state_process+0x200/0x15b0 net/dccp/input.c:644
+ [<ffffffff838b8a94>] dccp_v4_do_rcv+0xf4/0x1a0 net/dccp/ipv4.c:681
+ [<     inline     >] sk_backlog_rcv ./include/net/sock.h:872
+ [<ffffffff82b7ceb6>] __release_sock+0x126/0x3a0 net/core/sock.c:2044
+ [<ffffffff82b7d189>] release_sock+0x59/0x1c0 net/core/sock.c:2502
+ [<     inline     >] inet_wait_for_connect net/ipv4/af_inet.c:547
+ [<ffffffff8316b2a2>] __inet_stream_connect+0x5d2/0xbb0 net/ipv4/af_inet.c:617
+ [<ffffffff8316b8d5>] inet_stream_connect+0x55/0xa0 net/ipv4/af_inet.c:656
+ [<ffffffff82b705e4>] SYSC_connect+0x244/0x2f0 net/socket.c:1533
+ [<ffffffff82b72dd4>] SyS_connect+0x24/0x30 net/socket.c:1514
+ [<ffffffff83fbf701>] entry_SYSCALL_64_fastpath+0x1f/0xc2
+arch/x86/entry/entry_64.S:209
+---[ end trace 0dc4109d69f4e51e ]---
+
+On commit 14970f204b1993af7459d5bd34aaff38dfee6670 (Oct 27).
+
+A reproducer is attached.
+
+--001a114119ece2e4ae053ff637f3
+Content-Type: application/octet-stream; name="dccp-feat-warn-poc.c"
+Content-Disposition: attachment; filename="dccp-feat-warn-poc.c"
+Content-Transfer-Encoding: base64
+X-Attachment-Id: f_iuuhd74t0
+
+Ly8gYXV0b2dlbmVyYXRlZCBieSBzeXprYWxsZXIgKGh0dHA6Ly9naXRodWIuY29tL2dvb2dsZS9z
+eXprYWxsZXIpCgojaWZuZGVmIF9fTlJfYmluZAojZGVmaW5lIF9fTlJfYmluZCA0OQojZW5kaWYK
+I2lmbmRlZiBfX05SX2xpc3RlbgojZGVmaW5lIF9fTlJfbGlzdGVuIDUwCiNlbmRpZgojaWZuZGVm
+IF9fTlJfc3l6X29wZW5fcHRzCiNkZWZpbmUgX19OUl9zeXpfb3Blbl9wdHMgMTAwMDAwMwojZW5k
+aWYKI2lmbmRlZiBfX05SX3N5el90ZXN0CiNkZWZpbmUgX19OUl9zeXpfdGVzdCAxMDAwMDAxCiNl
+bmRpZgojaWZuZGVmIF9fTlJfbW1hcAojZGVmaW5lIF9fTlJfbW1hcCA5CiNlbmRpZgojaWZuZGVm
+IF9fTlJfc29ja2V0CiNkZWZpbmUgX19OUl9zb2NrZXQgNDEKI2VuZGlmCiNpZm5kZWYgX19OUl9j
+b25uZWN0CiNkZWZpbmUgX19OUl9jb25uZWN0IDQyCiNlbmRpZgojaWZuZGVmIF9fTlJfc3l6X2Z1
+c2VfbW91bnQKI2RlZmluZSBfX05SX3N5el9mdXNlX21vdW50IDEwMDAwMDQKI2VuZGlmCiNpZm5k
+ZWYgX19OUl9zeXpfZnVzZWJsa19tb3VudAojZGVmaW5lIF9fTlJfc3l6X2Z1c2VibGtfbW91bnQg
+MTAwMDAwNQojZW5kaWYKI2lmbmRlZiBfX05SX3N5el9vcGVuX2RldgojZGVmaW5lIF9fTlJfc3l6
+X29wZW5fZGV2IDEwMDAwMDIKI2VuZGlmCgojaW5jbHVkZSA8c3lzL2lvY3RsLmg+CiNpbmNsdWRl
+IDxzeXMvc29ja2V0Lmg+CiNpbmNsdWRlIDxzeXMvc3RhdC5oPgojaW5jbHVkZSA8c3lzL3N5c2Nh
+bGwuaD4KI2luY2x1ZGUgPHN5cy90eXBlcy5oPgoKI2luY2x1ZGUgPGVycm5vLmg+CiNpbmNsdWRl
+IDxlcnJvci5oPgojaW5jbHVkZSA8ZmNudGwuaD4KI2luY2x1ZGUgPHB0aHJlYWQuaD4KI2luY2x1
+ZGUgPHNldGptcC5oPgojaW5jbHVkZSA8c2lnbmFsLmg+CiNpbmNsdWRlIDxzdGRkZWYuaD4KI2lu
+Y2x1ZGUgPHN0ZGludC5oPgojaW5jbHVkZSA8c3RkaW8uaD4KI2luY2x1ZGUgPHN0ZGxpYi5oPgoj
+aW5jbHVkZSA8c3RyaW5nLmg+CiNpbmNsdWRlIDx1bmlzdGQuaD4KCl9fdGhyZWFkIGludCBza2lw
+X3NlZ3Y7Cl9fdGhyZWFkIGptcF9idWYgc2Vndl9lbnY7CgpzdGF0aWMgdm9pZCBzZWd2X2hhbmRs
+ZXIoaW50IHNpZywgc2lnaW5mb190KiBpbmZvLCB2b2lkKiB1Y3R4KQp7CiAgaWYgKF9fYXRvbWlj
+X2xvYWRfbigmc2tpcF9zZWd2LCBfX0FUT01JQ19SRUxBWEVEKSkKICAgIF9sb25nam1wKHNlZ3Zf
+ZW52LCAxKTsKICBleGl0KHNpZyk7Cn0KCnN0YXRpYyB2b2lkIGluc3RhbGxfc2Vndl9oYW5kbGVy
+KCkKewogIHN0cnVjdCBzaWdhY3Rpb24gc2E7CiAgbWVtc2V0KCZzYSwgMCwgc2l6ZW9mKHNhKSk7
+CiAgc2Euc2Ffc2lnYWN0aW9uID0gc2Vndl9oYW5kbGVyOwogIHNhLnNhX2ZsYWdzID0gU0FfTk9E
+RUZFUiB8IFNBX1NJR0lORk87CiAgc2lnYWN0aW9uKFNJR1NFR1YsICZzYSwgTlVMTCk7CiAgc2ln
+YWN0aW9uKFNJR0JVUywgJnNhLCBOVUxMKTsKfQoKI2RlZmluZSBOT05GQUlMSU5HKC4uLikgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBcCiAgeyAgICAgICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgXAogICAgX19hdG9taWNfZmV0Y2hfYWRkKCZza2lwX3NlZ3YsIDEsIF9fQVRPTUlDX1NFUV9D
+U1QpOyAgICAgICAgICAgICAgIFwKICAgIGlmIChfc2V0am1wKHNlZ3ZfZW52KSA9PSAwKSB7ICAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBcCiAgICAgIF9fVkFfQVJHU19fOyAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgXAogICAg
+fSAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgIFwKICAgIF9fYXRvbWljX2ZldGNoX3N1Yigmc2tpcF9zZWd2LCAxLCBfX0FUT01J
+Q19TRVFfQ1NUKTsgICAgICAgICAgICAgICBcCiAgfQoKc3RhdGljIHVpbnRwdHJfdCBzeXpfb3Bl
+bl9kZXYodWludHB0cl90IGEwLCB1aW50cHRyX3QgYTEsIHVpbnRwdHJfdCBhMikKewogIGlmIChh
+MCA9PSAweGMgfHwgYTAgPT0gMHhiKSB7CgogICAgY2hhciBidWZbMTI4XTsKICAgIHNwcmludGYo
+YnVmLCAiL2Rldi8lcy8lZDolZCIsIGEwID09IDB4YyA/ICJjaGFyIiA6ICJibG9jayIsCiAgICAg
+ICAgICAgICh1aW50OF90KWExLCAodWludDhfdClhMik7CiAgICByZXR1cm4gb3BlbihidWYsIE9f
+UkRXUiwgMCk7CiAgfSBlbHNlIHsKCiAgICBjaGFyIGJ1ZlsxMDI0XTsKICAgIGNoYXIqIGhhc2g7
+CiAgICBzdHJuY3B5KGJ1ZiwgKGNoYXIqKWEwLCBzaXplb2YoYnVmKSk7CiAgICBidWZbc2l6ZW9m
+KGJ1ZikgLSAxXSA9IDA7CiAgICB3aGlsZSAoKGhhc2ggPSBzdHJjaHIoYnVmLCAnIycpKSkgewog
+ICAgICAqaGFzaCA9ICcwJyArIChjaGFyKShhMSAlIDEwKTsKICAgICAgYTEgLz0gMTA7CiAgICB9
+CiAgICByZXR1cm4gb3BlbihidWYsIGEyLCAwKTsKICB9Cn0KCnN0YXRpYyB1aW50cHRyX3Qgc3l6
+X29wZW5fcHRzKHVpbnRwdHJfdCBhMCwgdWludHB0cl90IGExKQp7CgogIGludCBwdHlubyA9IDA7
+CiAgaWYgKGlvY3RsKGEwLCBUSU9DR1BUTiwgJnB0eW5vKSkKICAgIHJldHVybiAtMTsKICBjaGFy
+IGJ1ZlsxMjhdOwogIHNwcmludGYoYnVmLCAiL2Rldi9wdHMvJWQiLCBwdHlubyk7CiAgcmV0dXJu
+IG9wZW4oYnVmLCBhMSwgMCk7Cn0KCnN0YXRpYyB1aW50cHRyX3Qgc3l6X2Z1c2VfbW91bnQodWlu
+dHB0cl90IGEwLCB1aW50cHRyX3QgYTEsCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+dWludHB0cl90IGEyLCB1aW50cHRyX3QgYTMsCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgdWludHB0cl90IGE0LCB1aW50cHRyX3QgYTUpCnsKCiAgdWludDY0X3QgdGFyZ2V0ID0gYTA7
+CiAgdWludDY0X3QgbW9kZSA9IGExOwogIHVpbnQ2NF90IHVpZCA9IGEyOwogIHVpbnQ2NF90IGdp
+ZCA9IGEzOwogIHVpbnQ2NF90IG1heHJlYWQgPSBhNDsKICB1aW50NjRfdCBmbGFncyA9IGE1OwoK
+ICBpbnQgZmQgPSBvcGVuKCIvZGV2L2Z1c2UiLCBPX1JEV1IpOwogIGlmIChmZCA9PSAtMSkKICAg
+IHJldHVybiBmZDsKICBjaGFyIGJ1ZlsxMDI0XTsKICBzcHJpbnRmKGJ1ZiwgImZkPSVkLHVzZXJf
+aWQ9JWxkLGdyb3VwX2lkPSVsZCxyb290bW9kZT0wJW8iLCBmZCwKICAgICAgICAgIChsb25nKXVp
+ZCwgKGxvbmcpZ2lkLCAodW5zaWduZWQpbW9kZSAmIH4zdSk7CiAgaWYgKG1heHJlYWQgIT0gMCkK
+ICAgIHNwcmludGYoYnVmICsgc3RybGVuKGJ1ZiksICIsbWF4X3JlYWQ9JWxkIiwgKGxvbmcpbWF4
+cmVhZCk7CiAgaWYgKG1vZGUgJiAxKQogICAgc3RyY2F0KGJ1ZiwgIixkZWZhdWx0X3Blcm1pc3Np
+b25zIik7CiAgaWYgKG1vZGUgJiAyKQogICAgc3RyY2F0KGJ1ZiwgIixhbGxvd19vdGhlciIpOwog
+IHN5c2NhbGwoU1lTX21vdW50LCAiIiwgdGFyZ2V0LCAiZnVzZSIsIGZsYWdzLCBidWYpOwoKICBy
+ZXR1cm4gZmQ7Cn0KCnN0YXRpYyB1aW50cHRyX3Qgc3l6X2Z1c2VibGtfbW91bnQodWludHB0cl90
+IGEwLCB1aW50cHRyX3QgYTEsCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgdWlu
+dHB0cl90IGEyLCB1aW50cHRyX3QgYTMsCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgdWludHB0cl90IGE0LCB1aW50cHRyX3QgYTUsCiAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgdWludHB0cl90IGE2LCB1aW50cHRyX3QgYTcpCnsKCiAgdWludDY0X3QgdGFyZ2V0
+ID0gYTA7CiAgdWludDY0X3QgYmxrZGV2ID0gYTE7CiAgdWludDY0X3QgbW9kZSA9IGEyOwogIHVp
+bnQ2NF90IHVpZCA9IGEzOwogIHVpbnQ2NF90IGdpZCA9IGE0OwogIHVpbnQ2NF90IG1heHJlYWQg
+PSBhNTsKICB1aW50NjRfdCBibGtzaXplID0gYTY7CiAgdWludDY0X3QgZmxhZ3MgPSBhNzsKCiAg
+aW50IGZkID0gb3BlbigiL2Rldi9mdXNlIiwgT19SRFdSKTsKICBpZiAoZmQgPT0gLTEpCiAgICBy
+ZXR1cm4gZmQ7CiAgaWYgKHN5c2NhbGwoU1lTX21rbm9kYXQsIEFUX0ZEQ1dELCBibGtkZXYsIFNf
+SUZCTEssIG1ha2VkZXYoNywgMTk5KSkpCiAgICByZXR1cm4gZmQ7CiAgY2hhciBidWZbMjU2XTsK
+ICBzcHJpbnRmKGJ1ZiwgImZkPSVkLHVzZXJfaWQ9JWxkLGdyb3VwX2lkPSVsZCxyb290bW9kZT0w
+JW8iLCBmZCwKICAgICAgICAgIChsb25nKXVpZCwgKGxvbmcpZ2lkLCAodW5zaWduZWQpbW9kZSAm
+IH4zdSk7CiAgaWYgKG1heHJlYWQgIT0gMCkKICAgIHNwcmludGYoYnVmICsgc3RybGVuKGJ1Ziks
+ICIsbWF4X3JlYWQ9JWxkIiwgKGxvbmcpbWF4cmVhZCk7CiAgaWYgKGJsa3NpemUgIT0gMCkKICAg
+IHNwcmludGYoYnVmICsgc3RybGVuKGJ1ZiksICIsYmxrc2l6ZT0lbGQiLCAobG9uZylibGtzaXpl
+KTsKICBpZiAobW9kZSAmIDEpCiAgICBzdHJjYXQoYnVmLCAiLGRlZmF1bHRfcGVybWlzc2lvbnMi
+KTsKICBpZiAobW9kZSAmIDIpCiAgICBzdHJjYXQoYnVmLCAiLGFsbG93X290aGVyIik7CiAgc3lz
+Y2FsbChTWVNfbW91bnQsIGJsa2RldiwgdGFyZ2V0LCAiZnVzZWJsayIsIGZsYWdzLCBidWYpOwoK
+ICByZXR1cm4gZmQ7Cn0KCnN0YXRpYyB1aW50cHRyX3QgZXhlY3V0ZV9zeXNjYWxsKGludCBuciwg
+dWludHB0cl90IGEwLCB1aW50cHRyX3QgYTEsCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgIHVpbnRwdHJfdCBhMiwgdWludHB0cl90IGEzLAogICAgICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICB1aW50cHRyX3QgYTQsIHVpbnRwdHJfdCBhNSwKICAgICAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgdWludHB0cl90IGE2LCB1aW50cHRyX3QgYTcsCiAgICAgICAgICAgICAgICAg
+ICAgICAgICAgICAgICAgIHVpbnRwdHJfdCBhOCkKewogIHN3aXRjaCAobnIpIHsKICBkZWZhdWx0
+OgogICAgcmV0dXJuIHN5c2NhbGwobnIsIGEwLCBhMSwgYTIsIGEzLCBhNCwgYTUpOwogIGNhc2Ug
+X19OUl9zeXpfdGVzdDoKICAgIHJldHVybiAwOwogIGNhc2UgX19OUl9zeXpfb3Blbl9kZXY6CiAg
+ICByZXR1cm4gc3l6X29wZW5fZGV2KGEwLCBhMSwgYTIpOwogIGNhc2UgX19OUl9zeXpfb3Blbl9w
+dHM6CiAgICByZXR1cm4gc3l6X29wZW5fcHRzKGEwLCBhMSk7CiAgY2FzZSBfX05SX3N5el9mdXNl
+X21vdW50OgogICAgcmV0dXJuIHN5el9mdXNlX21vdW50KGEwLCBhMSwgYTIsIGEzLCBhNCwgYTUp
+OwogIGNhc2UgX19OUl9zeXpfZnVzZWJsa19tb3VudDoKICAgIHJldHVybiBzeXpfZnVzZWJsa19t
+b3VudChhMCwgYTEsIGEyLCBhMywgYTQsIGE1LCBhNiwgYTcpOwogIH0KfQoKbG9uZyByWzI4XTsK
+dm9pZCogdGhyKHZvaWQqIGFyZykKewogIHN3aXRjaCAoKGxvbmcpYXJnKSB7CiAgY2FzZSAwOgog
+ICAgclswXSA9CiAgICAgICAgZXhlY3V0ZV9zeXNjYWxsKF9fTlJfbW1hcCwgMHgyMDAwMDAwMHVs
+LCAweGUyYjAwMHVsLCAweDN1bCwKICAgICAgICAgICAgICAgICAgICAgICAgMHgzMnVsLCAweGZm
+ZmZmZmZmZmZmZmZmZmZ1bCwgMHgwdWwsIDAsIDAsIDApOwogICAgYnJlYWs7CiAgY2FzZSAxOgog
+ICAgclsxXSA9IGV4ZWN1dGVfc3lzY2FsbChfX05SX3NvY2tldCwgMHgydWwsIDB4ODA2dWwsIDB4
+MHVsLCAwLCAwLCAwLAogICAgICAgICAgICAgICAgICAgICAgICAgICAwLCAwLCAwKTsKICAgIGJy
+ZWFrOwogIGNhc2UgMjoKICAgIE5PTkZBSUxJTkcoKih1aW50MTZfdCopMHgyMDRlODAwMCA9ICh1
+aW50MTZfdCkweDIpOwogICAgTk9ORkFJTElORygqKHVpbnQxNl90KikweDIwNGU4MDAyID0gKHVp
+bnQxNl90KTB4NDI0Mik7CiAgICBOT05GQUlMSU5HKCoodWludDMyX3QqKTB4MjA0ZTgwMDQgPSAo
+dWludDMyX3QpMHgwKTsKICAgIE5PTkZBSUxJTkcoKih1aW50OF90KikweDIwNGU4MDA4ID0gKHVp
+bnQ4X3QpMHgwKTsKICAgIE5PTkZBSUxJTkcoKih1aW50OF90KikweDIwNGU4MDA5ID0gKHVpbnQ4
+X3QpMHgwKTsKICAgIE5PTkZBSUxJTkcoKih1aW50OF90KikweDIwNGU4MDBhID0gKHVpbnQ4X3Qp
+MHgwKTsKICAgIE5PTkZBSUxJTkcoKih1aW50OF90KikweDIwNGU4MDBiID0gKHVpbnQ4X3QpMHgw
+KTsKICAgIE5PTkZBSUxJTkcoKih1aW50OF90KikweDIwNGU4MDBjID0gKHVpbnQ4X3QpMHgwKTsK
+ICAgIE5PTkZBSUxJTkcoKih1aW50OF90KikweDIwNGU4MDBkID0gKHVpbnQ4X3QpMHgwKTsKICAg
+IE5PTkZBSUxJTkcoKih1aW50OF90KikweDIwNGU4MDBlID0gKHVpbnQ4X3QpMHgwKTsKICAgIE5P
+TkZBSUxJTkcoKih1aW50OF90KikweDIwNGU4MDBmID0gKHVpbnQ4X3QpMHgwKTsKICAgIHJbMTNd
+ID0gZXhlY3V0ZV9zeXNjYWxsKF9fTlJfYmluZCwgclsxXSwgMHgyMDRlODAwMHVsLCAweDEwdWws
+IDAsIDAsCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAwLCAwLCAwLCAwKTsKICAgIGJyZWFr
+OwogIGNhc2UgMzoKICAgIHJbMTRdID0KICAgICAgICBleGVjdXRlX3N5c2NhbGwoX19OUl9saXN0
+ZW4sIHJbMV0sIDB4MXVsLCAwLCAwLCAwLCAwLCAwLCAwLCAwKTsKICAgIGJyZWFrOwogIGNhc2Ug
+NDoKICAgIHJbMTVdID0gZXhlY3V0ZV9zeXNjYWxsKF9fTlJfc29ja2V0LCAweDJ1bCwgMHg2dWws
+IDB4MHVsLCAwLCAwLCAwLAogICAgICAgICAgICAgICAgICAgICAgICAgICAgMCwgMCwgMCk7CiAg
+ICBicmVhazsKICBjYXNlIDU6CiAgICBOT05GQUlMSU5HKCoodWludDE2X3QqKTB4MjBlMjYwMDAg
+PSAodWludDE2X3QpMHgyKTsKICAgIE5PTkZBSUxJTkcoKih1aW50MTZfdCopMHgyMGUyNjAwMiA9
+ICh1aW50MTZfdCkweDQyNDIpOwogICAgTk9ORkFJTElORygqKHVpbnQzMl90KikweDIwZTI2MDA0
+ID0gKHVpbnQzMl90KTB4MCk7CiAgICBOT05GQUlMSU5HKCoodWludDhfdCopMHgyMGUyNjAwOCA9
+ICh1aW50OF90KTB4MCk7CiAgICBOT05GQUlMSU5HKCoodWludDhfdCopMHgyMGUyNjAwOSA9ICh1
+aW50OF90KTB4MCk7CiAgICBOT05GQUlMSU5HKCoodWludDhfdCopMHgyMGUyNjAwYSA9ICh1aW50
+OF90KTB4MCk7CiAgICBOT05GQUlMSU5HKCoodWludDhfdCopMHgyMGUyNjAwYiA9ICh1aW50OF90
+KTB4MCk7CiAgICBOT05GQUlMSU5HKCoodWludDhfdCopMHgyMGUyNjAwYyA9ICh1aW50OF90KTB4
+MCk7CiAgICBOT05GQUlMSU5HKCoodWludDhfdCopMHgyMGUyNjAwZCA9ICh1aW50OF90KTB4MCk7
+CiAgICBOT05GQUlMSU5HKCoodWludDhfdCopMHgyMGUyNjAwZSA9ICh1aW50OF90KTB4MCk7CiAg
+ICBOT05GQUlMSU5HKCoodWludDhfdCopMHgyMGUyNjAwZiA9ICh1aW50OF90KTB4MCk7CiAgICBy
+WzI3XSA9IGV4ZWN1dGVfc3lzY2FsbChfX05SX2Nvbm5lY3QsIHJbMTVdLCAweDIwZTI2MDAwdWws
+IDB4MTB1bCwKICAgICAgICAgICAgICAgICAgICAgICAgICAgIDAsIDAsIDAsIDAsIDAsIDApOwog
+ICAgYnJlYWs7CiAgfQogIHJldHVybiAwOwp9CgppbnQgbWFpbigpCnsKICBsb25nIGk7CiAgcHRo
+cmVhZF90IHRoWzEyXTsKCiAgaW5zdGFsbF9zZWd2X2hhbmRsZXIoKTsKICBtZW1zZXQociwgLTEs
+IHNpemVvZihyKSk7CiAgc3JhbmQoZ2V0cGlkKCkpOwogIGZvciAoaSA9IDA7IGkgPCA2OyBpKysp
+IHsKICAgIHB0aHJlYWRfY3JlYXRlKCZ0aFtpXSwgMCwgdGhyLCAodm9pZCopaSk7CiAgICB1c2xl
+ZXAoMTAwMDApOwogIH0KICBmb3IgKGkgPSAwOyBpIDwgNjsgaSsrKSB7CiAgICBwdGhyZWFkX2Ny
+ZWF0ZSgmdGhbNiArIGldLCAwLCB0aHIsICh2b2lkKilpKTsKICAgIGlmIChyYW5kKCkgJSAyKQog
+ICAgICB1c2xlZXAocmFuZCgpICUgMTAwMDApOwogIH0KICB1c2xlZXAoMTAwMDAwKTsKICByZXR1
+cm4gMDsKfQo=
+--001a114119ece2e4ae053ff637f3--
