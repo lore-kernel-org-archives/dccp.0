@@ -1,7 +1,7 @@
-From: Andrey Konovalov <andreyknvl@google.com>
-Date: Sun, 30 Oct 2016 04:41:39 +0000
+From: Eric Dumazet <eric.dumazet@gmail.com>
+Date: Sun, 30 Oct 2016 13:20:01 +0000
 Subject: Re: net/dccp: warning in dccp_feat_clone_sp_val/__might_sleep
-Message-Id: <CAAeHK+z2mqZCsZpPP_hNY2-bt_-WEU9rFmOd=jcWSBmVPDS_rA@mail.gmail.com>
+Message-Id: <1477833601.7065.297.camel@edumazet-glaptop3.roam.corp.google.com>
 List-Id: <dccp.vger.kernel.org>
 References: <CAAeHK+z-SAq-YhHarfc94dguyXCJ_tv8n=ZVdLTRsYEy0cK-pQ@mail.gmail.com>
 In-Reply-To: <CAAeHK+z-SAq-YhHarfc94dguyXCJ_tv8n=ZVdLTRsYEy0cK-pQ@mail.gmail.com>
@@ -10,39 +10,51 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Sorry, the warning is still there.
+On Sun, 2016-10-30 at 05:41 +0100, Andrey Konovalov wrote:
+> Sorry, the warning is still there.
+> 
+> I'm not sure adding sched_annotate_sleep() does anything, since it's
+> defined as (in case CONFIG_DEBUG_ATOMIC_SLEEP is not set):
+> # define sched_annotate_sleep() do { } while (0)
 
-I'm not sure adding sched_annotate_sleep() does anything, since it's
-defined as (in case CONFIG_DEBUG_ATOMIC_SLEEP is not set):
-# define sched_annotate_sleep() do { } while (0)
+Thanks again for testing.
 
-On Sat, Oct 29, 2016 at 8:05 PM, Eric Dumazet <eric.dumazet@gmail.com> wrote:
-> On Sat, 2016-10-29 at 19:59 +0200, Andrey Konovalov wrote:
->> Hi Eric,
->>
->> Tested with both patches applied, still seeing the warning.
->>
->> Thanks!
->
-> Arg, sorry, this was at the wrong place.
->
-> Thanks for testing !
->
-> diff --git a/net/dccp/output.c b/net/dccp/output.c
-> index b66c84db0766..2548edff86ff 100644
-> --- a/net/dccp/output.c
-> +++ b/net/dccp/output.c
-> @@ -224,6 +224,11 @@ static int dccp_wait_for_ccid(struct sock *sk, unsigned long delay)
->
->         prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
->         sk->sk_write_pending++;
-> +
-> +       /* release_sock()/lock_sock() will process socket backlog
-> +        * from process context. Be prepared to sleep !
-> +        */
-> +       sched_annotate_sleep();
->         release_sock(sk);
->
->         remaining = schedule_timeout(delay);
->
->
+But you do have CONFIG_DEBUG_ATOMIC_SLEEP set, which triggers a check in
+__might_sleep() :
+
+WARN_ONCE(current->state != TASK_RUNNING && current->task_state_change,
+
+Relevant commit is 00845eb968ead28007338b2bb852b8beef816583
+("sched: don't cause task state changes in nested sleep debugging")
+
+Another relevant commit was 26cabd31259ba43f68026ce3f62b78094124333f
+("sched, net: Clean up sk_wait_event() vs. might_sleep()") 
+
+Before release_sock() could process the backlog in process context, only
+lock_sock() could trigger the issue, so my fix at that time was commit
+cb7cf8a33ff73cf638481d1edf883d8968f934f8 ("inet: Clean up
+inet_csk_wait_for_connect() vs. might_sleep()")
+
+I guess we need something else now, because the following :
+
+static int dccp_wait_for_ccid(struct sock *sk, unsigned long delay)
+{
+        DEFINE_WAIT(wait);
+        long remaining;
+
+        prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
+        sk->sk_write_pending++;
+        release_sock(sk);
+	...
+
+
+can now process the socket backlog in process context from
+release_sock(), so all GFP_KERNEL allocations might barf because of
+TASK_INTERRUPTIBLE being used at that point.
+
+sk_wait_event() probably also needs a fix.
+
+Peter, any idea how this can be done ?
+
+Thanks !
+
