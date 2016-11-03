@@ -1,26 +1,78 @@
-From: David Miller <davem@davemloft.net>
-Date: Wed, 30 Nov 2016 01:38:01 +0000
-Subject: Re: [PATCH net] net/dccp: fix use-after-free in dccp_invalid_packet
-Message-Id: <20161129.203801.926114791600466509.davem@davemloft.net>
+From: Eric Dumazet <eric.dumazet@gmail.com>
+Date: Thu, 03 Nov 2016 01:04:24 +0000
+Subject: [PATCH net] dccp: do not send reset to already closed sockets
+Message-Id: <1478135064.7065.409.camel@edumazet-glaptop3.roam.corp.google.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1480343209.18162.50.camel@edumazet-glaptop3.roam.corp.google.com>
-In-Reply-To: <1480343209.18162.50.camel@edumazet-glaptop3.roam.corp.google.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Eric Dumazet <eric.dumazet@gmail.com>
-Date: Mon, 28 Nov 2016 06:26:49 -0800
+From: Eric Dumazet <edumazet@google.com>
 
-> From: Eric Dumazet <edumazet@google.com>
-> 
-> pskb_may_pull() can reallocate skb->head, we need to reload dh pointer
-> in dccp_invalid_packet() or risk use after free.
-> 
-> Bug found by Andrey Konovalov using syzkaller.
-> 
-> Signed-off-by: Eric Dumazet <edumazet@google.com>
-> Reported-by: Andrey Konovalov <andreyknvl@google.com>
+Andrey reported following warning while fuzzing with syzkaller
 
-Applied and queued up for -stable, thanks Eric.
+WARNING: CPU: 1 PID: 21072 at net/dccp/proto.c:83 dccp_set_state+0x229/0x290
+Kernel panic - not syncing: panic_on_warn set ...
+
+CPU: 1 PID: 21072 Comm: syz-executor Not tainted 4.9.0-rc1+ #293
+Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Bochs 01/01/2011
+ ffff88003d4c7738 ffffffff81b474f4 0000000000000003 dffffc0000000000
+ ffffffff844f8b00 ffff88003d4c7804 ffff88003d4c7800 ffffffff8140c06a
+ 0000000041b58ab3 ffffffff8479ab7d ffffffff8140beae ffffffff8140cd00
+Call Trace:
+ [<     inline     >] __dump_stack lib/dump_stack.c:15
+ [<ffffffff81b474f4>] dump_stack+0xb3/0x10f lib/dump_stack.c:51
+ [<ffffffff8140c06a>] panic+0x1bc/0x39d kernel/panic.c:179
+ [<ffffffff8111125c>] __warn+0x1cc/0x1f0 kernel/panic.c:542
+ [<ffffffff8111144c>] warn_slowpath_null+0x2c/0x40 kernel/panic.c:585
+ [<ffffffff8389e5d9>] dccp_set_state+0x229/0x290 net/dccp/proto.c:83
+ [<ffffffff838a0aa2>] dccp_close+0x612/0xc10 net/dccp/proto.c:1016
+ [<ffffffff8316bf1f>] inet_release+0xef/0x1c0 net/ipv4/af_inet.c:415
+ [<ffffffff82b6e89e>] sock_release+0x8e/0x1d0 net/socket.c:570
+ [<ffffffff82b6e9f6>] sock_close+0x16/0x20 net/socket.c:1017
+ [<ffffffff815256ad>] __fput+0x29d/0x720 fs/file_table.c:208
+ [<ffffffff81525bb5>] ____fput+0x15/0x20 fs/file_table.c:244
+ [<ffffffff811727d8>] task_work_run+0xf8/0x170 kernel/task_work.c:116
+ [<     inline     >] exit_task_work include/linux/task_work.h:21
+ [<ffffffff8111bc53>] do_exit+0x883/0x2ac0 kernel/exit.c:828
+ [<ffffffff811221fe>] do_group_exit+0x10e/0x340 kernel/exit.c:931
+ [<ffffffff81143c94>] get_signal+0x634/0x15a0 kernel/signal.c:2307
+ [<ffffffff81054aad>] do_signal+0x8d/0x1a30 arch/x86/kernel/signal.c:807
+ [<ffffffff81003a05>] exit_to_usermode_loop+0xe5/0x130
+arch/x86/entry/common.c:156
+ [<     inline     >] prepare_exit_to_usermode arch/x86/entry/common.c:190
+ [<ffffffff81006298>] syscall_return_slowpath+0x1a8/0x1e0
+arch/x86/entry/common.c:259
+ [<ffffffff83fc1a62>] entry_SYSCALL_64_fastpath+0xc0/0xc2
+Dumping ftrace buffer:
+   (ftrace buffer empty)
+Kernel Offset: disabled
+
+Fix this the same way we did for TCP in commit 565b7b2d2e63
+("tcp: do not send reset to already closed sockets")
+
+Signed-off-by: Eric Dumazet <edumazet@google.com>
+Reported-by: Andrey Konovalov <andreyknvl@google.com>
+Tested-by: Andrey Konovalov <andreyknvl@google.com>
+---
+ net/dccp/proto.c |    4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 41e65804ddf5..9fe25bf63296 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -1009,6 +1009,10 @@ void dccp_close(struct sock *sk, long timeout)
+ 		__kfree_skb(skb);
+ 	}
+ 
++	/* If socket has been already reset kill it. */
++	if (sk->sk_state = DCCP_CLOSED)
++		goto adjudge_to_death;
++
+ 	if (data_was_unread) {
+ 		/* Unread data was tossed, send an appropriate Reset Code */
+ 		DCCP_WARN("ABORT with %u bytes unread\n", data_was_unread);
+
+
