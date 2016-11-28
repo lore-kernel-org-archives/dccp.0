@@ -1,62 +1,68 @@
-From: Eric Dumazet <eric.dumazet@gmail.com>
-Date: Mon, 28 Nov 2016 14:26:49 +0000
-Subject: [PATCH net] net/dccp: fix use-after-free in dccp_invalid_packet
-Message-Id: <1480343209.18162.50.camel@edumazet-glaptop3.roam.corp.google.com>
+From: Arnaldo Carvalho de Melo <acme@kernel.org>
+Date: Mon, 28 Nov 2016 14:40:01 +0000
+Subject: Re: [PATCH net] net/dccp: fix use-after-free in dccp_invalid_packet
+Message-Id: <20161128144001.GE16426@kernel.org>
 List-Id: <dccp.vger.kernel.org>
+References: <1480343209.18162.50.camel@edumazet-glaptop3.roam.corp.google.com>
+In-Reply-To: <1480343209.18162.50.camel@edumazet-glaptop3.roam.corp.google.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Eric Dumazet <edumazet@google.com>
+Em Mon, Nov 28, 2016 at 06:26:49AM -0800, Eric Dumazet escreveu:
+> From: Eric Dumazet <edumazet@google.com>
+> 
+> pskb_may_pull() can reallocate skb->head, we need to reload dh pointer
+> in dccp_invalid_packet() or risk use after free.
+> 
+> Bug found by Andrey Konovalov using syzkaller.
+> 
+> Signed-off-by: Eric Dumazet <edumazet@google.com>
+> Reported-by: Andrey Konovalov <andreyknvl@google.com>
 
-pskb_may_pull() can reallocate skb->head, we need to reload dh pointer
-in dccp_invalid_packet() or risk use after free.
+Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
 
-Bug found by Andrey Konovalov using syzkaller.
+I was about to send exactly this patch, and while looking at it I think
+the patch below needs to go in as well, no? To follow the advice of that
+Warning line there :-)
 
-Signed-off-by: Eric Dumazet <edumazet@google.com>
-Reported-by: Andrey Konovalov <andreyknvl@google.com>
----
- net/dccp/ipv4.c |   12 +++++++-----
- 1 file changed, 7 insertions(+), 5 deletions(-)
+From: Arnaldo Carvalho de Melo <acme@redhat.com>
 
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index b567c8725aea..edbe59d203ef 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -700,6 +700,7 @@ int dccp_invalid_packet(struct sk_buff *skb)
- {
- 	const struct dccp_hdr *dh;
- 	unsigned int cscov;
-+	u8 dccph_doff;
+pskb_may_pull() can reallocate skb->head, so we can't access
+iph->frag_off or risk use after free, save it to a variable and us that
+later.
+
+Cc: Andrey Konovalov <andreyknvl@google.com>
+Cc: Eric Dumazet <edumazet@google.com>
+Signed-off-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+
+diff --git a/net/ipv4/af_inet.c b/net/ipv4/af_inet.c
+index 5ddf5cda07f4..9462070561a3 100644
+--- a/net/ipv4/af_inet.c
++++ b/net/ipv4/af_inet.c
+@@ -1198,6 +1198,7 @@ struct sk_buff *inet_gso_segment(struct sk_buff *skb,
+ 	struct iphdr *iph;
+ 	int proto, tot_len;
+ 	int nhoff;
++	u16 frag_off;
+ 	int ihl;
+ 	int id;
  
- 	if (skb->pkt_type != PACKET_HOST)
- 		return 1;
-@@ -721,18 +722,19 @@ int dccp_invalid_packet(struct sk_buff *skb)
- 	/*
- 	 * If P.Data Offset is too small for packet type, drop packet and return
- 	 */
--	if (dh->dccph_doff < dccp_hdr_len(skb) / sizeof(u32)) {
--		DCCP_WARN("P.Data Offset(%u) too small\n", dh->dccph_doff);
-+	dccph_doff = dh->dccph_doff;
-+	if (dccph_doff < dccp_hdr_len(skb) / sizeof(u32)) {
-+		DCCP_WARN("P.Data Offset(%u) too small\n", dccph_doff);
- 		return 1;
+@@ -1213,6 +1214,7 @@ struct sk_buff *inet_gso_segment(struct sk_buff *skb,
+ 
+ 	id = ntohs(iph->id);
+ 	proto = iph->protocol;
++	frag_off = iph->frag_off;
+ 
+ 	/* Warning: after this point, iph might be no longer valid */
+ 	if (unlikely(!pskb_may_pull(skb, ihl)))
+@@ -1233,7 +1235,7 @@ struct sk_buff *inet_gso_segment(struct sk_buff *skb,
+ 		fixedid = !!(skb_shinfo(skb)->gso_type & SKB_GSO_TCP_FIXEDID);
+ 
+ 		/* fixed ID is invalid if DF bit is not set */
+-		if (fixedid && !(iph->frag_off & htons(IP_DF)))
++		if (fixedid && !(frag_off & htons(IP_DF)))
+ 			goto out;
  	}
- 	/*
- 	 * If P.Data Offset is too too large for packet, drop packet and return
- 	 */
--	if (!pskb_may_pull(skb, dh->dccph_doff * sizeof(u32))) {
--		DCCP_WARN("P.Data Offset(%u) too large\n", dh->dccph_doff);
-+	if (!pskb_may_pull(skb, dccph_doff * sizeof(u32))) {
-+		DCCP_WARN("P.Data Offset(%u) too large\n", dccph_doff);
- 		return 1;
- 	}
--
-+	dh = dccp_hdr(skb);
- 	/*
- 	 * If P.type is not Data, Ack, or DataAck and P.X = 0 (the packet
- 	 * has short sequence numbers), drop packet and return
-
-
+ 
