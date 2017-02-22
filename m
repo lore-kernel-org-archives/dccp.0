@@ -1,166 +1,109 @@
-From: Cong Wang <xiyou.wangcong@gmail.com>
-Date: Mon, 13 Feb 2017 22:29:24 +0000
-Subject: Re: net/dccp: use-after-free in dccp_feat_activate_values
-Message-Id: <CAM_iQpUVusW6YJqSgXSo2hAA2dCZGYxw4h+A1_iBpaiYMsXDMA@mail.gmail.com>
+From: Andrey Ryabinin <aryabinin@virtuozzo.com>
+Date: Wed, 22 Feb 2017 09:35:27 +0000
+Subject: [PATCH v2] net/dccp: fix use after free in tw_timer_handler()
+Message-Id: <20170222093527.19698-1-aryabinin@virtuozzo.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Mon, Feb 13, 2017 at 11:19 AM, Andrey Konovalov
-<andreyknvl@google.com> wrote:
-> Hi,
->
-> I've got the following error report while fuzzing the kernel with syzkaller.
->
-> On commit 926af6273fc683cd98cd0ce7bf0d04a02eed6742.
->
-> A reproducer and .config are attached.
-> Note, that it takes quite some time to trigger the bug (up to 10 minutes).
->
-> BUG: KASAN: use-after-free in dccp_feat_activate_values+0x967/0xab0
-> net/dccp/feat.c:1541 at addr ffff88003713be68
-> Read of size 8 by task syz-executor2/8457
-> CPU: 2 PID: 8457 Comm: syz-executor2 Not tainted 4.10.0-rc7+ #127
-> Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Bochs 01/01/2011
-> Call Trace:
->  <IRQ>
->  __dump_stack lib/dump_stack.c:15 [inline]
->  dump_stack+0x292/0x398 lib/dump_stack.c:51
->  kasan_object_err+0x1c/0x70 mm/kasan/report.c:162
->  print_address_description mm/kasan/report.c:200 [inline]
->  kasan_report_error mm/kasan/report.c:289 [inline]
->  kasan_report.part.1+0x20e/0x4e0 mm/kasan/report.c:311
->  kasan_report mm/kasan/report.c:332 [inline]
->  __asan_report_load8_noabort+0x29/0x30 mm/kasan/report.c:332
->  dccp_feat_activate_values+0x967/0xab0 net/dccp/feat.c:1541
->  dccp_create_openreq_child+0x464/0x610 net/dccp/minisocks.c:121
->  dccp_v6_request_recv_sock+0x1f6/0x1960 net/dccp/ipv6.c:457
->  dccp_check_req+0x335/0x5a0 net/dccp/minisocks.c:186
->  dccp_v6_rcv+0x69e/0x1d00 net/dccp/ipv6.c:711
->  ip6_input_finish+0x46d/0x17a0 net/ipv6/ip6_input.c:279
->  NF_HOOK include/linux/netfilter.h:257 [inline]
->  ip6_input+0xdb/0x590 net/ipv6/ip6_input.c:322
->  dst_input include/net/dst.h:507 [inline]
->  ip6_rcv_finish+0x289/0x890 net/ipv6/ip6_input.c:69
->  NF_HOOK include/linux/netfilter.h:257 [inline]
->  ipv6_rcv+0x12ec/0x23d0 net/ipv6/ip6_input.c:203
->  __netif_receive_skb_core+0x1ae5/0x3400 net/core/dev.c:4190
->  __netif_receive_skb+0x2a/0x170 net/core/dev.c:4228
->  process_backlog+0xe5/0x6c0 net/core/dev.c:4839
->  napi_poll net/core/dev.c:5202 [inline]
->  net_rx_action+0xe70/0x1900 net/core/dev.c:5267
->  __do_softirq+0x2fb/0xb7d kernel/softirq.c:284
->  do_softirq_own_stack+0x1c/0x30 arch/x86/entry/entry_64.S:902
+DCCP doesn't purge timewait sockets on network namespace shutdown.
+So, after net namespace destroyed we could still have an active timer
+which will trigger use after free in tw_timer_handler():
 
+    BUG: KASAN: use-after-free in tw_timer_handler+0x4a/0xa0 at addr ffff88010e0d1e10
+    Read of size 8 by task swapper/1/0
+    Call Trace:
+     __asan_load8+0x54/0x90
+     tw_timer_handler+0x4a/0xa0
+     call_timer_fn+0x127/0x480
+     expire_timers+0x1db/0x2e0
+     run_timer_softirq+0x12f/0x2a0
+     __do_softirq+0x105/0x5b4
+     irq_exit+0xdd/0xf0
+     smp_apic_timer_interrupt+0x57/0x70
+     apic_timer_interrupt+0x90/0xa0
 
-Seems there is a race condition between iterating dccp_feat_entry
-and freeing it, bh_lock_sock() seems not held in this path.
+    Object at ffff88010e0d1bc0, in cache net_namespace size: 6848
+    Allocated:
+     save_stack_trace+0x1b/0x20
+     kasan_kmalloc+0xee/0x180
+     kasan_slab_alloc+0x12/0x20
+     kmem_cache_alloc+0x134/0x310
+     copy_net_ns+0x8d/0x280
+     create_new_namespaces+0x23f/0x340
+     unshare_nsproxy_namespaces+0x75/0xf0
+     SyS_unshare+0x299/0x4f0
+     entry_SYSCALL_64_fastpath+0x18/0xad
+    Freed:
+     save_stack_trace+0x1b/0x20
+     kasan_slab_free+0xae/0x180
+     kmem_cache_free+0xb4/0x350
+     net_drop_ns+0x3f/0x50
+     cleanup_net+0x3df/0x450
+     process_one_work+0x419/0xbb0
+     worker_thread+0x92/0x850
+     kthread+0x192/0x1e0
+     ret_from_fork+0x2e/0x40
 
+Add .exit_batch hook to dccp_v4_ops()/dccp_v6_ops() which will purge
+timewait sockets on net namespace destruction and prevent above issue.
 
->  </IRQ>
->  do_softirq.part.17+0x1e8/0x230 kernel/softirq.c:328
->  do_softirq kernel/softirq.c:176 [inline]
->  __local_bh_enable_ip+0x1f2/0x200 kernel/softirq.c:181
->  local_bh_enable include/linux/bottom_half.h:31 [inline]
->  rcu_read_unlock_bh include/linux/rcupdate.h:971 [inline]
->  ip6_finish_output2+0xbb0/0x23d0 net/ipv6/ip6_output.c:123
->  ip6_finish_output+0x302/0x960 net/ipv6/ip6_output.c:148
->  NF_HOOK_COND include/linux/netfilter.h:246 [inline]
->  ip6_output+0x1cb/0x8d0 net/ipv6/ip6_output.c:162
->  ip6_xmit+0xcdf/0x20d0 include/net/dst.h:501
->  inet6_csk_xmit+0x320/0x5f0 net/ipv6/inet6_connection_sock.c:179
->  dccp_transmit_skb+0xb09/0x1120 net/dccp/output.c:141
->  dccp_xmit_packet+0x215/0x760 net/dccp/output.c:280
->  dccp_write_xmit+0x168/0x1d0 net/dccp/output.c:362
->  dccp_sendmsg+0x79c/0xb10 net/dccp/proto.c:796
->  inet_sendmsg+0x164/0x5b0 net/ipv4/af_inet.c:744
->  sock_sendmsg_nosec net/socket.c:635 [inline]
->  sock_sendmsg+0xca/0x110 net/socket.c:645
->  SYSC_sendto+0x660/0x810 net/socket.c:1687
->  SyS_sendto+0x40/0x50 net/socket.c:1655
->  entry_SYSCALL_64_fastpath+0x1f/0xc2
-> RIP: 0033:0x4458b9
-> RSP: 002b:00007f8ceb77bb58 EFLAGS: 00000282 ORIG_RAX: 000000000000002c
-> RAX: ffffffffffffffda RBX: 0000000000000017 RCX: 00000000004458b9
-> RDX: 0000000000000023 RSI: 0000000020e60000 RDI: 0000000000000017
-> RBP: 00000000006e1b90 R08: 00000000200f9fe1 R09: 0000000000000020
-> R10: 0000000000008010 R11: 0000000000000282 R12: 00000000007080a8
-> R13: 0000000000000000 R14: 00007f8ceb77c9c0 R15: 00007f8ceb77c700
-> Object at ffff88003713be50, in cache kmalloc-64 size: 64
-> Allocated:
-> PID = 8446
->  save_stack_trace+0x16/0x20 arch/x86/kernel/stacktrace.c:57
->  save_stack+0x43/0xd0 mm/kasan/kasan.c:502
->  set_track mm/kasan/kasan.c:514 [inline]
->  kasan_kmalloc+0xad/0xe0 mm/kasan/kasan.c:605
->  kmem_cache_alloc_trace+0x82/0x270 mm/slub.c:2738
->  kmalloc include/linux/slab.h:490 [inline]
->  dccp_feat_entry_new+0x214/0x410 net/dccp/feat.c:467
->  dccp_feat_push_change+0x38/0x220 net/dccp/feat.c:487
->  __feat_register_sp+0x223/0x2f0 net/dccp/feat.c:741
->  dccp_feat_propagate_ccid+0x22b/0x2b0 net/dccp/feat.c:949
->  dccp_feat_server_ccid_dependencies+0x1b3/0x250 net/dccp/feat.c:1012
->  dccp_make_response+0x1f1/0xc90 net/dccp/output.c:423
->  dccp_v6_send_response+0x4ec/0xc20 net/dccp/ipv6.c:217
->  dccp_v6_conn_request+0xaba/0x11b0 net/dccp/ipv6.c:377
->  dccp_rcv_state_process+0x51e/0x1650 net/dccp/input.c:606
->  dccp_v6_do_rcv+0x213/0x350 net/dccp/ipv6.c:632
->  sk_backlog_rcv include/net/sock.h:893 [inline]
->  __sk_receive_skb+0x36f/0xcc0 net/core/sock.c:479
->  dccp_v6_rcv+0xba5/0x1d00 net/dccp/ipv6.c:742
->  ip6_input_finish+0x46d/0x17a0 net/ipv6/ip6_input.c:279
->  NF_HOOK include/linux/netfilter.h:257 [inline]
->  ip6_input+0xdb/0x590 net/ipv6/ip6_input.c:322
->  dst_input include/net/dst.h:507 [inline]
->  ip6_rcv_finish+0x289/0x890 net/ipv6/ip6_input.c:69
->  NF_HOOK include/linux/netfilter.h:257 [inline]
->  ipv6_rcv+0x12ec/0x23d0 net/ipv6/ip6_input.c:203
->  __netif_receive_skb_core+0x1ae5/0x3400 net/core/dev.c:4190
->  __netif_receive_skb+0x2a/0x170 net/core/dev.c:4228
->  process_backlog+0xe5/0x6c0 net/core/dev.c:4839
->  napi_poll net/core/dev.c:5202 [inline]
->  net_rx_action+0xe70/0x1900 net/core/dev.c:5267
->  __do_softirq+0x2fb/0xb7d kernel/softirq.c:284
-> Freed:
-> PID = 15
->  save_stack_trace+0x16/0x20 arch/x86/kernel/stacktrace.c:57
->  save_stack+0x43/0xd0 mm/kasan/kasan.c:502
->  set_track mm/kasan/kasan.c:514 [inline]
->  kasan_slab_free+0x73/0xc0 mm/kasan/kasan.c:578
->  slab_free_hook mm/slub.c:1355 [inline]
->  slab_free_freelist_hook mm/slub.c:1377 [inline]
->  slab_free mm/slub.c:2954 [inline]
->  kfree+0xe8/0x2b0 mm/slub.c:3874
->  dccp_feat_entry_destructor.part.4+0x48/0x60 net/dccp/feat.c:418
->  dccp_feat_entry_destructor net/dccp/feat.c:416 [inline]
->  dccp_feat_list_pop net/dccp/feat.c:541 [inline]
->  dccp_feat_activate_values+0x57f/0xab0 net/dccp/feat.c:1543
->  dccp_create_openreq_child+0x464/0x610 net/dccp/minisocks.c:121
->  dccp_v6_request_recv_sock+0x1f6/0x1960 net/dccp/ipv6.c:457
->  dccp_check_req+0x335/0x5a0 net/dccp/minisocks.c:186
->  dccp_v6_rcv+0x69e/0x1d00 net/dccp/ipv6.c:711
->  ip6_input_finish+0x46d/0x17a0 net/ipv6/ip6_input.c:279
->  NF_HOOK include/linux/netfilter.h:257 [inline]
->  ip6_input+0xdb/0x590 net/ipv6/ip6_input.c:322
->  dst_input include/net/dst.h:507 [inline]
->  ip6_rcv_finish+0x289/0x890 net/ipv6/ip6_input.c:69
->  NF_HOOK include/linux/netfilter.h:257 [inline]
->  ipv6_rcv+0x12ec/0x23d0 net/ipv6/ip6_input.c:203
->  __netif_receive_skb_core+0x1ae5/0x3400 net/core/dev.c:4190
->  __netif_receive_skb+0x2a/0x170 net/core/dev.c:4228
->  process_backlog+0xe5/0x6c0 net/core/dev.c:4839
->  napi_poll net/core/dev.c:5202 [inline]
->  net_rx_action+0xe70/0x1900 net/core/dev.c:5267
->  __do_softirq+0x2fb/0xb7d kernel/softirq.c:284
-> Memory state around the buggy address:
->  ffff88003713bd00: fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc
->  ffff88003713bd80: fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc
->>ffff88003713be00: fc fc fc fc fc fc fc fc fc fc fb fb fb fb fb fb
->                                                           ^
->  ffff88003713be80: fb fb fc fc fc fc fc fc fc fc fc fc fc fc fc fc
->  ffff88003713bf00: fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc fc
-> =================================
-> Disabling lock debugging due to kernel taint
-> Kernel panic - not syncing: panic_on_warn set ...
+Fixes: f2bf415cfed7 ("mib: add net to NET_ADD_STATS_BH")
+Reported-by: Dmitry Vyukov <dvyukov@google.com>
+Signed-off-by: Andrey Ryabinin <aryabinin@virtuozzo.com>
+Acked-by: Arnaldo Carvalho de Melo <acme@redhat.com>
+---
+
+Changes since v1:
+ - Rebased on top the -next
+ - Added Fixes/Acked tags.
+
+ net/dccp/ipv4.c | 6 ++++++
+ net/dccp/ipv6.c | 6 ++++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index b043ec8..409d0cf 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -1017,9 +1017,15 @@ static void __net_exit dccp_v4_exit_net(struct net *net)
+ 	inet_ctl_sock_destroy(net->dccp.v4_ctl_sk);
+ }
+ 
++static void __net_exit dccp_v4_exit_batch(struct list_head *net_exit_list)
++{
++	inet_twsk_purge(&dccp_hashinfo, AF_INET);
++}
++
+ static struct pernet_operations dccp_v4_ops = {
+ 	.init	= dccp_v4_init_net,
+ 	.exit	= dccp_v4_exit_net,
++	.exit_batch = dccp_v4_exit_batch,
+ };
+ 
+ static int __init dccp_v4_init(void)
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index cef60a4..233b573 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -1075,9 +1075,15 @@ static void __net_exit dccp_v6_exit_net(struct net *net)
+ 	inet_ctl_sock_destroy(net->dccp.v6_ctl_sk);
+ }
+ 
++static void __net_exit dccp_v6_exit_batch(struct list_head *net_exit_list)
++{
++	inet_twsk_purge(&dccp_hashinfo, AF_INET6);
++}
++
+ static struct pernet_operations dccp_v6_ops = {
+ 	.init   = dccp_v6_init_net,
+ 	.exit   = dccp_v6_exit_net,
++	.exit_batch = dccp_v6_exit_batch,
+ };
+ 
+ static int __init dccp_v6_init(void)
+-- 
+2.10.2
+
