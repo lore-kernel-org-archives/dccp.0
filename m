@@ -1,7 +1,7 @@
 From: Andrey Ryabinin <aryabinin@virtuozzo.com>
-Date: Wed, 22 Feb 2017 08:59:03 +0000
+Date: Wed, 22 Feb 2017 09:35:20 +0000
 Subject: Re: [PATCH] net/dccp: fix use after free in tw_timer_handler()
-Message-Id: <6b21534b-060d-9eac-53f1-7fb3ec448358@virtuozzo.com>
+Message-Id: <ce0ad8f1-f0df-0853-92ce-7dbb22c94698@virtuozzo.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20170221112740.661-1-aryabinin@virtuozzo.com>
 In-Reply-To: <20170221112740.661-1-aryabinin@virtuozzo.com>
@@ -10,21 +10,26 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 02/21/2017 04:43 PM, Arnaldo Carvalho de Melo wrote:
-> Em Tue, Feb 21, 2017 at 02:27:40PM +0300, Andrey Ryabinin escreveu:
->> DCCP doesn't purge timewait sockets on network namespace shutdown.
->> So, after net namespace destroyed we could still have an active timer
->> which will trigger use after free in tw_timer_handler():
->>
->>
->> Add .exit_batch hook to dccp_v4_ops()/dccp_v6_ops() which will purge
->> timewait sockets on net namespace destruction and prevent above issue.
+On 02/21/2017 09:24 PM, David Miller wrote:
+> From: David Miller <davem@davemloft.net>
+> Date: Tue, 21 Feb 2017 13:23:51 -0500 (EST)
 > 
-> Please add this, to help stable kernels to pick this up
+>> From: Andrey Ryabinin <aryabinin@virtuozzo.com>
+>> Date: Tue, 21 Feb 2017 14:27:40 +0300
+>>
+>>> DCCP doesn't purge timewait sockets on network namespace shutdown.
+>>> So, after net namespace destroyed we could still have an active timer
+>>> which will trigger use after free in tw_timer_handler():
+>>  ...
+>>> Add .exit_batch hook to dccp_v4_ops()/dccp_v6_ops() which will purge
+>>> timewait sockets on net namespace destruction and prevent above issue.
+>>>
+>>> Reported-by: Dmitry Vyukov <dvyukov@google.com>
+>>> Signed-off-by: Andrey Ryabinin <aryabinin@virtuozzo.com>
+>>
+>> Applied and queued up for -stable, thanks.
 > 
-> Fixes: b099ce2602d8 ("net: Batch inet_twsk_purge")
-> Cc: Eric W. Biederman <ebiederm@xmission.com> 
+> Actually, this doesn't even compile.  Please fix this up and resubmit:
 > 
 
-Fixes tag should blame commit f2bf415cfed7 ("mib: add net to NET_ADD_STATS_BH").
-It introduced use of net namespace in the timer callback.
+Right, I tested this on top of the Linus' tree. Rebased on -next now.
