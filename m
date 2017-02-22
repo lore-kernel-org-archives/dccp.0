@@ -1,7 +1,7 @@
-From: David Miller <davem@davemloft.net>
-Date: Tue, 21 Feb 2017 18:24:49 +0000
+From: Dmitry Vyukov <dvyukov@google.com>
+Date: Wed, 22 Feb 2017 06:48:56 +0000
 Subject: Re: [PATCH] net/dccp: fix use after free in tw_timer_handler()
-Message-Id: <20170221.132449.1868705782244690263.davem@davemloft.net>
+Message-Id: <CACT4Y+YZaH2pCUfeUf7j3g8sL+-6A41teSdfj6o00vMrN+J94w@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20170221112740.661-1-aryabinin@virtuozzo.com>
 In-Reply-To: <20170221112740.661-1-aryabinin@virtuozzo.com>
@@ -10,30 +10,54 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-RnJvbTogRGF2aWQgTWlsbGVyIDxkYXZlbUBkYXZlbWxvZnQubmV0Pg0KRGF0ZTogVHVlLCAyMSBG
-ZWIgMjAxNyAxMzoyMzo1MSAtMDUwMCAoRVNUKQ0KDQo+IEZyb206IEFuZHJleSBSeWFiaW5pbiA8
-YXJ5YWJpbmluQHZpcnR1b3p6by5jb20+DQo+IERhdGU6IFR1ZSwgMjEgRmViIDIwMTcgMTQ6Mjc6
-NDAgKzAzMDANCj4gDQo+PiBEQ0NQIGRvZXNuJ3QgcHVyZ2UgdGltZXdhaXQgc29ja2V0cyBvbiBu
-ZXR3b3JrIG5hbWVzcGFjZSBzaHV0ZG93bi4NCj4+IFNvLCBhZnRlciBuZXQgbmFtZXNwYWNlIGRl
-c3Ryb3llZCB3ZSBjb3VsZCBzdGlsbCBoYXZlIGFuIGFjdGl2ZSB0aW1lcg0KPj4gd2hpY2ggd2ls
-bCB0cmlnZ2VyIHVzZSBhZnRlciBmcmVlIGluIHR3X3RpbWVyX2hhbmRsZXIoKToNCj4gIC4uLg0K
-Pj4gQWRkIC5leGl0X2JhdGNoIGhvb2sgdG8gZGNjcF92NF9vcHMoKS9kY2NwX3Y2X29wcygpIHdo
-aWNoIHdpbGwgcHVyZ2UNCj4+IHRpbWV3YWl0IHNvY2tldHMgb24gbmV0IG5hbWVzcGFjZSBkZXN0
-cnVjdGlvbiBhbmQgcHJldmVudCBhYm92ZSBpc3N1ZS4NCj4+IA0KPj4gUmVwb3J0ZWQtYnk6IERt
-aXRyeSBWeXVrb3YgPGR2eXVrb3ZAZ29vZ2xlLmNvbT4NCj4+IFNpZ25lZC1vZmYtYnk6IEFuZHJl
-eSBSeWFiaW5pbiA8YXJ5YWJpbmluQHZpcnR1b3p6by5jb20+DQo+IA0KPiBBcHBsaWVkIGFuZCBx
-dWV1ZWQgdXAgZm9yIC1zdGFibGUsIHRoYW5rcy4NCg0KQWN0dWFsbHksIHRoaXMgZG9lc24ndCBl
-dmVuIGNvbXBpbGUuICBQbGVhc2UgZml4IHRoaXMgdXAgYW5kIHJlc3VibWl0Og0KDQpuZXQvZGNj
-cC9pcHY0LmM6IEluIGZ1bmN0aW9uIKFkY2NwX3Y0X2V4aXRfYmF0Y2iiOg0KbmV0L2RjY3AvaXB2
-NC5jOjEwMjI6MzQ6IHdhcm5pbmc6IHBhc3NpbmcgYXJndW1lbnQgMiBvZiChaW5ldF90d3NrX3B1
-cmdloiBtYWtlcyBpbnRlZ2VyIGZyb20gcG9pbnRlciB3aXRob3V0IGEgY2FzdCBbLVdpbnQtY29u
-dmVyc2lvbl0NCiAgaW5ldF90d3NrX3B1cmdlKCZkY2NwX2hhc2hpbmZvLCAmZGNjcF9kZWF0aF9y
-b3csIEFGX0lORVQpOw0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIF4NCkluIGZp
-bGUgaW5jbHVkZWQgZnJvbSAuL2luY2x1ZGUvbGludXgvZGNjcC5oOjE0OjAsDQogICAgICAgICAg
-ICAgICAgIGZyb20gbmV0L2RjY3AvaXB2NC5jOjEzOg0KLi9pbmNsdWRlL25ldC9pbmV0X3RpbWV3
-YWl0X3NvY2suaDoxMTg6Njogbm90ZTogZXhwZWN0ZWQgoWludKIgYnV0IGFyZ3VtZW50IGlzIG9m
-IHR5cGUgoXN0cnVjdCBpbmV0X3RpbWV3YWl0X2RlYXRoX3JvdyAqog0KIHZvaWQgaW5ldF90d3Nr
-X3B1cmdlKHN0cnVjdCBpbmV0X2hhc2hpbmZvICpoYXNoaW5mbywgaW50IGZhbWlseSk7DQogICAg
-ICBeDQpuZXQvZGNjcC9pcHY0LmM6MTAyMjoyOiBlcnJvcjogdG9vIG1hbnkgYXJndW1lbnRzIHRv
-IGZ1bmN0aW9uIKFpbmV0X3R3c2tfcHVyZ2WiDQogIGluZXRfdHdza19wdXJnZSgmZGNjcF9oYXNo
-aW5mbywgJmRjY3BfZGVhdGhfcm93LCBBRl9JTkVUKTsNCiAgXg0K
+On Tue, Feb 21, 2017 at 2:56 PM, Dmitry Vyukov <dvyukov@google.com> wrote:
+> On Tue, Feb 21, 2017 at 2:27 PM, Andrey Ryabinin
+> <aryabinin@virtuozzo.com> wrote:
+>> DCCP doesn't purge timewait sockets on network namespace shutdown.
+>> So, after net namespace destroyed we could still have an active timer
+>> which will trigger use after free in tw_timer_handler():
+>>
+>>     BUG: KASAN: use-after-free in tw_timer_handler+0x4a/0xa0 at addr ffff88010e0d1e10
+>>     Read of size 8 by task swapper/1/0
+>>     Call Trace:
+>>      __asan_load8+0x54/0x90
+>>      tw_timer_handler+0x4a/0xa0
+>>      call_timer_fn+0x127/0x480
+>>      expire_timers+0x1db/0x2e0
+>>      run_timer_softirq+0x12f/0x2a0
+>>      __do_softirq+0x105/0x5b4
+>>      irq_exit+0xdd/0xf0
+>>      smp_apic_timer_interrupt+0x57/0x70
+>>      apic_timer_interrupt+0x90/0xa0
+>>
+>>     Object at ffff88010e0d1bc0, in cache net_namespace size: 6848
+>>     Allocated:
+>>      save_stack_trace+0x1b/0x20
+>>      kasan_kmalloc+0xee/0x180
+>>      kasan_slab_alloc+0x12/0x20
+>>      kmem_cache_alloc+0x134/0x310
+>>      copy_net_ns+0x8d/0x280
+>>      create_new_namespaces+0x23f/0x340
+>>      unshare_nsproxy_namespaces+0x75/0xf0
+>>      SyS_unshare+0x299/0x4f0
+>>      entry_SYSCALL_64_fastpath+0x18/0xad
+>>     Freed:
+>>      save_stack_trace+0x1b/0x20
+>>      kasan_slab_free+0xae/0x180
+>>      kmem_cache_free+0xb4/0x350
+>>      net_drop_ns+0x3f/0x50
+>>      cleanup_net+0x3df/0x450
+>>      process_one_work+0x419/0xbb0
+>>      worker_thread+0x92/0x850
+>>      kthread+0x192/0x1e0
+>>      ret_from_fork+0x2e/0x40
+>>
+>> Add .exit_batch hook to dccp_v4_ops()/dccp_v6_ops() which will purge
+>> timewait sockets on net namespace destruction and prevent above issue.
+>
+>
+> Aha! Thanks for tracking this down!
+>
+> Queued the patch on syzkaller bots, should have the verdict in several hours.
+
+I do not see the crash happening after applying the patch.
