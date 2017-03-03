@@ -1,7 +1,7 @@
-From: Eric Dumazet <eric.dumazet@gmail.com>
-Date: Fri, 03 Mar 2017 15:13:04 +0000
+From: Eric Dumazet <edumazet@google.com>
+Date: Fri, 03 Mar 2017 15:22:33 +0000
 Subject: Re: net/dccp: use-after-free in dccp_feat_activate_values
-Message-Id: <1488553984.9415.332.camel@edumazet-glaptop3.roam.corp.google.com>
+Message-Id: <CANn89i+E+DkUJBV-3AQ38hstj9=G7=3fLJuG8LA6upp77ecwPA@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <CAM_iQpUVusW6YJqSgXSo2hAA2dCZGYxw4h+A1_iBpaiYMsXDMA@mail.gmail.com>
 In-Reply-To: <CAM_iQpUVusW6YJqSgXSo2hAA2dCZGYxw4h+A1_iBpaiYMsXDMA@mail.gmail.com>
@@ -10,18 +10,12 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Fri, 2017-03-03 at 16:06 +0100, Dmitry Vyukov wrote:
+On Fri, Mar 3, 2017 at 7:12 AM, Dmitry Vyukov <dvyukov@google.com> wrote:
+> The first bot that picked this up started spewing:
+>
+> BUG: spinlock recursion on CPU#1, syz-executor2/9452
 
-> Something that compiles is definitely better :)
-> Reapplied.
+Yes. The bug is not about locking the listener, but protecting fields
+of struct dccp_request_sock
 
-Just to be clear : This is not the proper patch. This only reduces the
-race.
-
-bh_lock_sock() does not prevent a user process from owning the socket.
-
-We need another protection, probably RCU based, or another spinlock
-protecting the fields needed at SYNACK generation.
-
-
-
+I will provide a patch, once I reach the office and after the breakfast ;)
