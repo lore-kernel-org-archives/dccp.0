@@ -1,124 +1,23 @@
-From: Jon Maxwell <jmaxwell37@gmail.com>
-Date: Thu, 09 Mar 2017 01:15:21 +0000
-Subject: [PATCH net] dccp/tcp: fix routing redirect race
-Message-Id: <1489022121-20571-1-git-send-email-jmaxwell37@gmail.com>
+From: Eric Dumazet <eric.dumazet@gmail.com>
+Date: Thu, 09 Mar 2017 02:10:57 +0000
+Subject: Re: [PATCH net] dccp/tcp: fix routing redirect race
+Message-Id: <1489025457.28631.19.camel@edumazet-glaptop3.roam.corp.google.com>
 List-Id: <dccp.vger.kernel.org>
+References: <1489022121-20571-1-git-send-email-jmaxwell37@gmail.com>
+In-Reply-To: <1489022121-20571-1-git-send-email-jmaxwell37@gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="utf-8"
-Content-Transfer-Encoding: 8bit
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-We have seen a few incidents lately where a dst_enty has been freed
-with a dangling TCP socket reference (sk->sk_dst_cache) pointing to that
-dst_entry. If the conditions/timings are right a crash then ensues when the
-freed dst_entry is referenced later on. A Common crashing back trace is:
+On Thu, 2017-03-09 at 12:15 +1100, Jon Maxwell wrote:
+> We have seen a few incidents lately where a dst_enty has been freed
+> with a dangling TCP socket reference (sk->sk_dst_cache) pointing to that
+> dst_entry. If the conditions/timings are right a crash then ensues when the
+> freed dst_entry is referenced later on. A Common crashing back trace is:
 
- #8 [] page_fault at ffffffff8163e648
-    [exception RIP: __tcp_ack_snd_check+74]
-.
-.   
- #9 [] tcp_rcv_established at ffffffff81580b64
-#10 [] tcp_v4_do_rcv at ffffffff8158b54a
-#11 [] tcp_v4_rcv at ffffffff8158cd02
-#12 [] ip_local_deliver_finish at ffffffff815668f4
-#13 [] ip_local_deliver at ffffffff81566bd9
-#14 [] ip_rcv_finish at ffffffff8156656d
-#15 [] ip_rcv at ffffffff81566f06
-#16 [] __netif_receive_skb_core at ffffffff8152b3a2
-#17 [] __netif_receive_skb at ffffffff8152b608
-#18 [] netif_receive_skb at ffffffff8152b690
-#19 [] vmxnet3_rq_rx_complete at ffffffffa015eeaf [vmxnet3]
-#20 [] vmxnet3_poll_rx_only at ffffffffa015f32a [vmxnet3]
-#21 [] net_rx_action at ffffffff8152bac2
-#22 [] __do_softirq at ffffffff81084b4f
-#23 [] call_softirq at ffffffff8164845c
-#24 [] do_softirq at ffffffff81016fc5
-#25 [] irq_exit at ffffffff81084ee5
-#26 [] do_IRQ at ffffffff81648ff8
+Very nice catch !
 
-Of course it may happen with other NIC drivers as well.
+Don't we have a similar issue for IPv6 ?
 
-It's found the freed dst_entry here: 
-
- 224 static bool tcp_in_quickack_mode(struct sock *sk)↩
- 225 {↩
- 226 ▹       const struct inet_connection_sock *icsk = inet_csk(sk);↩
- 227 ▹       const struct dst_entry *dst = __sk_dst_get(sk);↩
- 228 ↩
- 229 ▹       return (dst && dst_metric(dst, RTAX_QUICKACK)) ||↩
- 230 ▹       ▹       (icsk->icsk_ack.quick && !icsk->icsk_ack.pingpong);↩
- 231 }↩
-
-But there are other backtraces attributed to the same freed dst_entry in 
-netfilter code as well. 
-
-All the vmcores showed 2 significant clues:
-
-- Remote hosts behind the default gateway had always been redirected to a 
-different gateway. A rtable/dst_entry will be added for that host. Making
-more dst_entrys with lower reference counts. Making this more probable.
-
-- All vmcores showed a postitive LockDroppedIcmps value, e.g:
-
-LockDroppedIcmps                  267
-
-A closer look at the tcp_v4_err() handler revealed that do_redirect() will run
-regardless of whether user space has the socket locked. This can result in a 
-race condition where the same dst_entry cached in sk->sk_dst_entry can be 
-decremented twice for the same socket via: 
-
-do_redirect()->__sk_dst_check()-> dst_release(). 
-
-Which leads to the dst_entry being prematurely freed with another socket 
-pointing to it via sk->sk_dst_cache and a subsequent crash.
-
-To fix this skip do_redirect() if usespace has the socket locked. Instead let 
-the redirect take place later when user space does not have the socket 
-locked.
-
-The dccp code is very similar in this respect, so fixing it there too. 
-
-As Eric Garver pointed out the following commit now invalidates routes. Which
-can set the dst->obsolete flag so that ipv4_dst_check() returns null and 
-triggers the dst_release().
-
-Fixes: ceb3320610d6 ("ipv4: Kill routes during PMTU/redirect updates.")
-Cc: Eric Garver <egarver@redhat.com>
-Cc: Hannes Sowa <hsowa@redhat.com>
-Signed-off-by: Jon Maxwell <jmaxwell37@gmail.com>
----
- net/dccp/ipv4.c     | 3 ++-
- net/ipv4/tcp_ipv4.c | 3 ++-
- 2 files changed, 4 insertions(+), 2 deletions(-)
-
-diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
-index 409d0cf..b99168b 100644
---- a/net/dccp/ipv4.c
-+++ b/net/dccp/ipv4.c
-@@ -289,7 +289,8 @@ static void dccp_v4_err(struct sk_buff *skb, u32 info)
- 
- 	switch (type) {
- 	case ICMP_REDIRECT:
--		dccp_do_redirect(skb, sk);
-+		if (!sock_owned_by_user(sk))
-+			dccp_do_redirect(skb, sk);
- 		goto out;
- 	case ICMP_SOURCE_QUENCH:
- 		/* Just silently ignore these. */
-diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
-index 8f3ec13..575e19d 100644
---- a/net/ipv4/tcp_ipv4.c
-+++ b/net/ipv4/tcp_ipv4.c
-@@ -431,7 +431,8 @@ void tcp_v4_err(struct sk_buff *icmp_skb, u32 info)
- 
- 	switch (type) {
- 	case ICMP_REDIRECT:
--		do_redirect(icmp_skb, sk);
-+		if (!sock_owned_by_user(sk))
-+			do_redirect(icmp_skb, sk);
- 		goto out;
- 	case ICMP_SOURCE_QUENCH:
- 		/* Just silently ignore these. */
--- 
-1.8.3.1
 
