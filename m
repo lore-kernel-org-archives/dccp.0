@@ -1,48 +1,62 @@
-From: David Miller <davem@davemloft.net>
-Date: Fri, 10 Mar 2017 02:21:27 +0000
-Subject: Re: [PATCH net] dccp/tcp: fix routing redirect race
-Message-Id: <20170309.182127.1480610707735412471.davem@davemloft.net>
+From: Andrey Konovalov <andreyknvl@google.com>
+Date: Thu, 04 May 2017 13:36:37 +0000
+Subject: Re: net/dccp: dccp_create_openreq_child freed held lock
+Message-Id: <CAAeHK+wSrkrooaK=d6Od85hNNQbTSuPxe55DFFYWEuE5zSqmSw@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1489022121-20571-1-git-send-email-jmaxwell37@gmail.com>
-In-Reply-To: <1489022121-20571-1-git-send-email-jmaxwell37@gmail.com>
+References: <CACT4Y+ZOAWRzJH3=xJ1z5bFVCM2-smuVSykziQPhSgkv1k3FBQ@mail.gmail.com>
+In-Reply-To: <CACT4Y+ZOAWRzJH3=xJ1z5bFVCM2-smuVSykziQPhSgkv1k3FBQ@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Jon Maxwell <jmaxwell37@gmail.com>
-Date: Thu,  9 Mar 2017 12:15:21 +1100
+On Wed, Mar 1, 2017 at 4:40 PM, Arnaldo Carvalho de Melo
+<acme@kernel.org> wrote:
+> Em Wed, Mar 01, 2017 at 12:35:10PM -0300, Arnaldo Carvalho de Melo escreveu:
+>> Em Wed, Mar 01, 2017 at 10:38:54AM +0100, Dmitry Vyukov escreveu:
+>> > Hello,
+>> >
+>> > I've got the following report while running syzkaller fuzzer on
+>> > 86292b33d4b79ee03e2f43ea0381ef85f077c760:
+>> >
+>> >
+>> > It seems that dccp_create_openreq_child needs to unlock the sock if
+>> > dccp_feat_activate_values fails.
+>>
+>> Yeah, can you please use the patch below, that mimics the error paths in
+>> sk_clone_new(), from where I think even the comment about it being a raw
+>
+> Argh, s/sk_clone_new()/sk_clone_lock()/g
 
-> We have seen a few incidents lately where a dst_enty has been freed
-> with a dangling TCP socket reference (sk->sk_dst_cache) pointing to that
-> dst_entry. If the conditions/timings are right a crash then ensues when the
-> freed dst_entry is referenced later on. A Common crashing back trace is:
- ...
-> A closer look at the tcp_v4_err() handler revealed that do_redirect() will run
-> regardless of whether user space has the socket locked. This can result in a 
-> race condition where the same dst_entry cached in sk->sk_dst_entry can be 
-> decremented twice for the same socket via: 
-> 
-> do_redirect()->__sk_dst_check()-> dst_release(). 
-> 
-> Which leads to the dst_entry being prematurely freed with another socket 
-> pointing to it via sk->sk_dst_cache and a subsequent crash.
-> 
-> To fix this skip do_redirect() if usespace has the socket locked. Instead let 
-> the redirect take place later when user space does not have the socket 
-> locked.
-> 
-> The dccp code is very similar in this respect, so fixing it there too. 
-> 
-> As Eric Garver pointed out the following commit now invalidates routes. Which
-> can set the dst->obsolete flag so that ipv4_dst_check() returns null and 
-> triggers the dst_release().
-> 
-> Fixes: ceb3320610d6 ("ipv4: Kill routes during PMTU/redirect updates.")
-> Cc: Eric Garver <egarver@redhat.com>
-> Cc: Hannes Sowa <hsowa@redhat.com>
-> Signed-off-by: Jon Maxwell <jmaxwell37@gmail.com>
+Hi Arnaldo,
 
-Please add the ipv6 side of this fix to this patch and repost.
+Could you send the patch?
 
-Thank you.
+We haven't seen these reports since we applied it.
+
+Thanks!
+
+>
+> - Arnaldo
+>
+>> copy came, but the bh_unlock_sock() didn't?
+>>
+>> - Arnaldo
+>>
+>> diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
+>> index 53eddf99e4f6..d20d948a98ed 100644
+>> --- a/net/dccp/minisocks.c
+>> +++ b/net/dccp/minisocks.c
+>> @@ -122,6 +122,7 @@ struct sock *dccp_create_openreq_child(const struct sock *sk,
+>>                       /* It is still raw copy of parent, so invalidate
+>>                        * destructor and make plain sk_free() */
+>>                       newsk->sk_destruct = NULL;
+>> +                     bh_unlock_sock(newsk);
+>>                       sk_free(newsk);
+>>                       return NULL;
+>>               }
+>
+> --
+> You received this message because you are subscribed to the Google Groups "syzkaller" group.
+> To unsubscribe from this group and stop receiving emails from it, send an email to syzkaller+unsubscribe@googlegroups.com.
+> For more options, visit https://groups.google.com/d/optout.
