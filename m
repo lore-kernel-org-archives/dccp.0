@@ -1,80 +1,22 @@
-From: Andrii <tulup@mail.ru>
-Date: Thu, 31 Aug 2017 05:28:01 +0000
-Subject: [PATCH] net: dccp: Add handling of IPV6_PKTOPTIONS to dccp_v6_do_rcv()
-Message-Id: <d782f2bb-ade5-62ed-f20f-4854e68a2b93@mail.ru>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="------------C8691BE71D1BFDEA4BD4D82E"
+From: David Miller <davem@davemloft.net>
+Date: Thu, 31 Aug 2017 18:44:08 +0000
+Subject: Re: [PATCH] net: dccp: Add handling of IPV6_PKTOPTIONS to dccp_v6_do_rcv()
+Message-Id: <20170831.114408.429602044118453235.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
 References: <20170830090435.58406d1b@dev>
 In-Reply-To: <20170830090435.58406d1b@dev>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is a multi-part message in MIME format.
---------------C8691BE71D1BFDEA4BD4D82E
-Content-Type: text/plain; charset=UTF-8; format=flowed
-Content-Transfer-Encoding: 7bit
+From: Andrii <tulup@mail.ru>
+Date: Thu, 31 Aug 2017 08:28:01 +0300
 
-Add handling of IPV6_PKTOPTIONS to dccp_v6_do_rcv() in net/dccp/ipv6.c, 
-similar
-to the handling in net/ipv6/tcp_ipv6.c
+> Add handling of IPV6_PKTOPTIONS to dccp_v6_do_rcv() in
+> net/dccp/ipv6.c, similar
+> to the handling in net/ipv6/tcp_ipv6.c
+> 
+> Signed-off-by: Andrii Vladyka <tulup@mail.ru>
 
-Signed-off-by: Andrii Vladyka <tulup@mail.ru>
----
-
-
---------------C8691BE71D1BFDEA4BD4D82E
-Content-Type: text/plain; charset=UTF-8;
- name="dccp.patch"
-Content-Transfer-Encoding: base64
-Content-Disposition: attachment;
- filename="dccp.patch"
-
-ZGlmZiAtLWdpdCBhL25ldC9kY2NwL2lwdjYuYyBiL25ldC9kY2NwL2lwdjYuYwppbmRleCAx
-YjU4ZWFjLi4zNWMyZWRiIDEwMDY0NAotLS0gYS9uZXQvZGNjcC9pcHY2LmMKKysrIGIvbmV0
-L2RjY3AvaXB2Ni5jCkBAIC0xNiw2ICsxNiw3IEBACiAjaW5jbHVkZSA8bGludXgvcmFuZG9t
-Lmg+CiAjaW5jbHVkZSA8bGludXgvc2xhYi5oPgogI2luY2x1ZGUgPGxpbnV4L3hmcm0uaD4K
-KyNpbmNsdWRlIDxsaW51eC9zdHJpbmcuaD4KIAogI2luY2x1ZGUgPG5ldC9hZGRyY29uZi5o
-PgogI2luY2x1ZGUgPG5ldC9pbmV0X2NvbW1vbi5oPgpAQCAtMzAsNiArMzEsNyBAQAogI2lu
-Y2x1ZGUgPG5ldC9pcDZfY2hlY2tzdW0uaD4KICNpbmNsdWRlIDxuZXQveGZybS5oPgogI2lu
-Y2x1ZGUgPG5ldC9zZWN1cmVfc2VxLmg+CisjaW5jbHVkZSA8bmV0L3NvY2suaD4KIAogI2lu
-Y2x1ZGUgImRjY3AuaCIKICNpbmNsdWRlICJpcHY2LmgiCkBAIC01OTcsMTkgKzU5OSwxMyBA
-QCBzdGF0aWMgaW50IGRjY3BfdjZfZG9fcmN2KHN0cnVjdCBzb2NrICpzaywgc3RydWN0IHNr
-X2J1ZmYgKnNrYikKIAkJCQkJICAgICAgIC0tQU5LICg5ODA3MjgpCiAJICovCiAJaWYgKG5w
-LT5yeG9wdC5hbGwpCi0JLyoKLQkgKiBGSVhNRTogQWRkIGhhbmRsaW5nIG9mIElQVjZfUEtU
-T1BUSU9OUyBza2IuIFNlZSB0aGUgY29tbWVudHMgYmVsb3cKLQkgKiAgICAgICAgKHdydCBp
-cHY2X3BrdG9waW9ucykgYW5kIG5ldC9pcHY2L3RjcF9pcHY2LmMgZm9yIGFuIGV4YW1wbGUu
-Ci0JICovCiAJCW9wdF9za2IgPSBza2JfY2xvbmUoc2tiLCBHRlBfQVRPTUlDKTsKIAogCWlm
-IChzay0+c2tfc3RhdGUgPT0gRENDUF9PUEVOKSB7IC8qIEZhc3QgcGF0aCAqLwogCQlpZiAo
-ZGNjcF9yY3ZfZXN0YWJsaXNoZWQoc2ssIHNrYiwgZGNjcF9oZHIoc2tiKSwgc2tiLT5sZW4p
-KQogCQkJZ290byByZXNldDsKLQkJaWYgKG9wdF9za2IpIHsKLQkJCS8qIFhYWCBUaGlzIGlz
-IHdoZXJlIHdlIHdvdWxkIGdvdG8gaXB2Nl9wa3RvcHRpb25zLiAqLwotCQkJX19rZnJlZV9z
-a2Iob3B0X3NrYik7Ci0JCX0KKwkJaWYgKG9wdF9za2IpCisJCQlnb3RvIGlwdjZfcGt0b3B0
-aW9uczsKIAkJcmV0dXJuIDA7CiAJfQogCkBAIC02NDAsMTAgKzYzNiw4IEBAIHN0YXRpYyBp
-bnQgZGNjcF92Nl9kb19yY3Yoc3RydWN0IHNvY2sgKnNrLCBzdHJ1Y3Qgc2tfYnVmZiAqc2ti
-KQogCiAJaWYgKGRjY3BfcmN2X3N0YXRlX3Byb2Nlc3Moc2ssIHNrYiwgZGNjcF9oZHIoc2ti
-KSwgc2tiLT5sZW4pKQogCQlnb3RvIHJlc2V0OwotCWlmIChvcHRfc2tiKSB7Ci0JCS8qIFhY
-WCBUaGlzIGlzIHdoZXJlIHdlIHdvdWxkIGdvdG8gaXB2Nl9wa3RvcHRpb25zLiAqLwotCQlf
-X2tmcmVlX3NrYihvcHRfc2tiKTsKLQl9CisJaWYgKG9wdF9za2IpCisJCWdvdG8gaXB2Nl9w
-a3RvcHRpb25zOwogCXJldHVybiAwOwogCiByZXNldDoKQEAgLTY1Myw2ICs2NDcsMzUgQEAg
-c3RhdGljIGludCBkY2NwX3Y2X2RvX3JjdihzdHJ1Y3Qgc29jayAqc2ssIHN0cnVjdCBza19i
-dWZmICpza2IpCiAJCV9fa2ZyZWVfc2tiKG9wdF9za2IpOwogCWtmcmVlX3NrYihza2IpOwog
-CXJldHVybiAwOworCisvKiBIYW5kbGluZyBJUFY2X1BLVE9QVElPTlMgc2tiIHRoZSBzaW1p
-bGFyCisgKiB3YXkgaXQncyBkb25lIGZvciBuZXQvaXB2Ni90Y3BfaXB2Ni5jCisgKi8KK2lw
-djZfcGt0b3B0aW9uczoKKwlpZiAoISgoMSA8PCBzay0+c2tfc3RhdGUpICYgKERDQ1BGX0NM
-T1NFRCB8IERDQ1BGX0xJU1RFTikpKSB7CisJCWlmIChucC0+cnhvcHQuYml0cy5yeGluZm8g
-fHwgbnAtPnJ4b3B0LmJpdHMucnhvaW5mbykKKwkJCW5wLT5tY2FzdF9vaWYgPSBpbmV0Nl9p
-aWYob3B0X3NrYik7CisJCWlmIChucC0+cnhvcHQuYml0cy5yeGhsaW0gfHwgbnAtPnJ4b3B0
-LmJpdHMucnhvaGxpbSkKKwkJCW5wLT5tY2FzdF9ob3BzID0gaXB2Nl9oZHIob3B0X3NrYikt
-PmhvcF9saW1pdDsKKwkJaWYgKG5wLT5yeG9wdC5iaXRzLnJ4ZmxvdyB8fCBucC0+cnhvcHQu
-Yml0cy5yeHRjbGFzcykKKwkJCW5wLT5yY3ZfZmxvd2luZm8gPSBpcDZfZmxvd2luZm8oaXB2
-Nl9oZHIob3B0X3NrYikpOworCQlpZiAobnAtPnJlcGZsb3cpCisJCQlucC0+Zmxvd19sYWJl
-bCA9IGlwNl9mbG93bGFiZWwoaXB2Nl9oZHIob3B0X3NrYikpOworCQlpZiAoaXB2Nl9vcHRf
-YWNjZXB0ZWQoc2ssIG9wdF9za2IsCisJCQkJICAgICAgJkRDQ1BfU0tCX0NCKG9wdF9za2Ip
-LT5oZWFkZXIuaDYpKSB7CisJCQlza2Jfc2V0X293bmVyX3Iob3B0X3NrYiwgc2spOworCQkJ
-bWVtbW92ZShJUDZDQihvcHRfc2tiKSwKKwkJCQkmRENDUF9TS0JfQ0Iob3B0X3NrYiktPmhl
-YWRlci5oNiwKKwkJCQlzaXplb2Yoc3RydWN0IGluZXQ2X3NrYl9wYXJtKSk7CisJCQlvcHRf
-c2tiID0geGNoZygmbnAtPnBrdG9wdGlvbnMsIG9wdF9za2IpOworCQl9IGVsc2UgeworCQkJ
-X19rZnJlZV9za2Iob3B0X3NrYik7CisJCQlvcHRfc2tiID0geGNoZygmbnAtPnBrdG9wdGlv
-bnMsIE5VTEwpOworCQl9CisJfQorCisJa2ZyZWVfc2tiKG9wdF9za2IpOworCXJldHVybiAw
-OwogfQogCiBzdGF0aWMgaW50IGRjY3BfdjZfcmN2KHN0cnVjdCBza19idWZmICpza2IpCg==
---------------C8691BE71D1BFDEA4BD4D82E--
+Applied.
