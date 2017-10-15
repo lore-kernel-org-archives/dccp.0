@@ -1,30 +1,54 @@
-From: Arnaldo Carvalho de Melo <acme@kernel.org>
-Date: Wed, 18 Oct 2017 20:26:55 +0000
-Subject: Re: dccp status
-Message-Id: <20171018202655.GI3707@kernel.org>
+From: "Gustavo A. R. Silva" <garsilva@embeddedor.com>
+Date: Sun, 15 Oct 2017 18:22:10 +0000
+Subject: [PATCH] net: dccp: mark expected switch fall-throughs
+Message-Id: <20171015182210.GA13849@embeddedor.com>
 List-Id: <dccp.vger.kernel.org>
-References: <CAHuN2juQ5Y8HL=MDLDEcNg-4_nbLXYRTBJikViCb0Uuecad+cA@mail.gmail.com>
-In-Reply-To: <CAHuN2juQ5Y8HL=MDLDEcNg-4_nbLXYRTBJikViCb0Uuecad+cA@mail.gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Wed, Oct 18, 2017 at 01:08:49PM -0700, Kwame-Lante Wright escreveu:
-> Hi everyone,
-> 
-> I'm trying to get a better sense of the state of DCCP in the Linux
-> kernel as I'd like to use it for a project. I found this page
-> https://wiki.linuxfoundation.org/networking/todo#DCCP but it seems
-> like it might be out of date.
-> 
-> Any pointers on how to get up to speed on the latest and greatest in
-> DCCP development?
+In preparation to enabling -Wimplicit-fallthrough, mark switch cases
+where we are expecting to fall through.
 
-Well, its been in basic maintainance mode in the areas it shares with
-the other transport protocols, most proeminently TCP, v4 and v6.
+Notice that for options.c file, I placed the "fall through" comment
+on its own line, which is what GCC is expecting to find.
 
-IIRC there are patches that need to be evaluated, forward ported, etc,
-in Gerrit's tree, I think.
+Signed-off-by: Gustavo A. R. Silva <garsilva@embeddedor.com>
+---
+This code was tested by compilation only (GCC 7.2.0 was used).
+Please, verify if the actual intention of the code is to fall through.
 
-- Arnaldo
+ net/dccp/input.c   | 1 +
+ net/dccp/options.c | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/net/dccp/input.c b/net/dccp/input.c
+index fa6be97..d28d46b 100644
+--- a/net/dccp/input.c
++++ b/net/dccp/input.c
+@@ -534,6 +534,7 @@ static int dccp_rcv_respond_partopen_state_process(struct sock *sk,
+ 	case DCCP_PKT_DATA:
+ 		if (sk->sk_state = DCCP_RESPOND)
+ 			break;
++		/* fall through */
+ 	case DCCP_PKT_DATAACK:
+ 	case DCCP_PKT_ACK:
+ 		/*
+diff --git a/net/dccp/options.c b/net/dccp/options.c
+index 51cdfc3..4e40db0 100644
+--- a/net/dccp/options.c
++++ b/net/dccp/options.c
+@@ -227,8 +227,8 @@ int dccp_parse_options(struct sock *sk, struct dccp_request_sock *dreq,
+ 			 * Ack vectors are processed by the TX CCID if it is
+ 			 * interested. The RX CCID need not parse Ack Vectors,
+ 			 * since it is only interested in clearing old state.
+-			 * Fall through.
+ 			 */
++			/* fall through */
+ 		case DCCPO_MIN_TX_CCID_SPECIFIC ... DCCPO_MAX_TX_CCID_SPECIFIC:
+ 			if (ccid_hc_tx_parse_options(dp->dccps_hc_tx_ccid, sk,
+ 						     pkt_type, opt, value, len))
+-- 
+2.7.4
+
