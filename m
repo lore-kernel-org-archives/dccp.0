@@ -1,165 +1,318 @@
 From: Masami Hiramatsu <mhiramat@kernel.org>
-Date: Wed, 08 Nov 2017 10:01:33 +0000
-Subject: [RFC PATCH -tip 3/6] net: sctp: Add SCTP ACK tracking trace event
-Message-Id: <151013529291.7294.2729970379107437282.stgit@devbox>
+Date: Wed, 08 Nov 2017 10:02:03 +0000
+Subject: [RFC PATCH -tip 4/6] net: sctp: Remove debug SCTP probe module
+Message-Id: <151013532315.7294.10480838204264809207.stgit@devbox>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Add SCTP ACK tracking trace event to trace the changes of SCTP
-association state in response to incoming packets.
-It is used for debugging SCTP congestion control algorithms,
-and will replace sctp_probe module.
-
-Note that this event a bit tricky. Since this consists of 2
-events (sctp_probe and sctp_probe_path) so you have to enable
-both events as below.
-
-  # cd /sys/kernel/debug/tracing
-  # echo 1 > events/sctp/sctp_probe/enable
-  # echo 1 > events/sctp/sctp_probe_path/enable
-
-Or, you can enable all the events under sctp.
-
-  # echo 1 > events/sctp/enable
-
-Since sctp_probe_path event is always invoked from sctp_probe
-event, you can not see any output if you only enable
-sctp_probe_path.
-
+Remove SCTP probe module since jprobe has been deprecated.
+That function is now replaced by sctp/sctp_probe and
+sctp/sctp_probe_path trace-events.
+You can use it via ftrace or perftools.
 
 Signed-off-by: Masami Hiramatsu <mhiramat@kernel.org>
 ---
- include/trace/events/sctp.h |   96 +++++++++++++++++++++++++++++++++++++++++++
- net/sctp/sm_statefuns.c     |    5 ++
- 2 files changed, 101 insertions(+)
- create mode 100644 include/trace/events/sctp.h
+ net/sctp/Kconfig  |   12 ---
+ net/sctp/Makefile |    3 -
+ net/sctp/probe.c  |  244 -----------------------------------------------------
+ 3 files changed, 259 deletions(-)
+ delete mode 100644 net/sctp/probe.c
 
-diff --git a/include/trace/events/sctp.h b/include/trace/events/sctp.h
-new file mode 100644
-index 000000000000..32c2dc72311e
---- /dev/null
-+++ b/include/trace/events/sctp.h
-@@ -0,0 +1,96 @@
-+/* SPDX-License-Identifier: GPL-2.0 */
-+#undef TRACE_SYSTEM
-+#define TRACE_SYSTEM sctp
-+
-+#if !defined(_TRACE_SCTP_H) || defined(TRACE_HEADER_MULTI_READ)
-+#define _TRACE_SCTP_H
-+
-+#include <net/sctp/structs.h>
-+#include <linux/tracepoint.h>
-+
-+TRACE_EVENT(sctp_probe_path,
-+
-+	TP_PROTO(struct sctp_transport *sp,
-+		 const struct sctp_association *asoc),
-+
-+	TP_ARGS(sp, asoc),
-+
-+	TP_STRUCT__entry(
-+		__field(__u64, asoc)
-+		__field(__u32, primary)
-+		__array(__u8, ipaddr, sizeof(union sctp_addr))
-+		__field(__u32, state)
-+		__field(__u32, cwnd)
-+		__field(__u32, ssthresh)
-+		__field(__u32, flight_size)
-+		__field(__u32, partial_bytes_acked)
-+		__field(__u32, pathmtu)
-+	),
-+
-+	TP_fast_assign(
-+		__entry->asoc = (__u64)asoc;
-+		__entry->primary = (sp = asoc->peer.primary_path);
-+		memcpy(__entry->ipaddr, &sp->ipaddr, sizeof(union sctp_addr));
-+		__entry->state = sp->state;
-+		__entry->cwnd = sp->cwnd;
-+		__entry->ssthresh = sp->ssthresh;
-+		__entry->flight_size = sp->flight_size;
-+		__entry->partial_bytes_acked = sp->partial_bytes_acked;
-+		__entry->pathmtu = sp->pathmtu;
-+	),
-+
-+	TP_printk("asoc=%#llx%s ipaddr=%pISpc state=%u cwnd=%u ssthresh=%u "
-+		  "flight_size=%u partial_bytes_acked=%u pathmtu=%u",
-+		  __entry->asoc, __entry->primary ? "(*)" : "",
-+		  __entry->ipaddr, __entry->state, __entry->cwnd,
-+		  __entry->ssthresh, __entry->flight_size,
-+		  __entry->partial_bytes_acked, __entry->pathmtu)
-+);
-+
-+TRACE_EVENT(sctp_probe,
-+
-+	TP_PROTO(const struct sctp_endpoint *ep,
-+		 const struct sctp_association *asoc,
-+		 struct sctp_chunk *chunk),
-+
-+	TP_ARGS(ep, asoc, chunk),
-+
-+	TP_STRUCT__entry(
-+		__field(__u64, asoc)
-+		__field(__u32, mark)
-+		__field(__u16, bind_port)
-+		__field(__u16, peer_port)
-+		__field(__u32, pathmtu)
-+		__field(__u32, rwnd)
-+		__field(__u16, unack_data)
-+	),
-+
-+	TP_fast_assign(
-+		struct sctp_transport *sp;
-+		struct sk_buff *skb = chunk->skb;
-+
-+		__entry->asoc = (__u64)asoc;
-+		__entry->mark = skb->mark;
-+		__entry->bind_port = ep->base.bind_addr.port;
-+		__entry->peer_port = asoc->peer.port;
-+		__entry->pathmtu = asoc->pathmtu;
-+		__entry->rwnd = asoc->peer.rwnd;
-+		__entry->unack_data = asoc->unack_data;
-+
-+		list_for_each_entry(sp, &asoc->peer.transport_addr_list,
-+				    transports) {
-+			trace_sctp_probe_path(sp, asoc);
-+		}
-+	),
-+
-+	TP_printk("asoc=%#llx mark=%#x bind_port=%d peer_port=%d pathmtu=%d "
-+		  "rwnd=%u unack_data=%d",
-+		  __entry->asoc, __entry->mark, __entry->bind_port,
-+		  __entry->peer_port, __entry->pathmtu, __entry->rwnd,
-+		  __entry->unack_data)
-+);
-+
-+#endif /* _TRACE_SCTP_H */
-+
-+/* This part must be outside protection */
-+#include <trace/define_trace.h>
-diff --git a/net/sctp/sm_statefuns.c b/net/sctp/sm_statefuns.c
-index 8f8ccded13e4..c5f92b2cc5c3 100644
---- a/net/sctp/sm_statefuns.c
-+++ b/net/sctp/sm_statefuns.c
-@@ -59,6 +59,9 @@
- #include <net/sctp/sm.h>
- #include <net/sctp/structs.h>
+diff --git a/net/sctp/Kconfig b/net/sctp/Kconfig
+index d9c04dc1b3f3..c740b189d4ba 100644
+--- a/net/sctp/Kconfig
++++ b/net/sctp/Kconfig
+@@ -37,18 +37,6 @@ menuconfig IP_SCTP
  
-+#define CREATE_TRACE_POINTS
-+#include <trace/events/sctp.h>
-+
- static struct sctp_packet *sctp_abort_pkt_new(
- 					struct net *net,
- 					const struct sctp_endpoint *ep,
-@@ -3219,6 +3222,8 @@ enum sctp_disposition sctp_sf_eat_sack_6_2(struct net *net,
- 	struct sctp_sackhdr *sackh;
- 	__u32 ctsn;
+ if IP_SCTP
  
-+	trace_sctp_probe(ep, asoc, chunk);
-+
- 	if (!sctp_vtag_verify(chunk, asoc))
- 		return sctp_sf_pdiscard(net, ep, asoc, type, arg, commands);
+-config NET_SCTPPROBE
+-	tristate "SCTP: Association probing"
+-        depends on PROC_FS && KPROBES
+-        ---help---
+-        This module allows for capturing the changes to SCTP association
+-        state in response to incoming packets. It is used for debugging
+-        SCTP congestion control algorithms. If you don't understand
+-        what was just said, you don't need it: say N.
+-
+-        To compile this code as a module, choose M here: the
+-        module will be called sctp_probe.
+-
+ config SCTP_DBG_OBJCNT
+ 	bool "SCTP: Debug object counts"
+ 	depends on PROC_FS
+diff --git a/net/sctp/Makefile b/net/sctp/Makefile
+index 8c434af3e68f..28961220b582 100644
+--- a/net/sctp/Makefile
++++ b/net/sctp/Makefile
+@@ -4,7 +4,6 @@
+ #
  
+ obj-$(CONFIG_IP_SCTP) += sctp.o
+-obj-$(CONFIG_NET_SCTPPROBE) += sctp_probe.o
+ obj-$(CONFIG_INET_SCTP_DIAG) += sctp_diag.o
+ 
+ sctp-y := sm_statetable.o sm_statefuns.o sm_sideeffect.o \
+@@ -15,8 +14,6 @@ sctp-y := sm_statetable.o sm_statefuns.o sm_sideeffect.o \
+ 	  output.o input.o debug.o stream.o auth.o \
+ 	  offload.o
+ 
+-sctp_probe-y := probe.o
+-
+ sctp-$(CONFIG_SCTP_DBG_OBJCNT) += objcnt.o
+ sctp-$(CONFIG_PROC_FS) += proc.o
+ sctp-$(CONFIG_SYSCTL) += sysctl.o
+diff --git a/net/sctp/probe.c b/net/sctp/probe.c
+deleted file mode 100644
+index 1280f85a598d..000000000000
+--- a/net/sctp/probe.c
++++ /dev/null
+@@ -1,244 +0,0 @@
+-/*
+- * sctp_probe - Observe the SCTP flow with kprobes.
+- *
+- * The idea for this came from Werner Almesberger's umlsim
+- * Copyright (C) 2004, Stephen Hemminger <shemminger@osdl.org>
+- *
+- * Modified for SCTP from Stephen Hemminger's code
+- * Copyright (C) 2010, Wei Yongjun <yjwei@cn.fujitsu.com>
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License
+- * along with this program; if not, write to the Free Software
+- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+- */
+-
+-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+-
+-#include <linux/kernel.h>
+-#include <linux/kprobes.h>
+-#include <linux/socket.h>
+-#include <linux/sctp.h>
+-#include <linux/proc_fs.h>
+-#include <linux/vmalloc.h>
+-#include <linux/module.h>
+-#include <linux/kfifo.h>
+-#include <linux/time.h>
+-#include <net/net_namespace.h>
+-
+-#include <net/sctp/sctp.h>
+-#include <net/sctp/sm.h>
+-
+-MODULE_SOFTDEP("pre: sctp");
+-MODULE_AUTHOR("Wei Yongjun <yjwei@cn.fujitsu.com>");
+-MODULE_DESCRIPTION("SCTP snooper");
+-MODULE_LICENSE("GPL");
+-
+-static int port __read_mostly = 0;
+-MODULE_PARM_DESC(port, "Port to match (0=all)");
+-module_param(port, int, 0);
+-
+-static unsigned int fwmark __read_mostly = 0;
+-MODULE_PARM_DESC(fwmark, "skb mark to match (0=no mark)");
+-module_param(fwmark, uint, 0);
+-
+-static int bufsize __read_mostly = 64 * 1024;
+-MODULE_PARM_DESC(bufsize, "Log buffer size (default 64k)");
+-module_param(bufsize, int, 0);
+-
+-static int full __read_mostly = 1;
+-MODULE_PARM_DESC(full, "Full log (1=every ack packet received,  0=only cwnd changes)");
+-module_param(full, int, 0);
+-
+-static const char procname[] = "sctpprobe";
+-
+-static struct {
+-	struct kfifo	  fifo;
+-	spinlock_t	  lock;
+-	wait_queue_head_t wait;
+-	struct timespec64 tstart;
+-} sctpw;
+-
+-static __printf(1, 2) void printl(const char *fmt, ...)
+-{
+-	va_list args;
+-	int len;
+-	char tbuf[256];
+-
+-	va_start(args, fmt);
+-	len = vscnprintf(tbuf, sizeof(tbuf), fmt, args);
+-	va_end(args);
+-
+-	kfifo_in_locked(&sctpw.fifo, tbuf, len, &sctpw.lock);
+-	wake_up(&sctpw.wait);
+-}
+-
+-static int sctpprobe_open(struct inode *inode, struct file *file)
+-{
+-	kfifo_reset(&sctpw.fifo);
+-	ktime_get_ts64(&sctpw.tstart);
+-
+-	return 0;
+-}
+-
+-static ssize_t sctpprobe_read(struct file *file, char __user *buf,
+-			      size_t len, loff_t *ppos)
+-{
+-	int error = 0, cnt = 0;
+-	unsigned char *tbuf;
+-
+-	if (!buf)
+-		return -EINVAL;
+-
+-	if (len = 0)
+-		return 0;
+-
+-	tbuf = vmalloc(len);
+-	if (!tbuf)
+-		return -ENOMEM;
+-
+-	error = wait_event_interruptible(sctpw.wait,
+-					 kfifo_len(&sctpw.fifo) != 0);
+-	if (error)
+-		goto out_free;
+-
+-	cnt = kfifo_out_locked(&sctpw.fifo, tbuf, len, &sctpw.lock);
+-	error = copy_to_user(buf, tbuf, cnt) ? -EFAULT : 0;
+-
+-out_free:
+-	vfree(tbuf);
+-
+-	return error ? error : cnt;
+-}
+-
+-static const struct file_operations sctpprobe_fops = {
+-	.owner	= THIS_MODULE,
+-	.open	= sctpprobe_open,
+-	.read	= sctpprobe_read,
+-	.llseek = noop_llseek,
+-};
+-
+-static enum sctp_disposition jsctp_sf_eat_sack(
+-					struct net *net,
+-					const struct sctp_endpoint *ep,
+-					const struct sctp_association *asoc,
+-					const union sctp_subtype type,
+-					void *arg,
+-					struct sctp_cmd_seq *commands)
+-{
+-	struct sctp_chunk *chunk = arg;
+-	struct sk_buff *skb = chunk->skb;
+-	struct sctp_transport *sp;
+-	static __u32 lcwnd = 0;
+-	struct timespec64 now;
+-
+-	sp = asoc->peer.primary_path;
+-
+-	if (((port = 0 && fwmark = 0) ||
+-	     asoc->peer.port = port ||
+-	     ep->base.bind_addr.port = port ||
+-	     (fwmark > 0 && skb->mark = fwmark)) &&
+-	    (full || sp->cwnd != lcwnd)) {
+-		lcwnd = sp->cwnd;
+-
+-		ktime_get_ts64(&now);
+-		now = timespec64_sub(now, sctpw.tstart);
+-
+-		printl("%lu.%06lu ", (unsigned long) now.tv_sec,
+-		       (unsigned long) now.tv_nsec / NSEC_PER_USEC);
+-
+-		printl("%p %5d %5d %5d %8d %5d ", asoc,
+-		       ep->base.bind_addr.port, asoc->peer.port,
+-		       asoc->pathmtu, asoc->peer.rwnd, asoc->unack_data);
+-
+-		list_for_each_entry(sp, &asoc->peer.transport_addr_list,
+-					transports) {
+-			if (sp = asoc->peer.primary_path)
+-				printl("*");
+-
+-			printl("%pISc %2u %8u %8u %8u %8u %8u ",
+-			       &sp->ipaddr, sp->state, sp->cwnd, sp->ssthresh,
+-			       sp->flight_size, sp->partial_bytes_acked,
+-			       sp->pathmtu);
+-		}
+-		printl("\n");
+-	}
+-
+-	jprobe_return();
+-	return 0;
+-}
+-
+-static struct jprobe sctp_recv_probe = {
+-	.kp	= {
+-		.symbol_name = "sctp_sf_eat_sack_6_2",
+-	},
+-	.entry	= jsctp_sf_eat_sack,
+-};
+-
+-static __init int sctp_setup_jprobe(void)
+-{
+-	int ret = register_jprobe(&sctp_recv_probe);
+-
+-	if (ret) {
+-		if (request_module("sctp"))
+-			goto out;
+-		ret = register_jprobe(&sctp_recv_probe);
+-	}
+-
+-out:
+-	return ret;
+-}
+-
+-static __init int sctpprobe_init(void)
+-{
+-	int ret = -ENOMEM;
+-
+-	/* Warning: if the function signature of sctp_sf_eat_sack_6_2,
+-	 * has been changed, you also have to change the signature of
+-	 * jsctp_sf_eat_sack, otherwise you end up right here!
+-	 */
+-	BUILD_BUG_ON(__same_type(sctp_sf_eat_sack_6_2,
+-				 jsctp_sf_eat_sack) = 0);
+-
+-	init_waitqueue_head(&sctpw.wait);
+-	spin_lock_init(&sctpw.lock);
+-	if (kfifo_alloc(&sctpw.fifo, bufsize, GFP_KERNEL))
+-		return ret;
+-
+-	if (!proc_create(procname, S_IRUSR, init_net.proc_net,
+-			 &sctpprobe_fops))
+-		goto free_kfifo;
+-
+-	ret = sctp_setup_jprobe();
+-	if (ret)
+-		goto remove_proc;
+-
+-	pr_info("probe registered (port=%d/fwmark=%u) bufsize=%u\n",
+-		port, fwmark, bufsize);
+-	return 0;
+-
+-remove_proc:
+-	remove_proc_entry(procname, init_net.proc_net);
+-free_kfifo:
+-	kfifo_free(&sctpw.fifo);
+-	return ret;
+-}
+-
+-static __exit void sctpprobe_exit(void)
+-{
+-	kfifo_free(&sctpw.fifo);
+-	remove_proc_entry(procname, init_net.proc_net);
+-	unregister_jprobe(&sctp_recv_probe);
+-}
+-
+-module_init(sctpprobe_init);
+-module_exit(sctpprobe_exit);
 
