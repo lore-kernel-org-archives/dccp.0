@@ -1,177 +1,156 @@
-From: Kees Cook <keescook@chromium.org>
-Date: Thu, 05 Oct 2017 00:52:26 +0000
-Subject: [PATCH] inet/connection_sock: Convert timers to use
-Message-Id: <20171005005226.GA23598@beast>
+From: Masami Hiramatsu <mhiramat@kernel.org>
+Date: Wed, 08 Nov 2017 10:02:33 +0000
+Subject: [RFC PATCH -tip 5/6] net: dccp: Add DCCP sendmsg trace event
+Message-Id: <151013535368.7294.589077906156597446.stgit@devbox>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-In preparation for unconditionally passing the struct timer_list pointer to
-all timer callbacks, switch to using the new timer_setup() and from_timer()
-to pass the timer pointer explicitly.
+Add DCCP sendmsg trace event (dccp/dccp_probe) for
+replacing dccpprobe. User can trace this event via
+ftrace or perftools.
 
-Cc: "David S. Miller" <davem@davemloft.net>
-Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Cc: Alexey Kuznetsov <kuznet@ms2.inr.ac.ru>
-Cc: Hideaki YOSHIFUJI <yoshfuji@linux-ipv6.org>
-Cc: netdev@vger.kernel.org
-Cc: dccp@vger.kernel.org
-Cc: Thomas Gleixner <tglx@linutronix.de>
-Signed-off-by: Kees Cook <keescook@chromium.org>
+Signed-off-by: Masami Hiramatsu <mhiramat@kernel.org>
 ---
-This requires commit 686fef928bba ("timer: Prepare to change timer
-callback argument type") in v4.14-rc3, but should be otherwise
-stand-alone.
----
- include/net/inet_connection_sock.h |  6 +++---
- net/dccp/timer.c                   | 18 ++++++++++--------
- net/ipv4/inet_connection_sock.c    | 14 ++++++--------
- net/ipv4/tcp_timer.c               | 18 +++++++++++-------
- 4 files changed, 30 insertions(+), 26 deletions(-)
+ net/dccp/proto.c |    5 +++
+ net/dccp/trace.h |  105 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 110 insertions(+)
+ create mode 100644 net/dccp/trace.h
 
-diff --git a/include/net/inet_connection_sock.h b/include/net/inet_connection_sock.h
-index 13e4c89a8231..0358745ea059 100644
---- a/include/net/inet_connection_sock.h
-+++ b/include/net/inet_connection_sock.h
-@@ -169,9 +169,9 @@ enum inet_csk_ack_state_t {
- };
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index b68168fcc06a..77a8a737c4f3 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -38,6 +38,9 @@
+ #include "dccp.h"
+ #include "feat.h"
  
- void inet_csk_init_xmit_timers(struct sock *sk,
--			       void (*retransmit_handler)(unsigned long),
--			       void (*delack_handler)(unsigned long),
--			       void (*keepalive_handler)(unsigned long));
-+			       void (*retransmit_handler)(struct timer_list *),
-+			       void (*delack_handler)(struct timer_list *),
-+			       void (*keepalive_handler)(struct timer_list *));
- void inet_csk_clear_xmit_timers(struct sock *sk);
++#define CREATE_TRACE_POINTS
++#include "trace.h"
++
+ DEFINE_SNMP_STAT(struct dccp_mib, dccp_statistics) __read_mostly;
  
- static inline void inet_csk_schedule_ack(struct sock *sk)
-diff --git a/net/dccp/timer.c b/net/dccp/timer.c
-index 3a2c34027758..1e35526bf436 100644
---- a/net/dccp/timer.c
-+++ b/net/dccp/timer.c
-@@ -125,10 +125,11 @@ static void dccp_retransmit_timer(struct sock *sk)
- 		__sk_dst_reset(sk);
- }
+ EXPORT_SYMBOL_GPL(dccp_statistics);
+@@ -756,6 +759,8 @@ int dccp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
+ 	int rc, size;
+ 	long timeo;
  
--static void dccp_write_timer(unsigned long data)
-+static void dccp_write_timer(struct timer_list *t)
- {
--	struct sock *sk = (struct sock *)data;
--	struct inet_connection_sock *icsk = inet_csk(sk);
-+	struct inet_connection_sock *icsk +			from_timer(icsk, t, icsk_retransmit_timer);
-+	struct sock *sk = &icsk->icsk_inet.sk;
- 	int event = 0;
++	trace_dccp_probe(sk, len);
++
+ 	if (len > dp->dccps_mss_cache)
+ 		return -EMSGSIZE;
  
- 	bh_lock_sock(sk);
-@@ -161,19 +162,20 @@ static void dccp_write_timer(unsigned long data)
- 	sock_put(sk);
- }
- 
--static void dccp_keepalive_timer(unsigned long data)
-+static void dccp_keepalive_timer(struct timer_list *t)
- {
--	struct sock *sk = (struct sock *)data;
-+	struct sock *sk = from_timer(sk, t, sk_timer);
- 
- 	pr_err("dccp should not use a keepalive timer !\n");
- 	sock_put(sk);
- }
- 
- /* This is the same as tcp_delack_timer, sans prequeue & mem_reclaim stuff */
--static void dccp_delack_timer(unsigned long data)
-+static void dccp_delack_timer(struct timer_list *t)
- {
--	struct sock *sk = (struct sock *)data;
--	struct inet_connection_sock *icsk = inet_csk(sk);
-+	struct inet_connection_sock *icsk +			from_timer(icsk, t, icsk_delack_timer);
-+	struct sock *sk = &icsk->icsk_inet.sk;
- 
- 	bh_lock_sock(sk);
- 	if (sock_owned_by_user(sk)) {
-diff --git a/net/ipv4/inet_connection_sock.c b/net/ipv4/inet_connection_sock.c
-index c039c937ba90..c838988eee04 100644
---- a/net/ipv4/inet_connection_sock.c
-+++ b/net/ipv4/inet_connection_sock.c
-@@ -494,17 +494,15 @@ EXPORT_SYMBOL(inet_csk_accept);
-  * to optimize.
-  */
- void inet_csk_init_xmit_timers(struct sock *sk,
--			       void (*retransmit_handler)(unsigned long),
--			       void (*delack_handler)(unsigned long),
--			       void (*keepalive_handler)(unsigned long))
-+			       void (*retransmit_handler)(struct timer_list *t),
-+			       void (*delack_handler)(struct timer_list *t),
-+			       void (*keepalive_handler)(struct timer_list *t))
- {
- 	struct inet_connection_sock *icsk = inet_csk(sk);
- 
--	setup_timer(&icsk->icsk_retransmit_timer, retransmit_handler,
--			(unsigned long)sk);
--	setup_timer(&icsk->icsk_delack_timer, delack_handler,
--			(unsigned long)sk);
--	setup_timer(&sk->sk_timer, keepalive_handler, (unsigned long)sk);
-+	timer_setup(&icsk->icsk_retransmit_timer, retransmit_handler, 0);
-+	timer_setup(&icsk->icsk_delack_timer, delack_handler, 0);
-+	timer_setup(&sk->sk_timer, keepalive_handler, 0);
- 	icsk->icsk_pending = icsk->icsk_ack.pending = 0;
- }
- EXPORT_SYMBOL(inet_csk_init_xmit_timers);
-diff --git a/net/ipv4/tcp_timer.c b/net/ipv4/tcp_timer.c
-index 655dd8d7f064..d24c29f73146 100644
---- a/net/ipv4/tcp_timer.c
-+++ b/net/ipv4/tcp_timer.c
-@@ -283,15 +283,17 @@ void tcp_delack_timer_handler(struct sock *sk)
-  *
-  *  Returns: Nothing (void)
-  */
--static void tcp_delack_timer(unsigned long data)
-+static void tcp_delack_timer(struct timer_list *t)
- {
--	struct sock *sk = (struct sock *)data;
-+	struct inet_connection_sock *icsk +			from_timer(icsk, t, icsk_delack_timer);
-+	struct sock *sk = &icsk->icsk_inet.sk;
- 
- 	bh_lock_sock(sk);
- 	if (!sock_owned_by_user(sk)) {
- 		tcp_delack_timer_handler(sk);
- 	} else {
--		inet_csk(sk)->icsk_ack.blocked = 1;
-+		icsk->icsk_ack.blocked = 1;
- 		__NET_INC_STATS(sock_net(sk), LINUX_MIB_DELAYEDACKLOCKED);
- 		/* deleguate our work to tcp_release_cb() */
- 		if (!test_and_set_bit(TCP_DELACK_TIMER_DEFERRED, &sk->sk_tsq_flags))
-@@ -570,9 +572,11 @@ void tcp_write_timer_handler(struct sock *sk)
- 	sk_mem_reclaim(sk);
- }
- 
--static void tcp_write_timer(unsigned long data)
-+static void tcp_write_timer(struct timer_list *t)
- {
--	struct sock *sk = (struct sock *)data;
-+	struct inet_connection_sock *icsk +			from_timer(icsk, t, icsk_retransmit_timer);
-+	struct sock *sk = &icsk->icsk_inet.sk;
- 
- 	bh_lock_sock(sk);
- 	if (!sock_owned_by_user(sk)) {
-@@ -607,9 +611,9 @@ void tcp_set_keepalive(struct sock *sk, int val)
- EXPORT_SYMBOL_GPL(tcp_set_keepalive);
- 
- 
--static void tcp_keepalive_timer (unsigned long data)
-+static void tcp_keepalive_timer (struct timer_list *t)
- {
--	struct sock *sk = (struct sock *) data;
-+	struct sock *sk = from_timer(sk, t, sk_timer);
- 	struct inet_connection_sock *icsk = inet_csk(sk);
- 	struct tcp_sock *tp = tcp_sk(sk);
- 	u32 elapsed;
--- 
-2.7.4
+diff --git a/net/dccp/trace.h b/net/dccp/trace.h
+new file mode 100644
+index 000000000000..aa01321a6c37
+--- /dev/null
++++ b/net/dccp/trace.h
+@@ -0,0 +1,105 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#undef TRACE_SYSTEM
++#define TRACE_SYSTEM dccp
++
++#if !defined(_TRACE_DCCP_H) || defined(TRACE_HEADER_MULTI_READ)
++#define _TRACE_DCCP_H
++
++#include <net/sock.h>
++#include "dccp.h"
++#include "ccids/ccid3.h"
++#include <linux/tracepoint.h>
++
++TRACE_EVENT(dccp_probe,
++
++	TP_PROTO(struct sock *sk, size_t size),
++
++	TP_ARGS(sk, size),
++
++	TP_STRUCT__entry(
++		/* sockaddr_in6 is always bigger than sockaddr_in */
++		__array(__u8, saddr, sizeof(struct sockaddr_in6))
++		__array(__u8, daddr, sizeof(struct sockaddr_in6))
++		__field(__u16, sport)
++		__field(__u16, dport)
++		__field(__u16, size)
++		__field(__u16, tx_s)
++		__field(__u32, tx_rtt)
++		__field(__u32, tx_p)
++		__field(__u32, tx_x_calc)
++		__field(__u64, tx_x_recv)
++		__field(__u64, tx_x)
++		__field(__u32, tx_t_ipi)
++	),
++
++	TP_fast_assign(
++		const struct inet_sock *inet = inet_sk(sk);
++		struct ccid3_hc_tx_sock *hc = NULL;
++
++		if (ccid_get_current_tx_ccid(dccp_sk(sk)) = DCCPC_CCID3)
++			hc = ccid3_hc_tx_sk(sk);
++
++		memset(__entry->saddr, 0, sizeof(struct sockaddr_in6));
++		memset(__entry->daddr, 0, sizeof(struct sockaddr_in6));
++
++		if (sk->sk_family = AF_INET) {
++			struct sockaddr_in *v4 = (void *)__entry->saddr;
++
++			v4->sin_family = AF_INET;
++			v4->sin_port = inet->inet_sport;
++			v4->sin_addr.s_addr = inet->inet_saddr;
++			v4 = (void *)__entry->daddr;
++			v4->sin_family = AF_INET;
++			v4->sin_port = inet->inet_dport;
++			v4->sin_addr.s_addr = inet->inet_daddr;
++#if IS_ENABLED(CONFIG_IPV6)
++		} else if (sk->sk_family = AF_INET6) {
++			struct sockaddr_in6 *v6 = (void *)__entry->saddr;
++
++			v6->sin6_family = AF_INET6;
++			v6->sin6_port = inet->inet_sport;
++			v6->sin6_addr = inet6_sk(sk)->saddr;
++			v6 = (void *)__entry->daddr;
++			v6->sin6_family = AF_INET6;
++			v6->sin6_port = inet->inet_dport;
++			v6->sin6_addr = sk->sk_v6_daddr;
++#endif
++		}
++
++		/* For filtering use */
++		__entry->sport = ntohs(inet->inet_sport);
++		__entry->dport = ntohs(inet->inet_dport);
++
++		__entry->size = size;
++		if (hc) {
++			__entry->tx_s = hc->tx_s;
++			__entry->tx_rtt = hc->tx_rtt;
++			__entry->tx_p = hc->tx_p;
++			__entry->tx_x_calc = hc->tx_x_calc;
++			__entry->tx_x_recv = hc->tx_x_recv >> 6;
++			__entry->tx_x = hc->tx_x >> 6;
++			__entry->tx_t_ipi = hc->tx_t_ipi;
++		} else {
++			__entry->tx_s = 0;
++			memset(&__entry->tx_rtt, 0, (void *)&__entry->tx_t_ipi -
++			       (void *)&__entry->tx_rtt +
++			       sizeof(__entry->tx_t_ipi));
++		}
++	),
++
++	TP_printk("src=%pISpc dest=%pISpc size=%d tx_s=%d tx_rtt=%d "
++		  "tx_p=%d tx_x_calc=%u tx_x_recv=%llu tx_x=%llu tx_t_ipi=%d",
++		  __entry->saddr, __entry->daddr, __entry->size,
++		  __entry->tx_s, __entry->tx_rtt, __entry->tx_p,
++		  __entry->tx_x_calc, __entry->tx_x_recv, __entry->tx_x,
++		  __entry->tx_t_ipi)
++);
++
++#endif /* _TRACE_TCP_H */
++
++/* This part must be outside protection */
++#undef TRACE_INCLUDE_PATH
++#define TRACE_INCLUDE_PATH .
++#undef TRACE_INCLUDE_FILE
++#define TRACE_INCLUDE_FILE trace
++#include <trace/define_trace.h>
 
-
--- 
-Kees Cook
-Pixel Security
