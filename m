@@ -1,145 +1,107 @@
-From: Dmitry Vyukov <dvyukov@google.com>
-Date: Sun, 05 Nov 2017 08:41:26 +0000
-Subject: Re: suspicious RCU usage at ./include/net/inet_sock.h:LINE
-Message-Id: <CACT4Y+a9jXZS3Ux-KiTPvSa59Fd0uQ7vBYFqyrtmEckEHBg8mg@mail.gmail.com>
+From: Masami Hiramatsu <mhiramat@kernel.org>
+Date: Wed, 08 Nov 2017 10:00:02 +0000
+Subject: [RFC PATCH -tip 0/6] net: tcp: sctp: dccp: Replace jprobe usage with trace events
+Message-Id: <151013520119.7294.3518752184394738314.stgit@devbox>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Sun, Nov 5, 2017 at 11:35 AM, syzbot
-<bot+79de6f09efc55fec084b706de3c91e9457433ac5@syzkaller.appspotmail.com>
-wrote:
-> Hello,
->
-> syzkaller hit the following crash on
-> 5a3517e009e979f21977d362212b7729c5165d92
-> git://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/master
-> compiler: gcc (GCC) 7.1.1 20170620
-> .config is attached
-> Raw console output is attached.
->
->
->
->
->
-> ==============> WARNING: suspicious RCU usage
-> 4.14.0-rc7-next-20171103+ #10 Not tainted
-> -----------------------------
-> ./include/net/inet_sock.h:136 suspicious rcu_dereference_check() usage!
->
-> other info that might help us debug this:
->
->
-> rcu_scheduler_active = 2, debug_locks = 1
-> 1 lock held by syz-executor0/836:
->  #0:  (sk_lock-AF_INET6){+.+.}, at: [<ffffffff840fe133>] lock_sock
-> include/net/sock.h:1461 [inline]
->  #0:  (sk_lock-AF_INET6){+.+.}, at: [<ffffffff840fe133>]
-> sock_setsockopt+0x163/0x1ae0 net/core/sock.c:715
->
-> stack backtrace:
-> CPU: 0 PID: 836 Comm: syz-executor0 Not tainted 4.14.0-rc7-next-20171103+
-> #10
-> Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Bochs 01/01/2011
-> Call Trace:
->  __dump_stack lib/dump_stack.c:17 [inline]
->  dump_stack+0x194/0x257 lib/dump_stack.c:53
->  lockdep_rcu_suspicious+0x123/0x170 kernel/locking/lockdep.c:4675
->  ireq_opt_deref include/net/inet_sock.h:135 [inline]
->  inet_csk_route_req+0x82a/0xca0 net/ipv4/inet_connection_sock.c:544
->  dccp_v4_send_response+0xa7/0x640 net/dccp/ipv4.c:485
->  dccp_v4_conn_request+0x9f4/0x11b0 net/dccp/ipv4.c:633
->  dccp_v6_conn_request+0xd30/0x1350 net/dccp/ipv6.c:317
->  dccp_rcv_state_process+0x574/0x1620 net/dccp/input.c:612
->  dccp_v4_do_rcv+0xeb/0x160 net/dccp/ipv4.c:682
->  dccp_v6_do_rcv+0x81a/0x9b0 net/dccp/ipv6.c:578
->  sk_backlog_rcv include/net/sock.h:909 [inline]
->  __release_sock+0x124/0x360 net/core/sock.c:2264
->  release_sock+0xa4/0x2a0 net/core/sock.c:2776
->  sock_setsockopt+0x513/0x1ae0 net/core/sock.c:1066
->  SYSC_setsockopt net/socket.c:1847 [inline]
->  SyS_setsockopt+0x2ff/0x360 net/socket.c:1830
->  entry_SYSCALL_64_fastpath+0x1f/0xbe
-> RIP: 0033:0x447c89
-> RSP: 002b:00007f86cc482bd8 EFLAGS: 00000246 ORIG_RAX: 0000000000000036
-> RAX: ffffffffffffffda RBX: 00007f86cc4836cc RCX: 0000000000447c89
-> RDX: 000000000000001a RSI: 0000000000000001 RDI: 0000000000000013
-> RBP: 0000000000000086 R08: 0000000000000010 R09: 0000000000000000
-> R10: 0000000020c3a000 R11: 0000000000000246 R12: 00000000ffffffff
-> R13: 00000000000006c0 R14: 00000000006e4760 R15: 00007f86cc483700
->
-> ==============> WARNING: suspicious RCU usage
-> 4.14.0-rc7-next-20171103+ #10 Not tainted
-> -----------------------------
-> ./include/net/inet_sock.h:136 suspicious rcu_dereference_check() usage!
->
-> other info that might help us debug this:
->
->
-> rcu_scheduler_active = 2, debug_locks = 1
-> 1 lock held by syz-executor0/836:
->  #0:  (sk_lock-AF_INET6){+.+.}, at: [<ffffffff840fe133>] lock_sock
-> include/net/sock.h:1461 [inline]
->  #0:  (sk_lock-AF_INET6){+.+.}, at: [<ffffffff840fe133>]
-> sock_setsockopt+0x163/0x1ae0 net/core/sock.c:715
->
-> stack backtrace:
-> CPU: 0 PID: 836 Comm: syz-executor0 Not tainted 4.14.0-rc7-next-20171103+
-> #10
-> Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Bochs 01/01/2011
-> Call Trace:
->  __dump_stack lib/dump_stack.c:17 [inline]
->  dump_stack+0x194/0x257 lib/dump_stack.c:53
->  lockdep_rcu_suspicious+0x123/0x170 kernel/locking/lockdep.c:4675
->  ireq_opt_deref include/net/inet_sock.h:135 [inline]
->  dccp_v4_send_response+0x4b0/0x640 net/dccp/ipv4.c:496
->  dccp_v4_conn_request+0x9f4/0x11b0 net/dccp/ipv4.c:633
->  dccp_v6_conn_request+0xd30/0x1350 net/dccp/ipv6.c:317
->  dccp_rcv_state_process+0x574/0x1620 net/dccp/input.c:612
->  dccp_v4_do_rcv+0xeb/0x160 net/dccp/ipv4.c:682
->  dccp_v6_do_rcv+0x81a/0x9b0 net/dccp/ipv6.c:578
->  sk_backlog_rcv include/net/sock.h:909 [inline]
->  __release_sock+0x124/0x360 net/core/sock.c:2264
->  release_sock+0xa4/0x2a0 net/core/sock.c:2776
->  sock_setsockopt+0x513/0x1ae0 net/core/sock.c:1066
->  SYSC_setsockopt net/socket.c:1847 [inline]
->  SyS_setsockopt+0x2ff/0x360 net/socket.c:1830
->  entry_SYSCALL_64_fastpath+0x1f/0xbe
-> RIP: 0033:0x447c89
-> RSP: 002b:00007f86cc482bd8 EFLAGS: 00000246 ORIG_RAX: 0000000000000036
-> RAX: ffffffffffffffda RBX: 00007f86cc4836cc RCX: 0000000000447c89
-> RDX: 000000000000001a RSI: 0000000000000001 RDI: 0000000000000013
-> RBP: 0000000000000086 R08: 0000000000000010 R09: 0000000000000000
-> R10: 0000000020c3a000 R11: 0000000000000246 R12: 00000000ffffffff
-> R13: 00000000000006c0 R14: 00000000006e4760 R15: 00007f86cc483700
+Hi,
+
+This series introduce new trace events which allows user to
+trace network congestion window etc. via ftrace or perftools.
+And remove jprobe usages (tcp_probe/dccp_probe/sctp_probe).
+So this series removes all register_jprobe users from the kernel
+tree.
+
+So following example in
+
+https://wiki.linuxfoundation.org/networking/tcpprobe
+
+ # modprobe tcp_probe portP01
+ # cat /proc/net/tcpprobe >/tmp/data.out &
+ # pid=$!
+ # iperf -c otherhost
+ # kill $pid
+
+will be changed as below;
+
+ # cd <debugfs or tracefs>/tracing
+ # echo 1 > events/tcp/tcp_probe/enable
+ # echo "sport = 5001 || dport = 5001"  > events/tcp/tcp_probe/filter
+ # tail -f trace_pipe > /tmp/data.out &
+ # pid=$!
+ # iperf -c otherhost
+ # kill $pid
+
+And it outouts logs lile below;
+
+# tracer: nop
+#
+#                              _-----=> irqs-off
+#                             / _----=> need-resched
+#                            | / _---=> hardirq/softirq
+#                            || / _--=> preempt-depth
+#                            ||| /     delay
+#           TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION
+#              | |       |   ||||       |         |
+          <idle>-0     [000] ..s2  1089.238049: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length7 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(960
+          <idle>-0     [000] ..s2  1090.156938: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length7 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(992
+          <idle>-0     [000] ..s2  1091.333729: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length8 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(992
+          <idle>-0     [000] ..s2  1092.300330: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length7 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(992
+          <idle>-0     [000] ..s2  1095.044739: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length6 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(992
+          <idle>-0     [000] ..s2  1096.573825: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length2 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(992
+
+I need your feedback for this change, like formatting etc.
+Also, I need more test for this events by who can setup
+DCCP and SCTP, since those are special protocols, I have
+no environment to test it.
+
+Steve, I also wrote a hack in sctp_probe event. Because
+it requires to record several events at once, sctp_probe_path
+events will be called from assignment code. This means
+ring-buffer write will be recursively called (reserve-commit
+pair will be recursed). As far as I can see, that seems OK.
+But I need your review too.
+
+Thank you,
+
+---
+
+Masami Hiramatsu (6):
+      net: tcp: Add trace events for TCP congestion window tracing
+      net: tcp: Remove TCP probe module
+      net: sctp: Add SCTP ACK tracking trace event
+      net: sctp: Remove debug SCTP probe module
+      net: dccp: Add DCCP sendmsg trace event
+      net: dccp: Remove dccpprobe module
 
 
-+dccp mailing list
+ include/trace/events/sctp.h |   96 ++++++++++++++
+ include/trace/events/tcp.h  |   96 ++++++++++++++
+ net/Kconfig                 |   17 --
+ net/core/net-traces.c       |    1 
+ net/dccp/Kconfig            |   17 --
+ net/dccp/Makefile           |    2 
+ net/dccp/probe.c            |  203 -----------------------------
+ net/dccp/proto.c            |    5 +
+ net/dccp/trace.h            |  105 +++++++++++++++
+ net/ipv4/Makefile           |    1 
+ net/ipv4/tcp_input.c        |    4 +
+ net/ipv4/tcp_probe.c        |  301 -------------------------------------------
+ net/sctp/Kconfig            |   12 --
+ net/sctp/Makefile           |    3 
+ net/sctp/probe.c            |  244 -----------------------------------
+ net/sctp/sm_statefuns.c     |    5 +
+ 16 files changed, 312 insertions(+), 800 deletions(-)
+ create mode 100644 include/trace/events/sctp.h
+ create mode 100644 include/trace/events/tcp.h
+ delete mode 100644 net/dccp/probe.c
+ create mode 100644 net/dccp/trace.h
+ delete mode 100644 net/ipv4/tcp_probe.c
+ delete mode 100644 net/sctp/probe.c
 
-> ---
-> This bug is generated by a dumb bot. It may contain errors.
-> See https://goo.gl/tpsmEJ for details.
-> Direct all questions to syzkaller@googlegroups.com.
-> Please credit me with: Reported-by: syzbot <syzkaller@googlegroups.com>
->
-> syzbot will keep track of this bug report.
-> Once a fix for this bug is committed, please reply to this email with:
-> #syz fix: exact-commit-title
-> To mark this as a duplicate of another syzbot report, please reply with:
-> #syz dup: exact-subject-of-another-report
-> If it's a one-off invalid bug report, please reply with:
-> #syz invalid
-> Note: if the crash happens again, it will cause creation of a new bug
-> report.
-> Note: all commands must start from beginning of the line.
->
-> --
-> You received this message because you are subscribed to the Google Groups
-> "syzkaller-bugs" group.
-> To unsubscribe from this group and stop receiving emails from it, send an
-> email to syzkaller-bugs+unsubscribe@googlegroups.com.
-> To view this discussion on the web visit
-> https://groups.google.com/d/msgid/syzkaller-bugs/001a1140ad88c4f006055d3836d2%40google.com.
-> For more options, visit https://groups.google.com/d/optout.
+--
+Masami Hiramatsu (Linaro) <mhiramat@kernel.org>
