@@ -1,80 +1,89 @@
 From: Masami Hiramatsu <mhiramat@kernel.org>
-Date: Fri, 29 Dec 2017 02:46:21 +0000
-Subject: [PATCH net-next v7 2/6] net: tcp: Remove TCP probe module
-Message-Id: <151451558090.17912.7577124864784112591.stgit@devbox>
+Date: Mon, 18 Dec 2017 08:12:44 +0000
+Subject: [v2 PATCH -tip 4/6] net: sctp: Remove debug SCTP probe module
+Message-Id: <151358476481.28850.4471363418339219622.stgit@devbox>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Remove TCP probe module since jprobe has been deprecated.
-That function is now replaced by tcp/tcp_probe trace-event.
+Remove SCTP probe module since jprobe has been deprecated.
+That function is now replaced by sctp/sctp_probe and
+sctp/sctp_probe_path trace-events.
 You can use it via ftrace or perftools.
 
 Signed-off-by: Masami Hiramatsu <mhiramat@kernel.org>
 ---
- net/Kconfig          |   17 ---
- net/ipv4/Makefile    |    1 
- net/ipv4/tcp_probe.c |  301 --------------------------------------------------
- 3 files changed, 319 deletions(-)
- delete mode 100644 net/ipv4/tcp_probe.c
+ net/sctp/Kconfig  |   12 ---
+ net/sctp/Makefile |    3 -
+ net/sctp/probe.c  |  244 -----------------------------------------------------
+ 3 files changed, 259 deletions(-)
+ delete mode 100644 net/sctp/probe.c
 
-diff --git a/net/Kconfig b/net/Kconfig
-index 9dba2715919d..efe930db3c08 100644
---- a/net/Kconfig
-+++ b/net/Kconfig
-@@ -336,23 +336,6 @@ config NET_PKTGEN
- 	  To compile this code as a module, choose M here: the
- 	  module will be called pktgen.
+diff --git a/net/sctp/Kconfig b/net/sctp/Kconfig
+index d9c04dc1b3f3..c740b189d4ba 100644
+--- a/net/sctp/Kconfig
++++ b/net/sctp/Kconfig
+@@ -37,18 +37,6 @@ menuconfig IP_SCTP
  
--config NET_TCPPROBE
--	tristate "TCP connection probing"
--	depends on INET && PROC_FS && KPROBES
--	---help---
--	This module allows for capturing the changes to TCP connection
--	state in response to incoming packets. It is used for debugging
--	TCP congestion avoidance modules. If you don't understand
--	what was just said, you don't need it: say N.
+ if IP_SCTP
+ 
+-config NET_SCTPPROBE
+-	tristate "SCTP: Association probing"
+-        depends on PROC_FS && KPROBES
+-        ---help---
+-        This module allows for capturing the changes to SCTP association
+-        state in response to incoming packets. It is used for debugging
+-        SCTP congestion control algorithms. If you don't understand
+-        what was just said, you don't need it: say N.
 -
--	Documentation on how to use TCP connection probing can be found
--	at:
--	
--	  http://www.linuxfoundation.org/collaborate/workgroups/networking/tcpprobe
+-        To compile this code as a module, choose M here: the
+-        module will be called sctp_probe.
 -
--	To compile this code as a module, choose M here: the
--	module will be called tcp_probe.
+ config SCTP_DBG_OBJCNT
+ 	bool "SCTP: Debug object counts"
+ 	depends on PROC_FS
+diff --git a/net/sctp/Makefile b/net/sctp/Makefile
+index 1ca84a288443..b52dfc6f8b4c 100644
+--- a/net/sctp/Makefile
++++ b/net/sctp/Makefile
+@@ -4,7 +4,6 @@
+ #
+ 
+ obj-$(CONFIG_IP_SCTP) += sctp.o
+-obj-$(CONFIG_NET_SCTPPROBE) += sctp_probe.o
+ obj-$(CONFIG_INET_SCTP_DIAG) += sctp_diag.o
+ 
+ sctp-y := sm_statetable.o sm_statefuns.o sm_sideeffect.o \
+@@ -16,8 +15,6 @@ sctp-y := sm_statetable.o sm_statefuns.o sm_sideeffect.o \
+ 	  offload.o stream_sched.o stream_sched_prio.o \
+ 	  stream_sched_rr.o
+ 
+-sctp_probe-y := probe.o
 -
- config NET_DROP_MONITOR
- 	tristate "Network packet drop alerting service"
- 	depends on INET && TRACEPOINTS
-diff --git a/net/ipv4/Makefile b/net/ipv4/Makefile
-index c6c8ad1d4b6d..47a0a6649a9d 100644
---- a/net/ipv4/Makefile
-+++ b/net/ipv4/Makefile
-@@ -43,7 +43,6 @@ obj-$(CONFIG_INET_DIAG) += inet_diag.o
- obj-$(CONFIG_INET_TCP_DIAG) += tcp_diag.o
- obj-$(CONFIG_INET_UDP_DIAG) += udp_diag.o
- obj-$(CONFIG_INET_RAW_DIAG) += raw_diag.o
--obj-$(CONFIG_NET_TCPPROBE) += tcp_probe.o
- obj-$(CONFIG_TCP_CONG_BBR) += tcp_bbr.o
- obj-$(CONFIG_TCP_CONG_BIC) += tcp_bic.o
- obj-$(CONFIG_TCP_CONG_CDG) += tcp_cdg.o
-diff --git a/net/ipv4/tcp_probe.c b/net/ipv4/tcp_probe.c
+ sctp-$(CONFIG_SCTP_DBG_OBJCNT) += objcnt.o
+ sctp-$(CONFIG_PROC_FS) += proc.o
+ sctp-$(CONFIG_SYSCTL) += sysctl.o
+diff --git a/net/sctp/probe.c b/net/sctp/probe.c
 deleted file mode 100644
-index 697f4c67b2e3..000000000000
---- a/net/ipv4/tcp_probe.c
+index 1280f85a598d..000000000000
+--- a/net/sctp/probe.c
 +++ /dev/null
-@@ -1,301 +0,0 @@
+@@ -1,244 +0,0 @@
 -/*
-- * tcpprobe - Observe the TCP flow with kprobes.
+- * sctp_probe - Observe the SCTP flow with kprobes.
 - *
 - * The idea for this came from Werner Almesberger's umlsim
 - * Copyright (C) 2004, Stephen Hemminger <shemminger@osdl.org>
 - *
+- * Modified for SCTP from Stephen Hemminger's code
+- * Copyright (C) 2010, Wei Yongjun <yjwei@cn.fujitsu.com>
+- *
 - * This program is free software; you can redistribute it and/or modify
 - * it under the terms of the GNU General Public License as published by
-- * the Free Software Foundation; either version 2 of the License.
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
 - *
 - * This program is distributed in the hope that it will be useful,
 - * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -91,280 +100,219 @@ index 697f4c67b2e3..000000000000
 -#include <linux/kernel.h>
 -#include <linux/kprobes.h>
 -#include <linux/socket.h>
--#include <linux/tcp.h>
--#include <linux/slab.h>
+-#include <linux/sctp.h>
 -#include <linux/proc_fs.h>
+-#include <linux/vmalloc.h>
 -#include <linux/module.h>
--#include <linux/ktime.h>
+-#include <linux/kfifo.h>
 -#include <linux/time.h>
 -#include <net/net_namespace.h>
 -
--#include <net/tcp.h>
+-#include <net/sctp/sctp.h>
+-#include <net/sctp/sm.h>
 -
--MODULE_AUTHOR("Stephen Hemminger <shemminger@linux-foundation.org>");
--MODULE_DESCRIPTION("TCP cwnd snooper");
+-MODULE_SOFTDEP("pre: sctp");
+-MODULE_AUTHOR("Wei Yongjun <yjwei@cn.fujitsu.com>");
+-MODULE_DESCRIPTION("SCTP snooper");
 -MODULE_LICENSE("GPL");
--MODULE_VERSION("1.1");
 -
--static int port __read_mostly;
+-static int port __read_mostly = 0;
 -MODULE_PARM_DESC(port, "Port to match (0=all)");
 -module_param(port, int, 0);
 -
--static unsigned int bufsize __read_mostly = 4096;
--MODULE_PARM_DESC(bufsize, "Log buffer size in packets (4096)");
--module_param(bufsize, uint, 0);
--
--static unsigned int fwmark __read_mostly;
+-static unsigned int fwmark __read_mostly = 0;
 -MODULE_PARM_DESC(fwmark, "skb mark to match (0=no mark)");
 -module_param(fwmark, uint, 0);
 -
--static int full __read_mostly;
+-static int bufsize __read_mostly = 64 * 1024;
+-MODULE_PARM_DESC(bufsize, "Log buffer size (default 64k)");
+-module_param(bufsize, int, 0);
+-
+-static int full __read_mostly = 1;
 -MODULE_PARM_DESC(full, "Full log (1=every ack packet received,  0=only cwnd changes)");
 -module_param(full, int, 0);
 -
--static const char procname[] = "tcpprobe";
--
--struct tcp_log {
--	ktime_t tstamp;
--	union {
--		struct sockaddr		raw;
--		struct sockaddr_in	v4;
--		struct sockaddr_in6	v6;
--	}	src, dst;
--	u16	length;
--	u32	snd_nxt;
--	u32	snd_una;
--	u32	snd_wnd;
--	u32	rcv_wnd;
--	u32	snd_cwnd;
--	u32	ssthresh;
--	u32	srtt;
--};
+-static const char procname[] = "sctpprobe";
 -
 -static struct {
--	spinlock_t	lock;
+-	struct kfifo	  fifo;
+-	spinlock_t	  lock;
 -	wait_queue_head_t wait;
--	ktime_t		start;
--	u32		lastcwnd;
+-	struct timespec64 tstart;
+-} sctpw;
 -
--	unsigned long	head, tail;
--	struct tcp_log	*log;
--} tcp_probe;
--
--static inline int tcp_probe_used(void)
+-static __printf(1, 2) void printl(const char *fmt, ...)
 -{
--	return (tcp_probe.head - tcp_probe.tail) & (bufsize - 1);
+-	va_list args;
+-	int len;
+-	char tbuf[256];
+-
+-	va_start(args, fmt);
+-	len = vscnprintf(tbuf, sizeof(tbuf), fmt, args);
+-	va_end(args);
+-
+-	kfifo_in_locked(&sctpw.fifo, tbuf, len, &sctpw.lock);
+-	wake_up(&sctpw.wait);
 -}
 -
--static inline int tcp_probe_avail(void)
+-static int sctpprobe_open(struct inode *inode, struct file *file)
 -{
--	return bufsize - tcp_probe_used() - 1;
--}
--
--#define tcp_probe_copy_fl_to_si4(inet, si4, mem)		\
--	do {							\
--		si4.sin_family = AF_INET;			\
--		si4.sin_port = inet->inet_##mem##port;		\
--		si4.sin_addr.s_addr = inet->inet_##mem##addr;	\
--	} while (0)						\
--
--/*
-- * Hook inserted to be called before each receive packet.
-- * Note: arguments must match tcp_rcv_established()!
-- */
--static void jtcp_rcv_established(struct sock *sk, struct sk_buff *skb,
--				 const struct tcphdr *th)
--{
--	unsigned int len = skb->len;
--	const struct tcp_sock *tp = tcp_sk(sk);
--	const struct inet_sock *inet = inet_sk(sk);
--
--	/* Only update if port or skb mark matches */
--	if (((port = 0 && fwmark = 0) ||
--	     ntohs(inet->inet_dport) = port ||
--	     ntohs(inet->inet_sport) = port ||
--	     (fwmark > 0 && skb->mark = fwmark)) &&
--	    (full || tp->snd_cwnd != tcp_probe.lastcwnd)) {
--
--		spin_lock(&tcp_probe.lock);
--		/* If log fills, just silently drop */
--		if (tcp_probe_avail() > 1) {
--			struct tcp_log *p = tcp_probe.log + tcp_probe.head;
--
--			p->tstamp = ktime_get();
--			switch (sk->sk_family) {
--			case AF_INET:
--				tcp_probe_copy_fl_to_si4(inet, p->src.v4, s);
--				tcp_probe_copy_fl_to_si4(inet, p->dst.v4, d);
--				break;
--			case AF_INET6:
--				memset(&p->src.v6, 0, sizeof(p->src.v6));
--				memset(&p->dst.v6, 0, sizeof(p->dst.v6));
--#if IS_ENABLED(CONFIG_IPV6)
--				p->src.v6.sin6_family = AF_INET6;
--				p->src.v6.sin6_port = inet->inet_sport;
--				p->src.v6.sin6_addr = inet6_sk(sk)->saddr;
--
--				p->dst.v6.sin6_family = AF_INET6;
--				p->dst.v6.sin6_port = inet->inet_dport;
--				p->dst.v6.sin6_addr = sk->sk_v6_daddr;
--#endif
--				break;
--			default:
--				BUG();
--			}
--
--			p->length = len;
--			p->snd_nxt = tp->snd_nxt;
--			p->snd_una = tp->snd_una;
--			p->snd_cwnd = tp->snd_cwnd;
--			p->snd_wnd = tp->snd_wnd;
--			p->rcv_wnd = tp->rcv_wnd;
--			p->ssthresh = tcp_current_ssthresh(sk);
--			p->srtt = tp->srtt_us >> 3;
--
--			tcp_probe.head = (tcp_probe.head + 1) & (bufsize - 1);
--		}
--		tcp_probe.lastcwnd = tp->snd_cwnd;
--		spin_unlock(&tcp_probe.lock);
--
--		wake_up(&tcp_probe.wait);
--	}
--
--	jprobe_return();
--}
--
--static struct jprobe tcp_jprobe = {
--	.kp = {
--		.symbol_name	= "tcp_rcv_established",
--	},
--	.entry	= jtcp_rcv_established,
--};
--
--static int tcpprobe_open(struct inode *inode, struct file *file)
--{
--	/* Reset (empty) log */
--	spin_lock_bh(&tcp_probe.lock);
--	tcp_probe.head = tcp_probe.tail = 0;
--	tcp_probe.start = ktime_get();
--	spin_unlock_bh(&tcp_probe.lock);
+-	kfifo_reset(&sctpw.fifo);
+-	ktime_get_ts64(&sctpw.tstart);
 -
 -	return 0;
 -}
 -
--static int tcpprobe_sprint(char *tbuf, int n)
+-static ssize_t sctpprobe_read(struct file *file, char __user *buf,
+-			      size_t len, loff_t *ppos)
 -{
--	const struct tcp_log *p
--		= tcp_probe.log + tcp_probe.tail;
--	struct timespec64 ts
--		= ktime_to_timespec64(ktime_sub(p->tstamp, tcp_probe.start));
--
--	return scnprintf(tbuf, n,
--			"%lu.%09lu %pISpc %pISpc %d %#x %#x %u %u %u %u %u\n",
--			(unsigned long)ts.tv_sec,
--			(unsigned long)ts.tv_nsec,
--			&p->src, &p->dst, p->length, p->snd_nxt, p->snd_una,
--			p->snd_cwnd, p->ssthresh, p->snd_wnd, p->srtt, p->rcv_wnd);
--}
--
--static ssize_t tcpprobe_read(struct file *file, char __user *buf,
--			     size_t len, loff_t *ppos)
--{
--	int error = 0;
--	size_t cnt = 0;
+-	int error = 0, cnt = 0;
+-	unsigned char *tbuf;
 -
 -	if (!buf)
 -		return -EINVAL;
 -
--	while (cnt < len) {
--		char tbuf[256];
--		int width;
+-	if (len = 0)
+-		return 0;
 -
--		/* Wait for data in buffer */
--		error = wait_event_interruptible(tcp_probe.wait,
--						 tcp_probe_used() > 0);
--		if (error)
--			break;
+-	tbuf = vmalloc(len);
+-	if (!tbuf)
+-		return -ENOMEM;
 -
--		spin_lock_bh(&tcp_probe.lock);
--		if (tcp_probe.head = tcp_probe.tail) {
--			/* multiple readers race? */
--			spin_unlock_bh(&tcp_probe.lock);
--			continue;
--		}
+-	error = wait_event_interruptible(sctpw.wait,
+-					 kfifo_len(&sctpw.fifo) != 0);
+-	if (error)
+-		goto out_free;
 -
--		width = tcpprobe_sprint(tbuf, sizeof(tbuf));
+-	cnt = kfifo_out_locked(&sctpw.fifo, tbuf, len, &sctpw.lock);
+-	error = copy_to_user(buf, tbuf, cnt) ? -EFAULT : 0;
 -
--		if (cnt + width < len)
--			tcp_probe.tail = (tcp_probe.tail + 1) & (bufsize - 1);
+-out_free:
+-	vfree(tbuf);
 -
--		spin_unlock_bh(&tcp_probe.lock);
--
--		/* if record greater than space available
--		   return partial buffer (so far) */
--		if (cnt + width >= len)
--			break;
--
--		if (copy_to_user(buf + cnt, tbuf, width))
--			return -EFAULT;
--		cnt += width;
--	}
--
--	return cnt = 0 ? error : cnt;
+-	return error ? error : cnt;
 -}
 -
--static const struct file_operations tcpprobe_fops = {
--	.owner	 = THIS_MODULE,
--	.open	 = tcpprobe_open,
--	.read    = tcpprobe_read,
--	.llseek  = noop_llseek,
+-static const struct file_operations sctpprobe_fops = {
+-	.owner	= THIS_MODULE,
+-	.open	= sctpprobe_open,
+-	.read	= sctpprobe_read,
+-	.llseek = noop_llseek,
 -};
 -
--static __init int tcpprobe_init(void)
+-static enum sctp_disposition jsctp_sf_eat_sack(
+-					struct net *net,
+-					const struct sctp_endpoint *ep,
+-					const struct sctp_association *asoc,
+-					const union sctp_subtype type,
+-					void *arg,
+-					struct sctp_cmd_seq *commands)
+-{
+-	struct sctp_chunk *chunk = arg;
+-	struct sk_buff *skb = chunk->skb;
+-	struct sctp_transport *sp;
+-	static __u32 lcwnd = 0;
+-	struct timespec64 now;
+-
+-	sp = asoc->peer.primary_path;
+-
+-	if (((port = 0 && fwmark = 0) ||
+-	     asoc->peer.port = port ||
+-	     ep->base.bind_addr.port = port ||
+-	     (fwmark > 0 && skb->mark = fwmark)) &&
+-	    (full || sp->cwnd != lcwnd)) {
+-		lcwnd = sp->cwnd;
+-
+-		ktime_get_ts64(&now);
+-		now = timespec64_sub(now, sctpw.tstart);
+-
+-		printl("%lu.%06lu ", (unsigned long) now.tv_sec,
+-		       (unsigned long) now.tv_nsec / NSEC_PER_USEC);
+-
+-		printl("%p %5d %5d %5d %8d %5d ", asoc,
+-		       ep->base.bind_addr.port, asoc->peer.port,
+-		       asoc->pathmtu, asoc->peer.rwnd, asoc->unack_data);
+-
+-		list_for_each_entry(sp, &asoc->peer.transport_addr_list,
+-					transports) {
+-			if (sp = asoc->peer.primary_path)
+-				printl("*");
+-
+-			printl("%pISc %2u %8u %8u %8u %8u %8u ",
+-			       &sp->ipaddr, sp->state, sp->cwnd, sp->ssthresh,
+-			       sp->flight_size, sp->partial_bytes_acked,
+-			       sp->pathmtu);
+-		}
+-		printl("\n");
+-	}
+-
+-	jprobe_return();
+-	return 0;
+-}
+-
+-static struct jprobe sctp_recv_probe = {
+-	.kp	= {
+-		.symbol_name = "sctp_sf_eat_sack_6_2",
+-	},
+-	.entry	= jsctp_sf_eat_sack,
+-};
+-
+-static __init int sctp_setup_jprobe(void)
+-{
+-	int ret = register_jprobe(&sctp_recv_probe);
+-
+-	if (ret) {
+-		if (request_module("sctp"))
+-			goto out;
+-		ret = register_jprobe(&sctp_recv_probe);
+-	}
+-
+-out:
+-	return ret;
+-}
+-
+-static __init int sctpprobe_init(void)
 -{
 -	int ret = -ENOMEM;
 -
--	/* Warning: if the function signature of tcp_rcv_established,
+-	/* Warning: if the function signature of sctp_sf_eat_sack_6_2,
 -	 * has been changed, you also have to change the signature of
--	 * jtcp_rcv_established, otherwise you end up right here!
+-	 * jsctp_sf_eat_sack, otherwise you end up right here!
 -	 */
--	BUILD_BUG_ON(__same_type(tcp_rcv_established,
--				 jtcp_rcv_established) = 0);
+-	BUILD_BUG_ON(__same_type(sctp_sf_eat_sack_6_2,
+-				 jsctp_sf_eat_sack) = 0);
 -
--	init_waitqueue_head(&tcp_probe.wait);
--	spin_lock_init(&tcp_probe.lock);
+-	init_waitqueue_head(&sctpw.wait);
+-	spin_lock_init(&sctpw.lock);
+-	if (kfifo_alloc(&sctpw.fifo, bufsize, GFP_KERNEL))
+-		return ret;
 -
--	if (bufsize = 0)
--		return -EINVAL;
+-	if (!proc_create(procname, S_IRUSR, init_net.proc_net,
+-			 &sctpprobe_fops))
+-		goto free_kfifo;
 -
--	bufsize = roundup_pow_of_two(bufsize);
--	tcp_probe.log = kcalloc(bufsize, sizeof(struct tcp_log), GFP_KERNEL);
--	if (!tcp_probe.log)
--		goto err0;
--
--	if (!proc_create(procname, S_IRUSR, init_net.proc_net, &tcpprobe_fops))
--		goto err0;
--
--	ret = register_jprobe(&tcp_jprobe);
+-	ret = sctp_setup_jprobe();
 -	if (ret)
--		goto err1;
+-		goto remove_proc;
 -
 -	pr_info("probe registered (port=%d/fwmark=%u) bufsize=%u\n",
 -		port, fwmark, bufsize);
 -	return 0;
-- err1:
+-
+-remove_proc:
 -	remove_proc_entry(procname, init_net.proc_net);
-- err0:
--	kfree(tcp_probe.log);
+-free_kfifo:
+-	kfifo_free(&sctpw.fifo);
 -	return ret;
 -}
--module_init(tcpprobe_init);
 -
--static __exit void tcpprobe_exit(void)
+-static __exit void sctpprobe_exit(void)
 -{
+-	kfifo_free(&sctpw.fifo);
 -	remove_proc_entry(procname, init_net.proc_net);
--	unregister_jprobe(&tcp_jprobe);
--	kfree(tcp_probe.log);
+-	unregister_jprobe(&sctp_recv_probe);
 -}
--module_exit(tcpprobe_exit);
+-
+-module_init(sctpprobe_init);
+-module_exit(sctpprobe_exit);
 
