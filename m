@@ -1,77 +1,112 @@
 From: Masami Hiramatsu <mhiramat@kernel.org>
-Date: Wed, 20 Dec 2017 01:05:02 +0000
-Subject: Re: [PATCH -tip v3 3/6] net: sctp: Add SCTP ACK tracking trace event
-Message-Id: <20171220100502.a8d23392147340437142efb7@kernel.org>
+Date: Mon, 18 Dec 2017 08:10:45 +0000
+Subject: [v2 PATCH -tip 0/6] net: tcp: sctp: dccp: Replace jprobe usage with trace events
+Message-Id: <151358464509.28850.477561174715901317.stgit@devbox>
 List-Id: <dccp.vger.kernel.org>
-References: <151367390483.32364.4432870291926458046.stgit@devbox>
-In-Reply-To: <151367390483.32364.4432870291926458046.stgit@devbox>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Tue, 19 Dec 2017 10:20:24 -0500
-Steven Rostedt <rostedt@goodmis.org> wrote:
+Hi,
 
-> On Tue, 19 Dec 2017 17:58:25 +0900
-> Masami Hiramatsu <mhiramat@kernel.org> wrote:
-> 
-> > +TRACE_EVENT(sctp_probe,
-> > +
-> > +	TP_PROTO(const struct sctp_endpoint *ep,
-> > +		 const struct sctp_association *asoc,
-> > +		 struct sctp_chunk *chunk),
-> > +
-> > +	TP_ARGS(ep, asoc, chunk),
-> > +
-> > +	TP_STRUCT__entry(
-> > +		__field(__u64, asoc)
-> > +		__field(__u32, mark)
-> > +		__field(__u16, bind_port)
-> > +		__field(__u16, peer_port)
-> > +		__field(__u32, pathmtu)
-> > +		__field(__u32, rwnd)
-> > +		__field(__u16, unack_data)
-> > +	),
-> > +
-> > +	TP_fast_assign(
-> > +		struct sctp_transport *sp;
-> > +		struct sk_buff *skb = chunk->skb;
-> > +
-> > +		__entry->asoc = (__u64)asoc;
-> > +		__entry->mark = skb->mark;
-> > +		__entry->bind_port = ep->base.bind_addr.port;
-> > +		__entry->peer_port = asoc->peer.port;
-> > +		__entry->pathmtu = asoc->pathmtu;
-> > +		__entry->rwnd = asoc->peer.rwnd;
-> > +		__entry->unack_data = asoc->unack_data;
-> > +
-> > +		if (trace_sctp_probe_path_enabled()) {
-> > +			list_for_each_entry(sp, &asoc->peer.transport_addr_list,
-> > +					    transports) {
-> > +				trace_sctp_probe_path(sp, asoc);
-> > +			}
-> > +		}
-> 
-> I thought you were going to move this into the code, like I suggested?
+This series is v2 of the replacement of jprobe usage with trace
+events, and is just rebased on current tip/master branch.
 
-Ah, I missed to define sp in the block...
+Please review it and test it.
+Anyway, this removes all {tcp,sctp,dccp}_probe.ko because those
+depend on jprobe.
 
-Thanks,
+This introduce new trace events which allows user to
+trace network congestion window etc. via ftrace or perftools.
+And remove jprobe usages (tcp_probe/dccp_probe/sctp_probe).
+So this series removes all register_jprobe users from the kernel
+tree.
 
-> 
-> -- Steve
-> 
-> > +	),
-> > +
-> > +	TP_printk("asoc=%#llx mark=%#x bind_port=%d peer_port=%d pathmtu=%d "
-> > +		  "rwnd=%u unack_data=%d",
-> > +		  __entry->asoc, __entry->mark, __entry->bind_port,
-> > +		  __entry->peer_port, __entry->pathmtu, __entry->rwnd,
-> > +		  __entry->unack_data)
-> > +);
-> > +
+So following example in
+
+https://wiki.linuxfoundation.org/networking/tcpprobe
+
+ # modprobe tcp_probe portP01
+ # cat /proc/net/tcpprobe >/tmp/data.out &
+ # pid=$!
+ # iperf -c otherhost
+ # kill $pid
+
+will be changed as below;
+
+ # cd <debugfs or tracefs>/tracing
+ # echo 1 > events/tcp/tcp_probe/enable
+ # echo "sport = 5001 || dport = 5001"  > events/tcp/tcp_probe/filter
+ # tail -f trace_pipe > /tmp/data.out &
+ # pid=$!
+ # iperf -c otherhost
+ # kill $pid
+
+And it outouts logs lile below;
+
+# tracer: nop
+#
+#                              _-----=> irqs-off
+#                             / _----=> need-resched
+#                            | / _---=> hardirq/softirq
+#                            || / _--=> preempt-depth
+#                            ||| /     delay
+#           TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION
+#              | |       |   ||||       |         |
+          <idle>-0     [000] ..s2  1089.238049: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length7 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(960
+          <idle>-0     [000] ..s2  1090.156938: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length7 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(992
+          <idle>-0     [000] ..s2  1091.333729: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length8 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(992
+          <idle>-0     [000] ..s2  1092.300330: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length7 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(992
+          <idle>-0     [000] ..s2  1095.044739: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length6 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(992
+          <idle>-0     [000] ..s2  1096.573825: tcp_probe: src=[::ffff:192.168.139.2]:5001 dest=[::ffff:192.168.139.1]:56256 mark=0x0 length2 snd_nxt=0xee4abe9c snd_una=0xee4abe9c snd_cwnd ssthresh!47483647 snd_wnd)312 srttG8 rcv_wnd(992
+
+I need your feedback for this change, like formatting etc.
+Also, I need more test for this events by who can setup
+DCCP and SCTP, since those are special protocols, I have
+no environment to test it.
+
+Steve, I also wrote a hack in sctp_probe event. In that event
+it calls trace_sctp_probe_path() directly and record it.
+This means an event invokes another event inside.
+As far as I can see, that seems OK.
+But I need your review too.
+
+Thank you,
+
+---
+
+Masami Hiramatsu (6):
+      net: tcp: Add trace events for TCP congestion window tracing
+      net: tcp: Remove TCP probe module
+      net: sctp: Add SCTP ACK tracking trace event
+      net: sctp: Remove debug SCTP probe module
+      net: dccp: Add DCCP sendmsg trace event
+      net: dccp: Remove dccpprobe module
 
 
--- 
-Masami Hiramatsu <mhiramat@kernel.org>
+ include/trace/events/sctp.h |   96 ++++++++++++++
+ include/trace/events/tcp.h  |   86 ++++++++++++
+ net/Kconfig                 |   17 --
+ net/core/net-traces.c       |    1 
+ net/dccp/Kconfig            |   17 --
+ net/dccp/Makefile           |    2 
+ net/dccp/probe.c            |  203 -----------------------------
+ net/dccp/proto.c            |    5 +
+ net/dccp/trace.h            |  105 +++++++++++++++
+ net/ipv4/Makefile           |    1 
+ net/ipv4/tcp_input.c        |    3 
+ net/ipv4/tcp_probe.c        |  301 -------------------------------------------
+ net/sctp/Kconfig            |   12 --
+ net/sctp/Makefile           |    3 
+ net/sctp/probe.c            |  244 -----------------------------------
+ net/sctp/sm_statefuns.c     |    5 +
+ 16 files changed, 301 insertions(+), 800 deletions(-)
+ create mode 100644 include/trace/events/sctp.h
+ delete mode 100644 net/dccp/probe.c
+ create mode 100644 net/dccp/trace.h
+ delete mode 100644 net/ipv4/tcp_probe.c
+ delete mode 100644 net/sctp/probe.c
+
+--
+Masami Hiramatsu (Linaro) <mhiramat@kernel.org>
