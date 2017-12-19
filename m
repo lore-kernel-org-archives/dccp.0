@@ -1,280 +1,149 @@
 From: Masami Hiramatsu <mhiramat@kernel.org>
-Date: Fri, 29 Dec 2017 02:48:25 +0000
-Subject: [PATCH net-next v7 6/6] net: dccp: Remove dccpprobe module
-Message-Id: <151451570511.17912.15439408788615637125.stgit@devbox>
+Date: Tue, 19 Dec 2017 08:57:25 +0000
+Subject: [PATCH -tip v3 1/6] net: tcp: Add trace events for TCP congestion window tracing
+Message-Id: <151367384517.32364.15159814032513293875.stgit@devbox>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Remove DCCP probe module since jprobe has been deprecated.
-That function is now replaced by dccp/dccp_probe trace-event.
-You can use it via ftrace or perftools.
+This adds an event to trace TCP stat variables with
+slightly intrusive trace-event. This uses ftrace/perf
+event log buffer to trace those state, no needs to
+prepare own ring-buffer, nor custom user apps.
+
+User can use ftrace to trace this event as below;
+
+  # cd /sys/kernel/debug/tracing
+  # echo 1 > events/tcp/tcp_probe/enable
+  (run workloads)
+  # cat trace
 
 Signed-off-by: Masami Hiramatsu <mhiramat@kernel.org>
 ---
- Changes in v5:
-  - Fix a conflict with previous change in Makefile.
+ Changes in v3:
+  - Fix build errors caused by including events/tcp.h twice.
+  - Sort out the including headers.
 ---
- net/dccp/Kconfig  |   17 ----
- net/dccp/Makefile |    2 -
- net/dccp/probe.c  |  203 -----------------------------------------------------
- 3 files changed, 222 deletions(-)
- delete mode 100644 net/dccp/probe.c
+ include/trace/events/tcp.h |   80 ++++++++++++++++++++++++++++++++++++++++++++
+ net/ipv4/tcp_input.c       |    3 ++
+ 2 files changed, 83 insertions(+)
 
-diff --git a/net/dccp/Kconfig b/net/dccp/Kconfig
-index 8c0ef71bed2f..b270e84d9c13 100644
---- a/net/dccp/Kconfig
-+++ b/net/dccp/Kconfig
-@@ -39,23 +39,6 @@ config IP_DCCP_DEBUG
+diff --git a/include/trace/events/tcp.h b/include/trace/events/tcp.h
+index 07cccca6cbf1..14ad60b468fb 100644
+--- a/include/trace/events/tcp.h
++++ b/include/trace/events/tcp.h
+@@ -1,3 +1,4 @@
++/* SPDX-License-Identifier: GPL-2.0 */
+ #undef TRACE_SYSTEM
+ #define TRACE_SYSTEM tcp
  
- 	  Just say N.
+@@ -8,6 +9,7 @@
+ #include <linux/tcp.h>
+ #include <linux/tracepoint.h>
+ #include <net/ipv6.h>
++#include <net/tcp.h>
  
--config NET_DCCPPROBE
--	tristate "DCCP connection probing"
--	depends on PROC_FS && KPROBES
--	---help---
--	This module allows for capturing the changes to DCCP connection
--	state in response to incoming packets. It is used for debugging
--	DCCP congestion avoidance modules. If you don't understand
--	what was just said, you don't need it: say N.
--
--	Documentation on how to use DCCP connection probing can be found
--	at:
--	
--	  http://www.linuxfoundation.org/collaborate/workgroups/networking/dccpprobe
--
--	To compile this code as a module, choose M here: the
--	module will be called dccp_probe.
--
+ #define tcp_state_name(state)	{ state, #state }
+ #define show_tcp_state_name(val)			\
+@@ -293,6 +295,84 @@ TRACE_EVENT(tcp_retransmit_synack,
+ 		  __entry->saddr_v6, __entry->daddr_v6)
+ );
  
- endmenu
++TRACE_EVENT(tcp_probe,
++
++	TP_PROTO(struct sock *sk, struct sk_buff *skb),
++
++	TP_ARGS(sk, skb),
++
++	TP_STRUCT__entry(
++		/* sockaddr_in6 is always bigger than sockaddr_in */
++		__array(__u8, saddr, sizeof(struct sockaddr_in6))
++		__array(__u8, daddr, sizeof(struct sockaddr_in6))
++		__field(__u16, sport)
++		__field(__u16, dport)
++		__field(__u32, mark)
++		__field(__u16, length)
++		__field(__u32, snd_nxt)
++		__field(__u32, snd_una)
++		__field(__u32, snd_cwnd)
++		__field(__u32, ssthresh)
++		__field(__u32, snd_wnd)
++		__field(__u32, srtt)
++		__field(__u32, rcv_wnd)
++	),
++
++	TP_fast_assign(
++		const struct tcp_sock *tp = tcp_sk(sk);
++		const struct inet_sock *inet = inet_sk(sk);
++
++		memset(__entry->saddr, 0, sizeof(struct sockaddr_in6));
++		memset(__entry->daddr, 0, sizeof(struct sockaddr_in6));
++
++		if (sk->sk_family = AF_INET) {
++			struct sockaddr_in *v4 = (void *)__entry->saddr;
++
++			v4->sin_family = AF_INET;
++			v4->sin_port = inet->inet_sport;
++			v4->sin_addr.s_addr = inet->inet_saddr;
++			v4 = (void *)__entry->daddr;
++			v4->sin_family = AF_INET;
++			v4->sin_port = inet->inet_dport;
++			v4->sin_addr.s_addr = inet->inet_daddr;
++#if IS_ENABLED(CONFIG_IPV6)
++		} else if (sk->sk_family = AF_INET6) {
++			struct sockaddr_in6 *v6 = (void *)__entry->saddr;
++
++			v6->sin6_family = AF_INET6;
++			v6->sin6_port = inet->inet_sport;
++			v6->sin6_addr = inet6_sk(sk)->saddr;
++			v6 = (void *)__entry->daddr;
++			v6->sin6_family = AF_INET6;
++			v6->sin6_port = inet->inet_dport;
++			v6->sin6_addr = sk->sk_v6_daddr;
++#endif
++		}
++
++		/* For filtering use */
++		__entry->sport = ntohs(inet->inet_sport);
++		__entry->dport = ntohs(inet->inet_dport);
++		__entry->mark = skb->mark;
++
++		__entry->length = skb->len;
++		__entry->snd_nxt = tp->snd_nxt;
++		__entry->snd_una = tp->snd_una;
++		__entry->snd_cwnd = tp->snd_cwnd;
++		__entry->snd_wnd = tp->snd_wnd;
++		__entry->rcv_wnd = tp->rcv_wnd;
++		__entry->ssthresh = tcp_current_ssthresh(sk);
++		__entry->srtt = tp->srtt_us >> 3;
++	),
++
++	TP_printk("src=%pISpc dest=%pISpc mark=%#x length=%d snd_nxt=%#x "
++		  "snd_una=%#x snd_cwnd=%u ssthresh=%u snd_wnd=%u srtt=%u "
++		  "rcv_wnd=%u",
++		  __entry->saddr, __entry->daddr, __entry->mark,
++		  __entry->length, __entry->snd_nxt, __entry->snd_una,
++		  __entry->snd_cwnd, __entry->ssthresh, __entry->snd_wnd,
++		  __entry->srtt, __entry->rcv_wnd)
++);
++
+ #endif /* _TRACE_TCP_H */
  
-diff --git a/net/dccp/Makefile b/net/dccp/Makefile
-index 4215f13a63af..5b4ff37bc806 100644
---- a/net/dccp/Makefile
-+++ b/net/dccp/Makefile
-@@ -21,12 +21,10 @@ obj-$(subst y,$(CONFIG_IP_DCCP),$(CONFIG_IPV6)) += dccp_ipv6.o
- dccp_ipv6-y := ipv6.o
+ /* This part must be outside protection */
+diff --git a/net/ipv4/tcp_input.c b/net/ipv4/tcp_input.c
+index 45f750e85714..fa19cc86b2ad 100644
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -5306,6 +5306,9 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
+ 	unsigned int len = skb->len;
+ 	struct tcp_sock *tp = tcp_sk(sk);
  
- obj-$(CONFIG_INET_DCCP_DIAG) += dccp_diag.o
--obj-$(CONFIG_NET_DCCPPROBE) += dccp_probe.o
- 
- dccp-$(CONFIG_SYSCTL) += sysctl.o
- 
- dccp_diag-y := diag.o
--dccp_probe-y := probe.o
- 
- # build with local directory for trace.h
- CFLAGS_proto.o := -I$(src)
-diff --git a/net/dccp/probe.c b/net/dccp/probe.c
-deleted file mode 100644
-index 3d3fda05b32d..000000000000
---- a/net/dccp/probe.c
-+++ /dev/null
-@@ -1,203 +0,0 @@
--/*
-- * dccp_probe - Observe the DCCP flow with kprobes.
-- *
-- * The idea for this came from Werner Almesberger's umlsim
-- * Copyright (C) 2004, Stephen Hemminger <shemminger@osdl.org>
-- *
-- * Modified for DCCP from Stephen Hemminger's code
-- * Copyright (C) 2006, Ian McDonald <ian.mcdonald@jandi.co.nz>
-- *
-- * This program is free software; you can redistribute it and/or modify
-- * it under the terms of the GNU General Public License as published by
-- * the Free Software Foundation; either version 2 of the License, or
-- * (at your option) any later version.
-- *
-- * This program is distributed in the hope that it will be useful,
-- * but WITHOUT ANY WARRANTY; without even the implied warranty of
-- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-- * GNU General Public License for more details.
-- *
-- * You should have received a copy of the GNU General Public License
-- * along with this program; if not, write to the Free Software
-- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-- */
--
--#include <linux/kernel.h>
--#include <linux/kprobes.h>
--#include <linux/socket.h>
--#include <linux/dccp.h>
--#include <linux/proc_fs.h>
--#include <linux/module.h>
--#include <linux/kfifo.h>
--#include <linux/vmalloc.h>
--#include <linux/time64.h>
--#include <linux/gfp.h>
--#include <net/net_namespace.h>
--
--#include "dccp.h"
--#include "ccid.h"
--#include "ccids/ccid3.h"
--
--static int port;
--
--static int bufsize = 64 * 1024;
--
--static const char procname[] = "dccpprobe";
--
--static struct {
--	struct kfifo	  fifo;
--	spinlock_t	  lock;
--	wait_queue_head_t wait;
--	struct timespec64 tstart;
--} dccpw;
--
--static void printl(const char *fmt, ...)
--{
--	va_list args;
--	int len;
--	struct timespec64 now;
--	char tbuf[256];
--
--	va_start(args, fmt);
--	getnstimeofday64(&now);
--
--	now = timespec64_sub(now, dccpw.tstart);
--
--	len = sprintf(tbuf, "%lu.%06lu ",
--		      (unsigned long) now.tv_sec,
--		      (unsigned long) now.tv_nsec / NSEC_PER_USEC);
--	len += vscnprintf(tbuf+len, sizeof(tbuf)-len, fmt, args);
--	va_end(args);
--
--	kfifo_in_locked(&dccpw.fifo, tbuf, len, &dccpw.lock);
--	wake_up(&dccpw.wait);
--}
--
--static int jdccp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
--{
--	const struct inet_sock *inet = inet_sk(sk);
--	struct ccid3_hc_tx_sock *hc = NULL;
--
--	if (ccid_get_current_tx_ccid(dccp_sk(sk)) = DCCPC_CCID3)
--		hc = ccid3_hc_tx_sk(sk);
--
--	if (port = 0 || ntohs(inet->inet_dport) = port ||
--	    ntohs(inet->inet_sport) = port) {
--		if (hc)
--			printl("%pI4:%u %pI4:%u %d %d %d %d %u %llu %llu %d\n",
--			       &inet->inet_saddr, ntohs(inet->inet_sport),
--			       &inet->inet_daddr, ntohs(inet->inet_dport), size,
--			       hc->tx_s, hc->tx_rtt, hc->tx_p,
--			       hc->tx_x_calc, hc->tx_x_recv >> 6,
--			       hc->tx_x >> 6, hc->tx_t_ipi);
--		else
--			printl("%pI4:%u %pI4:%u %d\n",
--			       &inet->inet_saddr, ntohs(inet->inet_sport),
--			       &inet->inet_daddr, ntohs(inet->inet_dport),
--			       size);
--	}
--
--	jprobe_return();
--	return 0;
--}
--
--static struct jprobe dccp_send_probe = {
--	.kp	= {
--		.symbol_name = "dccp_sendmsg",
--	},
--	.entry	= jdccp_sendmsg,
--};
--
--static int dccpprobe_open(struct inode *inode, struct file *file)
--{
--	kfifo_reset(&dccpw.fifo);
--	getnstimeofday64(&dccpw.tstart);
--	return 0;
--}
--
--static ssize_t dccpprobe_read(struct file *file, char __user *buf,
--			      size_t len, loff_t *ppos)
--{
--	int error = 0, cnt = 0;
--	unsigned char *tbuf;
--
--	if (!buf)
--		return -EINVAL;
--
--	if (len = 0)
--		return 0;
--
--	tbuf = vmalloc(len);
--	if (!tbuf)
--		return -ENOMEM;
--
--	error = wait_event_interruptible(dccpw.wait,
--					 kfifo_len(&dccpw.fifo) != 0);
--	if (error)
--		goto out_free;
--
--	cnt = kfifo_out_locked(&dccpw.fifo, tbuf, len, &dccpw.lock);
--	error = copy_to_user(buf, tbuf, cnt) ? -EFAULT : 0;
--
--out_free:
--	vfree(tbuf);
--
--	return error ? error : cnt;
--}
--
--static const struct file_operations dccpprobe_fops = {
--	.owner	 = THIS_MODULE,
--	.open	 = dccpprobe_open,
--	.read    = dccpprobe_read,
--	.llseek  = noop_llseek,
--};
--
--static __init int dccpprobe_init(void)
--{
--	int ret = -ENOMEM;
--
--	init_waitqueue_head(&dccpw.wait);
--	spin_lock_init(&dccpw.lock);
--	if (kfifo_alloc(&dccpw.fifo, bufsize, GFP_KERNEL))
--		return ret;
--	if (!proc_create(procname, S_IRUSR, init_net.proc_net, &dccpprobe_fops))
--		goto err0;
--
--	ret = register_jprobe(&dccp_send_probe);
--	if (ret) {
--		ret = request_module("dccp");
--		if (!ret)
--			ret = register_jprobe(&dccp_send_probe);
--	}
--
--	if (ret)
--		goto err1;
--
--	pr_info("DCCP watch registered (port=%d)\n", port);
--	return 0;
--err1:
--	remove_proc_entry(procname, init_net.proc_net);
--err0:
--	kfifo_free(&dccpw.fifo);
--	return ret;
--}
--module_init(dccpprobe_init);
--
--static __exit void dccpprobe_exit(void)
--{
--	kfifo_free(&dccpw.fifo);
--	remove_proc_entry(procname, init_net.proc_net);
--	unregister_jprobe(&dccp_send_probe);
--
--}
--module_exit(dccpprobe_exit);
--
--MODULE_PARM_DESC(port, "Port to match (0=all)");
--module_param(port, int, 0);
--
--MODULE_PARM_DESC(bufsize, "Log buffer size (default 64k)");
--module_param(bufsize, int, 0);
--
--MODULE_AUTHOR("Ian McDonald <ian.mcdonald@jandi.co.nz>");
--MODULE_DESCRIPTION("DCCP snooper");
--MODULE_LICENSE("GPL");
++	/* TCP congestion window tracking */
++	trace_tcp_probe(sk, skb);
++
+ 	tcp_mstamp_refresh(tp);
+ 	if (unlikely(!sk->sk_rx_dst))
+ 		inet_csk(sk)->icsk_af_ops->sk_rx_dst_set(sk, skb);
 
