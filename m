@@ -1,7 +1,7 @@
 From: Masami Hiramatsu <mhiramat@kernel.org>
-Date: Thu, 28 Dec 2017 06:12:30 +0000
-Subject: [PATCH net-next v6 5/6] net: dccp: Add DCCP sendmsg trace event
-Message-Id: <151444155073.11331.14178452487347263494.stgit@devbox>
+Date: Wed, 20 Dec 2017 04:16:41 +0000
+Subject: [PATCH net-next v4 5/6] net: dccp: Add DCCP sendmsg trace event
+Message-Id: <151374340100.2497.7426103509676124469.stgit@devbox>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -14,29 +14,13 @@ ftrace or perftools.
 
 Signed-off-by: Masami Hiramatsu <mhiramat@kernel.org>
 ---
-  Changes in v5
-   - Fix to add local directory to include for trace.h.
-     Thanks Steven!
----
- net/dccp/Makefile |    3 ++
- net/dccp/proto.c  |    5 +++
- net/dccp/trace.h  |  105 +++++++++++++++++++++++++++++++++++++++++++++++++++++
- 3 files changed, 113 insertions(+)
+ net/dccp/proto.c |    5 +++
+ net/dccp/trace.h |  105 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 110 insertions(+)
  create mode 100644 net/dccp/trace.h
 
-diff --git a/net/dccp/Makefile b/net/dccp/Makefile
-index 2e7b56097bc4..4215f13a63af 100644
---- a/net/dccp/Makefile
-+++ b/net/dccp/Makefile
-@@ -27,3 +27,6 @@ dccp-$(CONFIG_SYSCTL) += sysctl.o
- 
- dccp_diag-y := diag.o
- dccp_probe-y := probe.o
-+
-+# build with local directory for trace.h
-+CFLAGS_proto.o := -I$(src)
 diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 7a75a1d3568b..fa7e92e08920 100644
+index 9d43c1f40274..e57b5db495cd 100644
 --- a/net/dccp/proto.c
 +++ b/net/dccp/proto.c
 @@ -38,6 +38,9 @@
