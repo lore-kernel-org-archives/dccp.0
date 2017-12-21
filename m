@@ -1,7 +1,7 @@
 From: Masami Hiramatsu <mhiramat@kernel.org>
-Date: Thu, 21 Dec 2017 13:16:51 +0000
+Date: Thu, 21 Dec 2017 14:27:31 +0000
 Subject: Re: [PATCH net-next v4 0/6] net: tcp: sctp: dccp: Replace jprobe usage with trace events
-Message-Id: <20171221221651.fe8f18d4b8c63b1afdb821f4@kernel.org>
+Message-Id: <20171221232731.e84a838608d124770b251500@kernel.org>
 List-Id: <dccp.vger.kernel.org>
 References: <151374325126.2497.6934744693865165386.stgit@devbox>
 In-Reply-To: <151374325126.2497.6934744693865165386.stgit@devbox>
@@ -67,9 +67,23 @@ Steven Rostedt <rostedt@goodmis.org> wrote:
 > 
 > in the Makefile?
 
-Oops, I didn't do that, but also I had committed all in this changeset.
-Hmm, strange, because I don't see same issue... At first I will try to
-reproduce it and try above flags again.
+You're correct. I could reproduce it with kallmodconfig.
+And when I add below diff, it is resolved.
+If I built with O=<dir> option, it didn't happen. 
+
+diff --git a/net/dccp/Makefile b/net/dccp/Makefile
+index 9d0383d2f277..8d4a8e901ae0 100644
+--- a/net/dccp/Makefile
++++ b/net/dccp/Makefile
+@@ -25,3 +25,5 @@ obj-$(CONFIG_INET_DCCP_DIAG) += dccp_diag.o
+ dccp-$(CONFIG_SYSCTL) += sysctl.o
+ 
+ dccp_diag-y := diag.o
++
++CFLAGS_proto.o := -I$(src)
+
+
+I'll update [5/6].
 
 Thank you,
 
