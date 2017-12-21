@@ -1,7 +1,7 @@
-From: David Miller <davem@davemloft.net>
-Date: Thu, 21 Dec 2017 04:08:38 +0000
+From: Masami Hiramatsu <mhiramat@kernel.org>
+Date: Thu, 21 Dec 2017 12:43:39 +0000
 Subject: Re: [PATCH net-next v4 0/6] net: tcp: sctp: dccp: Replace jprobe usage with trace events
-Message-Id: <20171220.230838.757628851804244858.davem@davemloft.net>
+Message-Id: <20171221214339.f5eea0f0f39d09e517a05fe5@kernel.org>
 List-Id: <dccp.vger.kernel.org>
 References: <151374325126.2497.6934744693865165386.stgit@devbox>
 In-Reply-To: <151374325126.2497.6934744693865165386.stgit@devbox>
@@ -10,11 +10,19 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Masami Hiramatsu <mhiramat@kernel.org>
-Date: Thu, 21 Dec 2017 11:36:57 +0900
+On Wed, 20 Dec 2017 23:08:38 -0500 (EST)
+David Miller <davem@davemloft.net> wrote:
 
-> Could you share your .config file?
+> From: Masami Hiramatsu <mhiramat@kernel.org>
+> Date: Thu, 21 Dec 2017 11:36:57 +0900
+> 
+> > Could you share your .config file?
+> 
+> You never need to ask me this question.
+> 
+> All of my test builds are with "allmodconfig".
 
-You never need to ask me this question.
+OK, thanks!
 
-All of my test builds are with "allmodconfig".
+-- 
+Masami Hiramatsu <mhiramat@kernel.org>
