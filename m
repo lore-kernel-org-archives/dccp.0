@@ -1,91 +1,149 @@
 From: Masami Hiramatsu <mhiramat@kernel.org>
-Date: Thu, 21 Dec 2017 14:27:31 +0000
-Subject: Re: [PATCH net-next v4 0/6] net: tcp: sctp: dccp: Replace jprobe usage with trace events
-Message-Id: <20171221232731.e84a838608d124770b251500@kernel.org>
+Date: Fri, 22 Dec 2017 02:05:33 +0000
+Subject: [PATCH net-next v5 1/6] net: tcp: Add trace events for TCP congestion window tracing
+Message-Id: <151390833345.13277.9194686808843116185.stgit@devbox>
 List-Id: <dccp.vger.kernel.org>
-References: <151374325126.2497.6934744693865165386.stgit@devbox>
-In-Reply-To: <151374325126.2497.6934744693865165386.stgit@devbox>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, 20 Dec 2017 22:12:38 -0500
-Steven Rostedt <rostedt@goodmis.org> wrote:
+This adds an event to trace TCP stat variables with
+slightly intrusive trace-event. This uses ftrace/perf
+event log buffer to trace those state, no needs to
+prepare own ring-buffer, nor custom user apps.
 
-> On Thu, 21 Dec 2017 11:36:57 +0900
-> Masami Hiramatsu <mhiramat@kernel.org> wrote:
-> 
-> > On Wed, 20 Dec 2017 14:24:24 -0500 (EST)
-> > David Miller <davem@davemloft.net> wrote:
-> > 
-> > > From: David Miller <davem@davemloft.net>
-> > > Date: Wed, 20 Dec 2017 14:20:40 -0500 (EST)
-> > >   
-> > > > From: Masami Hiramatsu <mhiramat@kernel.org>
-> > > > Date: Wed, 20 Dec 2017 13:14:11 +0900
-> > > >   
-> > > >> This series is v4 of the replacement of jprobe usage with trace
-> > > >> events. This version is rebased on net-next, fixes a build warning
-> > > >> and moves a temporal variable definition in a block.
-> > > >> 
-> > > >> Previous version is here;
-> > > >> https://lkml.org/lkml/2017/12/19/153
-> > > >> 
-> > > >> Changes from v3:
-> > > >>   All: Rebased on net-next
-> > > >>   [3/6]: fixes a build warning for i386 by casting pointer unsigned
-> > > >>         long instead of __u64, and moves a temporal variable
-> > > >>          definition in a block.  
-> > > > 
-> > > > Looks good, series applied to net-next, thanks.  
-> > > 
-> > > Actually, this doesn't even compile, so I've reverted:
-> > > 
-> > > [davem@dhcp-10-15-49-227 net-next]$ make -s -j16
-> > > In file included from net/dccp/trace.h:105:0,
-> > >                  from net/dccp/proto.c:42:
-> > > ./include/trace/define_trace.h:89:42: fatal error: ./trace.h: No such file or directory
-> > >  #include TRACE_INCLUDE(TRACE_INCLUDE_FILE)
-> > >                                           ^
-> > > compilation terminated.  
-> > 
-> > Hi David,
-> > 
-> > Could you share your .config file? I would like to reproduce it.
-> > When I tried with attached kconfig, I could not reproduce this issue,
-> > and could run it.
-> >
-> 
-> Hi Masami,
-> 
-> Are you sure you committed everything in this change set? I don't see a
-> modification of the Makefile to get the trace.h file you created.
-> Shouldn't there be something like:
-> 
-> CFLAGS_proto.o := -I$(src)
-> 
-> in the Makefile?
+User can use ftrace to trace this event as below;
 
-You're correct. I could reproduce it with kallmodconfig.
-And when I add below diff, it is resolved.
-If I built with O=<dir> option, it didn't happen. 
+  # cd /sys/kernel/debug/tracing
+  # echo 1 > events/tcp/tcp_probe/enable
+  (run workloads)
+  # cat trace
 
-diff --git a/net/dccp/Makefile b/net/dccp/Makefile
-index 9d0383d2f277..8d4a8e901ae0 100644
---- a/net/dccp/Makefile
-+++ b/net/dccp/Makefile
-@@ -25,3 +25,5 @@ obj-$(CONFIG_INET_DCCP_DIAG) += dccp_diag.o
- dccp-$(CONFIG_SYSCTL) += sysctl.o
+Signed-off-by: Masami Hiramatsu <mhiramat@kernel.org>
+---
+ Changes in v3:
+  - Fix build errors caused by including events/tcp.h twice.
+  - Sort out the including headers.
+---
+ include/trace/events/tcp.h |   80 ++++++++++++++++++++++++++++++++++++++++++++
+ net/ipv4/tcp_input.c       |    3 ++
+ 2 files changed, 83 insertions(+)
+
+diff --git a/include/trace/events/tcp.h b/include/trace/events/tcp.h
+index 07cccca6cbf1..14ad60b468fb 100644
+--- a/include/trace/events/tcp.h
++++ b/include/trace/events/tcp.h
+@@ -1,3 +1,4 @@
++/* SPDX-License-Identifier: GPL-2.0 */
+ #undef TRACE_SYSTEM
+ #define TRACE_SYSTEM tcp
  
- dccp_diag-y := diag.o
+@@ -8,6 +9,7 @@
+ #include <linux/tcp.h>
+ #include <linux/tracepoint.h>
+ #include <net/ipv6.h>
++#include <net/tcp.h>
+ 
+ #define tcp_state_name(state)	{ state, #state }
+ #define show_tcp_state_name(val)			\
+@@ -293,6 +295,84 @@ TRACE_EVENT(tcp_retransmit_synack,
+ 		  __entry->saddr_v6, __entry->daddr_v6)
+ );
+ 
++TRACE_EVENT(tcp_probe,
 +
-+CFLAGS_proto.o := -I$(src)
++	TP_PROTO(struct sock *sk, struct sk_buff *skb),
++
++	TP_ARGS(sk, skb),
++
++	TP_STRUCT__entry(
++		/* sockaddr_in6 is always bigger than sockaddr_in */
++		__array(__u8, saddr, sizeof(struct sockaddr_in6))
++		__array(__u8, daddr, sizeof(struct sockaddr_in6))
++		__field(__u16, sport)
++		__field(__u16, dport)
++		__field(__u32, mark)
++		__field(__u16, length)
++		__field(__u32, snd_nxt)
++		__field(__u32, snd_una)
++		__field(__u32, snd_cwnd)
++		__field(__u32, ssthresh)
++		__field(__u32, snd_wnd)
++		__field(__u32, srtt)
++		__field(__u32, rcv_wnd)
++	),
++
++	TP_fast_assign(
++		const struct tcp_sock *tp = tcp_sk(sk);
++		const struct inet_sock *inet = inet_sk(sk);
++
++		memset(__entry->saddr, 0, sizeof(struct sockaddr_in6));
++		memset(__entry->daddr, 0, sizeof(struct sockaddr_in6));
++
++		if (sk->sk_family = AF_INET) {
++			struct sockaddr_in *v4 = (void *)__entry->saddr;
++
++			v4->sin_family = AF_INET;
++			v4->sin_port = inet->inet_sport;
++			v4->sin_addr.s_addr = inet->inet_saddr;
++			v4 = (void *)__entry->daddr;
++			v4->sin_family = AF_INET;
++			v4->sin_port = inet->inet_dport;
++			v4->sin_addr.s_addr = inet->inet_daddr;
++#if IS_ENABLED(CONFIG_IPV6)
++		} else if (sk->sk_family = AF_INET6) {
++			struct sockaddr_in6 *v6 = (void *)__entry->saddr;
++
++			v6->sin6_family = AF_INET6;
++			v6->sin6_port = inet->inet_sport;
++			v6->sin6_addr = inet6_sk(sk)->saddr;
++			v6 = (void *)__entry->daddr;
++			v6->sin6_family = AF_INET6;
++			v6->sin6_port = inet->inet_dport;
++			v6->sin6_addr = sk->sk_v6_daddr;
++#endif
++		}
++
++		/* For filtering use */
++		__entry->sport = ntohs(inet->inet_sport);
++		__entry->dport = ntohs(inet->inet_dport);
++		__entry->mark = skb->mark;
++
++		__entry->length = skb->len;
++		__entry->snd_nxt = tp->snd_nxt;
++		__entry->snd_una = tp->snd_una;
++		__entry->snd_cwnd = tp->snd_cwnd;
++		__entry->snd_wnd = tp->snd_wnd;
++		__entry->rcv_wnd = tp->rcv_wnd;
++		__entry->ssthresh = tcp_current_ssthresh(sk);
++		__entry->srtt = tp->srtt_us >> 3;
++	),
++
++	TP_printk("src=%pISpc dest=%pISpc mark=%#x length=%d snd_nxt=%#x "
++		  "snd_una=%#x snd_cwnd=%u ssthresh=%u snd_wnd=%u srtt=%u "
++		  "rcv_wnd=%u",
++		  __entry->saddr, __entry->daddr, __entry->mark,
++		  __entry->length, __entry->snd_nxt, __entry->snd_una,
++		  __entry->snd_cwnd, __entry->ssthresh, __entry->snd_wnd,
++		  __entry->srtt, __entry->rcv_wnd)
++);
++
+ #endif /* _TRACE_TCP_H */
+ 
+ /* This part must be outside protection */
+diff --git a/net/ipv4/tcp_input.c b/net/ipv4/tcp_input.c
+index 4d55c4b338ee..ff71b18d9682 100644
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -5299,6 +5299,9 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
+ 	unsigned int len = skb->len;
+ 	struct tcp_sock *tp = tcp_sk(sk);
+ 
++	/* TCP congestion window tracking */
++	trace_tcp_probe(sk, skb);
++
+ 	tcp_mstamp_refresh(tp);
+ 	if (unlikely(!sk->sk_rx_dst))
+ 		inet_csk(sk)->icsk_af_ops->sk_rx_dst_set(sk, skb);
 
-
-I'll update [5/6].
-
-Thank you,
-
--- 
-Masami Hiramatsu <mhiramat@kernel.org>
