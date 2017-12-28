@@ -1,81 +1,84 @@
 From: Masami Hiramatsu <mhiramat@kernel.org>
-Date: Mon, 18 Dec 2017 08:13:45 +0000
-Subject: [v2 PATCH -tip 6/6] net: dccp: Remove dccpprobe module
-Message-Id: <151358482510.28850.12381235597821835404.stgit@devbox>
+Date: Thu, 28 Dec 2017 06:12:00 +0000
+Subject: [PATCH net-next v6 4/6] net: sctp: Remove debug SCTP probe module
+Message-Id: <151444152081.11331.9346117767974967204.stgit@devbox>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Remove DCCP probe module since jprobe has been deprecated.
-That function is now replaced by dccp/dccp_probe trace-event.
+Remove SCTP probe module since jprobe has been deprecated.
+That function is now replaced by sctp/sctp_probe and
+sctp/sctp_probe_path trace-events.
 You can use it via ftrace or perftools.
 
 Signed-off-by: Masami Hiramatsu <mhiramat@kernel.org>
 ---
- net/dccp/Kconfig  |   17 ----
- net/dccp/Makefile |    2 -
- net/dccp/probe.c  |  203 -----------------------------------------------------
- 3 files changed, 222 deletions(-)
- delete mode 100644 net/dccp/probe.c
+ net/sctp/Kconfig  |   12 ---
+ net/sctp/Makefile |    3 -
+ net/sctp/probe.c  |  244 -----------------------------------------------------
+ 3 files changed, 259 deletions(-)
+ delete mode 100644 net/sctp/probe.c
 
-diff --git a/net/dccp/Kconfig b/net/dccp/Kconfig
-index 8c0ef71bed2f..b270e84d9c13 100644
---- a/net/dccp/Kconfig
-+++ b/net/dccp/Kconfig
-@@ -39,23 +39,6 @@ config IP_DCCP_DEBUG
+diff --git a/net/sctp/Kconfig b/net/sctp/Kconfig
+index d9c04dc1b3f3..c740b189d4ba 100644
+--- a/net/sctp/Kconfig
++++ b/net/sctp/Kconfig
+@@ -37,18 +37,6 @@ menuconfig IP_SCTP
  
- 	  Just say N.
+ if IP_SCTP
  
--config NET_DCCPPROBE
--	tristate "DCCP connection probing"
--	depends on PROC_FS && KPROBES
--	---help---
--	This module allows for capturing the changes to DCCP connection
--	state in response to incoming packets. It is used for debugging
--	DCCP congestion avoidance modules. If you don't understand
--	what was just said, you don't need it: say N.
+-config NET_SCTPPROBE
+-	tristate "SCTP: Association probing"
+-        depends on PROC_FS && KPROBES
+-        ---help---
+-        This module allows for capturing the changes to SCTP association
+-        state in response to incoming packets. It is used for debugging
+-        SCTP congestion control algorithms. If you don't understand
+-        what was just said, you don't need it: say N.
 -
--	Documentation on how to use DCCP connection probing can be found
--	at:
--	
--	  http://www.linuxfoundation.org/collaborate/workgroups/networking/dccpprobe
+-        To compile this code as a module, choose M here: the
+-        module will be called sctp_probe.
 -
--	To compile this code as a module, choose M here: the
--	module will be called dccp_probe.
+ config SCTP_DBG_OBJCNT
+ 	bool "SCTP: Debug object counts"
+ 	depends on PROC_FS
+diff --git a/net/sctp/Makefile b/net/sctp/Makefile
+index 54bd9c1a8aa1..6776582ec449 100644
+--- a/net/sctp/Makefile
++++ b/net/sctp/Makefile
+@@ -4,7 +4,6 @@
+ #
+ 
+ obj-$(CONFIG_IP_SCTP) += sctp.o
+-obj-$(CONFIG_NET_SCTPPROBE) += sctp_probe.o
+ obj-$(CONFIG_INET_SCTP_DIAG) += sctp_diag.o
+ 
+ sctp-y := sm_statetable.o sm_statefuns.o sm_sideeffect.o \
+@@ -16,8 +15,6 @@ sctp-y := sm_statetable.o sm_statefuns.o sm_sideeffect.o \
+ 	  offload.o stream_sched.o stream_sched_prio.o \
+ 	  stream_sched_rr.o stream_interleave.o
+ 
+-sctp_probe-y := probe.o
 -
- 
- endmenu
- 
-diff --git a/net/dccp/Makefile b/net/dccp/Makefile
-index 2e7b56097bc4..9d0383d2f277 100644
---- a/net/dccp/Makefile
-+++ b/net/dccp/Makefile
-@@ -21,9 +21,7 @@ obj-$(subst y,$(CONFIG_IP_DCCP),$(CONFIG_IPV6)) += dccp_ipv6.o
- dccp_ipv6-y := ipv6.o
- 
- obj-$(CONFIG_INET_DCCP_DIAG) += dccp_diag.o
--obj-$(CONFIG_NET_DCCPPROBE) += dccp_probe.o
- 
- dccp-$(CONFIG_SYSCTL) += sysctl.o
- 
- dccp_diag-y := diag.o
--dccp_probe-y := probe.o
-diff --git a/net/dccp/probe.c b/net/dccp/probe.c
+ sctp-$(CONFIG_SCTP_DBG_OBJCNT) += objcnt.o
+ sctp-$(CONFIG_PROC_FS) += proc.o
+ sctp-$(CONFIG_SYSCTL) += sysctl.o
+diff --git a/net/sctp/probe.c b/net/sctp/probe.c
 deleted file mode 100644
-index 3d3fda05b32d..000000000000
---- a/net/dccp/probe.c
+index 1280f85a598d..000000000000
+--- a/net/sctp/probe.c
 +++ /dev/null
-@@ -1,203 +0,0 @@
+@@ -1,244 +0,0 @@
 -/*
-- * dccp_probe - Observe the DCCP flow with kprobes.
+- * sctp_probe - Observe the SCTP flow with kprobes.
 - *
 - * The idea for this came from Werner Almesberger's umlsim
 - * Copyright (C) 2004, Stephen Hemminger <shemminger@osdl.org>
 - *
-- * Modified for DCCP from Stephen Hemminger's code
-- * Copyright (C) 2006, Ian McDonald <ian.mcdonald@jandi.co.nz>
+- * Modified for SCTP from Stephen Hemminger's code
+- * Copyright (C) 2010, Wei Yongjun <yjwei@cn.fujitsu.com>
 - *
 - * This program is free software; you can redistribute it and/or modify
 - * it under the terms of the GNU General Public License as published by
@@ -92,100 +95,75 @@ index 3d3fda05b32d..000000000000
 - * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 - */
 -
+-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+-
 -#include <linux/kernel.h>
 -#include <linux/kprobes.h>
 -#include <linux/socket.h>
--#include <linux/dccp.h>
+-#include <linux/sctp.h>
 -#include <linux/proc_fs.h>
+-#include <linux/vmalloc.h>
 -#include <linux/module.h>
 -#include <linux/kfifo.h>
--#include <linux/vmalloc.h>
--#include <linux/time64.h>
--#include <linux/gfp.h>
+-#include <linux/time.h>
 -#include <net/net_namespace.h>
 -
--#include "dccp.h"
--#include "ccid.h"
--#include "ccids/ccid3.h"
+-#include <net/sctp/sctp.h>
+-#include <net/sctp/sm.h>
 -
--static int port;
+-MODULE_SOFTDEP("pre: sctp");
+-MODULE_AUTHOR("Wei Yongjun <yjwei@cn.fujitsu.com>");
+-MODULE_DESCRIPTION("SCTP snooper");
+-MODULE_LICENSE("GPL");
 -
--static int bufsize = 64 * 1024;
+-static int port __read_mostly = 0;
+-MODULE_PARM_DESC(port, "Port to match (0=all)");
+-module_param(port, int, 0);
 -
--static const char procname[] = "dccpprobe";
+-static unsigned int fwmark __read_mostly = 0;
+-MODULE_PARM_DESC(fwmark, "skb mark to match (0=no mark)");
+-module_param(fwmark, uint, 0);
+-
+-static int bufsize __read_mostly = 64 * 1024;
+-MODULE_PARM_DESC(bufsize, "Log buffer size (default 64k)");
+-module_param(bufsize, int, 0);
+-
+-static int full __read_mostly = 1;
+-MODULE_PARM_DESC(full, "Full log (1=every ack packet received,  0=only cwnd changes)");
+-module_param(full, int, 0);
+-
+-static const char procname[] = "sctpprobe";
 -
 -static struct {
 -	struct kfifo	  fifo;
 -	spinlock_t	  lock;
 -	wait_queue_head_t wait;
 -	struct timespec64 tstart;
--} dccpw;
+-} sctpw;
 -
--static void printl(const char *fmt, ...)
+-static __printf(1, 2) void printl(const char *fmt, ...)
 -{
 -	va_list args;
 -	int len;
--	struct timespec64 now;
 -	char tbuf[256];
 -
 -	va_start(args, fmt);
--	getnstimeofday64(&now);
--
--	now = timespec64_sub(now, dccpw.tstart);
--
--	len = sprintf(tbuf, "%lu.%06lu ",
--		      (unsigned long) now.tv_sec,
--		      (unsigned long) now.tv_nsec / NSEC_PER_USEC);
--	len += vscnprintf(tbuf+len, sizeof(tbuf)-len, fmt, args);
+-	len = vscnprintf(tbuf, sizeof(tbuf), fmt, args);
 -	va_end(args);
 -
--	kfifo_in_locked(&dccpw.fifo, tbuf, len, &dccpw.lock);
--	wake_up(&dccpw.wait);
+-	kfifo_in_locked(&sctpw.fifo, tbuf, len, &sctpw.lock);
+-	wake_up(&sctpw.wait);
 -}
 -
--static int jdccp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
+-static int sctpprobe_open(struct inode *inode, struct file *file)
 -{
--	const struct inet_sock *inet = inet_sk(sk);
--	struct ccid3_hc_tx_sock *hc = NULL;
+-	kfifo_reset(&sctpw.fifo);
+-	ktime_get_ts64(&sctpw.tstart);
 -
--	if (ccid_get_current_tx_ccid(dccp_sk(sk)) = DCCPC_CCID3)
--		hc = ccid3_hc_tx_sk(sk);
--
--	if (port = 0 || ntohs(inet->inet_dport) = port ||
--	    ntohs(inet->inet_sport) = port) {
--		if (hc)
--			printl("%pI4:%u %pI4:%u %d %d %d %d %u %llu %llu %d\n",
--			       &inet->inet_saddr, ntohs(inet->inet_sport),
--			       &inet->inet_daddr, ntohs(inet->inet_dport), size,
--			       hc->tx_s, hc->tx_rtt, hc->tx_p,
--			       hc->tx_x_calc, hc->tx_x_recv >> 6,
--			       hc->tx_x >> 6, hc->tx_t_ipi);
--		else
--			printl("%pI4:%u %pI4:%u %d\n",
--			       &inet->inet_saddr, ntohs(inet->inet_sport),
--			       &inet->inet_daddr, ntohs(inet->inet_dport),
--			       size);
--	}
--
--	jprobe_return();
 -	return 0;
 -}
 -
--static struct jprobe dccp_send_probe = {
--	.kp	= {
--		.symbol_name = "dccp_sendmsg",
--	},
--	.entry	= jdccp_sendmsg,
--};
--
--static int dccpprobe_open(struct inode *inode, struct file *file)
--{
--	kfifo_reset(&dccpw.fifo);
--	getnstimeofday64(&dccpw.tstart);
--	return 0;
--}
--
--static ssize_t dccpprobe_read(struct file *file, char __user *buf,
+-static ssize_t sctpprobe_read(struct file *file, char __user *buf,
 -			      size_t len, loff_t *ppos)
 -{
 -	int error = 0, cnt = 0;
@@ -201,12 +179,12 @@ index 3d3fda05b32d..000000000000
 -	if (!tbuf)
 -		return -ENOMEM;
 -
--	error = wait_event_interruptible(dccpw.wait,
--					 kfifo_len(&dccpw.fifo) != 0);
+-	error = wait_event_interruptible(sctpw.wait,
+-					 kfifo_len(&sctpw.fifo) != 0);
 -	if (error)
 -		goto out_free;
 -
--	cnt = kfifo_out_locked(&dccpw.fifo, tbuf, len, &dccpw.lock);
+-	cnt = kfifo_out_locked(&sctpw.fifo, tbuf, len, &sctpw.lock);
 -	error = copy_to_user(buf, tbuf, cnt) ? -EFAULT : 0;
 -
 -out_free:
@@ -215,60 +193,126 @@ index 3d3fda05b32d..000000000000
 -	return error ? error : cnt;
 -}
 -
--static const struct file_operations dccpprobe_fops = {
--	.owner	 = THIS_MODULE,
--	.open	 = dccpprobe_open,
--	.read    = dccpprobe_read,
--	.llseek  = noop_llseek,
+-static const struct file_operations sctpprobe_fops = {
+-	.owner	= THIS_MODULE,
+-	.open	= sctpprobe_open,
+-	.read	= sctpprobe_read,
+-	.llseek = noop_llseek,
 -};
 -
--static __init int dccpprobe_init(void)
+-static enum sctp_disposition jsctp_sf_eat_sack(
+-					struct net *net,
+-					const struct sctp_endpoint *ep,
+-					const struct sctp_association *asoc,
+-					const union sctp_subtype type,
+-					void *arg,
+-					struct sctp_cmd_seq *commands)
+-{
+-	struct sctp_chunk *chunk = arg;
+-	struct sk_buff *skb = chunk->skb;
+-	struct sctp_transport *sp;
+-	static __u32 lcwnd = 0;
+-	struct timespec64 now;
+-
+-	sp = asoc->peer.primary_path;
+-
+-	if (((port = 0 && fwmark = 0) ||
+-	     asoc->peer.port = port ||
+-	     ep->base.bind_addr.port = port ||
+-	     (fwmark > 0 && skb->mark = fwmark)) &&
+-	    (full || sp->cwnd != lcwnd)) {
+-		lcwnd = sp->cwnd;
+-
+-		ktime_get_ts64(&now);
+-		now = timespec64_sub(now, sctpw.tstart);
+-
+-		printl("%lu.%06lu ", (unsigned long) now.tv_sec,
+-		       (unsigned long) now.tv_nsec / NSEC_PER_USEC);
+-
+-		printl("%p %5d %5d %5d %8d %5d ", asoc,
+-		       ep->base.bind_addr.port, asoc->peer.port,
+-		       asoc->pathmtu, asoc->peer.rwnd, asoc->unack_data);
+-
+-		list_for_each_entry(sp, &asoc->peer.transport_addr_list,
+-					transports) {
+-			if (sp = asoc->peer.primary_path)
+-				printl("*");
+-
+-			printl("%pISc %2u %8u %8u %8u %8u %8u ",
+-			       &sp->ipaddr, sp->state, sp->cwnd, sp->ssthresh,
+-			       sp->flight_size, sp->partial_bytes_acked,
+-			       sp->pathmtu);
+-		}
+-		printl("\n");
+-	}
+-
+-	jprobe_return();
+-	return 0;
+-}
+-
+-static struct jprobe sctp_recv_probe = {
+-	.kp	= {
+-		.symbol_name = "sctp_sf_eat_sack_6_2",
+-	},
+-	.entry	= jsctp_sf_eat_sack,
+-};
+-
+-static __init int sctp_setup_jprobe(void)
+-{
+-	int ret = register_jprobe(&sctp_recv_probe);
+-
+-	if (ret) {
+-		if (request_module("sctp"))
+-			goto out;
+-		ret = register_jprobe(&sctp_recv_probe);
+-	}
+-
+-out:
+-	return ret;
+-}
+-
+-static __init int sctpprobe_init(void)
 -{
 -	int ret = -ENOMEM;
 -
--	init_waitqueue_head(&dccpw.wait);
--	spin_lock_init(&dccpw.lock);
--	if (kfifo_alloc(&dccpw.fifo, bufsize, GFP_KERNEL))
+-	/* Warning: if the function signature of sctp_sf_eat_sack_6_2,
+-	 * has been changed, you also have to change the signature of
+-	 * jsctp_sf_eat_sack, otherwise you end up right here!
+-	 */
+-	BUILD_BUG_ON(__same_type(sctp_sf_eat_sack_6_2,
+-				 jsctp_sf_eat_sack) = 0);
+-
+-	init_waitqueue_head(&sctpw.wait);
+-	spin_lock_init(&sctpw.lock);
+-	if (kfifo_alloc(&sctpw.fifo, bufsize, GFP_KERNEL))
 -		return ret;
--	if (!proc_create(procname, S_IRUSR, init_net.proc_net, &dccpprobe_fops))
--		goto err0;
 -
--	ret = register_jprobe(&dccp_send_probe);
--	if (ret) {
--		ret = request_module("dccp");
--		if (!ret)
--			ret = register_jprobe(&dccp_send_probe);
--	}
+-	if (!proc_create(procname, S_IRUSR, init_net.proc_net,
+-			 &sctpprobe_fops))
+-		goto free_kfifo;
 -
+-	ret = sctp_setup_jprobe();
 -	if (ret)
--		goto err1;
+-		goto remove_proc;
 -
--	pr_info("DCCP watch registered (port=%d)\n", port);
+-	pr_info("probe registered (port=%d/fwmark=%u) bufsize=%u\n",
+-		port, fwmark, bufsize);
 -	return 0;
--err1:
+-
+-remove_proc:
 -	remove_proc_entry(procname, init_net.proc_net);
--err0:
--	kfifo_free(&dccpw.fifo);
+-free_kfifo:
+-	kfifo_free(&sctpw.fifo);
 -	return ret;
 -}
--module_init(dccpprobe_init);
 -
--static __exit void dccpprobe_exit(void)
+-static __exit void sctpprobe_exit(void)
 -{
--	kfifo_free(&dccpw.fifo);
+-	kfifo_free(&sctpw.fifo);
 -	remove_proc_entry(procname, init_net.proc_net);
--	unregister_jprobe(&dccp_send_probe);
--
+-	unregister_jprobe(&sctp_recv_probe);
 -}
--module_exit(dccpprobe_exit);
 -
--MODULE_PARM_DESC(port, "Port to match (0=all)");
--module_param(port, int, 0);
--
--MODULE_PARM_DESC(bufsize, "Log buffer size (default 64k)");
--module_param(bufsize, int, 0);
--
--MODULE_AUTHOR("Ian McDonald <ian.mcdonald@jandi.co.nz>");
--MODULE_DESCRIPTION("DCCP snooper");
--MODULE_LICENSE("GPL");
+-module_init(sctpprobe_init);
+-module_exit(sctpprobe_exit);
 
