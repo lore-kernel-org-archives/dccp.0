@@ -1,185 +1,175 @@
-From: Julia Lawall <Julia.Lawall@lip6.fr>
-Date: Wed, 27 Dec 2017 14:51:33 +0000
-Subject: [PATCH 00/12] drop unneeded newline
-Message-Id: <1514386305-7402-1-git-send-email-Julia.Lawall@lip6.fr>
+From: Masami Hiramatsu <mhiramat@kernel.org>
+Date: Thu, 28 Dec 2017 06:11:31 +0000
+Subject: [PATCH net-next v6 3/6] net: sctp: Add SCTP ACK tracking trace event
+Message-Id: <151444149116.11331.11755142747199764314.stgit@devbox>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Drop newline at the end of a message string when the printing function adds
-a newline.
+Add SCTP ACK tracking trace event to trace the changes of SCTP
+association state in response to incoming packets.
+It is used for debugging SCTP congestion control algorithms,
+and will replace sctp_probe module.
 
-The complete semantic patch that detects this issue is as shown below
-(http://coccinelle.lip6.fr/).  It works in two phases - the first phase
-counts how many uses of a function involve a newline and how many don't,
-and then the second phase removes newlines in the case of calls where a
-newline is used one fourth of the times or less.
+Note that this event a bit tricky. Since this consists of 2
+events (sctp_probe and sctp_probe_path) so you have to enable
+both events as below.
 
-This approach is only moderately reliable, and all patches have been
-checked to ensure that the newline is not needed.
+  # cd /sys/kernel/debug/tracing
+  # echo 1 > events/sctp/sctp_probe/enable
+  # echo 1 > events/sctp/sctp_probe_path/enable
 
-This also converts some cases of string concatenation to single strings in
-modified code, as this improves greppability.
+Or, you can enable all the events under sctp.
 
-// <smpl>
-virtual after_start
+  # echo 1 > events/sctp/enable
 
-@initialize:ocaml@
-@@
+Since sctp_probe_path event is always invoked from sctp_probe
+event, you can not see any output if you only enable
+sctp_probe_path.
 
-let withnl = Hashtbl.create 101
-let withoutnl = Hashtbl.create 101
-
-let ignore   ["strcpy";"strlcpy";"strcat";"strlcat";"strcmp";"strncmp";"strcspn";
-    "strsep";"sprintf";"printf";"strncasecmp";"seq_printf";"strstr";"strspn";
-    "strlen";"strpbrk";"strtok_r";"memcmp";"memcpy"]
-
-let dignore = ["tools";"samples"]
-
-let inc tbl k   let cell     try Hashtbl.find tbl k
-    with Not_found ->
-      let cell = ref 0 in
-      Hashtbl.add tbl k cell;
-      cell in
-  cell := 1 + !cell
-
-let endnl c   let len = String.length c in
-  try
-    String.get c (len-3) = '\\' && String.get c (len-2) = 'n' &&
-    String.get c (len-1) = '"'
-  with _ -> false
-
-let clean_string s extra   let pieces = Str.split (Str.regexp "\" \"") s in
-  let nonempty s     not (s = "") && String.get s 0 = '"' && not (String.get s 1 = '"') in
-  let rec loop = function
-      [] -> []
-    | [x] -> [x]
-    | x::y::rest ->
-	if nonempty x && nonempty y
-	then
-	  let xend = String.get x (String.length x - 2) = ' ' in
-	  let yend = String.get y 1 = ' ' in
-	  match (xend,yend) with
-	    (true,false) | (false,true) -> x :: (loop (y::rest))
-	  | (true,true) ->
-	      x :: (loop (((String.sub y 0 (String.length y - 2))^"\"")::rest))
-	  | (false,false) ->
-	      ((String.sub x 0 (String.length x - 1)) ^ " \"") ::
-	      (loop (y::rest))
-	else x :: (loop (y::rest)) in
-  (String.concat "" (loop pieces))^extra
-
-@r depends on !after_start@
-constant char[] c;
-expression list[n] es;
-identifier f;
-position p;
-@@
-
-f@p(es,c,...)
-
-@script:ocaml@
-f << r.f;
-n << r.n;
-p << r.p;
-c << r.c;
-@@
-
-let pieces = Str.split (Str.regexp "/") (List.hd p).file in
-if not (List.mem f ignore) &&
-  List.for_all (fun x -> not (List.mem x pieces)) dignore
-then
-  (if endnl c
-  then inc withnl (f,n)
-  else inc withoutnl (f,n))
-
-@finalize:ocaml depends on !after_start@
-w1 << merge.withnl;
-w2 << merge.withoutnl;
-@@
-
-let names = ref [] in
-let incn tbl k v   let cell     try Hashtbl.find tbl k
-    with Not_found ->
-      begin
-	let cell = ref 0 in
-	Hashtbl.add tbl k cell;
-	cell
-      end in
-  (if not (List.mem k !names) then names := k :: !names);
-  cell := !v + !cell in
-List.iter (function w -> Hashtbl.iter (incn withnl) w) w1;
-List.iter (function w -> Hashtbl.iter (incn withoutnl) w) w2;
-
-List.iter
-  (function name ->
-    let wth = try !(Hashtbl.find withnl name) with _ -> 0 in
-    let wo = try !(Hashtbl.find withoutnl name) with _ -> 0 in
-    if wth > 0 && wth <= wo / 3 then Hashtbl.remove withnl name
-    else (Printf.eprintf "dropping %s %d %d\n" (fst name) wth wo; Hashtbl.remove withoutnl name; Hashtbl.remove withnl name))
-  !names;
-
-let it = new iteration() in
-it#add_virtual_rule After_start;
-it#register()
-
-@s1 depends on after_start@
-constant char[] c;
-expression list[n] es;
-identifier f;
-position p;
-@@
-
-f(es,c@p,...)
-
-@script:ocaml s2@
-f << s1.f;
-n << s1.n;
-c << s1.c;
-newc;
-@@
-
-try
-  let _ = Hashtbl.find withnl (f,n) in
-  if endnl c
-  then Coccilib.include_match false
-  else newc :    make_expr(clean_string (String.sub c 0 (String.length c - 1)) "\\n\"")
-with Not_found ->
-try
-  let _ = Hashtbl.find withoutnl (f,n) in
-  if endnl c
-  then newc :    make_expr(clean_string (String.sub c 0 (String.length c - 3)) "\"")
-  else Coccilib.include_match false
-with Not_found -> Coccilib.include_match false
-
-@@
-constant char[] s1.c;
-position s1.p;
-expression s2.newc;
-@@
-
-- c@p
-+ newc
-// </smpl>
-
+Signed-off-by: Masami Hiramatsu <mhiramat@kernel.org>
 ---
+  Changes in v3:
+   - Add checking whether sctp_probe_path event is enabled
+     before iterating sctp paths to record. Thanks Steven.
+  Changes in v4:
+   - Move a temporal variable definition in the block.
+   - Fix to cast pointer to unsigned long instead of __u64
+     for 32bit environment.
+---
+ include/trace/events/sctp.h |   99 +++++++++++++++++++++++++++++++++++++++++++
+ net/sctp/sm_statefuns.c     |    5 ++
+ 2 files changed, 104 insertions(+)
+ create mode 100644 include/trace/events/sctp.h
 
- arch/arm/mach-davinci/board-da850-evm.c                 |    4 ++--
- drivers/block/DAC960.c                                  |    4 ++--
- drivers/gpu/drm/amd/powerplay/hwmgr/smu7_hwmgr.c        |   12 ++++++++----
- drivers/gpu/drm/amd/powerplay/smumgr/fiji_smumgr.c      |    2 +-
- drivers/gpu/drm/amd/powerplay/smumgr/iceland_smumgr.c   |    2 +-
- drivers/gpu/drm/amd/powerplay/smumgr/polaris10_smumgr.c |    2 +-
- drivers/gpu/drm/amd/powerplay/smumgr/tonga_smumgr.c     |    2 +-
- drivers/media/usb/pvrusb2/pvrusb2-hdw.c                 |    3 ++-
- drivers/s390/block/dasd_diag.c                          |    3 +--
- drivers/scsi/hpsa.c                                     |    2 +-
- fs/dlm/plock.c                                          |    3 +--
- fs/ext2/super.c                                         |    2 +-
- fs/hpfs/dnode.c                                         |    3 ++-
- net/dccp/ackvec.c                                       |    2 +-
- net/openvswitch/conntrack.c                             |    4 ++--
- tools/perf/tests/dso-data.c                             |    9 +++++----
- 16 files changed, 32 insertions(+), 27 deletions(-)
+diff --git a/include/trace/events/sctp.h b/include/trace/events/sctp.h
+new file mode 100644
+index 000000000000..7475c7be165a
+--- /dev/null
++++ b/include/trace/events/sctp.h
+@@ -0,0 +1,99 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#undef TRACE_SYSTEM
++#define TRACE_SYSTEM sctp
++
++#if !defined(_TRACE_SCTP_H) || defined(TRACE_HEADER_MULTI_READ)
++#define _TRACE_SCTP_H
++
++#include <net/sctp/structs.h>
++#include <linux/tracepoint.h>
++
++TRACE_EVENT(sctp_probe_path,
++
++	TP_PROTO(struct sctp_transport *sp,
++		 const struct sctp_association *asoc),
++
++	TP_ARGS(sp, asoc),
++
++	TP_STRUCT__entry(
++		__field(__u64, asoc)
++		__field(__u32, primary)
++		__array(__u8, ipaddr, sizeof(union sctp_addr))
++		__field(__u32, state)
++		__field(__u32, cwnd)
++		__field(__u32, ssthresh)
++		__field(__u32, flight_size)
++		__field(__u32, partial_bytes_acked)
++		__field(__u32, pathmtu)
++	),
++
++	TP_fast_assign(
++		__entry->asoc = (unsigned long)asoc;
++		__entry->primary = (sp = asoc->peer.primary_path);
++		memcpy(__entry->ipaddr, &sp->ipaddr, sizeof(union sctp_addr));
++		__entry->state = sp->state;
++		__entry->cwnd = sp->cwnd;
++		__entry->ssthresh = sp->ssthresh;
++		__entry->flight_size = sp->flight_size;
++		__entry->partial_bytes_acked = sp->partial_bytes_acked;
++		__entry->pathmtu = sp->pathmtu;
++	),
++
++	TP_printk("asoc=%#llx%s ipaddr=%pISpc state=%u cwnd=%u ssthresh=%u "
++		  "flight_size=%u partial_bytes_acked=%u pathmtu=%u",
++		  __entry->asoc, __entry->primary ? "(*)" : "",
++		  __entry->ipaddr, __entry->state, __entry->cwnd,
++		  __entry->ssthresh, __entry->flight_size,
++		  __entry->partial_bytes_acked, __entry->pathmtu)
++);
++
++TRACE_EVENT(sctp_probe,
++
++	TP_PROTO(const struct sctp_endpoint *ep,
++		 const struct sctp_association *asoc,
++		 struct sctp_chunk *chunk),
++
++	TP_ARGS(ep, asoc, chunk),
++
++	TP_STRUCT__entry(
++		__field(__u64, asoc)
++		__field(__u32, mark)
++		__field(__u16, bind_port)
++		__field(__u16, peer_port)
++		__field(__u32, pathmtu)
++		__field(__u32, rwnd)
++		__field(__u16, unack_data)
++	),
++
++	TP_fast_assign(
++		struct sk_buff *skb = chunk->skb;
++
++		__entry->asoc = (unsigned long)asoc;
++		__entry->mark = skb->mark;
++		__entry->bind_port = ep->base.bind_addr.port;
++		__entry->peer_port = asoc->peer.port;
++		__entry->pathmtu = asoc->pathmtu;
++		__entry->rwnd = asoc->peer.rwnd;
++		__entry->unack_data = asoc->unack_data;
++
++		if (trace_sctp_probe_path_enabled()) {
++			struct sctp_transport *sp;
++
++			list_for_each_entry(sp, &asoc->peer.transport_addr_list,
++					    transports) {
++				trace_sctp_probe_path(sp, asoc);
++			}
++		}
++	),
++
++	TP_printk("asoc=%#llx mark=%#x bind_port=%d peer_port=%d pathmtu=%d "
++		  "rwnd=%u unack_data=%d",
++		  __entry->asoc, __entry->mark, __entry->bind_port,
++		  __entry->peer_port, __entry->pathmtu, __entry->rwnd,
++		  __entry->unack_data)
++);
++
++#endif /* _TRACE_SCTP_H */
++
++/* This part must be outside protection */
++#include <trace/define_trace.h>
+diff --git a/net/sctp/sm_statefuns.c b/net/sctp/sm_statefuns.c
+index 541f34735346..eb7905ffe5f2 100644
+--- a/net/sctp/sm_statefuns.c
++++ b/net/sctp/sm_statefuns.c
+@@ -59,6 +59,9 @@
+ #include <net/sctp/sm.h>
+ #include <net/sctp/structs.h>
+ 
++#define CREATE_TRACE_POINTS
++#include <trace/events/sctp.h>
++
+ static struct sctp_packet *sctp_abort_pkt_new(
+ 					struct net *net,
+ 					const struct sctp_endpoint *ep,
+@@ -3219,6 +3222,8 @@ enum sctp_disposition sctp_sf_eat_sack_6_2(struct net *net,
+ 	struct sctp_sackhdr *sackh;
+ 	__u32 ctsn;
+ 
++	trace_sctp_probe(ep, asoc, chunk);
++
+ 	if (!sctp_vtag_verify(chunk, asoc))
+ 		return sctp_sf_pdiscard(net, ep, asoc, type, arg, commands);
+ 
+
