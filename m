@@ -1,7 +1,7 @@
-From: Bart Van Assche <Bart.VanAssche@wdc.com>
-Date: Tue, 02 Jan 2018 15:11:42 +0000
+From: Julia Lawall <julia.lawall@lip6.fr>
+Date: Tue, 02 Jan 2018 15:16:30 +0000
 Subject: Re: [Cluster-devel] [PATCH 00/12] drop unneeded newline
-Message-Id: <1514905900.4242.4.camel@wdc.com>
+Message-Id: <alpine.DEB.2.20.1801021615510.23552@hadrien>
 List-Id: <dccp.vger.kernel.org>
 References: <1878806802.2632123.1514901158666.JavaMail.zimbra@redhat.com>
 In-Reply-To: <1878806802.2632123.1514901158666.JavaMail.zimbra@redhat.com>
@@ -10,17 +10,27 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-T24gVHVlLCAyMDE4LTAxLTAyIGF0IDE1OjAwICswMTAwLCBKdWxpYSBMYXdhbGwgd3JvdGU6DQo+
-IE9uIFR1ZSwgMiBKYW4gMjAxOCwgQm9iIFBldGVyc29uIHdyb3RlOg0KPiA+IC0tLS0tIE9yaWdp
-bmFsIE1lc3NhZ2UgLS0tLS0NCj4gPiA+IC0tLS0tIE9yaWdpbmFsIE1lc3NhZ2UgLS0tLS0NCj4g
-PiA+DQo+ID4gU3RpbGwsIHRoZSBHRlMyIGFuZCBETE0gY29kZSBoYXMgYSBwbGV0aG9yYSBvZiBi
-cm9rZW4tdXAgcHJpbnRrIG1lc3NhZ2VzLA0KPiA+IGFuZCBJIGRvbid0IGxpa2UgdGhlIHRob3Vn
-aHQgb2YgcmUtY29tYmluaW5nIHRoZW0gYWxsLg0KPiANCj4gQWN0dWFsbHksIHRoZSBwb2ludCBv
-ZiB0aGUgcGF0Y2ggd2FzIHRvIHJlbW92ZSB0aGUgdW5uZWNlc3NhcnkgXG4gYXQgdGhlDQo+IGVu
-ZCBvZiB0aGUgc3RyaW5nLCBiZWNhdXNlIGxvZ19wcmludCB3aWxsIGFkZCBhbm90aGVyIG9uZS4g
-IElmIHlvdSBwcmVmZXINCj4gdG8ga2VlcCB0aGUgc3RyaW5nIGJyb2tlbiB1cCwgSSBjYW4gcmVz
-ZW5kIHRoZSBwYXRjaCBpbiB0aGF0IGZvcm0sIGJ1dA0KPiB3aXRob3V0IHRoZSB1bm5lY2Vzc2Fy
-eSBcbi4NCg0KUGxlYXNlIGNvbWJpbmUgYW55IHVzZXItdmlzaWJsZSBzdHJpbmdzIGludG8gYSBz
-aW5nbGUgbGluZSBmb3Igd2hpY2ggdGhlDQp1bm5lZWRlZCBuZXdsaW5lIGlzIGRyb3BwZWQgc2lu
-Y2UgdGhlc2Ugc3RyaW5ncyBhcmUgbW9kaWZpZWQgYW55d2F5IGJ5DQp5b3VyIHBhdGNoLg0KDQpU
-aGFua3MsDQoNCkJhcnQu
+
+
+On Tue, 2 Jan 2018, Bart Van Assche wrote:
+
+> On Tue, 2018-01-02 at 15:00 +0100, Julia Lawall wrote:
+> > On Tue, 2 Jan 2018, Bob Peterson wrote:
+> > > ----- Original Message -----
+> > > > ----- Original Message -----
+> > > >
+> > > Still, the GFS2 and DLM code has a plethora of broken-up printk messages,
+> > > and I don't like the thought of re-combining them all.
+> >
+> > Actually, the point of the patch was to remove the unnecessary \n at the
+> > end of the string, because log_print will add another one.  If you prefer
+> > to keep the string broken up, I can resend the patch in that form, but
+> > without the unnecessary \n.
+>
+> Please combine any user-visible strings into a single line for which the
+> unneeded newline is dropped since these strings are modified anyway by
+> your patch.
+
+That is what the submitted patch (2/12 specifically) did.
+
+julia
