@@ -1,36 +1,45 @@
-From: Julia Lawall <julia.lawall@lip6.fr>
-Date: Tue, 02 Jan 2018 15:16:30 +0000
-Subject: Re: [Cluster-devel] [PATCH 00/12] drop unneeded newline
-Message-Id: <alpine.DEB.2.20.1801021615510.23552@hadrien>
+From: Alexey Kodanev <alexey.kodanev@oracle.com>
+Date: Thu, 25 Jan 2018 17:43:57 +0000
+Subject: [PATCH net] dccp: don't restart ccid2_hc_tx_rto_expire() if sk in closed state
+Message-Id: <1516902237-17339-1-git-send-email-alexey.kodanev@oracle.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1878806802.2632123.1514901158666.JavaMail.zimbra@redhat.com>
-In-Reply-To: <1878806802.2632123.1514901158666.JavaMail.zimbra@redhat.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+ccid2_hc_tx_rto_expire() timer callback always restarts the timer
+again and can run indefinitely (unless it is stopped outside), and
+after commit 120e9dabaf55 ("dccp: defer ccid_hc_tx_delete() at
+dismantle time"), which moved sk_stop_timer() to sk_destruct(),
+this started to happen quite often. The timer prevents releasing
+the socket, as a result, sk_destruct() won't be called.
 
+Found with LTP/dccp_ipsec tests running on the bonding device,
+which later couldn't be unloaded after the tests were completed:
 
-On Tue, 2 Jan 2018, Bart Van Assche wrote:
+  unregister_netdevice: waiting for bond0 to become free. Usage count = 148
 
-> On Tue, 2018-01-02 at 15:00 +0100, Julia Lawall wrote:
-> > On Tue, 2 Jan 2018, Bob Peterson wrote:
-> > > ----- Original Message -----
-> > > > ----- Original Message -----
-> > > >
-> > > Still, the GFS2 and DLM code has a plethora of broken-up printk messages,
-> > > and I don't like the thought of re-combining them all.
-> >
-> > Actually, the point of the patch was to remove the unnecessary \n at the
-> > end of the string, because log_print will add another one.  If you prefer
-> > to keep the string broken up, I can resend the patch in that form, but
-> > without the unnecessary \n.
->
-> Please combine any user-visible strings into a single line for which the
-> unneeded newline is dropped since these strings are modified anyway by
-> your patch.
+Fixes: 120e9dabaf55 ("dccp: defer ccid_hc_tx_delete() at dismantle time")
+Signed-off-by: Alexey Kodanev <alexey.kodanev@oracle.com>
+---
+ net/dccp/ccids/ccid2.c |    3 +++
+ 1 files changed, 3 insertions(+), 0 deletions(-)
 
-That is what the submitted patch (2/12 specifically) did.
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 1c75cd1..92d016e 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -140,6 +140,9 @@ static void ccid2_hc_tx_rto_expire(struct timer_list *t)
+ 
+ 	ccid2_pr_debug("RTO_EXPIRE\n");
+ 
++	if (sk->sk_state = DCCP_CLOSED)
++		goto out;
++
+ 	/* back-off timer */
+ 	hc->tx_rto <<= 1;
+ 	if (hc->tx_rto > DCCP_RTO_MAX)
+-- 
+1.7.1
 
-julia
