@@ -1,7 +1,7 @@
-From: Eric Dumazet <eric.dumazet@gmail.com>
-Date: Fri, 26 Jan 2018 15:56:18 +0000
+From: David Miller <davem@davemloft.net>
+Date: Fri, 26 Jan 2018 16:15:28 +0000
 Subject: Re: [PATCH net v2] dccp: don't restart ccid2_hc_tx_rto_expire() if sk in closed state
-Message-Id: <1516982178.3715.59.camel@gmail.com>
+Message-Id: <20180126.111528.1557408443833860633.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
 References: <1516968856-900-1-git-send-email-alexey.kodanev@oracle.com>
 In-Reply-To: <1516968856-900-1-git-send-email-alexey.kodanev@oracle.com>
@@ -10,7 +10,9 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Fri, 2018-01-26 at 15:14 +0300, Alexey Kodanev wrote:
+From: Alexey Kodanev <alexey.kodanev@oracle.com>
+Date: Fri, 26 Jan 2018 15:14:16 +0300
+
 > ccid2_hc_tx_rto_expire() timer callback always restarts the timer
 > again and can run indefinitely (unless it is stopped outside), and after
 > commit 120e9dabaf55 ("dccp: defer ccid_hc_tx_delete() at dismantle time"),
@@ -27,8 +29,8 @@ On Fri, 2018-01-26 at 15:14 +0300, Alexey Kodanev wrote:
 > Fixes: 2a91aa396739 ("[DCCP] CCID2: Initial CCID2 (TCP-Like) implementation")
 > Signed-off-by: Alexey Kodanev <alexey.kodanev@oracle.com>
 > ---
+> 
+> v2: * corrected bug origin commit id
+>     * clarified commit message about sk_stop_timer()
 
-Reviewed-by: Eric Dumazet <edumazet@google.com>
-
-Thanks Alexey.
-
+Applied and queued up for -stable.
