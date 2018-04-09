@@ -1,52 +1,36 @@
-From: Jia-Ju Bai <baijiaju1990@gmail.com>
-Date: Mon, 09 Apr 2018 14:10:04 +0000
-Subject: [PATCH] net: dccp: Replace GFP_ATOMIC with GFP_KERNEL in dccp_init
-Message-Id: <1523283004-25581-1-git-send-email-baijiaju1990@gmail.com>
+From: Eric Dumazet <eric.dumazet@gmail.com>
+Date: Mon, 09 Apr 2018 14:42:20 +0000
+Subject: Re: [PATCH] net: dccp: Replace GFP_ATOMIC with GFP_KERNEL in dccp_init
+Message-Id: <8216dee8-5e52-421e-026a-4c75d654be54@gmail.com>
 List-Id: <dccp.vger.kernel.org>
+References: <1523283004-25581-1-git-send-email-baijiaju1990@gmail.com>
+In-Reply-To: <1523283004-25581-1-git-send-email-baijiaju1990@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-dccp_init() is never called in atomic context.
-This function is only set as a parameter of module_init().
 
-Despite never getting called from atomic context,
-dccp_init() calls __get_free_pages() with GFP_ATOMIC,
-which waits busily for allocation.
-GFP_ATOMIC is not necessary and can be replaced with GFP_KERNEL,
-to avoid busy waiting and improve the possibility of sucessful allocation.
 
-This is found by a static analysis tool named DCNS written by myself.
-And I also manually check it.
+On 04/09/2018 07:10 AM, Jia-Ju Bai wrote:
+> dccp_init() is never called in atomic context.
+> This function is only set as a parameter of module_init().
+> 
+> Despite never getting called from atomic context,
+> dccp_init() calls __get_free_pages() with GFP_ATOMIC,
+> which waits busily for allocation.
 
-Signed-off-by: Jia-Ju Bai <baijiaju1990@gmail.com>
----
- net/dccp/proto.c | 4 ++--
- 1 file changed, 2 insertions(+), 2 deletions(-)
+What do you mean by "waits busily" ?
 
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index b68168f..f63ba93 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -1159,7 +1159,7 @@ static int __init dccp_init(void)
- 			hash_size--;
- 		dccp_hashinfo.ehash_mask = hash_size - 1;
- 		dccp_hashinfo.ehash = (struct inet_ehash_bucket *)
--			__get_free_pages(GFP_ATOMIC|__GFP_NOWARN, ehash_order);
-+			__get_free_pages(GFP_KERNEL|__GFP_NOWARN, ehash_order);
- 	} while (!dccp_hashinfo.ehash && --ehash_order > 0);
- 
- 	if (!dccp_hashinfo.ehash) {
-@@ -1182,7 +1182,7 @@ static int __init dccp_init(void)
- 		    bhash_order > 0)
- 			continue;
- 		dccp_hashinfo.bhash = (struct inet_bind_hashbucket *)
--			__get_free_pages(GFP_ATOMIC|__GFP_NOWARN, bhash_order);
-+			__get_free_pages(GFP_KERNEL|__GFP_NOWARN, bhash_order);
- 	} while (!dccp_hashinfo.bhash && --bhash_order >= 0);
- 
- 	if (!dccp_hashinfo.bhash) {
--- 
-1.9.1
+GFP_ATOMIC does not sleep, does not wait.
+
+> GFP_ATOMIC is not necessary and can be replaced with GFP_KERNEL,
+> to avoid busy waiting and improve the possibility of sucessful allocation.
+> 
+> This is found by a static analysis tool named DCNS written by myself.
+> And I also manually check it.
+> 
+> Signed-off-by: Jia-Ju Bai <baijiaju1990@gmail.com>
+> ---
+
 
