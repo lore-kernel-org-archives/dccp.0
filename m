@@ -1,125 +1,207 @@
-From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
-Date: Fri, 18 May 2018 08:15:20 +0000
-Subject: [PATCH 4.14 03/45] dccp: fix tasklet usage
-Message-Id: <20180518081530.496930122@linuxfoundation.org>
+From: Stephen Hemminger <stephen@networkplumber.org>
+Date: Mon, 07 May 2018 18:43:32 +0000
+Subject: [PATCH net-next  v3 1/2] inet: add bound ports statistic
+Message-Id: <20180507184333.32688-2-sthemmin@microsoft.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-4.14-stable review patch.  If anyone has any objections, please let me know.
+This adds a number of bound ports which fixes socket summary
+command.  The ss -s has been broken since changes to slab info
+and this is one way to recover the missing value by adding a
+field onto /proc/net/sockstat.
 
-------------------
+Since this is an informational value only, there is no need
+for locking.
 
-From: Eric Dumazet <edumazet@google.com>
-
-[ Upstream commit a8d7aa17bbc970971ccdf71988ea19230ab368b1 ]
-
-syzbot reported a crash in tasklet_action_common() caused by dccp.
-
-dccp needs to make sure socket wont disappear before tasklet handler
-has completed.
-
-This patch takes a reference on the socket when arming the tasklet,
-and moves the sock_put() from dccp_write_xmit_timer() to dccp_write_xmitlet()
-
-kernel BUG at kernel/softirq.c:514!
-invalid opcode: 0000 [#1] SMP KASAN
-Dumping ftrace buffer:
-   (ftrace buffer empty)
-Modules linked in:
-CPU: 1 PID: 17 Comm: ksoftirqd/1 Not tainted 4.17.0-rc3+ #30
-Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS Google 01/01/2011
-RIP: 0010:tasklet_action_common.isra.19+0x6db/0x700 kernel/softirq.c:515
-RSP: 0018:ffff8801d9b3faf8 EFLAGS: 00010246
-dccp_close: ABORT with 65423 bytes unread
-RAX: 1ffff1003b367f6b RBX: ffff8801daf1f3f0 RCX: 0000000000000000
-RDX: ffff8801cf895498 RSI: 0000000000000004 RDI: 0000000000000000
-RBP: ffff8801d9b3fc40 R08: ffffed0039f12a95 R09: ffffed0039f12a94
-dccp_close: ABORT with 65423 bytes unread
-R10: ffffed0039f12a94 R11: ffff8801cf8954a3 R12: 0000000000000000
-R13: ffff8801d9b3fc18 R14: dffffc0000000000 R15: ffff8801cf895490
-FS:  0000000000000000(0000) GS:ffff8801daf00000(0000) knlGS:0000000000000000
-CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
-CR2: 0000001b2bc28000 CR3: 00000001a08a9000 CR4: 00000000001406e0
-DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000
-DR3: 0000000000000000 DR6: 00000000fffe0ff0 DR7: 0000000000000400
-Call Trace:
- tasklet_action+0x1d/0x20 kernel/softirq.c:533
- __do_softirq+0x2e0/0xaf5 kernel/softirq.c:285
-dccp_close: ABORT with 65423 bytes unread
- run_ksoftirqd+0x86/0x100 kernel/softirq.c:646
- smpboot_thread_fn+0x417/0x870 kernel/smpboot.c:164
- kthread+0x345/0x410 kernel/kthread.c:238
- ret_from_fork+0x3a/0x50 arch/x86/entry/entry_64.S:412
-Code: 48 8b 85 e8 fe ff ff 48 8b 95 f0 fe ff ff e9 94 fb ff ff 48 89 95 f0 fe ff ff e8 81 53 6e 00 48 8b 95 f0 fe ff ff e9 62 fb ff ff <0f> 0b 48 89 cf 48 89 8d e8 fe ff ff e8 64 53 6e 00 48 8b 8d e8
-RIP: tasklet_action_common.isra.19+0x6db/0x700 kernel/softirq.c:515 RSP: ffff8801d9b3faf8
-
-Fixes: dc841e30eaea ("dccp: Extend CCID packet dequeueing interface")
-Signed-off-by: Eric Dumazet <edumazet@google.com>
-Reported-by: syzbot <syzkaller@googlegroups.com>
-Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Cc: dccp@vger.kernel.org
-Signed-off-by: David S. Miller <davem@davemloft.net>
-Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Signed-off-by: Stephen Hemminger <stephen@networkplumber.org>
 ---
- net/dccp/ccids/ccid2.c |   14 ++++++++++++--
- net/dccp/timer.c       |    2 +-
- 2 files changed, 13 insertions(+), 3 deletions(-)
+ include/net/inet_hashtables.h    |  3 +++
+ include/net/inet_timewait_sock.h |  2 ++
+ net/dccp/proto.c                 |  1 +
+ net/ipv4/inet_hashtables.c       | 22 +++++++++++++++++++---
+ net/ipv4/inet_timewait_sock.c    |  8 +++++---
+ net/ipv4/proc.c                  |  5 +++--
+ net/ipv4/tcp.c                   |  1 +
+ 7 files changed, 34 insertions(+), 8 deletions(-)
 
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -126,6 +126,16 @@ static void ccid2_change_l_seq_window(st
- 						  DCCPF_SEQ_WMAX));
+diff --git a/include/net/inet_hashtables.h b/include/net/inet_hashtables.h
+index 9141e95529e7..b02524e2571e 100644
+--- a/include/net/inet_hashtables.h
++++ b/include/net/inet_hashtables.h
+@@ -103,6 +103,7 @@ static inline struct net *ib_net(struct inet_bind_bucket *ib)
+ 
+ struct inet_bind_hashbucket {
+ 	spinlock_t		lock;
++	unsigned int		count;
+ 	struct hlist_head	chain;
+ };
+ 
+@@ -193,7 +194,9 @@ inet_bind_bucket_create(struct kmem_cache *cachep, struct net *net,
+ 			struct inet_bind_hashbucket *head,
+ 			const unsigned short snum);
+ void inet_bind_bucket_destroy(struct kmem_cache *cachep,
++			      struct inet_bind_hashbucket *head,
+ 			      struct inet_bind_bucket *tb);
++unsigned int inet_bind_bucket_count(const struct proto *prot);
+ 
+ static inline u32 inet_bhashfn(const struct net *net, const __u16 lport,
+ 			       const u32 bhash_size)
+diff --git a/include/net/inet_timewait_sock.h b/include/net/inet_timewait_sock.h
+index c7be1ca8e562..4cdb8034ad80 100644
+--- a/include/net/inet_timewait_sock.h
++++ b/include/net/inet_timewait_sock.h
+@@ -87,7 +87,9 @@ static inline struct inet_timewait_sock *inet_twsk(const struct sock *sk)
+ void inet_twsk_free(struct inet_timewait_sock *tw);
+ void inet_twsk_put(struct inet_timewait_sock *tw);
+ 
++struct inet_bind_hashbucket;
+ void inet_twsk_bind_unhash(struct inet_timewait_sock *tw,
++			   struct inet_bind_hashbucket *head,
+ 			   struct inet_hashinfo *hashinfo);
+ 
+ struct inet_timewait_sock *inet_twsk_alloc(const struct sock *sk,
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 84cd4e3fd01b..25f03e62cfea 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -1208,6 +1208,7 @@ static int __init dccp_init(void)
+ 	for (i = 0; i < dccp_hashinfo.bhash_size; i++) {
+ 		spin_lock_init(&dccp_hashinfo.bhash[i].lock);
+ 		INIT_HLIST_HEAD(&dccp_hashinfo.bhash[i].chain);
++		dccp_hashinfo.bhash[i].count = 0;
+ 	}
+ 
+ 	rc = dccp_mib_init();
+diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
+index 31ff46daae97..8ba6b17d95d5 100644
+--- a/net/ipv4/inet_hashtables.c
++++ b/net/ipv4/inet_hashtables.c
+@@ -58,6 +58,18 @@ static u32 sk_ehashfn(const struct sock *sk)
+ 			    sk->sk_daddr, sk->sk_dport);
  }
  
-+static void dccp_tasklet_schedule(struct sock *sk)
++/* Count how many any entries are in the bind hash table */
++unsigned int inet_bind_bucket_count(const struct proto *prot)
 +{
-+	struct tasklet_struct *t = &dccp_sk(sk)->dccps_xmitlet;
++	const struct inet_hashinfo *hinfo = prot->h.hashinfo;
++	unsigned int i, ports = 0;
 +
-+	if (!test_and_set_bit(TASKLET_STATE_SCHED, &t->state)) {
-+		sock_hold(sk);
-+		__tasklet_schedule(t);
-+	}
++	for (i = 0; i < hinfo->bhash_size; i++)
++		ports += hinfo->bhash[i].count;
++
++	return ports;
 +}
 +
- static void ccid2_hc_tx_rto_expire(unsigned long data)
+ /*
+  * Allocate and initialize a new local port bind bucket.
+  * The bindhash mutex for snum's hash chain must be held here.
+@@ -76,6 +88,7 @@ struct inet_bind_bucket *inet_bind_bucket_create(struct kmem_cache *cachep,
+ 		tb->fastreuseport = 0;
+ 		INIT_HLIST_HEAD(&tb->owners);
+ 		hlist_add_head(&tb->node, &head->chain);
++		++head->count;
+ 	}
+ 	return tb;
+ }
+@@ -83,10 +96,13 @@ struct inet_bind_bucket *inet_bind_bucket_create(struct kmem_cache *cachep,
+ /*
+  * Caller must hold hashbucket lock for this tb with local BH disabled
+  */
+-void inet_bind_bucket_destroy(struct kmem_cache *cachep, struct inet_bind_bucket *tb)
++void inet_bind_bucket_destroy(struct kmem_cache *cachep,
++			      struct inet_bind_hashbucket *head,
++			      struct inet_bind_bucket *tb)
  {
- 	struct sock *sk = (struct sock *)data;
-@@ -166,7 +176,7 @@ static void ccid2_hc_tx_rto_expire(unsig
- 
- 	/* if we were blocked before, we may now send cwnd=1 packet */
- 	if (sender_was_blocked)
--		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
-+		dccp_tasklet_schedule(sk);
- 	/* restart backed-off timer */
- 	sk_reset_timer(sk, &hc->tx_rtotimer, jiffies + hc->tx_rto);
- out:
-@@ -706,7 +716,7 @@ static void ccid2_hc_tx_packet_recv(stru
- done:
- 	/* check if incoming Acks allow pending packets to be sent */
- 	if (sender_was_blocked && !ccid2_cwnd_network_limited(hc))
--		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
-+		dccp_tasklet_schedule(sk);
- 	dccp_ackvec_parsed_cleanup(&hc->tx_av_chunks);
+ 	if (hlist_empty(&tb->owners)) {
+ 		__hlist_del(&tb->node);
++		--head->count;
+ 		kmem_cache_free(cachep, tb);
+ 	}
+ }
+@@ -115,7 +131,7 @@ static void __inet_put_port(struct sock *sk)
+ 	__sk_del_bind_node(sk);
+ 	inet_csk(sk)->icsk_bind_hash = NULL;
+ 	inet_sk(sk)->inet_num = 0;
+-	inet_bind_bucket_destroy(hashinfo->bind_bucket_cachep, tb);
++	inet_bind_bucket_destroy(hashinfo->bind_bucket_cachep, head, tb);
+ 	spin_unlock(&head->lock);
  }
  
---- a/net/dccp/timer.c
-+++ b/net/dccp/timer.c
-@@ -230,12 +230,12 @@ static void dccp_write_xmitlet(unsigned
- 	else
- 		dccp_write_xmit(sk);
- 	bh_unlock_sock(sk);
-+	sock_put(sk);
- }
- 
- static void dccp_write_xmit_timer(unsigned long data)
+@@ -756,7 +772,7 @@ int __inet_hash_connect(struct inet_timewait_death_row *death_row,
+ 		inet_ehash_nolisten(sk, (struct sock *)tw);
+ 	}
+ 	if (tw)
+-		inet_twsk_bind_unhash(tw, hinfo);
++		inet_twsk_bind_unhash(tw, head, hinfo);
+ 	spin_unlock(&head->lock);
+ 	if (tw)
+ 		inet_twsk_deschedule_put(tw);
+diff --git a/net/ipv4/inet_timewait_sock.c b/net/ipv4/inet_timewait_sock.c
+index 88c5069b5d20..dd888c52f958 100644
+--- a/net/ipv4/inet_timewait_sock.c
++++ b/net/ipv4/inet_timewait_sock.c
+@@ -26,7 +26,8 @@
+  *	Returns 1 if caller should call inet_twsk_put() after lock release.
+  */
+ void inet_twsk_bind_unhash(struct inet_timewait_sock *tw,
+-			  struct inet_hashinfo *hashinfo)
++			   struct inet_bind_hashbucket *head,
++			   struct inet_hashinfo *hashinfo)
  {
- 	dccp_write_xmitlet(data);
--	sock_put((struct sock *)data);
+ 	struct inet_bind_bucket *tb = tw->tw_tb;
+ 
+@@ -35,7 +36,8 @@ void inet_twsk_bind_unhash(struct inet_timewait_sock *tw,
+ 
+ 	__hlist_del(&tw->tw_bind_node);
+ 	tw->tw_tb = NULL;
+-	inet_bind_bucket_destroy(hashinfo->bind_bucket_cachep, tb);
++	inet_bind_bucket_destroy(hashinfo->bind_bucket_cachep,
++				 head, tb);
+ 	__sock_put((struct sock *)tw);
  }
  
- void dccp_init_xmit_timers(struct sock *sk)
-
+@@ -55,7 +57,7 @@ static void inet_twsk_kill(struct inet_timewait_sock *tw)
+ 			hashinfo->bhash_size)];
+ 
+ 	spin_lock(&bhead->lock);
+-	inet_twsk_bind_unhash(tw, hashinfo);
++	inet_twsk_bind_unhash(tw, bhead, hashinfo);
+ 	spin_unlock(&bhead->lock);
+ 
+ 	atomic_dec(&tw->tw_dr->tw_count);
+diff --git a/net/ipv4/proc.c b/net/ipv4/proc.c
+index 261b71d0ccc5..83bc9a0f2785 100644
+--- a/net/ipv4/proc.c
++++ b/net/ipv4/proc.c
+@@ -60,10 +60,11 @@ static int sockstat_seq_show(struct seq_file *seq, void *v)
+ 	sockets = proto_sockets_allocated_sum_positive(&tcp_prot);
+ 
+ 	socket_seq_show(seq);
+-	seq_printf(seq, "TCP: inuse %d orphan %d tw %d alloc %d mem %ld\n",
++	seq_printf(seq, "TCP: inuse %d orphan %d tw %d alloc %d mem %ld ports %u\n",
+ 		   sock_prot_inuse_get(net, &tcp_prot), orphans,
+ 		   atomic_read(&net->ipv4.tcp_death_row.tw_count), sockets,
+-		   proto_memory_allocated(&tcp_prot));
++		   proto_memory_allocated(&tcp_prot),
++		   inet_bind_bucket_count(&tcp_prot));
+ 	seq_printf(seq, "UDP: inuse %d mem %ld\n",
+ 		   sock_prot_inuse_get(net, &udp_prot),
+ 		   proto_memory_allocated(&udp_prot));
+diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
+index 868ed74a76a8..f62e2fb02fdf 100644
+--- a/net/ipv4/tcp.c
++++ b/net/ipv4/tcp.c
+@@ -3836,6 +3836,7 @@ void __init tcp_init(void)
+ 	for (i = 0; i < tcp_hashinfo.bhash_size; i++) {
+ 		spin_lock_init(&tcp_hashinfo.bhash[i].lock);
+ 		INIT_HLIST_HEAD(&tcp_hashinfo.bhash[i].chain);
++		tcp_hashinfo.bhash[i].count = 0;
+ 	}
+ 
+ 
+-- 
+2.17.0
 
