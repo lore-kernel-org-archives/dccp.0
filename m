@@ -1,70 +1,85 @@
 From: Stephen Hemminger <stephen@networkplumber.org>
-Date: Wed, 09 May 2018 19:34:34 +0000
-Subject: Re: [PATCH net-next v3 0/2] socket statistics for ss
-Message-Id: <20180509123434.707caa80@xeon-e3>
+Date: Mon, 07 May 2018 18:43:33 +0000
+Subject: [PATCH net-next v3 2/2] socket: keep track of the number of sockets allocated
+Message-Id: <20180507184333.32688-3-sthemmin@microsoft.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20180507184333.32688-1-sthemmin@microsoft.com>
-In-Reply-To: <20180507184333.32688-1-sthemmin@microsoft.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, 9 May 2018 11:53:50 -0700
-Eric Dumazet <eric.dumazet@gmail.com> wrote:
+Add a per-cpu counter to keep track of the number of inodes allocated
+to sockets to fix incorrect statistics from ss command.
 
-> On 05/09/2018 11:44 AM, Stephen Hemminger wrote:
-> > On Wed, 9 May 2018 10:53:58 -0700
-> > Eric Dumazet <eric.dumazet@gmail.com> wrote:
-> >   
-> >> On 05/09/2018 10:31 AM, Stephen Hemminger wrote:  
-> >>> On Wed, 9 May 2018 10:18:23 -0700
-> >>> Eric Dumazet <eric.dumazet@gmail.com> wrote:
-> >>>     
-> >>>> On 05/09/2018 08:22 AM, Stephen Hemminger wrote:
-> >>>>    
-> >>>>> I am not sure if these patches are worth applying.
-> >>>>> The 'ss -s' command has had missing values since 2.4 kernel.
-> >>>>> And the first complaints came in only this year.
-> >>>>>
-> >>>>> Another alternative would be just to remove these fields from ss -s
-> >>>>> output and move on.
-> >>>>>       
-> >>>>
-> >>>> Anyway your patches are not netns ready, so lets remove these fields from ss.
-> >>>>
-> >>>> Or you have to spend _much_ more time on writing and testing the kernel part.
-> >>>>
-> >>>> Thanks.    
-> >>>
-> >>> The patches only expose the existing TCP socket accounting infrastructure.
-> >>> Several other pieces that sockstat has are not netns aware.
-> >>> That is a completely different problem.    
-> >>
-> >>
-> >> Adding a new field counting 'bounds ports' without being netns ready is a total mistake,
-> >> as it is useless by current standards.
-> >>
-> >> The first thing that users will do is add proper netns support, with extra complexity in the kernel.
-> >>
-> >> So, instead of pushing some incomplete feature, trying to fool ourselves with a sentiment of 'small cost'
-> >> that will later need another 100 lines of code in the kernel, please give us the complete picture.
-> >>
-> >> I am just saying, you can of course ignore my feedback.  
-> > 
-> > The current TCP hashinfo should be moved into netns. The current method of scanning and matching
-> > by net namespace is a scalability issue now.  
-> 
-> It is not the plan yet, and we have no scalability issue.
-> 
-> Before switching to netns hash table, this would need rhashtable conversions
-> but so far this has not been done.
-> 
-> - Time to create/delete netns is critical.
-> - Adding few Mbytes of overhead per netns is a nogo,
-> 
-> Please do not change subject, this is adding noise to this particular thread.
+The ss command tries to keep track of the number of sockets
+allocated but it was doing by the slabinfo statistics which are
+wrong (due to merging) and not available when using slub.
 
-Back to original subject. My current intention is to just pull all these statistics
-from ss command. They are always zero now, and very few people noticed and  no one
-really needs them.
+Signed-off-by: Stephen Hemminger <stephen@networkplumber.org>
+---
+ net/socket.c | 21 +++++++++++++++++++--
+ 1 file changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/net/socket.c b/net/socket.c
+index f10f1d947c78..89ec7f41559d 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -234,6 +234,18 @@ static int move_addr_to_user(struct sockaddr_storage *kaddr, int klen,
+ }
+ 
+ static struct kmem_cache *sock_inode_cachep __ro_after_init;
++static unsigned int __percpu *sock_pcpu_allocated;
++
++static unsigned int sock_allocated(void)
++{
++	unsigned int res = 0;
++	int cpu;
++
++	for_each_possible_cpu(cpu)
++		res += *per_cpu_ptr(sock_pcpu_allocated, cpu);
++
++	return res;
++}
+ 
+ static struct inode *sock_alloc_inode(struct super_block *sb)
+ {
+@@ -248,6 +260,7 @@ static struct inode *sock_alloc_inode(struct super_block *sb)
+ 		kmem_cache_free(sock_inode_cachep, ei);
+ 		return NULL;
+ 	}
++	this_cpu_inc(*sock_pcpu_allocated);
+ 	init_waitqueue_head(&wq->wait);
+ 	wq->fasync_list = NULL;
+ 	wq->flags = 0;
+@@ -270,6 +283,7 @@ static void sock_destroy_inode(struct inode *inode)
+ 	ei = container_of(inode, struct socket_alloc, vfs_inode);
+ 	wq = rcu_dereference_protected(ei->socket.wq, 1);
+ 	kfree_rcu(wq, rcu);
++	this_cpu_dec(*sock_pcpu_allocated);
+ 	kmem_cache_free(sock_inode_cachep, ei);
+ }
+ 
+@@ -290,6 +304,8 @@ static void init_inodecache(void)
+ 					       SLAB_MEM_SPREAD | SLAB_ACCOUNT),
+ 					      init_once);
+ 	BUG_ON(sock_inode_cachep = NULL);
++	sock_pcpu_allocated = alloc_percpu(unsigned int);
++	BUG_ON(sock_pcpu_allocated = NULL);
+ }
+ 
+ static const struct super_operations sockfs_ops = {
+@@ -2738,8 +2754,9 @@ core_initcall(sock_init);	/* early initcall */
+ #ifdef CONFIG_PROC_FS
+ void socket_seq_show(struct seq_file *seq)
+ {
+-	seq_printf(seq, "sockets: used %d\n",
+-		   sock_inuse_get(seq->private));
++	seq_printf(seq, "sockets: used %d allocated %u\n",
++		   sock_inuse_get(seq->private),
++		   sock_allocated());
+ }
+ #endif				/* CONFIG_PROC_FS */
+ 
+-- 
+2.17.0
+
