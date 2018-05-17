@@ -1,125 +1,177 @@
-From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
-Date: Fri, 18 May 2018 08:15:42 +0000
-Subject: [PATCH 4.9 03/33] dccp: fix tasklet usage
-Message-Id: <20180518081535.234591426@linuxfoundation.org>
+From: syzbot <syzbot+5d47e9ec91a6f15dbd6f@syzkaller.appspotmail.com>
+Date: Thu, 17 May 2018 17:57:02 +0000
+Subject: KASAN: use-after-free Read in timer_is_static_object
+Message-Id: <000000000000048356056c6a90e2@google.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-4.9-stable review patch.  If anyone has any objections, please let me know.
+Hello,
 
-------------------
+syzbot found the following crash on:
 
-From: Eric Dumazet <edumazet@google.com>
+HEAD commit:    e6506eb24187 Merge tag 'trace-v4.17-rc4-2' of git://git.ke..
+git tree:       upstream
+console output: https://syzkaller.appspot.com/x/log.txt?x=177fe477800000
+kernel config:  https://syzkaller.appspot.com/x/.config?x=F3b4e30da84ec1ed
+dashboard link: https://syzkaller.appspot.com/bug?extid]47e9ec91a6f15dbd6f
+compiler:       gcc (GCC) 8.0.1 20180413 (experimental)
 
-[ Upstream commit a8d7aa17bbc970971ccdf71988ea19230ab368b1 ]
+Unfortunately, I don't have any reproducer for this crash yet.
 
-syzbot reported a crash in tasklet_action_common() caused by dccp.
+IMPORTANT: if you fix the bug, please add the following tag to the commit:
+Reported-by: syzbot+5d47e9ec91a6f15dbd6f@syzkaller.appspotmail.com
 
-dccp needs to make sure socket wont disappear before tasklet handler
-has completed.
+RDX: 0000000000000000 RSI: 0000000000000000 RDI: 0000000000000016
+RBP: 000000000072bea0 R08: 0000000000000000 R09: 0000000000000000
+R10: 0000000000000000 R11: 0000000000000246 R12: 0000000000000017
+R13: 0000000000000053 R14: 00000000006f4868 R15: 0000000000000001
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D
+BUG: KASAN: use-after-free in timer_is_static_object+0x80/0x90 =20
+kernel/time/timer.c:607
+Read of size 8 at addr ffff8801bebb5118 by task syz-executor2/25299
 
-This patch takes a reference on the socket when arming the tasklet,
-and moves the sock_put() from dccp_write_xmit_timer() to dccp_write_xmitlet()
-
-kernel BUG at kernel/softirq.c:514!
-invalid opcode: 0000 [#1] SMP KASAN
-Dumping ftrace buffer:
-   (ftrace buffer empty)
-Modules linked in:
-CPU: 1 PID: 17 Comm: ksoftirqd/1 Not tainted 4.17.0-rc3+ #30
-Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS Google 01/01/2011
-RIP: 0010:tasklet_action_common.isra.19+0x6db/0x700 kernel/softirq.c:515
-RSP: 0018:ffff8801d9b3faf8 EFLAGS: 00010246
-dccp_close: ABORT with 65423 bytes unread
-RAX: 1ffff1003b367f6b RBX: ffff8801daf1f3f0 RCX: 0000000000000000
-RDX: ffff8801cf895498 RSI: 0000000000000004 RDI: 0000000000000000
-RBP: ffff8801d9b3fc40 R08: ffffed0039f12a95 R09: ffffed0039f12a94
-dccp_close: ABORT with 65423 bytes unread
-R10: ffffed0039f12a94 R11: ffff8801cf8954a3 R12: 0000000000000000
-R13: ffff8801d9b3fc18 R14: dffffc0000000000 R15: ffff8801cf895490
-FS:  0000000000000000(0000) GS:ffff8801daf00000(0000) knlGS:0000000000000000
-CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
-CR2: 0000001b2bc28000 CR3: 00000001a08a9000 CR4: 00000000001406e0
-DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000
-DR3: 0000000000000000 DR6: 00000000fffe0ff0 DR7: 0000000000000400
+CPU: 1 PID: 25299 Comm: syz-executor2 Not tainted 4.17.0-rc5+ #54
+Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS =20
+Google 01/01/2011
 Call Trace:
- tasklet_action+0x1d/0x20 kernel/softirq.c:533
- __do_softirq+0x2e0/0xaf5 kernel/softirq.c:285
-dccp_close: ABORT with 65423 bytes unread
- run_ksoftirqd+0x86/0x100 kernel/softirq.c:646
- smpboot_thread_fn+0x417/0x870 kernel/smpboot.c:164
- kthread+0x345/0x410 kernel/kthread.c:238
- ret_from_fork+0x3a/0x50 arch/x86/entry/entry_64.S:412
-Code: 48 8b 85 e8 fe ff ff 48 8b 95 f0 fe ff ff e9 94 fb ff ff 48 89 95 f0 fe ff ff e8 81 53 6e 00 48 8b 95 f0 fe ff ff e9 62 fb ff ff <0f> 0b 48 89 cf 48 89 8d e8 fe ff ff e8 64 53 6e 00 48 8b 8d e8
-RIP: tasklet_action_common.isra.19+0x6db/0x700 kernel/softirq.c:515 RSP: ffff8801d9b3faf8
+  <IRQ>
+  __dump_stack lib/dump_stack.c:77 [inline]
+  dump_stack+0x1b9/0x294 lib/dump_stack.c:113
+  print_address_description+0x6c/0x20b mm/kasan/report.c:256
+  kasan_report_error mm/kasan/report.c:354 [inline]
+  kasan_report.cold.7+0x242/0x2fe mm/kasan/report.c:412
+  __asan_report_load8_noabort+0x14/0x20 mm/kasan/report.c:433
+  timer_is_static_object+0x80/0x90 kernel/time/timer.c:607
+  debug_object_activate+0x2d9/0x670 lib/debugobjects.c:508
+  debug_timer_activate kernel/time/timer.c:709 [inline]
+  debug_activate kernel/time/timer.c:764 [inline]
+  __mod_timer kernel/time/timer.c:1041 [inline]
+  mod_timer+0x4d3/0x13b0 kernel/time/timer.c:1102
+  sk_reset_timer+0x22/0x60 net/core/sock.c:2742
+  ccid2_hc_tx_rto_expire+0x587/0x680 net/dccp/ccids/ccid2.c:147
+  call_timer_fn+0x230/0x940 kernel/time/timer.c:1326
+  expire_timers kernel/time/timer.c:1363 [inline]
+  __run_timers+0x79e/0xc50 kernel/time/timer.c:1666
+  run_timer_softirq+0x4c/0x70 kernel/time/timer.c:1692
+  __do_softirq+0x2e0/0xaf5 kernel/softirq.c:285
+  invoke_softirq kernel/softirq.c:365 [inline]
+  irq_exit+0x1d1/0x200 kernel/softirq.c:405
+  exiting_irq arch/x86/include/asm/apic.h:525 [inline]
+  smp_apic_timer_interrupt+0x17e/0x710 arch/x86/kernel/apic/apic.c:1052
+  apic_timer_interrupt+0xf/0x20 arch/x86/entry/entry_64.S:863
+  </IRQ>
+RIP: 0010:cap_capable+0x3f/0x260 security/commoncap.c:82
+RSP: 0018:ffff8801ac75f8c8 EFLAGS: 00000246 ORIG_RAX: ffffffffffffff13
+RAX: dffffc0000000000 RBX: ffffffff88d5be00 RCX: 0000000000000000
+RDX: 1ffff100386dc571 RSI: ffffffff830ee893 RDI: ffff8801c36e2b88
+RBP: ffff8801ac75f910 R08: ffff8801ac126440 R09: ffff8801ac75fcb8
+R10: ffff8801ac126c78 R11: ffff8801ac75fc78 R12: dffffc0000000000
+R13: dffffc0000000000 R14: ffff8801c36e2b00 R15: 0000000000000021
+  cap_vm_enough_memory+0x50/0x70 security/commoncap.c:1307
+  security_vm_enough_memory_mm+0x71/0xc0 security/security.c:327
+  mmap_region+0x37b/0x1870 mm/mmap.c:1714
+  do_mmap+0xde2/0x1360 mm/mmap.c:1535
+  do_mmap_pgoff include/linux/mm.h:2237 [inline]
+  vm_mmap_pgoff+0x1fb/0x2a0 mm/util.c:357
+  ksys_mmap_pgoff+0x26e/0x640 mm/mmap.c:1585
+  __do_sys_mmap arch/x86/kernel/sys_x86_64.c:100 [inline]
+  __se_sys_mmap arch/x86/kernel/sys_x86_64.c:91 [inline]
+  __x64_sys_mmap+0xe9/0x1b0 arch/x86/kernel/sys_x86_64.c:91
+  do_syscall_64+0x1b1/0x800 arch/x86/entry/common.c:287
+  entry_SYSCALL_64_after_hwframe+0x49/0xbe
+RIP: 0033:0x455a5a
+RSP: 002b:0000000000a3e778 EFLAGS: 00000246 ORIG_RAX: 0000000000000009
+RAX: ffffffffffffffda RBX: 0000000000000003 RCX: 0000000000455a5a
+RDX: 0000000000000003 RSI: 0000000000021000 RDI: 0000000000000000
+RBP: ffffffffffffffff R08: ffffffffffffffff R09: 0000000000000000
+R10: 0000000000020022 R11: 0000000000000246 R12: 0000000000000000
+R13: 0000000000021000 R14: 0000000000020022 R15: 0000000000000000
 
-Fixes: dc841e30eaea ("dccp: Extend CCID packet dequeueing interface")
-Signed-off-by: Eric Dumazet <edumazet@google.com>
-Reported-by: syzbot <syzkaller@googlegroups.com>
-Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Cc: dccp@vger.kernel.org
-Signed-off-by: David S. Miller <davem@davemloft.net>
-Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Allocated by task 25374:
+  save_stack+0x43/0xd0 mm/kasan/kasan.c:448
+  set_track mm/kasan/kasan.c:460 [inline]
+  kasan_kmalloc+0xc4/0xe0 mm/kasan/kasan.c:553
+  kasan_slab_alloc+0x12/0x20 mm/kasan/kasan.c:490
+  kmem_cache_alloc+0x12e/0x760 mm/slab.c:3554
+  ccid_new+0x25b/0x3e0 net/dccp/ccid.c:151
+  dccp_hdlr_ccid+0x27/0x150 net/dccp/feat.c:44
+  __dccp_feat_activate+0x184/0x270 net/dccp/feat.c:344
+  dccp_feat_activate_values+0x3a7/0x819 net/dccp/feat.c:1538
+  dccp_create_openreq_child+0x472/0x610 net/dccp/minisocks.c:128
+  dccp_v4_request_recv_sock+0x12c/0xca0 net/dccp/ipv4.c:408
+  dccp_v6_request_recv_sock+0x125d/0x1f10 net/dccp/ipv6.c:415
+  dccp_check_req+0x455/0x6a0 net/dccp/minisocks.c:197
+  dccp_v4_rcv+0x7b8/0x1f3f net/dccp/ipv4.c:841
+  ip_local_deliver_finish+0x2e3/0xd80 net/ipv4/ip_input.c:215
+  NF_HOOK include/linux/netfilter.h:288 [inline]
+  ip_local_deliver+0x1e1/0x720 net/ipv4/ip_input.c:256
+  dst_input include/net/dst.h:450 [inline]
+  ip_rcv_finish+0x81b/0x2200 net/ipv4/ip_input.c:396
+  NF_HOOK include/linux/netfilter.h:288 [inline]
+  ip_rcv+0xb70/0x143d net/ipv4/ip_input.c:492
+  __netif_receive_skb_core+0x26f5/0x3630 net/core/dev.c:4592
+  __netif_receive_skb+0x2c/0x1e0 net/core/dev.c:4657
+  process_backlog+0x219/0x760 net/core/dev.c:5337
+  napi_poll net/core/dev.c:5735 [inline]
+  net_rx_action+0x7b7/0x1930 net/core/dev.c:5801
+  __do_softirq+0x2e0/0xaf5 kernel/softirq.c:285
+
+Freed by task 25374:
+  save_stack+0x43/0xd0 mm/kasan/kasan.c:448
+  set_track mm/kasan/kasan.c:460 [inline]
+  __kasan_slab_free+0x11a/0x170 mm/kasan/kasan.c:521
+  kasan_slab_free+0xe/0x10 mm/kasan/kasan.c:528
+  __cache_free mm/slab.c:3498 [inline]
+  kmem_cache_free+0x86/0x2d0 mm/slab.c:3756
+  ccid_hc_tx_delete+0xc3/0x100 net/dccp/ccid.c:190
+  dccp_disconnect+0x130/0xc66 net/dccp/proto.c:286
+  dccp_close+0x3bc/0xe60 net/dccp/proto.c:1045
+  inet_release+0x104/0x1f0 net/ipv4/af_inet.c:427
+  inet6_release+0x50/0x70 net/ipv6/af_inet6.c:460
+  sock_release+0x96/0x1b0 net/socket.c:594
+  sock_close+0x16/0x20 net/socket.c:1149
+  __fput+0x34d/0x890 fs/file_table.c:209
+  ____fput+0x15/0x20 fs/file_table.c:243
+  task_work_run+0x1e4/0x290 kernel/task_work.c:113
+  tracehook_notify_resume include/linux/tracehook.h:191 [inline]
+  exit_to_usermode_loop+0x2bd/0x310 arch/x86/entry/common.c:166
+  prepare_exit_to_usermode arch/x86/entry/common.c:196 [inline]
+  syscall_return_slowpath arch/x86/entry/common.c:265 [inline]
+  do_syscall_64+0x6ac/0x800 arch/x86/entry/common.c:290
+  entry_SYSCALL_64_after_hwframe+0x49/0xbe
+
+The buggy address belongs to the object at ffff8801bebb4cc0
+  which belongs to the cache ccid2_hc_tx_sock of size 1240
+The buggy address is located 1112 bytes inside of
+  1240-byte region [ffff8801bebb4cc0, ffff8801bebb5198)
+The buggy address belongs to the page:
+page:ffffea0006faed00 count:1 mapcount:0 mapping:ffff8801bebb41c0 =20
+index:0xffff8801bebb5240 compound_mapcount: 0
+flags: 0x2fffc0000008100(slab|head)
+raw: 02fffc0000008100 ffff8801bebb41c0 ffff8801bebb5240 0000000100000003
+raw: ffff8801cdba3138 ffffea0007634120 ffff8801cdbaab40 0000000000000000
+page dumped because: kasan: bad access detected
+
+Memory state around the buggy address:
+  ffff8801bebb5000: fb fb fb fb fb fb fb fb fb fb fb fb fb fb fb fb
+  ffff8801bebb5080: fb fb fb fb fb fb fb fb fb fb fb fb fb fb fb fb
+> ffff8801bebb5100: fb fb fb fb fb fb fb fb fb fb fb fb fb fb fb fb
+                             ^
+  ffff8801bebb5180: fb fb fb fc fc fc fc fc fc fc fc fc fc fc fc fc
+  ffff8801bebb5200: fc fc fc fc fc fc fc fc fb fb fb fb fb fb fb fb
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D
+
+
 ---
- net/dccp/ccids/ccid2.c |   14 ++++++++++++--
- net/dccp/timer.c       |    2 +-
- 2 files changed, 13 insertions(+), 3 deletions(-)
+This bug is generated by a bot. It may contain errors.
+See https://goo.gl/tpsmEJ for more information about syzbot.
+syzbot engineers can be reached at syzkaller@googlegroups.com.
 
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -126,6 +126,16 @@ static void ccid2_change_l_seq_window(st
- 						  DCCPF_SEQ_WMAX));
- }
- 
-+static void dccp_tasklet_schedule(struct sock *sk)
-+{
-+	struct tasklet_struct *t = &dccp_sk(sk)->dccps_xmitlet;
-+
-+	if (!test_and_set_bit(TASKLET_STATE_SCHED, &t->state)) {
-+		sock_hold(sk);
-+		__tasklet_schedule(t);
-+	}
-+}
-+
- static void ccid2_hc_tx_rto_expire(unsigned long data)
- {
- 	struct sock *sk = (struct sock *)data;
-@@ -166,7 +176,7 @@ static void ccid2_hc_tx_rto_expire(unsig
- 
- 	/* if we were blocked before, we may now send cwnd=1 packet */
- 	if (sender_was_blocked)
--		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
-+		dccp_tasklet_schedule(sk);
- 	/* restart backed-off timer */
- 	sk_reset_timer(sk, &hc->tx_rtotimer, jiffies + hc->tx_rto);
- out:
-@@ -706,7 +716,7 @@ static void ccid2_hc_tx_packet_recv(stru
- done:
- 	/* check if incoming Acks allow pending packets to be sent */
- 	if (sender_was_blocked && !ccid2_cwnd_network_limited(hc))
--		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
-+		dccp_tasklet_schedule(sk);
- 	dccp_ackvec_parsed_cleanup(&hc->tx_av_chunks);
- }
- 
---- a/net/dccp/timer.c
-+++ b/net/dccp/timer.c
-@@ -230,12 +230,12 @@ static void dccp_write_xmitlet(unsigned
- 	else
- 		dccp_write_xmit(sk);
- 	bh_unlock_sock(sk);
-+	sock_put(sk);
- }
- 
- static void dccp_write_xmit_timer(unsigned long data)
- {
- 	dccp_write_xmitlet(data);
--	sock_put((struct sock *)data);
- }
- 
- void dccp_init_xmit_timers(struct sock *sk)
-
-
+syzbot will keep track of this bug report. See:
+https://goo.gl/tpsmEJ#bug-status-tracking for how to communicate with =20
+syzbot.
