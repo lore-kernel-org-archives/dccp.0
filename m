@@ -1,14 +1,14 @@
 From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
-Date: Thu, 24 May 2018 09:38:11 +0000
-Subject: [PATCH 3.18 03/45] dccp: fix tasklet usage
-Message-Id: <20180524093120.982327688@linuxfoundation.org>
+Date: Fri, 18 May 2018 08:15:42 +0000
+Subject: [PATCH 4.9 03/33] dccp: fix tasklet usage
+Message-Id: <20180518081535.234591426@linuxfoundation.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-3.18-stable review patch.  If anyone has any objections, please let me know.
+4.9-stable review patch.  If anyone has any objections, please let me know.
 
 ------------------
 
@@ -107,7 +107,7 @@ Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
  
 --- a/net/dccp/timer.c
 +++ b/net/dccp/timer.c
-@@ -252,12 +252,12 @@ static void dccp_write_xmitlet(unsigned
+@@ -230,12 +230,12 @@ static void dccp_write_xmitlet(unsigned
  	else
  		dccp_write_xmit(sk);
  	bh_unlock_sock(sk);
