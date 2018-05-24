@@ -1,85 +1,125 @@
-From: Stephen Hemminger <stephen@networkplumber.org>
-Date: Mon, 07 May 2018 18:43:33 +0000
-Subject: [PATCH net-next v3 2/2] socket: keep track of the number of sockets allocated
-Message-Id: <20180507184333.32688-3-sthemmin@microsoft.com>
+From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Date: Thu, 24 May 2018 09:37:40 +0000
+Subject: [PATCH 4.4 03/92] dccp: fix tasklet usage
+Message-Id: <20180524093159.565174724@linuxfoundation.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Add a per-cpu counter to keep track of the number of inodes allocated
-to sockets to fix incorrect statistics from ss command.
+4.4-stable review patch.  If anyone has any objections, please let me know.
 
-The ss command tries to keep track of the number of sockets
-allocated but it was doing by the slabinfo statistics which are
-wrong (due to merging) and not available when using slub.
+------------------
 
-Signed-off-by: Stephen Hemminger <stephen@networkplumber.org>
+From: Eric Dumazet <edumazet@google.com>
+
+[ Upstream commit a8d7aa17bbc970971ccdf71988ea19230ab368b1 ]
+
+syzbot reported a crash in tasklet_action_common() caused by dccp.
+
+dccp needs to make sure socket wont disappear before tasklet handler
+has completed.
+
+This patch takes a reference on the socket when arming the tasklet,
+and moves the sock_put() from dccp_write_xmit_timer() to dccp_write_xmitlet()
+
+kernel BUG at kernel/softirq.c:514!
+invalid opcode: 0000 [#1] SMP KASAN
+Dumping ftrace buffer:
+   (ftrace buffer empty)
+Modules linked in:
+CPU: 1 PID: 17 Comm: ksoftirqd/1 Not tainted 4.17.0-rc3+ #30
+Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS Google 01/01/2011
+RIP: 0010:tasklet_action_common.isra.19+0x6db/0x700 kernel/softirq.c:515
+RSP: 0018:ffff8801d9b3faf8 EFLAGS: 00010246
+dccp_close: ABORT with 65423 bytes unread
+RAX: 1ffff1003b367f6b RBX: ffff8801daf1f3f0 RCX: 0000000000000000
+RDX: ffff8801cf895498 RSI: 0000000000000004 RDI: 0000000000000000
+RBP: ffff8801d9b3fc40 R08: ffffed0039f12a95 R09: ffffed0039f12a94
+dccp_close: ABORT with 65423 bytes unread
+R10: ffffed0039f12a94 R11: ffff8801cf8954a3 R12: 0000000000000000
+R13: ffff8801d9b3fc18 R14: dffffc0000000000 R15: ffff8801cf895490
+FS:  0000000000000000(0000) GS:ffff8801daf00000(0000) knlGS:0000000000000000
+CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+CR2: 0000001b2bc28000 CR3: 00000001a08a9000 CR4: 00000000001406e0
+DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000
+DR3: 0000000000000000 DR6: 00000000fffe0ff0 DR7: 0000000000000400
+Call Trace:
+ tasklet_action+0x1d/0x20 kernel/softirq.c:533
+ __do_softirq+0x2e0/0xaf5 kernel/softirq.c:285
+dccp_close: ABORT with 65423 bytes unread
+ run_ksoftirqd+0x86/0x100 kernel/softirq.c:646
+ smpboot_thread_fn+0x417/0x870 kernel/smpboot.c:164
+ kthread+0x345/0x410 kernel/kthread.c:238
+ ret_from_fork+0x3a/0x50 arch/x86/entry/entry_64.S:412
+Code: 48 8b 85 e8 fe ff ff 48 8b 95 f0 fe ff ff e9 94 fb ff ff 48 89 95 f0 fe ff ff e8 81 53 6e 00 48 8b 95 f0 fe ff ff e9 62 fb ff ff <0f> 0b 48 89 cf 48 89 8d e8 fe ff ff e8 64 53 6e 00 48 8b 8d e8
+RIP: tasklet_action_common.isra.19+0x6db/0x700 kernel/softirq.c:515 RSP: ffff8801d9b3faf8
+
+Fixes: dc841e30eaea ("dccp: Extend CCID packet dequeueing interface")
+Signed-off-by: Eric Dumazet <edumazet@google.com>
+Reported-by: syzbot <syzkaller@googlegroups.com>
+Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Cc: dccp@vger.kernel.org
+Signed-off-by: David S. Miller <davem@davemloft.net>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 ---
- net/socket.c | 21 +++++++++++++++++++--
- 1 file changed, 19 insertions(+), 2 deletions(-)
+ net/dccp/ccids/ccid2.c |   14 ++++++++++++--
+ net/dccp/timer.c       |    2 +-
+ 2 files changed, 13 insertions(+), 3 deletions(-)
 
-diff --git a/net/socket.c b/net/socket.c
-index f10f1d947c78..89ec7f41559d 100644
---- a/net/socket.c
-+++ b/net/socket.c
-@@ -234,6 +234,18 @@ static int move_addr_to_user(struct sockaddr_storage *kaddr, int klen,
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -126,6 +126,16 @@ static void ccid2_change_l_seq_window(st
+ 						  DCCPF_SEQ_WMAX));
  }
  
- static struct kmem_cache *sock_inode_cachep __ro_after_init;
-+static unsigned int __percpu *sock_pcpu_allocated;
-+
-+static unsigned int sock_allocated(void)
++static void dccp_tasklet_schedule(struct sock *sk)
 +{
-+	unsigned int res = 0;
-+	int cpu;
++	struct tasklet_struct *t = &dccp_sk(sk)->dccps_xmitlet;
 +
-+	for_each_possible_cpu(cpu)
-+		res += *per_cpu_ptr(sock_pcpu_allocated, cpu);
-+
-+	return res;
++	if (!test_and_set_bit(TASKLET_STATE_SCHED, &t->state)) {
++		sock_hold(sk);
++		__tasklet_schedule(t);
++	}
 +}
- 
- static struct inode *sock_alloc_inode(struct super_block *sb)
++
+ static void ccid2_hc_tx_rto_expire(unsigned long data)
  {
-@@ -248,6 +260,7 @@ static struct inode *sock_alloc_inode(struct super_block *sb)
- 		kmem_cache_free(sock_inode_cachep, ei);
- 		return NULL;
- 	}
-+	this_cpu_inc(*sock_pcpu_allocated);
- 	init_waitqueue_head(&wq->wait);
- 	wq->fasync_list = NULL;
- 	wq->flags = 0;
-@@ -270,6 +283,7 @@ static void sock_destroy_inode(struct inode *inode)
- 	ei = container_of(inode, struct socket_alloc, vfs_inode);
- 	wq = rcu_dereference_protected(ei->socket.wq, 1);
- 	kfree_rcu(wq, rcu);
-+	this_cpu_dec(*sock_pcpu_allocated);
- 	kmem_cache_free(sock_inode_cachep, ei);
+ 	struct sock *sk = (struct sock *)data;
+@@ -166,7 +176,7 @@ static void ccid2_hc_tx_rto_expire(unsig
+ 
+ 	/* if we were blocked before, we may now send cwnd=1 packet */
+ 	if (sender_was_blocked)
+-		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
++		dccp_tasklet_schedule(sk);
+ 	/* restart backed-off timer */
+ 	sk_reset_timer(sk, &hc->tx_rtotimer, jiffies + hc->tx_rto);
+ out:
+@@ -706,7 +716,7 @@ static void ccid2_hc_tx_packet_recv(stru
+ done:
+ 	/* check if incoming Acks allow pending packets to be sent */
+ 	if (sender_was_blocked && !ccid2_cwnd_network_limited(hc))
+-		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
++		dccp_tasklet_schedule(sk);
+ 	dccp_ackvec_parsed_cleanup(&hc->tx_av_chunks);
  }
  
-@@ -290,6 +304,8 @@ static void init_inodecache(void)
- 					       SLAB_MEM_SPREAD | SLAB_ACCOUNT),
- 					      init_once);
- 	BUG_ON(sock_inode_cachep = NULL);
-+	sock_pcpu_allocated = alloc_percpu(unsigned int);
-+	BUG_ON(sock_pcpu_allocated = NULL);
+--- a/net/dccp/timer.c
++++ b/net/dccp/timer.c
+@@ -230,12 +230,12 @@ static void dccp_write_xmitlet(unsigned
+ 	else
+ 		dccp_write_xmit(sk);
+ 	bh_unlock_sock(sk);
++	sock_put(sk);
  }
  
- static const struct super_operations sockfs_ops = {
-@@ -2738,8 +2754,9 @@ core_initcall(sock_init);	/* early initcall */
- #ifdef CONFIG_PROC_FS
- void socket_seq_show(struct seq_file *seq)
+ static void dccp_write_xmit_timer(unsigned long data)
  {
--	seq_printf(seq, "sockets: used %d\n",
--		   sock_inuse_get(seq->private));
-+	seq_printf(seq, "sockets: used %d allocated %u\n",
-+		   sock_inuse_get(seq->private),
-+		   sock_allocated());
+ 	dccp_write_xmitlet(data);
+-	sock_put((struct sock *)data);
  }
- #endif				/* CONFIG_PROC_FS */
  
--- 
-2.17.0
+ void dccp_init_xmit_timers(struct sock *sk)
+
 
