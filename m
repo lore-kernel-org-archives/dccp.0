@@ -1,14 +1,14 @@
 From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
-Date: Fri, 20 Jul 2018 12:11:13 +0000
-Subject: [PATCH 3.18 18/29] net: dccp: switch rx_tstamp_last_feedback to monotonic clock
-Message-Id: <20180720115159.632277649@linuxfoundation.org>
+Date: Fri, 20 Jul 2018 12:13:44 +0000
+Subject: [PATCH 4.4 14/31] net: dccp: switch rx_tstamp_last_feedback to monotonic clock
+Message-Id: <20180720121340.671722543@linuxfoundation.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-3.18-stable review patch.  If anyone has any objections, please let me know.
+4.4-stable review patch.  If anyone has any objections, please let me know.
 
 ------------------
 
