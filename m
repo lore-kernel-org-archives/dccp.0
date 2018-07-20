@@ -1,14 +1,14 @@
 From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
-Date: Fri, 20 Jul 2018 12:13:43 +0000
-Subject: [PATCH 4.4 13/31] net: dccp: avoid crash in ccid3_hc_rx_send_feedback()
-Message-Id: <20180720121340.633256628@linuxfoundation.org>
+Date: Fri, 20 Jul 2018 12:13:21 +0000
+Subject: [PATCH 4.17 015/101] net: dccp: avoid crash in ccid3_hc_rx_send_feedback()
+Message-Id: <20180720121423.587688903@linuxfoundation.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-4.4-stable review patch.  If anyone has any objections, please let me know.
+4.17-stable review patch.  If anyone has any objections, please let me know.
 
 ------------------
 
@@ -66,7 +66,7 @@ Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -624,9 +624,8 @@ static void ccid3_hc_rx_send_feedback(st
+@@ -625,9 +625,8 @@ static void ccid3_hc_rx_send_feedback(st
  	case CCID3_FBACK_PERIODIC:
  		delta = ktime_us_delta(now, hc->rx_tstamp_last_feedback);
  		if (delta <= 0)
