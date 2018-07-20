@@ -1,14 +1,14 @@
 From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
-Date: Fri, 20 Jul 2018 12:13:37 +0000
-Subject: [PATCH 4.9 20/66] net: dccp: switch rx_tstamp_last_feedback to monotonic clock
-Message-Id: <20180720121408.422815413@linuxfoundation.org>
+Date: Fri, 20 Jul 2018 12:13:22 +0000
+Subject: [PATCH 4.17 016/101] net: dccp: switch rx_tstamp_last_feedback to monotonic clock
+Message-Id: <20180720121423.628405497@linuxfoundation.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-4.9-stable review patch.  If anyone has any objections, please let me know.
+4.17-stable review patch.  If anyone has any objections, please let me know.
 
 ------------------
 
@@ -33,7 +33,7 @@ Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -599,7 +599,7 @@ static void ccid3_hc_rx_send_feedback(st
+@@ -600,7 +600,7 @@ static void ccid3_hc_rx_send_feedback(st
  {
  	struct ccid3_hc_rx_sock *hc = ccid3_hc_rx_sk(sk);
  	struct dccp_sock *dp = dccp_sk(sk);
@@ -42,7 +42,7 @@ Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
  	s64 delta = 0;
  
  	switch (fbtype) {
-@@ -631,7 +631,7 @@ static void ccid3_hc_rx_send_feedback(st
+@@ -632,7 +632,7 @@ static void ccid3_hc_rx_send_feedback(st
  		return;
  	}
  
@@ -51,7 +51,7 @@ Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
  		       hc->rx_x_recv, hc->rx_pinv);
  
  	hc->rx_tstamp_last_feedback = now;
-@@ -678,7 +678,8 @@ static int ccid3_hc_rx_insert_options(st
+@@ -679,7 +679,8 @@ static int ccid3_hc_rx_insert_options(st
  static u32 ccid3_first_li(struct sock *sk)
  {
  	struct ccid3_hc_rx_sock *hc = ccid3_hc_rx_sk(sk);
@@ -61,7 +61,7 @@ Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
  	u64 fval;
  
  	if (hc->rx_rtt = 0) {
-@@ -686,7 +687,9 @@ static u32 ccid3_first_li(struct sock *s
+@@ -687,7 +688,9 @@ static u32 ccid3_first_li(struct sock *s
  		hc->rx_rtt = DCCP_FALLBACK_RTT;
  	}
  
