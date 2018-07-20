@@ -1,82 +1,76 @@
 From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
-Date: Fri, 20 Jul 2018 12:13:25 +0000
-Subject: [PATCH 4.14 21/92] net: dccp: avoid crash in ccid3_hc_rx_send_feedback()
-Message-Id: <20180720121418.658136674@linuxfoundation.org>
+Date: Fri, 20 Jul 2018 12:13:37 +0000
+Subject: [PATCH 4.9 20/66] net: dccp: switch rx_tstamp_last_feedback to monotonic clock
+Message-Id: <20180720121408.422815413@linuxfoundation.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-4.14-stable review patch.  If anyone has any objections, please let me know.
+4.9-stable review patch.  If anyone has any objections, please let me know.
 
 ------------------
 
 From: Eric Dumazet <edumazet@google.com>
 
-[ Upstream commit 74174fe5634ffbf645a7ca5a261571f700b2f332 ]
+[ Upstream commit 0ce4e70ff00662ad7490e545ba0cd8c1fa179fca ]
 
-On fast hosts or malicious bots, we trigger a DCCP_BUG() which
-seems excessive.
+To compute delays, better not use time of the day which can
+be changed by admins or malicious programs.
 
-syzbot reported :
-
-BUG: delta (-6195) <= 0 at net/dccp/ccids/ccid3.c:628/ccid3_hc_rx_send_feedback()
-CPU: 1 PID: 18 Comm: ksoftirqd/1 Not tainted 4.18.0-rc1+ #112
-Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS Google 01/01/2011
-Call Trace:
- __dump_stack lib/dump_stack.c:77 [inline]
- dump_stack+0x1c9/0x2b4 lib/dump_stack.c:113
- ccid3_hc_rx_send_feedback net/dccp/ccids/ccid3.c:628 [inline]
- ccid3_hc_rx_packet_recv.cold.16+0x38/0x71 net/dccp/ccids/ccid3.c:793
- ccid_hc_rx_packet_recv net/dccp/ccid.h:185 [inline]
- dccp_deliver_input_to_ccids+0xf0/0x280 net/dccp/input.c:180
- dccp_rcv_established+0x87/0xb0 net/dccp/input.c:378
- dccp_v4_do_rcv+0x153/0x180 net/dccp/ipv4.c:654
- sk_backlog_rcv include/net/sock.h:914 [inline]
- __sk_receive_skb+0x3ba/0xd80 net/core/sock.c:517
- dccp_v4_rcv+0x10f9/0x1f58 net/dccp/ipv4.c:875
- ip_local_deliver_finish+0x2eb/0xda0 net/ipv4/ip_input.c:215
- NF_HOOK include/linux/netfilter.h:287 [inline]
- ip_local_deliver+0x1e9/0x750 net/ipv4/ip_input.c:256
- dst_input include/net/dst.h:450 [inline]
- ip_rcv_finish+0x823/0x2220 net/ipv4/ip_input.c:396
- NF_HOOK include/linux/netfilter.h:287 [inline]
- ip_rcv+0xa18/0x1284 net/ipv4/ip_input.c:492
- __netif_receive_skb_core+0x2488/0x3680 net/core/dev.c:4628
- __netif_receive_skb+0x2c/0x1e0 net/core/dev.c:4693
- process_backlog+0x219/0x760 net/core/dev.c:5373
- napi_poll net/core/dev.c:5771 [inline]
- net_rx_action+0x7da/0x1980 net/core/dev.c:5837
- __do_softirq+0x2e8/0xb17 kernel/softirq.c:284
- run_ksoftirqd+0x86/0x100 kernel/softirq.c:645
- smpboot_thread_fn+0x417/0x870 kernel/smpboot.c:164
- kthread+0x345/0x410 kernel/kthread.c:240
- ret_from_fork+0x3a/0x50 arch/x86/entry/entry_64.S:412
+Also change ccid3_first_li() to use s64 type for delta variable
+to avoid potential overflows.
 
 Signed-off-by: Eric Dumazet <edumazet@google.com>
-Reported-by: syzbot <syzkaller@googlegroups.com>
 Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
 Cc: dccp@vger.kernel.org
 Signed-off-by: David S. Miller <davem@davemloft.net>
 Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 ---
- net/dccp/ccids/ccid3.c |    5 ++---
- 1 file changed, 2 insertions(+), 3 deletions(-)
+ net/dccp/ccids/ccid3.c |   11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
 
 --- a/net/dccp/ccids/ccid3.c
 +++ b/net/dccp/ccids/ccid3.c
-@@ -624,9 +624,8 @@ static void ccid3_hc_rx_send_feedback(st
- 	case CCID3_FBACK_PERIODIC:
- 		delta = ktime_us_delta(now, hc->rx_tstamp_last_feedback);
- 		if (delta <= 0)
--			DCCP_BUG("delta (%ld) <= 0", (long)delta);
--		else
--			hc->rx_x_recv = scaled_div32(hc->rx_bytes_recv, delta);
-+			delta = 1;
-+		hc->rx_x_recv = scaled_div32(hc->rx_bytes_recv, delta);
- 		break;
- 	default:
+@@ -599,7 +599,7 @@ static void ccid3_hc_rx_send_feedback(st
+ {
+ 	struct ccid3_hc_rx_sock *hc = ccid3_hc_rx_sk(sk);
+ 	struct dccp_sock *dp = dccp_sk(sk);
+-	ktime_t now = ktime_get_real();
++	ktime_t now = ktime_get();
+ 	s64 delta = 0;
+ 
+ 	switch (fbtype) {
+@@ -631,7 +631,7 @@ static void ccid3_hc_rx_send_feedback(st
  		return;
+ 	}
+ 
+-	ccid3_pr_debug("Interval %ldusec, X_recv=%u, 1/p=%u\n", (long)delta,
++	ccid3_pr_debug("Interval %lldusec, X_recv=%u, 1/p=%u\n", delta,
+ 		       hc->rx_x_recv, hc->rx_pinv);
+ 
+ 	hc->rx_tstamp_last_feedback = now;
+@@ -678,7 +678,8 @@ static int ccid3_hc_rx_insert_options(st
+ static u32 ccid3_first_li(struct sock *sk)
+ {
+ 	struct ccid3_hc_rx_sock *hc = ccid3_hc_rx_sk(sk);
+-	u32 x_recv, p, delta;
++	u32 x_recv, p;
++	s64 delta;
+ 	u64 fval;
+ 
+ 	if (hc->rx_rtt = 0) {
+@@ -686,7 +687,9 @@ static u32 ccid3_first_li(struct sock *s
+ 		hc->rx_rtt = DCCP_FALLBACK_RTT;
+ 	}
+ 
+-	delta  = ktime_to_us(net_timedelta(hc->rx_tstamp_last_feedback));
++	delta = ktime_us_delta(ktime_get(), hc->rx_tstamp_last_feedback);
++	if (delta <= 0)
++		delta = 1;
+ 	x_recv = scaled_div32(hc->rx_bytes_recv, delta);
+ 	if (x_recv = 0) {		/* would also trigger divide-by-zero */
+ 		DCCP_WARN("X_recv=0\n");
 
 
