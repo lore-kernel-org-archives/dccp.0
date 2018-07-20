@@ -1,14 +1,14 @@
 From: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
-Date: Fri, 20 Jul 2018 12:11:12 +0000
-Subject: [PATCH 3.18 17/29] net: dccp: avoid crash in ccid3_hc_rx_send_feedback()
-Message-Id: <20180720115159.599065116@linuxfoundation.org>
+Date: Fri, 20 Jul 2018 12:13:43 +0000
+Subject: [PATCH 4.4 13/31] net: dccp: avoid crash in ccid3_hc_rx_send_feedback()
+Message-Id: <20180720121340.633256628@linuxfoundation.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-3.18-stable review patch.  If anyone has any objections, please let me know.
+4.4-stable review patch.  If anyone has any objections, please let me know.
 
 ------------------
 
