@@ -1,75 +1,69 @@
-From: Eric Dumazet <edumazet@google.com>
-Date: Fri, 22 Jun 2018 13:44:14 +0000
-Subject: [PATCH net 1/2] net: dccp: avoid crash in ccid3_hc_rx_send_feedback()
-Message-Id: <20180622134415.104266-2-edumazet@google.com>
+From: Andrey Ryabinin <aryabinin@virtuozzo.com>
+Date: Tue, 31 Jul 2018 17:01:30 +0000
+Subject: SLAB_TYPESAFE_BY_RCU without constructors (was Re: [PATCH v4 13/17] khwasan: add hooks implementatio
+Message-Id: <e3b48104-3efb-1896-0d46-792419f49a75@virtuozzo.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On fast hosts or malicious bots, we trigger a DCCP_BUG() which
-seems excessive.
 
-syzbot reported :
+On 07/31/2018 07:04 PM, Andrey Ryabinin wrote:
+>> Somewhat offtopic, but I can't understand how SLAB_TYPESAFE_BY_RCU
+>> slabs can be useful without ctors or at least memset(0). Objects in
+>> such slabs need to be type-stable, but I can't understand how it's
+>> possible to establish type stability without a ctor... Are these bugs?
+> 
+> Yeah, I puzzled by this too. However, I think it's hard but possible to make it work, at least in theory.
+> There must be an initializer, which consists of two parts:
+> a) initilize objects fields
+> b) expose object to the world (add it to list or something like that)
+> 
+> (a) part must somehow to be ok to race with another cpu which might already use the object.
+> (b) part must must use e.g. barriers to make sure that racy users will see previously inilized fields.
+> Racy users must have parring barrier of course.
+> 
+> But it sound fishy, and very easy to fuck up. I won't be surprised if every single one SLAB_TYPESAFE_BY_RCU user
+> without ->ctor is bogus. It certainly would be better to convert those to use ->ctor.
+> 
+> Such caches seems used by networking subsystem in proto_register():
+> 
+> 		prot->slab = kmem_cache_create_usercopy(prot->name,
+> 					prot->obj_size, 0,
+> 					SLAB_HWCACHE_ALIGN | SLAB_ACCOUNT |
+> 					prot->slab_flags,
+> 					prot->useroffset, prot->usersize,
+> 					NULL);
+> 
+> And certain protocols specify SLAB_TYPESAFE_BY_RCU in ->slab_flags, such as:
+> llc_proto, smc_proto, smc_proto6, tcp_prot, tcpv6_prot, dccp_v6_prot, dccp_v4_prot.
+> 
+> 
+> Also nf_conntrack_cachep, kernfs_node_cache, jbd2_journal_head_cache and i915_request cache.
+> 
 
-BUG: delta (-6195) <= 0 at net/dccp/ccids/ccid3.c:628/ccid3_hc_rx_send_feedback()
-CPU: 1 PID: 18 Comm: ksoftirqd/1 Not tainted 4.18.0-rc1+ #112
-Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS Google 01/01/2011
-Call Trace:
- __dump_stack lib/dump_stack.c:77 [inline]
- dump_stack+0x1c9/0x2b4 lib/dump_stack.c:113
- ccid3_hc_rx_send_feedback net/dccp/ccids/ccid3.c:628 [inline]
- ccid3_hc_rx_packet_recv.cold.16+0x38/0x71 net/dccp/ccids/ccid3.c:793
- ccid_hc_rx_packet_recv net/dccp/ccid.h:185 [inline]
- dccp_deliver_input_to_ccids+0xf0/0x280 net/dccp/input.c:180
- dccp_rcv_established+0x87/0xb0 net/dccp/input.c:378
- dccp_v4_do_rcv+0x153/0x180 net/dccp/ipv4.c:654
- sk_backlog_rcv include/net/sock.h:914 [inline]
- __sk_receive_skb+0x3ba/0xd80 net/core/sock.c:517
- dccp_v4_rcv+0x10f9/0x1f58 net/dccp/ipv4.c:875
- ip_local_deliver_finish+0x2eb/0xda0 net/ipv4/ip_input.c:215
- NF_HOOK include/linux/netfilter.h:287 [inline]
- ip_local_deliver+0x1e9/0x750 net/ipv4/ip_input.c:256
- dst_input include/net/dst.h:450 [inline]
- ip_rcv_finish+0x823/0x2220 net/ipv4/ip_input.c:396
- NF_HOOK include/linux/netfilter.h:287 [inline]
- ip_rcv+0xa18/0x1284 net/ipv4/ip_input.c:492
- __netif_receive_skb_core+0x2488/0x3680 net/core/dev.c:4628
- __netif_receive_skb+0x2c/0x1e0 net/core/dev.c:4693
- process_backlog+0x219/0x760 net/core/dev.c:5373
- napi_poll net/core/dev.c:5771 [inline]
- net_rx_action+0x7da/0x1980 net/core/dev.c:5837
- __do_softirq+0x2e8/0xb17 kernel/softirq.c:284
- run_ksoftirqd+0x86/0x100 kernel/softirq.c:645
- smpboot_thread_fn+0x417/0x870 kernel/smpboot.c:164
- kthread+0x345/0x410 kernel/kthread.c:240
- ret_from_fork+0x3a/0x50 arch/x86/entry/entry_64.S:412
 
-Signed-off-by: Eric Dumazet <edumazet@google.com>
-Reported-by: syzbot <syzkaller@googlegroups.com>
-Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Cc: dccp@vger.kernel.org
----
- net/dccp/ccids/ccid3.c | 5 ++---
- 1 file changed, 2 insertions(+), 3 deletions(-)
+[+CC maintainer of the relevant code.]
 
-diff --git a/net/dccp/ccids/ccid3.c b/net/dccp/ccids/ccid3.c
-index 8b5ba6dffac7ebc88fd21075793dc3db43a74a43..d57a2be1e2e09aee89347e286aca538303b7dee1 100644
---- a/net/dccp/ccids/ccid3.c
-+++ b/net/dccp/ccids/ccid3.c
-@@ -625,9 +625,8 @@ static void ccid3_hc_rx_send_feedback(struct sock *sk,
- 	case CCID3_FBACK_PERIODIC:
- 		delta = ktime_us_delta(now, hc->rx_tstamp_last_feedback);
- 		if (delta <= 0)
--			DCCP_BUG("delta (%ld) <= 0", (long)delta);
--		else
--			hc->rx_x_recv = scaled_div32(hc->rx_bytes_recv, delta);
-+			delta = 1;
-+		hc->rx_x_recv = scaled_div32(hc->rx_bytes_recv, delta);
- 		break;
- 	default:
- 		return;
--- 
-2.18.0.rc2.346.g013aa6912e-goog
+Guys, it seems that we have a lot of code using SLAB_TYPESAFE_BY_RCU cache without constructor.
+I think it's nearly impossible to use that combination without having bugs.
+It's either you don't really need the SLAB_TYPESAFE_BY_RCU, or you need to have a constructor in kmem_cache.
+
+Could you guys, please, verify your code if it's really need SLAB_TYPSAFE or constructor?
+
+E.g. the netlink code look extremely suspicious:
+
+	/*
+	 * Do not use kmem_cache_zalloc(), as this cache uses
+	 * SLAB_TYPESAFE_BY_RCU.
+	 */
+	ct = kmem_cache_alloc(nf_conntrack_cachep, gfp);
+	if (ct = NULL)
+		goto out;
+
+	spin_lock_init(&ct->lock);
+
+If nf_conntrack_cachep objects really used in rcu typesafe manner, than 'ct' returned by kmem_cache_alloc might still be
+in use by another cpu. So we just reinitialize spin_lock used by someone else?
 
