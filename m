@@ -1,7 +1,7 @@
-From: Dmitry Vyukov <dvyukov@google.com>
-Date: Wed, 01 Aug 2018 13:52:40 +0000
+From: Christopher Lameter <cl@linux.com>
+Date: Wed, 01 Aug 2018 15:15:51 +0000
 Subject: Re: SLAB_TYPESAFE_BY_RCU without constructors (was Re: [PATCH v4 13/17] khwasan: add hooks implement
-Message-Id: <CACT4Y+ay6+UTLMr4K_RTTubjzpGZXe2n7T8Q=kC=Q1baHshkHQ@mail.gmail.com>
+Message-Id: <01000164f60f3f12-b1253c6e-ee57-49fc-aed8-0944ab4fd7a2-000000@email.amazonses.com>
 List-Id: <dccp.vger.kernel.org>
 References: <e3b48104-3efb-1896-0d46-792419f49a75@virtuozzo.com>
 In-Reply-To: <e3b48104-3efb-1896-0d46-792419f49a75@virtuozzo.com>
@@ -10,20 +10,19 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, Aug 1, 2018 at 3:46 PM, Florian Westphal <fw@strlen.de> wrote:
-> Dmitry Vyukov <dvyukov@google.com> wrote:
->> If that scenario is possible that a fix would be to make
->
-> Looks possible.
->
->> __nf_conntrack_find_get ever return NULL iff it got NULL from
->> ____nf_conntrack_find (not if any of the checks has failed).
->
-> I don't see why we need to restart on nf_ct_is_dying(), but other
-> than that this seems ok.
+On Wed, 1 Aug 2018, Dmitry Vyukov wrote:
 
-Because it can be a wrong entry dying. When we check dying, we don't
-yet know if we are looking at the right entry or not. If we
-successfully acquire a reference, then recheck nf_ct_key_equal and
-_then_ check dying, then we don't need to restart on dying. But with
-the current check order, we need to restart on dying too.
+> But we are trading 1 indirect call for comparable overhead removed
+> from much more common path. The path that does ctors is also calling
+> into page alloc, which is much more expensive.
+> So ctor should be a net win on performance front, no?
+
+ctor would make it esier to review the flow and guarantee that the object
+always has certain fields set as required before any use by the subsystem.
+
+ctors are run once on allocation of the slab page for all objects in it.
+
+ctors are not called duiring allocation and freeing of objects from the
+slab page. So we could avoid the intialization of the spinlock on each
+object allocation which actually should be faster.
+
