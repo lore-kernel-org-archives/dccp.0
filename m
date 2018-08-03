@@ -1,61 +1,38 @@
-From: Alexey Kodanev <alexey.kodanev@oracle.com>
-Date: Thu, 02 Aug 2018 16:22:05 +0000
-Subject: [PATCH net] dccp: fix undefined behavior with 'cwnd' shift in ccid2_cwnd_restart()
-Message-Id: <1533226925-16783-1-git-send-email-alexey.kodanev@oracle.com>
+From: David Miller <davem@davemloft.net>
+Date: Fri, 03 Aug 2018 20:36:39 +0000
+Subject: Re: [PATCH net] dccp: fix undefined behavior with 'cwnd' shift in ccid2_cwnd_restart()
+Message-Id: <20180803.133639.1730093521545082783.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
+References: <1533226925-16783-1-git-send-email-alexey.kodanev@oracle.com>
+In-Reply-To: <1533226925-16783-1-git-send-email-alexey.kodanev@oracle.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Make sure that the value of "(now - hc->tx_lsndtime) / hc->tx_rto" is
-properly limited when shifting 'u32 cwnd' with it, otherwise we can get:
+From: Alexey Kodanev <alexey.kodanev@oracle.com>
+Date: Thu,  2 Aug 2018 19:22:05 +0300
 
-[40850.963623] UBSAN: Undefined behaviour in net/dccp/ccids/ccid2.c:237:7
-[40851.043858] shift exponent 67 is too large for 32-bit type 'unsigned int'
-[40851.127163] CPU: 3 PID: 15940 Comm: netstress Tainted: G        W   E     4.18.0-rc7.x86_64 #1
-...
-[40851.377176] Call Trace:
-[40851.408503]  dump_stack+0xf1/0x17b
-[40851.451331]  ? show_regs_print_info+0x5/0x5
-[40851.503555]  ubsan_epilogue+0x9/0x7c
-[40851.548363]  __ubsan_handle_shift_out_of_bounds+0x25b/0x2b4
-[40851.617109]  ? __ubsan_handle_load_invalid_value+0x18f/0x18f
-[40851.686796]  ? xfrm4_output_finish+0x80/0x80
-[40851.739827]  ? lock_downgrade+0x6d0/0x6d0
-[40851.789744]  ? xfrm4_prepare_output+0x160/0x160
-[40851.845912]  ? ip_queue_xmit+0x810/0x1db0
-[40851.895845]  ? ccid2_hc_tx_packet_sent+0xd36/0x10a0 [dccp]
-[40851.963530]  ccid2_hc_tx_packet_sent+0xd36/0x10a0 [dccp]
-[40852.029063]  dccp_xmit_packet+0x1d3/0x720 [dccp]
-[40852.086254]  dccp_write_xmit+0x116/0x1d0 [dccp]
-[40852.142412]  dccp_sendmsg+0x428/0xb20 [dccp]
-[40852.195454]  ? inet_dccp_listen+0x200/0x200 [dccp]
-[40852.254833]  ? sched_clock+0x5/0x10
-[40852.298508]  ? sched_clock+0x5/0x10
-[40852.342194]  ? inet_create+0xdf0/0xdf0
-[40852.388988]  sock_sendmsg+0xd9/0x160
-...
+> Make sure that the value of "(now - hc->tx_lsndtime) / hc->tx_rto" is
+> properly limited when shifting 'u32 cwnd' with it, otherwise we can get:
+ ...
+> Fixes: 113ced1f52e5 ("dccp ccid-2: Perform congestion-window validation")
+> Signed-off-by: Alexey Kodanev <alexey.kodanev@oracle.com>
+ ...
+> @@ -234,7 +234,7 @@ static void ccid2_cwnd_restart(struct sock *sk, const u32 now)
+>  
+>  	/* don't reduce cwnd below the initial window (IW) */
+>  	restart_cwnd = min(cwnd, iwnd);
+> -	cwnd >>= (now - hc->tx_lsndtime) / hc->tx_rto;
+> +	cwnd >>= min((now - hc->tx_lsndtime) / hc->tx_rto, 31U);
+>  	hc->tx_cwnd = max(cwnd, restart_cwnd);
+>  
+>  	hc->tx_cwnd_stamp = now;
 
-Fixes: 113ced1f52e5 ("dccp ccid-2: Perform congestion-window validation")
-Signed-off-by: Alexey Kodanev <alexey.kodanev@oracle.com>
----
- net/dccp/ccids/ccid2.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+Better to mimick the TCP cwnd validation code, something like:
 
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index 2b75df4..2821180 100644
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -234,7 +234,7 @@ static void ccid2_cwnd_restart(struct sock *sk, const u32 now)
- 
- 	/* don't reduce cwnd below the initial window (IW) */
- 	restart_cwnd = min(cwnd, iwnd);
--	cwnd >>= (now - hc->tx_lsndtime) / hc->tx_rto;
-+	cwnd >>= min((now - hc->tx_lsndtime) / hc->tx_rto, 31U);
- 	hc->tx_cwnd = max(cwnd, restart_cwnd);
- 
- 	hc->tx_cwnd_stamp = now;
--- 
-1.8.3.1
+	s32 delta = now - hc->tx_lsndtime;
+	while ((delta -= hc->tx_rto) > 0 && cwnd > restart_cwnd)
+		cwnd >>= 1;
 
+Thanks.
