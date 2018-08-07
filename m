@@ -1,83 +1,33 @@
-From: Alexey Kodanev <alexey.kodanev@oracle.com>
-Date: Tue, 07 Aug 2018 16:54:21 +0000
-Subject: [PATCH net v2] dccp: fix undefined behavior with 'cwnd' shift in ccid2_cwnd_restart()
-Message-Id: <1533661437-26715-1-git-send-email-alexey.kodanev@oracle.com>
+From: David Miller <davem@davemloft.net>
+Date: Tue, 07 Aug 2018 22:49:28 +0000
+Subject: Re: [PATCH net v2] dccp: fix undefined behavior with 'cwnd' shift in ccid2_cwnd_restart()
+Message-Id: <20180807.154928.1470634752988946729.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
+References: <1533661437-26715-1-git-send-email-alexey.kodanev@oracle.com>
+In-Reply-To: <1533661437-26715-1-git-send-email-alexey.kodanev@oracle.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-The shift of 'cwnd' with '(now - hc->tx_lsndtime) / hc->tx_rto' value
-can lead to undefined behavior [1].
+From: Alexey Kodanev <alexey.kodanev@oracle.com>
+Date: Tue,  7 Aug 2018 20:03:57 +0300
 
-In order to fix this use a gradual shift of the window with a 'while'
-loop, similar to what tcp_cwnd_restart() is doing.
+> The shift of 'cwnd' with '(now - hc->tx_lsndtime) / hc->tx_rto' value
+> can lead to undefined behavior [1].
+> 
+> In order to fix this use a gradual shift of the window with a 'while'
+> loop, similar to what tcp_cwnd_restart() is doing.
+> 
+> When comparing delta and RTO there is a minor difference between TCP
+> and DCCP, the last one also invokes dccp_cwnd_restart() and reduces
+> 'cwnd' if delta equals RTO. That case is preserved in this change.
+ ...
+> Fixes: 113ced1f52e5 ("dccp ccid-2: Perform congestion-window validation")
+> Signed-off-by: Alexey Kodanev <alexey.kodanev@oracle.com>
+> ---
+> 
+> v2: instead of checking the value with min(), use gradual shifting,
+>     similar to tcp_cwnd_restart().
 
-When comparing delta and RTO there is a minor difference between TCP
-and DCCP, the last one also invokes dccp_cwnd_restart() and reduces
-'cwnd' if delta equals RTO. That case is preserved in this change.
-
-[1]:
-[40850.963623] UBSAN: Undefined behaviour in net/dccp/ccids/ccid2.c:237:7
-[40851.043858] shift exponent 67 is too large for 32-bit type 'unsigned int'
-[40851.127163] CPU: 3 PID: 15940 Comm: netstress Tainted: G        W   E     4.18.0-rc7.x86_64 #1
-...
-[40851.377176] Call Trace:
-[40851.408503]  dump_stack+0xf1/0x17b
-[40851.451331]  ? show_regs_print_info+0x5/0x5
-[40851.503555]  ubsan_epilogue+0x9/0x7c
-[40851.548363]  __ubsan_handle_shift_out_of_bounds+0x25b/0x2b4
-[40851.617109]  ? __ubsan_handle_load_invalid_value+0x18f/0x18f
-[40851.686796]  ? xfrm4_output_finish+0x80/0x80
-[40851.739827]  ? lock_downgrade+0x6d0/0x6d0
-[40851.789744]  ? xfrm4_prepare_output+0x160/0x160
-[40851.845912]  ? ip_queue_xmit+0x810/0x1db0
-[40851.895845]  ? ccid2_hc_tx_packet_sent+0xd36/0x10a0 [dccp]
-[40851.963530]  ccid2_hc_tx_packet_sent+0xd36/0x10a0 [dccp]
-[40852.029063]  dccp_xmit_packet+0x1d3/0x720 [dccp]
-[40852.086254]  dccp_write_xmit+0x116/0x1d0 [dccp]
-[40852.142412]  dccp_sendmsg+0x428/0xb20 [dccp]
-[40852.195454]  ? inet_dccp_listen+0x200/0x200 [dccp]
-[40852.254833]  ? sched_clock+0x5/0x10
-[40852.298508]  ? sched_clock+0x5/0x10
-[40852.342194]  ? inet_create+0xdf0/0xdf0
-[40852.388988]  sock_sendmsg+0xd9/0x160
-...
-
-Fixes: 113ced1f52e5 ("dccp ccid-2: Perform congestion-window validation")
-Signed-off-by: Alexey Kodanev <alexey.kodanev@oracle.com>
----
-
-v2: instead of checking the value with min(), use gradual shifting,
-    similar to tcp_cwnd_restart().
-
- net/dccp/ccids/ccid2.c | 6 ++++--
- 1 file changed, 4 insertions(+), 2 deletions(-)
-
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index 2b75df4..842a9c7 100644
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -229,14 +229,16 @@ static void ccid2_cwnd_restart(struct sock *sk, const u32 now)
- 	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
- 	u32 cwnd = hc->tx_cwnd, restart_cwnd,
- 	    iwnd = rfc3390_bytes_to_packets(dccp_sk(sk)->dccps_mss_cache);
-+	s32 delta = now - hc->tx_lsndtime;
- 
- 	hc->tx_ssthresh = max(hc->tx_ssthresh, (cwnd >> 1) + (cwnd >> 2));
- 
- 	/* don't reduce cwnd below the initial window (IW) */
- 	restart_cwnd = min(cwnd, iwnd);
--	cwnd >>= (now - hc->tx_lsndtime) / hc->tx_rto;
--	hc->tx_cwnd = max(cwnd, restart_cwnd);
- 
-+	while ((delta -= hc->tx_rto) >= 0 && cwnd > restart_cwnd)
-+		cwnd >>= 1;
-+	hc->tx_cwnd = max(cwnd, restart_cwnd);
- 	hc->tx_cwnd_stamp = now;
- 	hc->tx_cwnd_used  = 0;
- 
--- 
-1.8.3.1
-
+Applied and queued up for -stable, thanks.
