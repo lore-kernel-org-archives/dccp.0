@@ -1,7 +1,7 @@
-From: Arnd Bergmann <arnd@arndb.de>
-Date: Thu, 13 Sep 2018 12:28:08 +0000
+From: Stefan Schmidt <stefan@datenfreihafen.org>
+Date: Fri, 21 Sep 2018 09:14:36 +0000
 Subject: Re: [PATCH net-next 1/3] net: rework SIOCGSTAMP ioctl handling
-Message-Id: <CAK8P3a038aDQQotzua_QtKGhq8O9n+rdiz2=WDCp82ys8eUT+A@mail.gmail.com>
+Message-Id: <5cca03b6-8d3d-5f18-778f-a5d5e70c2218@datenfreihafen.org>
 List-Id: <dccp.vger.kernel.org>
 References: <20180829130308.3504560-1-arnd@arndb.de>
 In-Reply-To: <20180829130308.3504560-1-arnd@arndb.de>
@@ -10,79 +10,67 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, Aug 29, 2018 at 3:03 PM Arnd Bergmann <arnd@arndb.de> wrote:
+Hello Arnd.
 
-> diff --git a/net/core/sock.c b/net/core/sock.c
-> index 3730eb855095..df17bbfaca27 100644
-> --- a/net/core/sock.c
-> +++ b/net/core/sock.c
-> @@ -2897,37 +2897,31 @@ bool lock_sock_fast(struct sock *sk)
->  }
->  EXPORT_SYMBOL(lock_sock_fast);
->
-> -int sock_get_timestamp(struct sock *sk, struct timeval __user *userstamp)
-> +int sock_gettstamp(struct socket *sock, void __user *userstamp,
-> +                  bool timeval, bool time32)
->  {
-> -       struct timeval tv;
-> -
-> -       sock_enable_timestamp(sk, SOCK_TIMESTAMP);
-> -       tv = ktime_to_timeval(sk->sk_stamp);
-> -       if (tv.tv_sec = -1)
-> -               return -ENOENT;
-> -       if (tv.tv_sec = 0) {
-> -               sk->sk_stamp = ktime_get_real();
-> -               tv = ktime_to_timeval(sk->sk_stamp);
-> -       }
-> -       return copy_to_user(userstamp, &tv, sizeof(tv)) ? -EFAULT : 0;
-> -}
-> -EXPORT_SYMBOL(sock_get_timestamp);
+On 8/29/18 2:59 PM, Arnd Bergmann wrote:
+> The SIOCGSTAMP/SIOCGSTAMPNS ioctl commands are implemented by many
+> socket protocol handlers, and all of those end up calling the same
+> sock_get_timestamp()/sock_get_timestampns() helper functions, which
+> results in a lot of duplicate code.
+> 
+> With the introduction of 64-bit time_t on 32-bit architectures, this
+> gets worse, as we then need four different ioctl commands in each
+> socket protocol implementation.
+> 
+> To simplify that, let's add a new .gettstamp() operation in
+> struct proto_ops, and move ioctl implementation into the common
+> sock_ioctl()/compat_sock_ioctl_trans() functions that these all go
+> through.
+> 
+> We can reuse the sock_get_timestamp() implementation, but generalize
+> it so it can deal with both native and compat mode, as well as
+> timeval and timespec structures.
+> 
+> Signed-off-by: Arnd Bergmann <arnd@arndb.de>
+> ---
+>  include/linux/net.h          |  2 ++
+>  include/net/compat.h         |  3 --
+>  include/net/sock.h           |  4 +--
+>  net/appletalk/ddp.c          |  7 +----
+>  net/atm/ioctl.c              | 16 -----------
+>  net/atm/pvc.c                |  1 +
+>  net/atm/svc.c                |  1 +
+>  net/ax25/af_ax25.c           |  9 +-----
+>  net/bluetooth/af_bluetooth.c |  8 ------
+>  net/bluetooth/l2cap_sock.c   |  1 +
+>  net/bluetooth/rfcomm/sock.c  |  1 +
+>  net/bluetooth/sco.c          |  1 +
+>  net/can/af_can.c             |  6 ----
+>  net/can/bcm.c                |  1 +
+>  net/can/raw.c                |  1 +
+>  net/compat.c                 | 54 ------------------------------------
+>  net/core/sock.c              | 38 +++++++++++--------------
+>  net/dccp/ipv4.c              |  1 +
+>  net/dccp/ipv6.c              |  1 +
+>  net/ieee802154/socket.c      |  6 ++--
+>  net/ipv4/af_inet.c           |  9 ++----
+>  net/ipv6/af_inet6.c          |  8 ++----
+>  net/ipv6/raw.c               |  1 +
+>  net/l2tp/l2tp_ip.c           |  1 +
+>  net/l2tp/l2tp_ip6.c          |  1 +
+>  net/netrom/af_netrom.c       | 14 +---------
+>  net/packet/af_packet.c       |  7 ++---
+>  net/qrtr/qrtr.c              |  4 +--
+>  net/rose/af_rose.c           |  7 +----
+>  net/sctp/ipv6.c              |  1 +
+>  net/sctp/protocol.c          |  1 +
+>  net/socket.c                 | 48 ++++++++++----------------------
+>  net/x25/af_x25.c             | 27 +-----------------
+>  33 files changed, 63 insertions(+), 228 deletions(-)
 
-As  I just learned, sparc64 uses a 32-bit suseconds_t, so this
-function always leaked 32 bits of kernel stack data by copying
-the padding bytes of 'tv' into user space.
+For the net/ieee802154/socket. part I am fine with this change.
 
-Linux-4.11 and higher could avoid that with
-CONFIG_GCC_PLUGIN_STRUCTLEAK, but older kernels
-have been affected since socket timestamps were first added.
+Acked-by: Stefan Schmidt <stefan@datenfreihafen.org>
 
-The same thing is probably true of many other interfaces
-that pass a timeval.
-
-> -int sock_get_timestampns(struct sock *sk, struct timespec __user *userstamp)
-> -{
-> -       struct timespec ts;
-> +       struct sock *sk = sock->sk;
-> +       struct timespec64 ts;
->
->         sock_enable_timestamp(sk, SOCK_TIMESTAMP);
-> -       ts = ktime_to_timespec(sk->sk_stamp);
-> +       ts = ktime_to_timespec64(sk->sk_stamp);
->         if (ts.tv_sec = -1)
->                 return -ENOENT;
->         if (ts.tv_sec = 0) {
->                 sk->sk_stamp = ktime_get_real();
-> -               ts = ktime_to_timespec(sk->sk_stamp);
-> +               ts = ktime_to_timespec64(sk->sk_stamp);
->         }
-> -       return copy_to_user(userstamp, &ts, sizeof(ts)) ? -EFAULT : 0;
-> +
-> +       if (timeval)
-> +               ts.tv_nsec /= 1000;
-> +#ifdef CONFIG_COMPAT_32BIT_TIME
-> +       if (time32)
-> +               return put_old_timespec32(&ts, userstamp);
-> +#endif
-> +
-> +       return put_timespec64(&ts, userstamp);
->  }
-
-My new implementation is worse here: it no longer leaks stack
-data, but since we now write a big-endian 64-bit microseconds
-value, the microseconds are in the wrong place and will
-be interpreted as zero by user space...
-
-I'll also have to revisit a few other similar patches I did for
-y2038, to figure out what they should do on sparc64.
-
-         Arnd
+regards
+Stefan Schmidt
