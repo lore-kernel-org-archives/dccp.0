@@ -1,76 +1,94 @@
-From: Stefan Schmidt <stefan@datenfreihafen.org>
-Date: Fri, 21 Sep 2018 09:14:36 +0000
-Subject: Re: [PATCH net-next 1/3] net: rework SIOCGSTAMP ioctl handling
-Message-Id: <5cca03b6-8d3d-5f18-778f-a5d5e70c2218@datenfreihafen.org>
+From: syzbot <syzbot+e786ba000564d103a6fe@syzkaller.appspotmail.com>
+Date: Tue, 23 Oct 2018 10:13:02 +0000
+Subject: BUG: please report to dccp@vger.kernel.org => prev = 2, last = 2 at net/dccp/ccids/lib/packet_histor
+Message-Id: <0000000000006dc2420578e29de3@google.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20180829130308.3504560-1-arnd@arndb.de>
-In-Reply-To: <20180829130308.3504560-1-arnd@arndb.de>
+References: <20180408215707.GE685@sol.localdomain>
+In-Reply-To: <20180408215707.GE685@sol.localdomain>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="windows-1252"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-Hello Arnd.
+Hello,
 
-On 8/29/18 2:59 PM, Arnd Bergmann wrote:
-> The SIOCGSTAMP/SIOCGSTAMPNS ioctl commands are implemented by many
-> socket protocol handlers, and all of those end up calling the same
-> sock_get_timestamp()/sock_get_timestampns() helper functions, which
-> results in a lot of duplicate code.
-> 
-> With the introduction of 64-bit time_t on 32-bit architectures, this
-> gets worse, as we then need four different ioctl commands in each
-> socket protocol implementation.
-> 
-> To simplify that, let's add a new .gettstamp() operation in
-> struct proto_ops, and move ioctl implementation into the common
-> sock_ioctl()/compat_sock_ioctl_trans() functions that these all go
-> through.
-> 
-> We can reuse the sock_get_timestamp() implementation, but generalize
-> it so it can deal with both native and compat mode, as well as
-> timeval and timespec structures.
-> 
-> Signed-off-by: Arnd Bergmann <arnd@arndb.de>
-> ---
->  include/linux/net.h          |  2 ++
->  include/net/compat.h         |  3 --
->  include/net/sock.h           |  4 +--
->  net/appletalk/ddp.c          |  7 +----
->  net/atm/ioctl.c              | 16 -----------
->  net/atm/pvc.c                |  1 +
->  net/atm/svc.c                |  1 +
->  net/ax25/af_ax25.c           |  9 +-----
->  net/bluetooth/af_bluetooth.c |  8 ------
->  net/bluetooth/l2cap_sock.c   |  1 +
->  net/bluetooth/rfcomm/sock.c  |  1 +
->  net/bluetooth/sco.c          |  1 +
->  net/can/af_can.c             |  6 ----
->  net/can/bcm.c                |  1 +
->  net/can/raw.c                |  1 +
->  net/compat.c                 | 54 ------------------------------------
->  net/core/sock.c              | 38 +++++++++++--------------
->  net/dccp/ipv4.c              |  1 +
->  net/dccp/ipv6.c              |  1 +
->  net/ieee802154/socket.c      |  6 ++--
->  net/ipv4/af_inet.c           |  9 ++----
->  net/ipv6/af_inet6.c          |  8 ++----
->  net/ipv6/raw.c               |  1 +
->  net/l2tp/l2tp_ip.c           |  1 +
->  net/l2tp/l2tp_ip6.c          |  1 +
->  net/netrom/af_netrom.c       | 14 +---------
->  net/packet/af_packet.c       |  7 ++---
->  net/qrtr/qrtr.c              |  4 +--
->  net/rose/af_rose.c           |  7 +----
->  net/sctp/ipv6.c              |  1 +
->  net/sctp/protocol.c          |  1 +
->  net/socket.c                 | 48 ++++++++++----------------------
->  net/x25/af_x25.c             | 27 +-----------------
->  33 files changed, 63 insertions(+), 228 deletions(-)
+syzbot found the following crash on:
 
-For the net/ieee802154/socket. part I am fine with this change.
+HEAD commit:    ca9eb48fe01f Merge tag 'regulator-v5.0' of git://git.kerne..
+git tree:       upstream
+console output: https://syzkaller.appspot.com/x/log.txt?x=1482a939400000
+kernel config:  https://syzkaller.appspot.com/x/.config?x=963b24abf3f7c2d8
+dashboard link: https://syzkaller.appspot.com/bug?extid=E786ba000564d103a6fe
+compiler:       gcc (GCC) 8.0.1 20180413 (experimental)
 
-Acked-by: Stefan Schmidt <stefan@datenfreihafen.org>
+Unfortunately, I don't have any reproducer for this crash yet.
 
-regards
-Stefan Schmidt
+IMPORTANT: if you fix the bug, please add the following tag to the commit:
+Reported-by: syzbot+e786ba000564d103a6fe@syzkaller.appspotmail.com
+
+input: syz0 as /devices/virtual/input/input6
+BUG: please report to dccp@vger.kernel.org =3D> prev =3D 2, last =3D 2 at  =
+
+net/dccp/ccids/lib/packet_history.c:425/tfrc_rx_hist_sample_rtt()
+CPU: 1 PID: 18 Comm: ksoftirqd/1 Not tainted 4.19.0+ #298
+Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS =20
+Google 01/01/2011
+Call Trace:
+  __dump_stack lib/dump_stack.c:77 [inline]
+  dump_stack+0x1c4/0x2b6 lib/dump_stack.c:113
+  tfrc_rx_hist_sample_rtt.cold.3+0x54/0x5c =20
+net/dccp/ccids/lib/packet_history.c:422
+  ccid3_hc_rx_packet_recv+0x5c4/0xeb0 net/dccp/ccids/ccid3.c:767
+  ccid_hc_rx_packet_recv net/dccp/ccid.h:185 [inline]
+  dccp_deliver_input_to_ccids+0xf0/0x280 net/dccp/input.c:180
+  dccp_rcv_established+0x87/0xb0 net/dccp/input.c:378
+  dccp_v4_do_rcv+0x153/0x180 net/dccp/ipv4.c:656
+  sk_backlog_rcv include/net/sock.h:931 [inline]
+  __sk_receive_skb+0x3e5/0xec0 net/core/sock.c:473
+  dccp_v4_rcv+0x10f9/0x1f58 net/dccp/ipv4.c:877
+  ip_local_deliver_finish+0x2e9/0xda0 net/ipv4/ip_input.c:215
+  NF_HOOK include/linux/netfilter.h:289 [inline]
+  ip_local_deliver+0x1e9/0x750 net/ipv4/ip_input.c:256
+  dst_input include/net/dst.h:450 [inline]
+  ip_rcv_finish+0x1f9/0x300 net/ipv4/ip_input.c:415
+  NF_HOOK include/linux/netfilter.h:289 [inline]
+  ip_rcv+0xed/0x600 net/ipv4/ip_input.c:524
+  __netif_receive_skb_one_core+0x14d/0x200 net/core/dev.c:4913
+  __netif_receive_skb+0x2c/0x1e0 net/core/dev.c:5023
+  process_backlog+0x218/0x6f0 net/core/dev.c:5829
+  napi_poll net/core/dev.c:6249 [inline]
+  net_rx_action+0x7c5/0x1950 net/core/dev.c:6315
+  __do_softirq+0x30c/0xb03 kernel/softirq.c:292
+  run_ksoftirqd+0x94/0x100 kernel/softirq.c:653
+  smpboot_thread_fn+0x68b/0xa00 kernel/smpboot.c:164
+  kthread+0x35a/0x420 kernel/kthread.c:246
+  ret_from_fork+0x3a/0x50 arch/x86/entry/entry_64.S:413
+net_ratelimit: 18 callbacks suppressed
+dccp_close: ABORT with 105978 bytes unread
+input: syz0 as /devices/virtual/input/input7
+input: syz0 as /devices/virtual/input/input8
+dccp_close: ABORT with 52730 bytes unread
+input: syz0 as /devices/virtual/input/input9
+dccp_close: ABORT with 105978 bytes unread
+dccp_close: ABORT with 105978 bytes unread
+dccp_close: ABORT with 77306 bytes unread
+dccp_close: ABORT with 89594 bytes unread
+input: syz0 as /devices/virtual/input/input10
+input: syz0 as /devices/virtual/input/input11
+input: syz0 as /devices/virtual/input/input12
+input: syz0 as /devices/virtual/input/input13
+input: syz0 as /devices/virtual/input/input14
+input: syz0 as /devices/virtual/input/input15
+input: syz0 as /devices/virtual/input/input16
+input: syz0 as /devices/virtual/input/input17
+input: syz0 as /devices/virtual/input/input18
+
+
+---
+This bug is generated by a bot. It may contain errors.
+See https://goo.gl/tpsmEJ for more information about syzbot.
+syzbot engineers can be reached at syzkaller@googlegroups.com.
+
+syzbot will keep track of this bug report. See:
+https://goo.gl/tpsmEJ#bug-status-tracking for how to communicate with =20
+syzbot.
