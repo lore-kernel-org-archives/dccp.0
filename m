@@ -1,43 +1,41 @@
 From: Eric Biggers <ebiggers@kernel.org>
-Date: Wed, 27 Feb 2019 00:42:41 +0000
-Subject: Re: BUG: please report to dccp@vger.kernel.org => prev = 2, last = 2 at net/dccp/ccids/lib/packet_hi
-Message-Id: <20190227004240.GH218103@gmail.com>
+Date: Wed, 27 Feb 2019 00:44:09 +0000
+Subject: Re: BUG: please report to dccp@vger.kernel.org => prev = 5, last = 5 at net/dccp/ccids/lib/packet_hi
+Message-Id: <20190227004409.GI218103@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20180408215707.GE685@sol.localdomain>
 In-Reply-To: <20180408215707.GE685@sol.localdomain>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="windows-1252"
+Content-Type: text/plain; charset="iso-8859-1"
 Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On Tue, Oct 23, 2018 at 03:13:02AM -0700, syzbot wrote:
+On Fri, Oct 12, 2018 at 12:58:02AM -0700, syzbot wrote:
 > Hello,
 >=20
 > syzbot found the following crash on:
 >=20
-> HEAD commit:    ca9eb48fe01f Merge tag 'regulator-v5.0' of git://git.kern=
-e..
-> git tree:       upstream
-> console output: https://syzkaller.appspot.com/x/log.txt?x=1482a939400000
-> kernel config:  https://syzkaller.appspot.com/x/.config?x=963b24abf3f7c2d8
-> dashboard link: https://syzkaller.appspot.com/bug?extid=E786ba000564d103a=
-6fe
+> HEAD commit:    771b65e89c8a Add linux-next specific files for 20181011
+> git tree:       linux-next
+> console output: https://syzkaller.appspot.com/x/log.txt?x=167d2376400000
+> kernel config:  https://syzkaller.appspot.com/x/.config?xEf1c06c4da0a925
+> dashboard link: https://syzkaller.appspot.com/bug?extid=E326127852f785c44=
+347
 > compiler:       gcc (GCC) 8.0.1 20180413 (experimental)
 >=20
 > Unfortunately, I don't have any reproducer for this crash yet.
 >=20
 > IMPORTANT: if you fix the bug, please add the following tag to the commit:
-> Reported-by: syzbot+e786ba000564d103a6fe@syzkaller.appspotmail.com
+> Reported-by: syzbot+e326127852f785c44347@syzkaller.appspotmail.com
 >=20
-> input: syz0 as /devices/virtual/input/input6
-> BUG: please report to dccp@vger.kernel.org =3D> prev =3D 2, last =3D 2 at
+> BUG: please report to dccp@vger.kernel.org =3D> prev =3D 5, last =3D 5 at
 > net/dccp/ccids/lib/packet_history.c:425/tfrc_rx_hist_sample_rtt()
-> CPU: 1 PID: 18 Comm: ksoftirqd/1 Not tainted 4.19.0+ #298
+> CPU: 1 PID: 16 Comm: ksoftirqd/1 Not tainted 4.19.0-rc7-next-20181011+ #92
 > Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS
 > Google 01/01/2011
 > Call Trace:
 >  __dump_stack lib/dump_stack.c:77 [inline]
->  dump_stack+0x1c4/0x2b6 lib/dump_stack.c:113
+>  dump_stack+0x244/0x3ab lib/dump_stack.c:113
 >  tfrc_rx_hist_sample_rtt.cold.3+0x54/0x5c
 > net/dccp/ccids/lib/packet_history.c:422
 >  ccid3_hc_rx_packet_recv+0x5c4/0xeb0 net/dccp/ccids/ccid3.c:767
@@ -45,45 +43,55 @@ e..
 >  dccp_deliver_input_to_ccids+0xf0/0x280 net/dccp/input.c:180
 >  dccp_rcv_established+0x87/0xb0 net/dccp/input.c:378
 >  dccp_v4_do_rcv+0x153/0x180 net/dccp/ipv4.c:656
->  sk_backlog_rcv include/net/sock.h:931 [inline]
->  __sk_receive_skb+0x3e5/0xec0 net/core/sock.c:473
+>  sk_backlog_rcv include/net/sock.h:932 [inline]
+>  __sk_receive_skb+0x3e0/0xeb0 net/core/sock.c:473
+> binder: send failed reply for transaction 41 to 27388:27389
 >  dccp_v4_rcv+0x10f9/0x1f58 net/dccp/ipv4.c:877
 >  ip_local_deliver_finish+0x2e9/0xda0 net/ipv4/ip_input.c:215
 >  NF_HOOK include/linux/netfilter.h:289 [inline]
->  ip_local_deliver+0x1e9/0x750 net/ipv4/ip_input.c:256
+>  ip_local_deliver+0x1e4/0x740 net/ipv4/ip_input.c:256
 >  dst_input include/net/dst.h:450 [inline]
 >  ip_rcv_finish+0x1f9/0x300 net/ipv4/ip_input.c:415
 >  NF_HOOK include/linux/netfilter.h:289 [inline]
->  ip_rcv+0xed/0x600 net/ipv4/ip_input.c:524
->  __netif_receive_skb_one_core+0x14d/0x200 net/core/dev.c:4913
->  __netif_receive_skb+0x2c/0x1e0 net/core/dev.c:5023
->  process_backlog+0x218/0x6f0 net/core/dev.c:5829
->  napi_poll net/core/dev.c:6249 [inline]
->  net_rx_action+0x7c5/0x1950 net/core/dev.c:6315
->  __do_softirq+0x30c/0xb03 kernel/softirq.c:292
->  run_ksoftirqd+0x94/0x100 kernel/softirq.c:653
+>  ip_rcv+0xe8/0x600 net/ipv4/ip_input.c:524
+>  __netif_receive_skb_one_core+0x14d/0x200 net/core/dev.c:4908
+>  __netif_receive_skb+0x27/0x1e0 net/core/dev.c:5018
+>  process_backlog+0x24e/0x7a0 net/core/dev.c:5822
+>  napi_poll net/core/dev.c:6242 [inline]
+>  net_rx_action+0x7fa/0x19b0 net/core/dev.c:6308
+>  __do_softirq+0x30d/0xb26 kernel/softirq.c:292
+>  run_ksoftirqd+0x5e/0x100 kernel/softirq.c:654
 >  smpboot_thread_fn+0x68b/0xa00 kernel/smpboot.c:164
->  kthread+0x35a/0x420 kernel/kthread.c:246
->  ret_from_fork+0x3a/0x50 arch/x86/entry/entry_64.S:413
-> net_ratelimit: 18 callbacks suppressed
-> dccp_close: ABORT with 105978 bytes unread
-> input: syz0 as /devices/virtual/input/input7
-> input: syz0 as /devices/virtual/input/input8
-> dccp_close: ABORT with 52730 bytes unread
-> input: syz0 as /devices/virtual/input/input9
-> dccp_close: ABORT with 105978 bytes unread
-> dccp_close: ABORT with 105978 bytes unread
-> dccp_close: ABORT with 77306 bytes unread
-> dccp_close: ABORT with 89594 bytes unread
-> input: syz0 as /devices/virtual/input/input10
-> input: syz0 as /devices/virtual/input/input11
-> input: syz0 as /devices/virtual/input/input12
-> input: syz0 as /devices/virtual/input/input13
-> input: syz0 as /devices/virtual/input/input14
-> input: syz0 as /devices/virtual/input/input15
-> input: syz0 as /devices/virtual/input/input16
-> input: syz0 as /devices/virtual/input/input17
-> input: syz0 as /devices/virtual/input/input18
+>  kthread+0x35a/0x440 kernel/kthread.c:246
+>  ret_from_fork+0x3a/0x50 arch/x86/entry/entry_64.S:352
+> dccp_close: ABORT with 52224 bytes unread
+> binder: send failed reply for transaction 43 to 27399:27404
+> dccp_close: ABORT with 3584 bytes unread
+> binder: send failed reply for transaction 45 to 27417:27418
+> binder: send failed reply for transaction 47 to 27424:27425
+> dccp_close: ABORT with 105984 bytes unread
+> dccp_close: ABORT with 105984 bytes unread
+> dccp_close: ABORT with 105984 bytes unread
+> nf_conntrack: default automatic helper assignment has been turned off for
+> security reasons and CT-based  firewall rule not found. Use the iptables =
+CT
+> target to attach helpers instead.
+> Dead loop on virtual device ip6_vti0, fix it urgently!
+> Dead loop on virtual device ip6_vti0, fix it urgently!
+> Dead loop on virtual device ip6_vti0, fix it urgently!
+> Dead loop on virtual device ip6_vti0, fix it urgently!
+> Dead loop on virtual device ip6_vti0, fix it urgently!
+> Dead loop on virtual device ip6_vti0, fix it urgently!
+> IPVS: sync thread started: state =3D BACKUP, mcast_ifn =3D team_slave_0, =
+syncid
+> =3D 0, id =3D 0
+> Dead loop on virtual device ip6_vti0, fix it urgently!
+> IPVS: sync thread started: state =3D BACKUP, mcast_ifn =3D team_slave_0, =
+syncid
+> =3D 0, id =3D 0
+> IPVS: ftp: loaded support on port[0] =3D 21
+> : renamed from bpq0
+> IPVS: ftp: loaded support on port[0] =3D 21
 >=20
 >=20
 > ---
