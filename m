@@ -1,29 +1,43 @@
-From: David Miller <davem@davemloft.net>
-Date: Mon, 25 Mar 2019 00:13:57 +0000
-Subject: Re: [PATCH] net: dccp: Checksum verification considering skb->ip_summed
-Message-Id: <20190324.201357.1580092867848179795.davem@davemloft.net>
+From: Yue Haibing <yuehaibing@huawei.com>
+Date: Thu, 21 Mar 2019 14:10:58 +0000
+Subject: [PATCH] dccp: Fix memleak in __feat_register_sp
+Message-Id: <20190321141058.14580-1-yuehaibing@huawei.com>
 List-Id: <dccp.vger.kernel.org>
-References: <FRAPR01MB11701F9A1C7014276A68F22AFA7C0@FRAPR01MB1170.DEUPRD01.PROD.OUTLOOK.DE>
-In-Reply-To: <FRAPR01MB11701F9A1C7014276A68F22AFA7C0@FRAPR01MB1170.DEUPRD01.PROD.OUTLOOK.DE>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: <Markus.Amend@telekom.de>
-Date: Fri, 22 Mar 2019 14:34:58 +0000
+From: YueHaibing <yuehaibing@huawei.com>
 
-> @@ -786,7 +787,8 @@ static int dccp_v4_rcv(struct sk_buff *skb)
->  
->  	iph = ip_hdr(skb);
->  	/* Step 1: If header checksum is incorrect, drop packet and return */
-> -	if (dccp_v4_csum_finish(skb, iph->saddr, iph->daddr)) {
-> +	if (__skb_checksum_validate(skb, IPPROTO_DCCP,
-> +		  true, false, 0, inet_compute_pseudo)) {
+If dccp_feat_push_change fails, we forget free the mem
+which is alloced by kmemdup in dccp_feat_clone_sp_val.
 
-The arguments on the second and subsequent lines of a function call must
-begin precisely at the first column after the openning parenthesis of
-the first line of the function call.
+Reported-by: Hulk Robot <hulkci@huawei.com>
+Fixes: e8ef967a54f4 ("dccp: Registration routines for changing feature values")
+Signed-off-by: YueHaibing <yuehaibing@huawei.com>
+---
+ net/dccp/feat.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
 
-You must use the appropriate number of TAB, then SPACE, characters
-necessary to achieve this.
+diff --git a/net/dccp/feat.c b/net/dccp/feat.c
+index f227f00..083e012 100644
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -738,7 +738,12 @@ static int __feat_register_sp(struct list_head *fn, u8 feat, u8 is_local,
+ 	if (dccp_feat_clone_sp_val(&fval, sp_val, sp_len))
+ 		return -ENOMEM;
+ 
+-	return dccp_feat_push_change(fn, feat, is_local, mandatory, &fval);
++	if (dccp_feat_push_change(fn, feat, is_local, mandatory, &fval)) {
++		kfree(val->sp.vec);
++		return -ENOMEM;
++	}
++
++	return 0;
+ }
+ 
+ /**
+-- 
+2.7.0
+
