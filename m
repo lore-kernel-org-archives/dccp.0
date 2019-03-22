@@ -1,188 +1,103 @@
-From: Eric Biggers <ebiggers@kernel.org>
-Date: Wed, 27 Feb 2019 00:42:16 +0000
-Subject: Re: BUG: please report to dccp@vger.kernel.org => prev = 10, last = 10 at net/dccp/ccids/lib/packet_
-Message-Id: <20190227004215.GG218103@gmail.com>
+From: Arnd Bergmann <arnd@arndb.de>
+Date: Fri, 22 Mar 2019 15:44:09 +0000
+Subject: [BACKPORT 4.4.y 18/25] tcp/dccp: drop SYN packets if accept queue is full
+Message-Id: <20190322154425.3852517-19-arnd@arndb.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Thu, Dec 20, 2018 at 02:55:03AM -0800, syzbot wrote:
-> Hello,
->=20
-> syzbot found the following crash on:
->=20
-> HEAD commit:    6531e115b7ab Merge branch 'akpm' (patches from Andrew)
-> git tree:       upstream
-> console output: https://syzkaller.appspot.com/x/log.txt?x=13b0bd5d400000
-> kernel config:  https://syzkaller.appspot.com/x/.config?x=C8970c89a0efbb23
-> dashboard link: https://syzkaller.appspot.com/bug?extid<8a843d9de82272915b
-> compiler:       gcc (GCC) 8.0.1 20180413 (experimental)
->=20
-> Unfortunately, I don't have any reproducer for this crash yet.
->=20
-> IMPORTANT: if you fix the bug, please add the following tag to the commit:
-> Reported-by: syzbot+3c8a843d9de82272915b@syzkaller.appspotmail.com
->=20
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> BUG: please report to dccp@vger.kernel.org =3D> prev =3D 10, last =3D 10 =
-at
-> net/dccp/ccids/lib/packet_history.c:425/tfrc_rx_hist_sample_rtt()
-> CPU: 0 PID: 9 Comm: ksoftirqd/0 Not tainted 4.20.0-rc6+ #374
-> Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS
-> Google 01/01/2011
-> Call Trace:
->  __dump_stack lib/dump_stack.c:77 [inline]
->  dump_stack+0x244/0x39d lib/dump_stack.c:113
->  tfrc_rx_hist_sample_rtt.cold.3+0x54/0x5c
-> net/dccp/ccids/lib/packet_history.c:422
->  ccid3_hc_rx_packet_recv+0x5c4/0xeb0 net/dccp/ccids/ccid3.c:767
->  ccid_hc_rx_packet_recv net/dccp/ccid.h:185 [inline]
->  dccp_deliver_input_to_ccids+0xf0/0x280 net/dccp/input.c:180
->  dccp_rcv_established+0x87/0xb0 net/dccp/input.c:378
->  dccp_v4_do_rcv+0x153/0x180 net/dccp/ipv4.c:656
->  sk_backlog_rcv include/net/sock.h:932 [inline]
->  __sk_receive_skb+0x3e5/0xec0 net/core/sock.c:473
->  dccp_v4_rcv+0x10f9/0x1f58 net/dccp/ipv4.c:877
->  ip_local_deliver_finish+0x2e9/0xda0 net/ipv4/ip_input.c:215
->  NF_HOOK include/linux/netfilter.h:289 [inline]
->  ip_local_deliver+0x1e9/0x750 net/ipv4/ip_input.c:256
->  dst_input include/net/dst.h:450 [inline]
->  ip_rcv_finish+0x1f9/0x300 net/ipv4/ip_input.c:415
->  NF_HOOK include/linux/netfilter.h:289 [inline]
->  ip_rcv+0xed/0x600 net/ipv4/ip_input.c:524
->  __netif_receive_skb_one_core+0x14d/0x200 net/core/dev.c:4946
->  __netif_receive_skb+0x2c/0x1e0 net/core/dev.c:5056
->  process_backlog+0x24e/0x7a0 net/core/dev.c:5864
->  napi_poll net/core/dev.c:6287 [inline]
->  net_rx_action+0x7fa/0x19b0 net/core/dev.c:6353
->  __do_softirq+0x308/0xb7e kernel/softirq.c:292
->  run_ksoftirqd+0x5e/0x100 kernel/softirq.c:654
->  smpboot_thread_fn+0x68b/0xa00 kernel/smpboot.c:164
->  kthread+0x35a/0x440 kernel/kthread.c:246
->  ret_from_fork+0x3a/0x50 arch/x86/entry/entry_64.S:352
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> IPVS: ftp: loaded support on port[0] =3D 21
-> dccp_close: ABORT with 36864 bytes unread
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> IPVS: ftp: loaded support on port[0] =3D 21
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> IPVS: ftp: loaded support on port[0] =3D 21
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> IPVS: ftp: loaded support on port[0] =3D 21
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> IPVS: ftp: loaded support on port[0] =3D 21
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> IPVS: ftp: loaded support on port[0] =3D 21
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> IPVS: ftp: loaded support on port[0] =3D 21
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> IPVS: ftp: loaded support on port[0] =3D 21
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> IPVS: ftp: loaded support on port[0] =3D 21
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> IPVS: ftp: loaded support on port[0] =3D 21
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> IPv6: ADDRCONF(NETDEV_CHANGE): vcan0: link becomes ready
-> bond0: enslaved VLAN challenged slave lo. Adding VLANs will be blocked as
-> long as lo is part of bond bond0
-> bond0: lo is up - this may be due to an out of date ifenslave
-> A link change request failed with some changes committed already. Interfa=
-ce
-> lo may have been left with an inconsistent configuration, please check.
->=20
->=20
-> ---
-> This bug is generated by a bot. It may contain errors.
-> See https://goo.gl/tpsmEJ for more information about syzbot.
-> syzbot engineers can be reached at syzkaller@googlegroups.com.
->=20
-> syzbot will keep track of this bug report. See:
-> https://goo.gl/tpsmEJ#bug-status-tracking for how to communicate with
-> syzbot.
->=20
-> --=20
-> You received this message because you are subscribed to the Google Groups=
- "syzkaller-bugs" group.
-> To unsubscribe from this group and stop receiving emails from it, send an=
- email to syzkaller-bugs+unsubscribe@googlegroups.com.
-> To view this discussion on the web visit https://groups.google.com/d/msgi=
-d/syzkaller-bugs/0000000000007664bf057d71f6d7%40google.com.
-> For more options, visit https://groups.google.com/d/optout.
+From: Eric Dumazet <edumazet@google.com>
 
-#syz dup: BUG: please report to dccp@vger.kernel.org =3D> prev =3D 0, last =
-=3D 0 at net/dccp/ccids/lib/packet_history.c:LINE/tfrc_rx_hist_sample_rtt()
+Per listen(fd, backlog) rules, there is really no point accepting a SYN,
+sending a SYNACK, and dropping the following ACK packet if accept queue
+is full, because application is not draining accept queue fast enough.
 
-Still occurring, see existing thread with reproducer here:
-https://groups.google.com/d/msg/syzkaller-bugs/u5nq3PdPkIc/M7tbibYVCQAJ
+This behavior is fooling TCP clients that believe they established a
+flow, while there is nothing at server side. They might then send about
+10 MSS (if using IW10) that will be dropped anyway while server is under
+stress.
 
-- Eric
+Signed-off-by: Eric Dumazet <edumazet@google.com>
+Acked-by: Neal Cardwell <ncardwell@google.com>
+Acked-by: Yuchung Cheng <ycheng@google.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+(cherry picked from commit 5ea8ea2cb7f1d0db15762c9b0bb9e7330425a071)
+Signed-off-by: Arnd Bergmann <arnd@arndb.de>
+---
+ include/net/inet_connection_sock.h | 5 -----
+ net/dccp/ipv4.c                    | 8 +-------
+ net/dccp/ipv6.c                    | 2 +-
+ net/ipv4/tcp_input.c               | 8 +-------
+ 4 files changed, 3 insertions(+), 20 deletions(-)
+
+diff --git a/include/net/inet_connection_sock.h b/include/net/inet_connection_sock.h
+index 49dcad4fe99e..72599bbc8255 100644
+--- a/include/net/inet_connection_sock.h
++++ b/include/net/inet_connection_sock.h
+@@ -289,11 +289,6 @@ static inline int inet_csk_reqsk_queue_len(const struct sock *sk)
+ 	return reqsk_queue_len(&inet_csk(sk)->icsk_accept_queue);
+ }
+ 
+-static inline int inet_csk_reqsk_queue_young(const struct sock *sk)
+-{
+-	return reqsk_queue_len_young(&inet_csk(sk)->icsk_accept_queue);
+-}
+-
+ static inline int inet_csk_reqsk_queue_is_full(const struct sock *sk)
+ {
+ 	return inet_csk_reqsk_queue_len(sk) >= sk->sk_max_ack_backlog;
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 45fd82e61e79..b0a577a79a6a 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -592,13 +592,7 @@ int dccp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
+ 	if (inet_csk_reqsk_queue_is_full(sk))
+ 		goto drop;
+ 
+-	/*
+-	 * Accept backlog is full. If we have already queued enough
+-	 * of warm entries in syn queue, drop request. It is better than
+-	 * clogging syn queue with openreqs with exponentially increasing
+-	 * timeout.
+-	 */
+-	if (sk_acceptq_is_full(sk) && inet_csk_reqsk_queue_young(sk) > 1)
++	if (sk_acceptq_is_full(sk))
+ 		goto drop;
+ 
+ 	req = inet_reqsk_alloc(&dccp_request_sock_ops, sk, true);
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index 0bf41faeffc4..18bb2a42f0d1 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -324,7 +324,7 @@ static int dccp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
+ 	if (inet_csk_reqsk_queue_is_full(sk))
+ 		goto drop;
+ 
+-	if (sk_acceptq_is_full(sk) && inet_csk_reqsk_queue_young(sk) > 1)
++	if (sk_acceptq_is_full(sk))
+ 		goto drop;
+ 
+ 	req = inet_reqsk_alloc(&dccp6_request_sock_ops, sk, true);
+diff --git a/net/ipv4/tcp_input.c b/net/ipv4/tcp_input.c
+index 1aff93d76f24..b320fa9f834a 100644
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -6305,13 +6305,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
+ 			goto drop;
+ 	}
+ 
+-
+-	/* Accept backlog is full. If we have already queued enough
+-	 * of warm entries in syn queue, drop request. It is better than
+-	 * clogging syn queue with openreqs with exponentially increasing
+-	 * timeout.
+-	 */
+-	if (sk_acceptq_is_full(sk) && inet_csk_reqsk_queue_young(sk) > 1) {
++	if (sk_acceptq_is_full(sk)) {
+ 		NET_INC_STATS_BH(sock_net(sk), LINUX_MIB_LISTENOVERFLOWS);
+ 		goto drop;
+ 	}
+-- 
+2.20.0
