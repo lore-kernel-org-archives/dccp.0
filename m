@@ -1,27 +1,43 @@
-From: David Miller <davem@davemloft.net>
-Date: Mon, 25 Mar 2019 00:12:26 +0000
+From: YueHaibing <yuehaibing@huawei.com>
+Date: Mon, 25 Mar 2019 02:51:14 +0000
 Subject: Re: [PATCH v2] dccp: Fix memleak in __feat_register_sp
-Message-Id: <20190324.201226.2195904854628723725.davem@davemloft.net>
+Message-Id: <f86a5326-2681-1d8f-094a-4316837f7beb@huawei.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20190322134348.15048-1-yuehaibing@huawei.com>
 In-Reply-To: <20190322134348.15048-1-yuehaibing@huawei.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-RnJvbTogWXVlIEhhaWJpbmcgPHl1ZWhhaWJpbmdAaHVhd2VpLmNvbT4NCkRhdGU6IEZyaSwgMjIg
-TWFyIDIwMTkgMjE6NDM6NDggKzA4MDANCg0KPiBGcm9tOiBZdWVIYWliaW5nIDx5dWVoYWliaW5n
-QGh1YXdlaS5jb20+DQo+IA0KPiBJZiBkY2NwX2ZlYXRfcHVzaF9jaGFuZ2UgZmFpbHMsIHdlIGZv
-cmdldCBmcmVlIHRoZSBtZW0NCj4gd2hpY2ggaXMgYWxsb2NlZCBieSBrbWVtZHVwIGluIGRjY3Bf
-ZmVhdF9jbG9uZV9zcF92YWwuDQo+IA0KPiBSZXBvcnRlZC1ieTogSHVsayBSb2JvdCA8aHVsa2Np
-QGh1YXdlaS5jb20+DQo+IEZpeGVzOiBlOGVmOTY3YTU0ZjQgKCJkY2NwOiBSZWdpc3RyYXRpb24g
-cm91dGluZXMgZm9yIGNoYW5naW5nIGZlYXR1cmUgdmFsdWVzIikNCj4gU2lnbmVkLW9mZi1ieTog
-WXVlSGFpYmluZyA8eXVlaGFpYmluZ0BodWF3ZWkuY29tPg0KPiAtLS0NCj4gdjI6IGtmcmVlICd2
-YWwgLS0+ICdmdmFsJw0KDQpEb24ndCBzdWJtaXQgYW55IHBhdGNoZXMgZm9yIGF0IGxlYXN0IDIg
-ZGF5cywgSSBhbSBnZXR0aW5nIHJlYWxseSB0aXJlZCBvZg0KY2hhbmdlcyB5b3UgZG9uJ3QgZXZl
-biBDT01QSUxFIFRFU1Q6DQoNCiAgQ0MgW01dICBuZXQvZGNjcC9mZWF0Lm8NCm5ldC9kY2NwL2Zl
-YXQuYzogSW4gZnVuY3Rpb24goV9fZmVhdF9yZWdpc3Rlcl9zcKI6DQpuZXQvZGNjcC9mZWF0LmM6
-NzQyOjEzOiBlcnJvcjogaW52YWxpZCB0eXBlIGFyZ3VtZW50IG9mIKEtPqIgKGhhdmUgoWRjY3Bf
-ZmVhdF92YWyiIHtha2EgoXVuaW9uIDxhbm9ueW1vdXM+on0pDQogICBrZnJlZShmdmFsLT5zcC52
-ZWMpOw0KICAgICAgICAgICAgIF5+DQo
+
+On 2019/3/25 8:12, David Miller wrote:
+> From: Yue Haibing <yuehaibing@huawei.com>
+> Date: Fri, 22 Mar 2019 21:43:48 +0800
+>=20
+>> From: YueHaibing <yuehaibing@huawei.com>
+>>
+>> If dccp_feat_push_change fails, we forget free the mem
+>> which is alloced by kmemdup in dccp_feat_clone_sp_val.
+>>
+>> Reported-by: Hulk Robot <hulkci@huawei.com>
+>> Fixes: e8ef967a54f4 ("dccp: Registration routines for changing feature v=
+alues")
+>> Signed-off-by: YueHaibing <yuehaibing@huawei.com>
+>> ---
+>> v2: kfree 'val --> 'fval'
+>=20
+> Don't submit any patches for at least 2 days, I am getting really tired of
+> changes you don't even COMPILE TEST:
+>=20
+>   CC [M]  net/dccp/feat.o
+> net/dccp/feat.c: In function =A1__feat_register_sp=A2:
+> net/dccp/feat.c:742:13: error: invalid type argument of =A1->=A2 (have =
+=A1dccp_feat_val=A2 {aka =A1union <anonymous>=A2})
+>    kfree(fval->sp.vec);
+>      =20
+
+I'm very sorry for this, will self-reflection.
+
+       ^~
+>=20
