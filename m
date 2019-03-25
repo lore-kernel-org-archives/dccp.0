@@ -1,45 +1,27 @@
-From: Yue Haibing <yuehaibing@huawei.com>
-Date: Fri, 22 Mar 2019 13:43:48 +0000
-Subject: [PATCH v2] dccp: Fix memleak in __feat_register_sp
-Message-Id: <20190322134348.15048-1-yuehaibing@huawei.com>
+From: David Miller <davem@davemloft.net>
+Date: Mon, 25 Mar 2019 00:12:26 +0000
+Subject: Re: [PATCH v2] dccp: Fix memleak in __feat_register_sp
+Message-Id: <20190324.201226.2195904854628723725.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
+References: <20190322134348.15048-1-yuehaibing@huawei.com>
+In-Reply-To: <20190322134348.15048-1-yuehaibing@huawei.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: YueHaibing <yuehaibing@huawei.com>
-
-If dccp_feat_push_change fails, we forget free the mem
-which is alloced by kmemdup in dccp_feat_clone_sp_val.
-
-Reported-by: Hulk Robot <hulkci@huawei.com>
-Fixes: e8ef967a54f4 ("dccp: Registration routines for changing feature values")
-Signed-off-by: YueHaibing <yuehaibing@huawei.com>
----
-v2: kfree 'val --> 'fval'
----
- net/dccp/feat.c | 7 ++++++-
- 1 file changed, 6 insertions(+), 1 deletion(-)
-
-diff --git a/net/dccp/feat.c b/net/dccp/feat.c
-index f227f00..03275b2 100644
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -738,7 +738,12 @@ static int __feat_register_sp(struct list_head *fn, u8 feat, u8 is_local,
- 	if (dccp_feat_clone_sp_val(&fval, sp_val, sp_len))
- 		return -ENOMEM;
- 
--	return dccp_feat_push_change(fn, feat, is_local, mandatory, &fval);
-+	if (dccp_feat_push_change(fn, feat, is_local, mandatory, &fval)) {
-+		kfree(fval->sp.vec);
-+		return -ENOMEM;
-+	}
-+
-+	return 0;
- }
- 
- /**
--- 
-2.7.4
-
+RnJvbTogWXVlIEhhaWJpbmcgPHl1ZWhhaWJpbmdAaHVhd2VpLmNvbT4NCkRhdGU6IEZyaSwgMjIg
+TWFyIDIwMTkgMjE6NDM6NDggKzA4MDANCg0KPiBGcm9tOiBZdWVIYWliaW5nIDx5dWVoYWliaW5n
+QGh1YXdlaS5jb20+DQo+IA0KPiBJZiBkY2NwX2ZlYXRfcHVzaF9jaGFuZ2UgZmFpbHMsIHdlIGZv
+cmdldCBmcmVlIHRoZSBtZW0NCj4gd2hpY2ggaXMgYWxsb2NlZCBieSBrbWVtZHVwIGluIGRjY3Bf
+ZmVhdF9jbG9uZV9zcF92YWwuDQo+IA0KPiBSZXBvcnRlZC1ieTogSHVsayBSb2JvdCA8aHVsa2Np
+QGh1YXdlaS5jb20+DQo+IEZpeGVzOiBlOGVmOTY3YTU0ZjQgKCJkY2NwOiBSZWdpc3RyYXRpb24g
+cm91dGluZXMgZm9yIGNoYW5naW5nIGZlYXR1cmUgdmFsdWVzIikNCj4gU2lnbmVkLW9mZi1ieTog
+WXVlSGFpYmluZyA8eXVlaGFpYmluZ0BodWF3ZWkuY29tPg0KPiAtLS0NCj4gdjI6IGtmcmVlICd2
+YWwgLS0+ICdmdmFsJw0KDQpEb24ndCBzdWJtaXQgYW55IHBhdGNoZXMgZm9yIGF0IGxlYXN0IDIg
+ZGF5cywgSSBhbSBnZXR0aW5nIHJlYWxseSB0aXJlZCBvZg0KY2hhbmdlcyB5b3UgZG9uJ3QgZXZl
+biBDT01QSUxFIFRFU1Q6DQoNCiAgQ0MgW01dICBuZXQvZGNjcC9mZWF0Lm8NCm5ldC9kY2NwL2Zl
+YXQuYzogSW4gZnVuY3Rpb24goV9fZmVhdF9yZWdpc3Rlcl9zcKI6DQpuZXQvZGNjcC9mZWF0LmM6
+NzQyOjEzOiBlcnJvcjogaW52YWxpZCB0eXBlIGFyZ3VtZW50IG9mIKEtPqIgKGhhdmUgoWRjY3Bf
+ZmVhdF92YWyiIHtha2EgoXVuaW9uIDxhbm9ueW1vdXM+on0pDQogICBrZnJlZShmdmFsLT5zcC52
+ZWMpOw0KICAgICAgICAgICAgIF5+DQo
