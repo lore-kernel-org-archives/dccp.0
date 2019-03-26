@@ -1,43 +1,60 @@
-From: YueHaibing <yuehaibing@huawei.com>
-Date: Mon, 25 Mar 2019 02:51:14 +0000
-Subject: Re: [PATCH v2] dccp: Fix memleak in __feat_register_sp
-Message-Id: <f86a5326-2681-1d8f-094a-4316837f7beb@huawei.com>
+From: <Markus.Amend@telekom.de>
+Date: Tue, 26 Mar 2019 08:54:41 +0000
+Subject: [PATCH v2] net: dccp: Checksum verification enhancement
+Message-Id: <FRAPR01MB117083E6F526BDCB88742713FA5F0@FRAPR01MB1170.DEUPRD01.PROD.OUTLOOK.DE>
 List-Id: <dccp.vger.kernel.org>
-References: <20190322134348.15048-1-yuehaibing@huawei.com>
-In-Reply-To: <20190322134348.15048-1-yuehaibing@huawei.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+Modify checksum verification to allow the validation of skb->ip_summed, in case the checksum has already been verified in lower layers.
 
-On 2019/3/25 8:12, David Miller wrote:
-> From: Yue Haibing <yuehaibing@huawei.com>
-> Date: Fri, 22 Mar 2019 21:43:48 +0800
->=20
->> From: YueHaibing <yuehaibing@huawei.com>
->>
->> If dccp_feat_push_change fails, we forget free the mem
->> which is alloced by kmemdup in dccp_feat_clone_sp_val.
->>
->> Reported-by: Hulk Robot <hulkci@huawei.com>
->> Fixes: e8ef967a54f4 ("dccp: Registration routines for changing feature v=
-alues")
->> Signed-off-by: YueHaibing <yuehaibing@huawei.com>
->> ---
->> v2: kfree 'val --> 'fval'
->=20
-> Don't submit any patches for at least 2 days, I am getting really tired of
-> changes you don't even COMPILE TEST:
->=20
->   CC [M]  net/dccp/feat.o
-> net/dccp/feat.c: In function =A1__feat_register_sp=A2:
-> net/dccp/feat.c:742:13: error: invalid type argument of =A1->=A2 (have =
-=A1dccp_feat_val=A2 {aka =A1union <anonymous>=A2})
->    kfree(fval->sp.vec);
->      =20
+Signed-off-by: Nathalie Romo Moreno <natha.ro.moreno@gmail.com>
+Signed-off-by: Markus Amend <markus.amend@telekom.de>
+---
+ net/dccp/ipv4.c | 8 +++++---
+ net/dccp/ipv6.c | 4 ++--
+ 2 files changed, 7 insertions(+), 5 deletions(-)
 
-I'm very sorry for this, will self-reflection.
-
-       ^~
->=20
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c index 26a21d97b6b0..7e56327e385a 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -763,8 +763,9 @@ int dccp_invalid_packet(struct sk_buff *skb)
+ 	}
+ 
+ 	/* If header checksum is incorrect, drop packet and return.
+-	 * (This step is completed in the AF-dependent functions.) */
+-	skb->csum = skb_checksum(skb, 0, cscov, 0);
++	 * (This step is completed in the AF-dependent functions.)
++	 * skb->csum = skb_checksum(skb, 0, cscov, 0);
++	 */
+ 
+ 	return 0;
+ }
+@@ -786,7 +787,8 @@ static int dccp_v4_rcv(struct sk_buff *skb)
+ 
+ 	iph = ip_hdr(skb);
+ 	/* Step 1: If header checksum is incorrect, drop packet and return */
+-	if (dccp_v4_csum_finish(skb, iph->saddr, iph->daddr)) {
++	if (__skb_checksum_validate(skb, IPPROTO_DCCP,
++				    true, false, 0, inet_compute_pseudo)) {
+ 		DCCP_WARN("dropped packet with invalid checksum\n");
+ 		goto discard_it;
+ 	}
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c index d5740bad5b18..60743c425ceb 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -695,8 +695,8 @@ static int dccp_v6_rcv(struct sk_buff *skb)
+ 		goto discard_it;
+ 
+ 	/* Step 1: If header checksum is incorrect, drop packet and return. */
+-	if (dccp_v6_csum_finish(skb, &ipv6_hdr(skb)->saddr,
+-				     &ipv6_hdr(skb)->daddr)) {
++	if (__skb_checksum_validate(skb, IPPROTO_DCCP,
++				    true, false, 0, ip6_compute_pseudo)) {
+ 		DCCP_WARN("dropped packet with invalid checksum\n");
+ 		goto discard_it;
+ 	}
+--
+2.20.1
