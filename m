@@ -1,8 +1,10 @@
 From: Eric Biggers <ebiggers@kernel.org>
-Date: Tue, 02 Jul 2019 06:18:18 +0000
+Date: Wed, 24 Jul 2019 02:28:10 +0000
 Subject: Reminder: 6 open syzbot bugs in "net/dccp" subsystem
-Message-Id: <20190702061818.GE27702@sol.localdomain>
+Message-Id: <20190724022810.GP643@sol.localdomain>
 List-Id: <dccp.vger.kernel.org>
+References: <20190702061818.GE27702@sol.localdomain>
+In-Reply-To: <20190702061818.GE27702@sol.localdomain>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="windows-1252"
 Content-Transfer-Encoding: quoted-printable
@@ -19,8 +21,6 @@ listed these reports below, sorted by an algorithm that tries to list first=
  the
 reports most likely to be still valid, important, and actionable.
 
-Of these 6 bugs, 1 was seen in mainline in the last week.
-
 If you believe a bug is no longer valid, please close the syzbot report by
 sending a '#syz fix', '#syz dup', or '#syz invalid' command in reply to the
 original thread, as explained at https://goo.gl/tpsmEJ#status
@@ -34,31 +34,9 @@ Here are the bugs:
 
 ---------------------------------------------------------------------------=
 -----
-Title:              BUG: please report to dccp@vger.kernel.org =3D> prev =
-=3D 0, last =3D 0 at net/dccp/ccids/lib/packet_history.c:LINE/tfrc_rx_hist_=
-sample_rtt()
-Last occurred:      3 days ago
-Reported:           603 days ago
-Branches:           Mainline and others
-Dashboard link:     https://syzkaller.appspot.com/bug?id=0881c535c265ca965e=
-dc49c0ac3d0a9850d26eb1
-Original thread:    https://groups.google.com/d/msgid/syzkaller-bugs/94eb2c=
-05611406f6a5055d38a272%40google.com
-
-This bug has a C reproducer.
-
-For some reason the original report email for this bug is missing from the =
-LKML
-archive at lore.kernel.org, so my script couldn't check whether anyone has
-replied to it or not.  The Google Groups link above should still work, thou=
-gh.=20
-Also try searching for the bug title.
-
----------------------------------------------------------------------------=
------
 Title:              KASAN: use-after-free Read in ccid2_hc_tx_packet_recv
-Last occurred:      4 days ago
-Reported:           455 days ago
+Last occurred:      26 days ago
+Reported:           477 days ago
 Branches:           Mainline and others
 Dashboard link:     https://syzkaller.appspot.com/bug?id1f032fe94df7aca6ce5=
 d45455f6acefa26515e4
@@ -80,9 +58,31 @@ https://lkml.kernel.org/r/0000000000003872fd0568da185f@google.com
 
 ---------------------------------------------------------------------------=
 -----
+Title:              BUG: please report to dccp@vger.kernel.org =3D> prev =
+=3D 0, last =3D 0 at net/dccp/ccids/lib/packet_history.c:LINE/tfrc_rx_hist_=
+sample_rtt()
+Last occurred:      21 days ago
+Reported:           625 days ago
+Branches:           Mainline and others
+Dashboard link:     https://syzkaller.appspot.com/bug?id=0881c535c265ca965e=
+dc49c0ac3d0a9850d26eb1
+Original thread:    https://groups.google.com/d/msgid/syzkaller-bugs/94eb2c=
+05611406f6a5055d38a272%40google.com
+
+This bug has a C reproducer.
+
+For some reason the original report email for this bug is missing from the =
+LKML
+archive at lore.kernel.org, so my script couldn't check whether anyone has
+replied to it or not.  The Google Groups link above should still work, thou=
+gh.=20
+Also try searching for the bug title.
+
+---------------------------------------------------------------------------=
+-----
 Title:              KASAN: use-after-free Read in ccid_hc_tx_delete
-Last occurred:      45 days ago
-Reported:           308 days ago
+Last occurred:      66 days ago
+Reported:           330 days ago
 Branches:           Mainline and others
 Dashboard link:     https://syzkaller.appspot.com/bug?id>769c60cb2d1cab692f=
 d541dae957b1fd31bde4
@@ -105,8 +105,8 @@ https://lkml.kernel.org/r/000000000000de3c7705746dcbb7@google.com
 ---------------------------------------------------------------------------=
 -----
 Title:              KMSAN: uninit-value in dccp_invalid_packet
-Last occurred:      437 days ago
-Reported:           438 days ago
+Last occurred:      458 days ago
+Reported:           460 days ago
 Branches:           Mainline (with KMSAN patches)
 Dashboard link:     https://syzkaller.appspot.com/bug?id=89916fdba284272cdb=
 d0bf00de942f41d052c3f4
@@ -129,8 +129,8 @@ https://lkml.kernel.org/r/0000000000000e2bf3056a36962d@google.com
 ---------------------------------------------------------------------------=
 -----
 Title:              suspicious RCU usage at ./include/net/inet_sock.h:LINE
-Last occurred:      513 days ago
-Reported:           603 days ago
+Last occurred:      535 days ago
+Reported:           625 days ago
 Branches:           Mainline and others
 Dashboard link:     https://syzkaller.appspot.com/bug?idxf9fe251de26a75a606=
 90bc2384d62d2db32299
@@ -149,8 +149,8 @@ Also try searching for the bug title.
 ---------------------------------------------------------------------------=
 -----
 Title:              WARNING: suspicious RCU usage in pid_task
-Last occurred:      280 days ago
-Reported:           380 days ago
+Last occurred:      302 days ago
+Reported:           402 days ago
 Branches:           Mainline and others
 Dashboard link:     https://syzkaller.appspot.com/bug?id[9f20bfdfb67155f627=
 c5e13c258ca56eff026a
@@ -159,7 +159,7 @@ eb@google.com/T/#u
 
 This bug has a C reproducer.
 
-The original thread for this bug received 1 reply, 301 days ago.
+The original thread for this bug received 1 reply, 323 days ago.
 
 If you fix this bug, please add the following tag to the commit:
     Reported-by: syzbot+c2d4c3ae3fd90bbaf059@syzkaller.appspotmail.com
