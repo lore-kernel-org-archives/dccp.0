@@ -1,33 +1,29 @@
-From: syzbot  <syzbot+79de6f09efc55fec084b706de3c91e9457433ac5@syzkaller.appspotmail.c
-Date: Thu, 07 Nov 2019 13:42:04 +0000
-Subject: Re: suspicious RCU usage at ./include/net/inet_sock.h:LINE
-Message-Id: <000000000000ac3e9d0596c1d4fe@google.com>
+From: syzbot <syzbot+3967c1caf256f4d5aefe@syzkaller.appspotmail.com>
+Date: Thu, 21 Nov 2019 15:00:00 +0000
+Subject: Re: KASAN: use-after-free Read in ccid_hc_tx_delete
+Message-Id: <0000000000002c243a0597dc8d9d@google.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="macroman"
+Content-Transfer-Encoding: base64
 To: dccp@vger.kernel.org
 
-syzbot suspects this bug was fixed by commit:
-
-commit 3f32d0be6c16b902b687453c962d17eea5b8ea19
-Author: Parthasarathy Bhuvaragan <parthasarathy.bhuvaragan@ericsson.com>
-Date:   Tue Sep 25 20:09:10 2018 +0000
-
-     tipc: lock wakeup & inputq at tipc_link_reset()
-
-bisection log:  https://syzkaller.appspot.com/x/bisect.txt?x=1368cfa2600000
-start commit:   464e1d5f
-git tree:       upstream
-kernel config:  https://syzkaller.appspot.com/x/.config?x=BAce9f7ec244b823
-dashboard link: =20
-https://syzkaller.appspot.com/bug?extidyde6f09efc55fec084b706de3c91e9457433=
-ac5
-syz repro:      https://syzkaller.appspot.com/x/repro.syz?x=126079e1800000
-C reproducer:   https://syzkaller.appspot.com/x/repro.c?x=101499e1800000
-
-If the result looks correct, please mark the bug fixed by replying with:
-
-#syz fix: tipc: lock wakeup & inputq at tipc_link_reset()
-
-For information about bisection process see: https://goo.gl/tpsmEJ#bisection
+c3l6Ym90IGhhcyBiaXNlY3RlZCB0aGlzIGJ1ZyB0bzoKCmNvbW1pdCBmMDQ2ODRiNGQ4NWQ2Mzcx
+MTI2ZjQ3NmQzMjY4ZWJmNmEwYmQ1N2NmCkF1dGhvcjogRGFuIENhcnBlbnRlciA8ZGFuLmNhcnBl
+bnRlckBvcmFjbGUuY29tPgpEYXRlOiAgIFRodSBKdW4gMjEgMDg6MDc6MjEgMjAxOCArMDAwMAoK
+ICAgICBBTFNBOiBseDY0NjRlczogTWlzc2luZyBlcnJvciBjb2RlIGluIHNuZF9seDY0NjRlc19j
+cmVhdGUoKQoKYmlzZWN0aW9uIGxvZzogIGh0dHBzOi8vc3l6a2FsbGVyLmFwcHNwb3QuY29tL3gv
+YmlzZWN0LnR4dD94EGRkMTFjYWUwMDAwMApzdGFydCBjb21taXQ6ICAgZWI2Y2Y5ZjggTWVyZ2Ug
+dGFnICdhcm02NC1maXhlcycgb2YgZ2l0Oi8vZ2l0Lmtlcm5lbC5vcmcvcC4uCmdpdCB0cmVlOiAg
+ICAgICB1cHN0cmVhbQpmaW5hbCBjcmFzaDogICAgaHR0cHM6Ly9zeXprYWxsZXIuYXBwc3BvdC5j
+b20veC9yZXBvcnQudHh0P3gSZGQxMWNhZTAwMDAwCmNvbnNvbGUgb3V0cHV0OiBodHRwczovL3N5
+emthbGxlci5hcHBzcG90LmNvbS94L2xvZy50eHQ/eBRkZDExY2FlMDAwMDAKa2VybmVsIGNvbmZp
+ZzogIGh0dHBzOi8vc3l6a2FsbGVyLmFwcHNwb3QuY29tL3gvLmNvbmZpZz94yDk3MGM4OWEwZWZi
+YjIzCmRhc2hib2FyZCBsaW5rOiBodHRwczovL3N5emthbGxlci5hcHBzcG90LmNvbS9idWc/ZXh0
+aWQ5NjdjMWNhZjI1NmY0ZDVhZWZlCnN5eiByZXBybzogICAgICBodHRwczovL3N5emthbGxlci5h
+cHBzcG90LmNvbS94L3JlcHJvLnN5ej94ETAyMmNjZDQwMDAwMApDIHJlcHJvZHVjZXI6ICAgaHR0
+cHM6Ly9zeXprYWxsZXIuYXBwc3BvdC5jb20veC9yZXByby5jP3gSNDU4MWRiNDAwMDAwCgpSZXBv
+cnRlZC1ieTogc3l6Ym90KzM5NjdjMWNhZjI1NmY0ZDVhZWZlQHN5emthbGxlci5hcHBzcG90bWFp
+bC5jb20KRml4ZXM6IGYwNDY4NGI0ZDg1ZCAoIkFMU0E6IGx4NjQ2NGVzOiBNaXNzaW5nIGVycm9y
+IGNvZGUgaW4gIApzbmRfbHg2NDY0ZXNfY3JlYXRlKCkiKQoKRm9yIGluZm9ybWF0aW9uIGFib3V0
+IGJpc2VjdGlvbiBwcm9jZXNzIHNlZTogaHR0cHM6Ly9nb28uZ2wvdHBzbUVKI2Jpc2VjdGlvbg==
