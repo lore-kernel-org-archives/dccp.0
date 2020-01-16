@@ -1,29 +1,47 @@
-From: syzbot <syzbot+3967c1caf256f4d5aefe@syzkaller.appspotmail.com>
-Date: Thu, 21 Nov 2019 15:00:00 +0000
-Subject: Re: KASAN: use-after-free Read in ccid_hc_tx_delete
-Message-Id: <0000000000002c243a0597dc8d9d@google.com>
+From: Sasha Levin <sashal@kernel.org>
+Date: Thu, 16 Jan 2020 17:20:26 +0000
+Subject: [PATCH AUTOSEL 4.14 154/371] dccp: Fix memleak in __feat_register_sp
+Message-Id: <20200116172403.18149-97-sashal@kernel.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="macroman"
-Content-Transfer-Encoding: base64
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-c3l6Ym90IGhhcyBiaXNlY3RlZCB0aGlzIGJ1ZyB0bzoKCmNvbW1pdCBmMDQ2ODRiNGQ4NWQ2Mzcx
-MTI2ZjQ3NmQzMjY4ZWJmNmEwYmQ1N2NmCkF1dGhvcjogRGFuIENhcnBlbnRlciA8ZGFuLmNhcnBl
-bnRlckBvcmFjbGUuY29tPgpEYXRlOiAgIFRodSBKdW4gMjEgMDg6MDc6MjEgMjAxOCArMDAwMAoK
-ICAgICBBTFNBOiBseDY0NjRlczogTWlzc2luZyBlcnJvciBjb2RlIGluIHNuZF9seDY0NjRlc19j
-cmVhdGUoKQoKYmlzZWN0aW9uIGxvZzogIGh0dHBzOi8vc3l6a2FsbGVyLmFwcHNwb3QuY29tL3gv
-YmlzZWN0LnR4dD94EGRkMTFjYWUwMDAwMApzdGFydCBjb21taXQ6ICAgZWI2Y2Y5ZjggTWVyZ2Ug
-dGFnICdhcm02NC1maXhlcycgb2YgZ2l0Oi8vZ2l0Lmtlcm5lbC5vcmcvcC4uCmdpdCB0cmVlOiAg
-ICAgICB1cHN0cmVhbQpmaW5hbCBjcmFzaDogICAgaHR0cHM6Ly9zeXprYWxsZXIuYXBwc3BvdC5j
-b20veC9yZXBvcnQudHh0P3gSZGQxMWNhZTAwMDAwCmNvbnNvbGUgb3V0cHV0OiBodHRwczovL3N5
-emthbGxlci5hcHBzcG90LmNvbS94L2xvZy50eHQ/eBRkZDExY2FlMDAwMDAKa2VybmVsIGNvbmZp
-ZzogIGh0dHBzOi8vc3l6a2FsbGVyLmFwcHNwb3QuY29tL3gvLmNvbmZpZz94yDk3MGM4OWEwZWZi
-YjIzCmRhc2hib2FyZCBsaW5rOiBodHRwczovL3N5emthbGxlci5hcHBzcG90LmNvbS9idWc/ZXh0
-aWQ5NjdjMWNhZjI1NmY0ZDVhZWZlCnN5eiByZXBybzogICAgICBodHRwczovL3N5emthbGxlci5h
-cHBzcG90LmNvbS94L3JlcHJvLnN5ej94ETAyMmNjZDQwMDAwMApDIHJlcHJvZHVjZXI6ICAgaHR0
-cHM6Ly9zeXprYWxsZXIuYXBwc3BvdC5jb20veC9yZXByby5jP3gSNDU4MWRiNDAwMDAwCgpSZXBv
-cnRlZC1ieTogc3l6Ym90KzM5NjdjMWNhZjI1NmY0ZDVhZWZlQHN5emthbGxlci5hcHBzcG90bWFp
-bC5jb20KRml4ZXM6IGYwNDY4NGI0ZDg1ZCAoIkFMU0E6IGx4NjQ2NGVzOiBNaXNzaW5nIGVycm9y
-IGNvZGUgaW4gIApzbmRfbHg2NDY0ZXNfY3JlYXRlKCkiKQoKRm9yIGluZm9ybWF0aW9uIGFib3V0
-IGJpc2VjdGlvbiBwcm9jZXNzIHNlZTogaHR0cHM6Ly9nb28uZ2wvdHBzbUVKI2Jpc2VjdGlvbg==
+From: YueHaibing <yuehaibing@huawei.com>
+
+[ Upstream commit 1d3ff0950e2b40dc861b1739029649d03f591820 ]
+
+If dccp_feat_push_change fails, we forget free the mem
+which is alloced by kmemdup in dccp_feat_clone_sp_val.
+
+Reported-by: Hulk Robot <hulkci@huawei.com>
+Fixes: e8ef967a54f4 ("dccp: Registration routines for changing feature values")
+Reviewed-by: Mukesh Ojha <mojha@codeaurora.org>
+Signed-off-by: YueHaibing <yuehaibing@huawei.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+Signed-off-by: Sasha Levin <sashal@kernel.org>
+---
+ net/dccp/feat.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/net/dccp/feat.c b/net/dccp/feat.c
+index f227f002c73d..db87d9f58019 100644
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -738,7 +738,12 @@ static int __feat_register_sp(struct list_head *fn, u8 feat, u8 is_local,
+ 	if (dccp_feat_clone_sp_val(&fval, sp_val, sp_len))
+ 		return -ENOMEM;
+ 
+-	return dccp_feat_push_change(fn, feat, is_local, mandatory, &fval);
++	if (dccp_feat_push_change(fn, feat, is_local, mandatory, &fval)) {
++		kfree(fval.sp.vec);
++		return -ENOMEM;
++	}
++
++	return 0;
+ }
+ 
+ /**
+-- 
+2.20.1
