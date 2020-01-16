@@ -1,81 +1,47 @@
-From: Dan Carpenter <dan.carpenter@oracle.com>
-Date: Tue, 21 Jan 2020 15:39:04 +0000
-Subject: Re: KASAN: use-after-free Read in ccid_hc_tx_delete
-Message-Id: <20200121153904.GA9856@kadam>
+From: Sasha Levin <sashal@kernel.org>
+Date: Thu, 16 Jan 2020 17:41:06 +0000
+Subject: [PATCH AUTOSEL 4.4 069/174] dccp: Fix memleak in __feat_register_sp
+Message-Id: <20200116174251.24326-69-sashal@kernel.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="iso-8859-1"
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Thu, Nov 21, 2019 at 11:14:33PM +0300, Dan Carpenter wrote:
-> On Thu, Nov 21, 2019 at 07:00:00AM -0800, syzbot wrote:
-> > syzbot has bisected this bug to:
-> >=20
-> > commit f04684b4d85d6371126f476d3268ebf6a0bd57cf
-> > Author: Dan Carpenter <dan.carpenter@oracle.com>
-> > Date:   Thu Jun 21 08:07:21 2018 +0000
-> >=20
-> >     ALSA: lx6464es: Missing error code in snd_lx6464es_create()
-> >=20
-> > bisection log:  https://syzkaller.appspot.com/x/bisect.txt?x=10dd11cae0=
-0000
-> > start commit:   eb6cf9f8 Merge tag 'arm64-fixes' of git://git.kernel.or=
-g/p..
-> > git tree:       upstream
-> > final crash:    https://syzkaller.appspot.com/x/report.txt?x=12dd11cae0=
-0000
-> > console output: https://syzkaller.appspot.com/x/log.txt?x=14dd11cae00000
-> > kernel config:  https://syzkaller.appspot.com/x/.config?x=C8970c89a0efb=
-b23
-> > dashboard link: https://syzkaller.appspot.com/bug?extid967c1caf256f4d5a=
-efe
-> > syz repro:      https://syzkaller.appspot.com/x/repro.syz?x=11022ccd400=
-000
-> > C reproducer:   https://syzkaller.appspot.com/x/repro.c?x=124581db400000
-> >=20
-> > Reported-by: syzbot+3967c1caf256f4d5aefe@syzkaller.appspotmail.com
-> > Fixes: f04684b4d85d ("ALSA: lx6464es: Missing error code in
-> > snd_lx6464es_create()")
-> >=20
-> > For information about bisection process see: https://goo.gl/tpsmEJ#bise=
-ction
->=20
-> This crash isn't related to my commit, it's seems something specific to
-> DCCP.
->=20
-> My guess is that the fix is probably something like this.  The old sk
-> and the new sk re-use the same newdp->dccps_hc_rx/tx_ccid pointers.
-> The first sk destructor frees it and that causes a use after free when
-> the second destructor tries to free it.
->=20
-> But I don't know DCCP code at all so I might be totally off and I
-> haven't tested this at all...  It was just easier to write a patch than
-> to try to explain in words.  Maybe we should clone the ccid instead of
-> setting it to NULL.  Or I might be completely wrong.
->=20
-> ---
->  net/dccp/minisocks.c | 2 ++
->  1 file changed, 2 insertions(+)
->=20
-> diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
-> index 25187528c308..4cbfcccbbbbb 100644
-> --- a/net/dccp/minisocks.c
-> +++ b/net/dccp/minisocks.c
-> @@ -98,6 +98,8 @@ struct sock *dccp_create_openreq_child(const struct soc=
-k *sk,
->  		newdp->dccps_timestamp_echo =3D dreq->dreq_timestamp_echo;
->  		newdp->dccps_timestamp_time =3D dreq->dreq_timestamp_time;
->  		newicsk->icsk_rto	    =3D DCCP_TIMEOUT_INIT;
-> +		newdp->dccps_hc_rx_ccid     =3D NULL;
-> +		newdp->dccps_hc_tx_ccid     =3D NULL;
-> =20
->  		INIT_LIST_HEAD(&newdp->dccps_featneg);
->  		/*
+From: YueHaibing <yuehaibing@huawei.com>
 
-Could someone take a look at this?  It seem like a pretty serious bug
-but DCCP is not very actively maintained and a lot of distributions
-disable it.
+[ Upstream commit 1d3ff0950e2b40dc861b1739029649d03f591820 ]
 
-regards,
-dan carpenter
+If dccp_feat_push_change fails, we forget free the mem
+which is alloced by kmemdup in dccp_feat_clone_sp_val.
+
+Reported-by: Hulk Robot <hulkci@huawei.com>
+Fixes: e8ef967a54f4 ("dccp: Registration routines for changing feature values")
+Reviewed-by: Mukesh Ojha <mojha@codeaurora.org>
+Signed-off-by: YueHaibing <yuehaibing@huawei.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+Signed-off-by: Sasha Levin <sashal@kernel.org>
+---
+ net/dccp/feat.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/net/dccp/feat.c b/net/dccp/feat.c
+index f227f002c73d..db87d9f58019 100644
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -738,7 +738,12 @@ static int __feat_register_sp(struct list_head *fn, u8 feat, u8 is_local,
+ 	if (dccp_feat_clone_sp_val(&fval, sp_val, sp_len))
+ 		return -ENOMEM;
+ 
+-	return dccp_feat_push_change(fn, feat, is_local, mandatory, &fval);
++	if (dccp_feat_push_change(fn, feat, is_local, mandatory, &fval)) {
++		kfree(fval.sp.vec);
++		return -ENOMEM;
++	}
++
++	return 0;
+ }
+ 
+ /**
+-- 
+2.20.1
