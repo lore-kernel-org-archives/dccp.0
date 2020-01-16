@@ -1,7 +1,7 @@
 From: Sasha Levin <sashal@kernel.org>
-Date: Thu, 16 Jan 2020 17:34:18 +0000
-Subject: [PATCH AUTOSEL 4.9 109/251] dccp: Fix memleak in __feat_register_sp
-Message-Id: <20200116173641.22137-69-sashal@kernel.org>
+Date: Thu, 16 Jan 2020 16:58:30 +0000
+Subject: [PATCH AUTOSEL 4.19 272/671] dccp: Fix memleak in __feat_register_sp
+Message-Id: <20200116170509.12787-9-sashal@kernel.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
