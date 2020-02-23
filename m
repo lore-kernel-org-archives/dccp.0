@@ -1,47 +1,34 @@
-From: Sasha Levin <sashal@kernel.org>
-Date: Thu, 16 Jan 2020 16:58:30 +0000
-Subject: [PATCH AUTOSEL 4.19 272/671] dccp: Fix memleak in __feat_register_sp
-Message-Id: <20200116170509.12787-9-sashal@kernel.org>
+From: Jules Irenge <jbi.octave@gmail.com>
+Date: Sun, 23 Feb 2020 23:16:55 +0000
+Subject: [PATCH 14/30] dccp: Add missing annotation for dccp_child_process()
+Message-Id: <20200223231711.157699-15-jbi.octave@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: YueHaibing <yuehaibing@huawei.com>
+Sparse reports a warning at dccp_child_process()
+warning: context imbalance in dccp_child_process() - unexpected unlock
+The root cause is the missing annotation at dccp_child_process()
+Add the missing __releases(child) annotation
 
-[ Upstream commit 1d3ff0950e2b40dc861b1739029649d03f591820 ]
-
-If dccp_feat_push_change fails, we forget free the mem
-which is alloced by kmemdup in dccp_feat_clone_sp_val.
-
-Reported-by: Hulk Robot <hulkci@huawei.com>
-Fixes: e8ef967a54f4 ("dccp: Registration routines for changing feature values")
-Reviewed-by: Mukesh Ojha <mojha@codeaurora.org>
-Signed-off-by: YueHaibing <yuehaibing@huawei.com>
-Signed-off-by: David S. Miller <davem@davemloft.net>
-Signed-off-by: Sasha Levin <sashal@kernel.org>
+Signed-off-by: Jules Irenge <jbi.octave@gmail.com>
 ---
- net/dccp/feat.c | 7 ++++++-
- 1 file changed, 6 insertions(+), 1 deletion(-)
+ net/dccp/minisocks.c | 1 +
+ 1 file changed, 1 insertion(+)
 
-diff --git a/net/dccp/feat.c b/net/dccp/feat.c
-index f227f002c73d..db87d9f58019 100644
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -738,7 +738,12 @@ static int __feat_register_sp(struct list_head *fn, u8 feat, u8 is_local,
- 	if (dccp_feat_clone_sp_val(&fval, sp_val, sp_len))
- 		return -ENOMEM;
- 
--	return dccp_feat_push_change(fn, feat, is_local, mandatory, &fval);
-+	if (dccp_feat_push_change(fn, feat, is_local, mandatory, &fval)) {
-+		kfree(fval.sp.vec);
-+		return -ENOMEM;
-+	}
-+
-+	return 0;
- }
- 
- /**
+diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
+index 25187528c308..c5c74a34d139 100644
+--- a/net/dccp/minisocks.c
++++ b/net/dccp/minisocks.c
+@@ -216,6 +216,7 @@ EXPORT_SYMBOL_GPL(dccp_check_req);
+  */
+ int dccp_child_process(struct sock *parent, struct sock *child,
+ 		       struct sk_buff *skb)
++	__releases(child)
+ {
+ 	int ret = 0;
+ 	const int state = child->sk_state;
 -- 
-2.20.1
+2.24.1
