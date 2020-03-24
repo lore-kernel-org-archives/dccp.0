@@ -1,46 +1,90 @@
-From: David Miller <davem@davemloft.net>
-Date: Fri, 28 Feb 2020 20:09:35 +0000
-Subject: Re: [PATCH][next] net: dccp: Replace zero-length array with flexible-array member
-Message-Id: <20200228.120935.757538787445893720.davem@davemloft.net>
+From: Kuniyuki Iwashima <kuniyu@amazon.co.jp>
+Date: Tue, 24 Mar 2020 11:33:31 +0000
+Subject: [PATCH v2 net-next] tcp/dccp: Move initialisation of refcounted into if block.
+Message-Id: <20200324113331.29031-1-kuniyu@amazon.co.jp>
 List-Id: <dccp.vger.kernel.org>
-References: <20200228133337.GA23619@embeddedor>
-In-Reply-To: <20200228133337.GA23619@embeddedor>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: "Gustavo A. R. Silva" <gustavo@embeddedor.com>
-Date: Fri, 28 Feb 2020 07:33:37 -0600
+The refcounted seems to be initialised at most three times, but the
+complier can optimize that and the refcounted is initialised only at once.
 
-> The current codebase makes use of the zero-length array language
-> extension to the C90 standard, but the preferred mechanism to declare
-> variable-length types such as these ones is a flexible array member[1][2],
-> introduced in C99:
-> 
-> struct foo {
->         int stuff;
->         struct boo array[];
-> };
-> 
-> By making use of the mechanism above, we will get a compiler warning
-> in case the flexible array does not occur last in the structure, which
-> will help us prevent some kind of undefined behavior bugs from being
-> inadvertently introduced[3] to the codebase from now on.
-> 
-> Also, notice that, dynamic memory allocations won't be affected by
-> this change:
-> 
-> "Flexible array members have incomplete type, and so the sizeof operator
-> may not be applied. As a quirk of the original implementation of
-> zero-length arrays, sizeof evaluates to zero."[1]
-> 
-> This issue was found with the help of Coccinelle.
-> 
-> [1] https://gcc.gnu.org/onlinedocs/gcc/Zero-Length.html
-> [2] https://github.com/KSPP/linux/issues/21
-> [3] commit 76497732932f ("cxgb3/l2t: Fix undefined behaviour")
-> 
-> Signed-off-by: Gustavo A. R. Silva <gustavo@embeddedor.com>
+  - __inet_lookup_skb() sets it true.
+  - skb_steal_sock() is false and __inet_lookup() sets it true.
+  - __inet_lookup_established() is false and __inet_lookup() sets it false.
 
-Applied.
+The code is bit confusing, so this patch makes it more readable so that no
+one doubt about the complier optimization.
+
+Signed-off-by: Kuniyuki Iwashima <kuniyu@amazon.co.jp>
+---
+ include/net/inet6_hashtables.h | 11 +++++++----
+ include/net/inet_hashtables.h  | 11 +++++++----
+ 2 files changed, 14 insertions(+), 8 deletions(-)
+
+diff --git a/include/net/inet6_hashtables.h b/include/net/inet6_hashtables.h
+index fe96bf247aac..9b6c97100d54 100644
+--- a/include/net/inet6_hashtables.h
++++ b/include/net/inet6_hashtables.h
+@@ -70,9 +70,11 @@ static inline struct sock *__inet6_lookup(struct net *net,
+ 	struct sock *sk = __inet6_lookup_established(net, hashinfo, saddr,
+ 						     sport, daddr, hnum,
+ 						     dif, sdif);
+-	*refcounted = true;
+-	if (sk)
++	if (sk) {
++		*refcounted = true;
+ 		return sk;
++	}
++
+ 	*refcounted = false;
+ 	return inet6_lookup_listener(net, hashinfo, skb, doff, saddr, sport,
+ 				     daddr, hnum, dif, sdif);
+@@ -87,9 +89,10 @@ static inline struct sock *__inet6_lookup_skb(struct inet_hashinfo *hashinfo,
+ {
+ 	struct sock *sk = skb_steal_sock(skb);
+ 
+-	*refcounted = true;
+-	if (sk)
++	if (sk) {
++		*refcounted = true;
+ 		return sk;
++	}
+ 
+ 	return __inet6_lookup(dev_net(skb_dst(skb)->dev), hashinfo, skb,
+ 			      doff, &ipv6_hdr(skb)->saddr, sport,
+diff --git a/include/net/inet_hashtables.h b/include/net/inet_hashtables.h
+index d0019d3395cf..aa859bf8607b 100644
+--- a/include/net/inet_hashtables.h
++++ b/include/net/inet_hashtables.h
+@@ -345,9 +345,11 @@ static inline struct sock *__inet_lookup(struct net *net,
+ 
+ 	sk = __inet_lookup_established(net, hashinfo, saddr, sport,
+ 				       daddr, hnum, dif, sdif);
+-	*refcounted = true;
+-	if (sk)
++	if (sk) {
++		*refcounted = true;
+ 		return sk;
++	}
++
+ 	*refcounted = false;
+ 	return __inet_lookup_listener(net, hashinfo, skb, doff, saddr,
+ 				      sport, daddr, hnum, dif, sdif);
+@@ -382,9 +384,10 @@ static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
+ 	struct sock *sk = skb_steal_sock(skb);
+ 	const struct iphdr *iph = ip_hdr(skb);
+ 
+-	*refcounted = true;
+-	if (sk)
++	if (sk) {
++		*refcounted = true;
+ 		return sk;
++	}
+ 
+ 	return __inet_lookup(dev_net(skb_dst(skb)->dev), hashinfo, skb,
+ 			     doff, iph->saddr, sport,
+-- 
+2.17.2 (Apple Git-113)
