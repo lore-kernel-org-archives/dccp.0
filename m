@@ -1,27 +1,37 @@
-From: Kuniyuki Iwashima <kuniyu@amazon.co.jp>
-Date: Mon, 23 Mar 2020 18:18:12 +0000
-Subject: [PATCH net-next 0/2] tcp/dccp: Cleanup initialisation code of refcounted.
-Message-Id: <20200323181814.87661-1-kuniyu@amazon.co.jp>
+From: YueHaibing <yuehaibing@huawei.com>
+Date: Fri, 24 Apr 2020 13:13:34 +0000
+Subject: [PATCH net-next] dccp: remove unused inline function dccp_set_seqno
+Message-Id: <20200424131334.37532-1-yuehaibing@huawei.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-These patches cleanup initialisation of the refcounted which is passed to
-__inet_lookup_skb().
+There's no callers in-tree since commit 792b48780e8b ("dccp: Implement
+both feature-local and feature-remote Sequence Window feature")
 
-Kuniyuki Iwashima (2):
-  tcp/dccp: Move initialisation of refcounted into if block.
-  tcp/dccp: Remove unnecessary initialization of refcounted.
+Signed-off-by: YueHaibing <yuehaibing@huawei.com>
+---
+ net/dccp/dccp.h | 5 -----
+ 1 file changed, 5 deletions(-)
 
- include/net/inet6_hashtables.h | 11 +++++++----
- include/net/inet_hashtables.h  | 11 +++++++----
- net/dccp/ipv4.c                |  1 -
- net/dccp/ipv6.c                |  1 -
- net/ipv4/tcp_ipv4.c            |  1 -
- net/ipv6/tcp_ipv6.c            |  1 -
- 6 files changed, 14 insertions(+), 12 deletions(-)
-
+diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
+index 9c3b27c257bb..7dce4f6c7025 100644
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -108,11 +108,6 @@ extern int  sysctl_dccp_sync_ratelimit;
+ #define ADD48(a, b)	 (((a) + (b)) & UINT48_MAX)
+ #define SUB48(a, b)	 ADD48((a), COMPLEMENT48(b))
+ 
+-static inline void dccp_set_seqno(u64 *seqno, u64 value)
+-{
+-	*seqno = value & UINT48_MAX;
+-}
+-
+ static inline void dccp_inc_seqno(u64 *seqno)
+ {
+ 	*seqno = ADD48(*seqno, 1);
 -- 
-2.17.2 (Apple Git-113)
+2.17.1
+
