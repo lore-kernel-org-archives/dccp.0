@@ -1,37 +1,21 @@
-From: YueHaibing <yuehaibing@huawei.com>
-Date: Fri, 24 Apr 2020 13:13:34 +0000
-Subject: [PATCH net-next] dccp: remove unused inline function dccp_set_seqno
-Message-Id: <20200424131334.37532-1-yuehaibing@huawei.com>
+From: David Miller <davem@davemloft.net>
+Date: Sun, 26 Apr 2020 03:43:18 +0000
+Subject: Re: [PATCH net-next] dccp: remove unused inline function dccp_set_seqno
+Message-Id: <20200425.204318.2085505541872793394.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
+References: <20200424131334.37532-1-yuehaibing@huawei.com>
+In-Reply-To: <20200424131334.37532-1-yuehaibing@huawei.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-There's no callers in-tree since commit 792b48780e8b ("dccp: Implement
-both feature-local and feature-remote Sequence Window feature")
+From: YueHaibing <yuehaibing@huawei.com>
+Date: Fri, 24 Apr 2020 21:13:34 +0800
 
-Signed-off-by: YueHaibing <yuehaibing@huawei.com>
----
- net/dccp/dccp.h | 5 -----
- 1 file changed, 5 deletions(-)
+> There's no callers in-tree since commit 792b48780e8b ("dccp: Implement
+> both feature-local and feature-remote Sequence Window feature")
+> 
+> Signed-off-by: YueHaibing <yuehaibing@huawei.com>
 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 9c3b27c257bb..7dce4f6c7025 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -108,11 +108,6 @@ extern int  sysctl_dccp_sync_ratelimit;
- #define ADD48(a, b)	 (((a) + (b)) & UINT48_MAX)
- #define SUB48(a, b)	 ADD48((a), COMPLEMENT48(b))
- 
--static inline void dccp_set_seqno(u64 *seqno, u64 value)
--{
--	*seqno = value & UINT48_MAX;
--}
--
- static inline void dccp_inc_seqno(u64 *seqno)
- {
- 	*seqno = ADD48(*seqno, 1);
--- 
-2.17.1
-
+Applied.
