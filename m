@@ -1,107 +1,41 @@
 From: Jakub Sitnicki <jakub@cloudflare.com>
-Date: Wed, 06 May 2020 12:55:01 +0000
-Subject: [PATCH bpf-next 05/17] inet: Run SK_LOOKUP BPF program on socket lookup
-Message-Id: <20200506125514.1020829-6-jakub@cloudflare.com>
+Date: Wed, 06 May 2020 12:55:12 +0000
+Subject: [PATCH bpf-next 16/17] selftests/bpf: Rename test_sk_lookup_kern.c to test_ref_track_kern.c
+Message-Id: <20200506125514.1020829-17-jakub@cloudflare.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Run a BPF program before looking up a listening socket on the receive path.
-Program selects a listening socket to yield as result of socket lookup by
-calling bpf_sk_assign() helper and returning BPF_REDIRECT code.
+Name the BPF C file after the test case that uses it.
 
-Alternatively, program can also fail the lookup by returning with BPF_DROP,
-or let the lookup continue as usual with BPF_OK on return.
+This frees up "test_sk_lookup" namespace for BPF sk_lookup program tests
+introduced by the following patch.
 
-This lets the user match packets with listening sockets freely at the last
-possible point on the receive path, where we know that packets are destined
-for local delivery after undergoing policing, filtering, and routing.
-
-With BPF code selecting the socket, directing packets destined to an IP
-range or to a port range to a single socket becomes possible.
-
-Suggested-by: Marek Majkowski <marek@cloudflare.com>
-Reviewed-by: Lorenz Bauer <lmb@cloudflare.com>
 Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
 ---
- include/net/inet_hashtables.h | 36 +++++++++++++++++++++++++++++++++++
- net/ipv4/inet_hashtables.c    | 15 ++++++++++++++-
- 2 files changed, 50 insertions(+), 1 deletion(-)
+ tools/testing/selftests/bpf/prog_tests/reference_tracking.c     | 2 +-
+ .../bpf/progs/{test_sk_lookup_kern.c => test_ref_track_kern.c}  | 0
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+ rename tools/testing/selftests/bpf/progs/{test_sk_lookup_kern.c => test_ref_track_kern.c} (100%)
 
-diff --git a/include/net/inet_hashtables.h b/include/net/inet_hashtables.h
-index 6072dfbd1078..3fcbc8f66f88 100644
---- a/include/net/inet_hashtables.h
-+++ b/include/net/inet_hashtables.h
-@@ -422,4 +422,40 @@ int __inet_hash_connect(struct inet_timewait_death_row *death_row,
+diff --git a/tools/testing/selftests/bpf/prog_tests/reference_tracking.c b/tools/testing/selftests/bpf/prog_tests/reference_tracking.c
+index fc0d7f4f02cf..106ca8bb2a8f 100644
+--- a/tools/testing/selftests/bpf/prog_tests/reference_tracking.c
++++ b/tools/testing/selftests/bpf/prog_tests/reference_tracking.c
+@@ -3,7 +3,7 @@
  
- int inet_hash_connect(struct inet_timewait_death_row *death_row,
- 		      struct sock *sk);
-+
-+static inline struct sock *bpf_sk_lookup_run(struct net *net,
-+					     struct bpf_sk_lookup_kern *ctx)
-+{
-+	struct bpf_prog *prog;
-+	int ret = BPF_OK;
-+
-+	rcu_read_lock();
-+	prog = rcu_dereference(net->sk_lookup_prog);
-+	if (prog)
-+		ret = BPF_PROG_RUN(prog, ctx);
-+	rcu_read_unlock();
-+
-+	if (ret = BPF_DROP)
-+		return ERR_PTR(-ECONNREFUSED);
-+	if (ret = BPF_REDIRECT)
-+		return ctx->selected_sk;
-+	return NULL;
-+}
-+
-+static inline struct sock *inet_lookup_run_bpf(struct net *net, u8 protocol,
-+					       __be32 saddr, __be16 sport,
-+					       __be32 daddr, u16 dport)
-+{
-+	struct bpf_sk_lookup_kern ctx = {
-+		.family		= AF_INET,
-+		.protocol	= protocol,
-+		.v4.saddr	= saddr,
-+		.v4.daddr	= daddr,
-+		.sport		= sport,
-+		.dport		= dport,
-+	};
-+
-+	return bpf_sk_lookup_run(net, &ctx);
-+}
-+
- #endif /* _INET_HASHTABLES_H */
-diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
-index ab64834837c8..f4d07285591a 100644
---- a/net/ipv4/inet_hashtables.c
-+++ b/net/ipv4/inet_hashtables.c
-@@ -307,9 +307,22 @@ struct sock *__inet_lookup_listener(struct net *net,
- 				    const int dif, const int sdif)
+ void test_reference_tracking(void)
  {
- 	struct inet_listen_hashbucket *ilb2;
--	struct sock *result = NULL;
-+	struct sock *result, *reuse_sk;
- 	unsigned int hash2;
- 
-+	/* Lookup redirect from BPF */
-+	result = inet_lookup_run_bpf(net, hashinfo->protocol,
-+				     saddr, sport, daddr, hnum);
-+	if (IS_ERR(result))
-+		return NULL;
-+	if (result) {
-+		reuse_sk = lookup_reuseport(net, result, skb, doff,
-+					    saddr, sport, daddr, hnum);
-+		if (reuse_sk)
-+			result = reuse_sk;
-+		goto done;
-+	}
-+
- 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
- 	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
- 
+-	const char *file = "test_sk_lookup_kern.o";
++	const char *file = "test_ref_track_kern.o";
+ 	const char *obj_name = "ref_track";
+ 	DECLARE_LIBBPF_OPTS(bpf_object_open_opts, open_opts,
+ 		.object_name = obj_name,
+diff --git a/tools/testing/selftests/bpf/progs/test_sk_lookup_kern.c b/tools/testing/selftests/bpf/progs/test_ref_track_kern.c
+similarity index 100%
+rename from tools/testing/selftests/bpf/progs/test_sk_lookup_kern.c
+rename to tools/testing/selftests/bpf/progs/test_ref_track_kern.c
 -- 
 2.25.3
