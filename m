@@ -1,86 +1,72 @@
 From: Jakub Sitnicki <jakub@cloudflare.com>
-Date: Wed, 06 May 2020 12:55:06 +0000
-Subject: [PATCH bpf-next 10/17] udp: Run SK_LOOKUP BPF program on socket lookup
-Message-Id: <20200506125514.1020829-11-jakub@cloudflare.com>
+Date: Wed, 06 May 2020 12:55:00 +0000
+Subject: [PATCH bpf-next 04/17] inet: Extract helper for selecting socket from reuseport group
+Message-Id: <20200506125514.1020829-5-jakub@cloudflare.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Following INET/TCP socket lookup changes, modify UDP socket lookup to let
-BPF program select a receiving socket before searching for a socket by
-destination address and port as usual.
+Prepare for calling into reuseport from __inet_lookup_listener as well.
 
-Lookup of connected sockets that match packet 4-tuple is unaffected by this
-change. BPF program runs, and potentially overrides the lookup result, only
-if a 4-tuple match was not found.
-
-Suggested-by: Marek Majkowski <marek@cloudflare.com>
-Reviewed-by: Lorenz Bauer <lmb@cloudflare.com>
 Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
 ---
- net/ipv4/udp.c | 36 ++++++++++++++++++++++++++++--------
- 1 file changed, 28 insertions(+), 8 deletions(-)
+ net/ipv4/inet_hashtables.c | 29 ++++++++++++++++++++---------
+ 1 file changed, 20 insertions(+), 9 deletions(-)
 
-diff --git a/net/ipv4/udp.c b/net/ipv4/udp.c
-index d4842f29294a..18d8432f6551 100644
---- a/net/ipv4/udp.c
-+++ b/net/ipv4/udp.c
-@@ -460,7 +460,7 @@ struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr,
- 		__be16 sport, __be32 daddr, __be16 dport, int dif,
- 		int sdif, struct udp_table *udptable, struct sk_buff *skb)
- {
--	struct sock *result;
-+	struct sock *result, *sk, *reuse_sk;
- 	unsigned short hnum = ntohs(dport);
- 	unsigned int hash2, slot2;
- 	struct udp_hslot *hslot2;
-@@ -469,18 +469,38 @@ struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr,
- 	slot2 = hash2 & udptable->mask;
- 	hslot2 = &udptable->hash2[slot2];
+diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
+index 2bbaaf0c7176..ab64834837c8 100644
+--- a/net/ipv4/inet_hashtables.c
++++ b/net/ipv4/inet_hashtables.c
+@@ -246,6 +246,21 @@ static inline int compute_score(struct sock *sk, struct net *net,
+ 	return score;
+ }
  
-+	/* Lookup connected or non-wildcard socket */
- 	result = udp4_lib_lookup2(net, saddr, sport,
- 				  daddr, hnum, dif, sdif,
- 				  hslot2, skb);
--	if (!result) {
--		hash2 = ipv4_portaddr_hash(net, htonl(INADDR_ANY), hnum);
--		slot2 = hash2 & udptable->mask;
--		hslot2 = &udptable->hash2[slot2];
-+	if (!IS_ERR_OR_NULL(result) && result->sk_state = TCP_ESTABLISHED)
-+		goto done;
++static inline struct sock *lookup_reuseport(struct net *net, struct sock *sk,
++					    struct sk_buff *skb, int doff,
++					    __be32 saddr, __be16 sport,
++					    __be32 daddr, unsigned short hnum)
++{
++	struct sock *reuse_sk = NULL;
++	u32 phash;
++
++	if (sk->sk_reuseport) {
++		phash = inet_ehashfn(net, daddr, hnum, saddr, sport);
++		reuse_sk = reuseport_select_sock(sk, phash, skb, doff);
++	}
++	return reuse_sk;
++}
++
+ /*
+  * Here are some nice properties to exploit here. The BSD API
+  * does not allow a listening sock to specify the remote port nor the
+@@ -265,21 +280,17 @@ static struct sock *inet_lhash2_lookup(struct net *net,
+ 	struct inet_connection_sock *icsk;
+ 	struct sock *sk, *result = NULL;
+ 	int score, hiscore = 0;
+-	u32 phash = 0;
  
--		result = udp4_lib_lookup2(net, saddr, sport,
--					  htonl(INADDR_ANY), hnum, dif, sdif,
--					  hslot2, skb);
-+	/* Lookup redirect from BPF */
-+	sk = inet_lookup_run_bpf(net, udptable->protocol,
-+				 saddr, sport, daddr, hnum);
-+	if (IS_ERR(sk))
-+		return NULL;
-+	if (sk) {
-+		reuse_sk = lookup_reuseport(net, sk, skb,
-+					    saddr, sport, daddr, hnum);
-+		result = reuse_sk ? : sk;
-+		goto done;
- 	}
+ 	inet_lhash2_for_each_icsk_rcu(icsk, &ilb2->head) {
+ 		sk = (struct sock *)icsk;
+ 		score = compute_score(sk, net, hnum, daddr,
+ 				      dif, sdif, exact_dif);
+ 		if (score > hiscore) {
+-			if (sk->sk_reuseport) {
+-				phash = inet_ehashfn(net, daddr, hnum,
+-						     saddr, sport);
+-				result = reuseport_select_sock(sk, phash,
+-							       skb, doff);
+-				if (result)
+-					return result;
+-			}
++			result = lookup_reuseport(net, sk, skb, doff,
++						  saddr, sport, daddr, hnum);
++			if (result)
++				return result;
 +
-+	/* Got non-wildcard socket or error on first lookup */
-+	if (result)
-+		goto done;
-+
-+	/* Lookup wildcard sockets */
-+	hash2 = ipv4_portaddr_hash(net, htonl(INADDR_ANY), hnum);
-+	slot2 = hash2 & udptable->mask;
-+	hslot2 = &udptable->hash2[slot2];
-+
-+	result = udp4_lib_lookup2(net, saddr, sport,
-+				  htonl(INADDR_ANY), hnum, dif, sdif,
-+				  hslot2, skb);
-+done:
- 	if (IS_ERR(result))
- 		return NULL;
- 	return result;
+ 			result = sk;
+ 			hiscore = score;
+ 		}
 -- 
 2.25.3
