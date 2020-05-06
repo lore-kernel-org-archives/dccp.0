@@ -1,58 +1,84 @@
-From: Richard Sailer <richard_siegfried@systemli.org>
-Date: Sat, 30 May 2020 15:59:00 +0000
-Subject: [PATCH] net: dccp: Add SIOCOUTQ IOCTL support (send buffer fill)
-Message-Id: <20200530155900.930808-1-richard_siegfried@systemli.org>
+From: Jakub Sitnicki <jakub@cloudflare.com>
+Date: Wed, 06 May 2020 12:55:08 +0000
+Subject: [PATCH bpf-next 12/17] udp6: Run SK_LOOKUP BPF program on socket lookup
+Message-Id: <20200506125514.1020829-13-jakub@cloudflare.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Richard Sailer <rs@tuxedocomputers.com>
+Same as for udp4, let BPF program override the socket lookup result, by
+selecting a receiving socket of its choice or failing the lookup, if no
+connected UDP socket matched packet 4-tuple.
 
-This adds support for the SIOCOUTQ IOCTL to call send buffer fill
-from the DCCP socket, like UDP and TCP already have.
-
-Regarding the used data field. DCCP uses per packet sequence numbers,
-not per byte, so sequence numbers can't be used like in TCP. sk_wmem_queued
-is not used by DCCP and always 0, even in test on highly congested paths.
-Therefore this uses sk_wmem_alloc like in UDP.
+Suggested-by: Marek Majkowski <marek@cloudflare.com>
+Reviewed-by: Lorenz Bauer <lmb@cloudflare.com>
+Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
 ---
- Documentation/networking/dccp.txt | 2 ++
- net/dccp/proto.c                  | 8 ++++++++
- 2 files changed, 10 insertions(+)
+ net/ipv6/udp.c | 37 ++++++++++++++++++++++++++++---------
+ 1 file changed, 28 insertions(+), 9 deletions(-)
 
-diff --git a/Documentation/networking/dccp.txt b/Documentation/networking/dccp.txt
-index 55c575fcaf17d..682ecf8288827 100644
---- a/Documentation/networking/dccp.txt
-+++ b/Documentation/networking/dccp.txt
-@@ -185,6 +185,8 @@ FIONREAD
- 	Works as in udp(7): returns in the `int' argument pointer the size of
- 	the next pending datagram in bytes, or 0 when no datagram is pending.
+diff --git a/net/ipv6/udp.c b/net/ipv6/udp.c
+index ee2073329d25..934f41a5e6ca 100644
+--- a/net/ipv6/udp.c
++++ b/net/ipv6/udp.c
+@@ -197,28 +197,47 @@ struct sock *__udp6_lib_lookup(struct net *net,
+ 			       int dif, int sdif, struct udp_table *udptable,
+ 			       struct sk_buff *skb)
+ {
++	struct sock *result, *sk, *reuse_sk;
+ 	unsigned short hnum = ntohs(dport);
+ 	unsigned int hash2, slot2;
+ 	struct udp_hslot *hslot2;
+-	struct sock *result;
  
-+SIOCOUTQ
-+  Returns the number of data bytes in the local send queue.
+ 	hash2 = ipv6_portaddr_hash(net, daddr, hnum);
+ 	slot2 = hash2 & udptable->mask;
+ 	hslot2 = &udptable->hash2[slot2];
  
- Other tunables
- =======
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 4af8a98fe7846..b286346a8c626 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -375,6 +375,14 @@ int dccp_ioctl(struct sock *sk, int cmd, unsigned long arg)
- 		goto out;
++	/* Lookup connected or non-wildcard sockets */
+ 	result = udp6_lib_lookup2(net, saddr, sport,
+ 				  daddr, hnum, dif, sdif,
+ 				  hslot2, skb);
+-	if (!result) {
+-		hash2 = ipv6_portaddr_hash(net, &in6addr_any, hnum);
+-		slot2 = hash2 & udptable->mask;
++	if (!IS_ERR_OR_NULL(result) && result->sk_state = TCP_ESTABLISHED)
++		goto done;
  
- 	switch (cmd) {
-+	case SIOCOUTQ: {
-+		/* Using sk_wmem_alloc here because sk_wmem_queued is not used by DCCP and
-+     * always 0, comparably to UDP.
-+		 */
-+		int amount = sk_wmem_alloc_get(sk);
-+		rc = put_user(amount, (int __user *)arg);
-+	}
-+		       break;
- 	case SIOCINQ: {
- 		struct sk_buff *skb;
- 		unsigned long amount = 0;
+-		hslot2 = &udptable->hash2[slot2];
+-
+-		result = udp6_lib_lookup2(net, saddr, sport,
+-					  &in6addr_any, hnum, dif, sdif,
+-					  hslot2, skb);
++	/* Lookup redirect from BPF */
++	sk = inet6_lookup_run_bpf(net, udptable->protocol,
++				  saddr, sport, daddr, hnum);
++	if (IS_ERR(sk))
++		return NULL;
++	if (sk) {
++		reuse_sk = lookup_reuseport(net, sk, skb,
++					    saddr, sport, daddr, hnum);
++		result = reuse_sk ? : sk;
++		goto done;
+ 	}
++
++	/* Got non-wildcard socket or error on first lookup */
++	if (result)
++		goto done;
++
++	/* Lookup wildcard sockets */
++	hash2 = ipv6_portaddr_hash(net, &in6addr_any, hnum);
++	slot2 = hash2 & udptable->mask;
++	hslot2 = &udptable->hash2[slot2];
++
++	result = udp6_lib_lookup2(net, saddr, sport,
++				  &in6addr_any, hnum, dif, sdif,
++				  hslot2, skb);
++done:
+ 	if (IS_ERR(result))
+ 		return NULL;
+ 	return result;
 -- 
-2.26.2
+2.25.3
