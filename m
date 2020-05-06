@@ -1,84 +1,107 @@
 From: Jakub Sitnicki <jakub@cloudflare.com>
-Date: Mon, 11 May 2020 18:52:13 +0000
-Subject: [PATCH bpf-next v2 12/17] udp6: Run SK_LOOKUP BPF program on socket lookup
-Message-Id: <20200511185218.1422406-13-jakub@cloudflare.com>
+Date: Wed, 06 May 2020 12:55:01 +0000
+Subject: [PATCH bpf-next 05/17] inet: Run SK_LOOKUP BPF program on socket lookup
+Message-Id: <20200506125514.1020829-6-jakub@cloudflare.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Same as for udp4, let BPF program override the socket lookup result, by
-selecting a receiving socket of its choice or failing the lookup, if no
-connected UDP socket matched packet 4-tuple.
+Run a BPF program before looking up a listening socket on the receive path.
+Program selects a listening socket to yield as result of socket lookup by
+calling bpf_sk_assign() helper and returning BPF_REDIRECT code.
+
+Alternatively, program can also fail the lookup by returning with BPF_DROP,
+or let the lookup continue as usual with BPF_OK on return.
+
+This lets the user match packets with listening sockets freely at the last
+possible point on the receive path, where we know that packets are destined
+for local delivery after undergoing policing, filtering, and routing.
+
+With BPF code selecting the socket, directing packets destined to an IP
+range or to a port range to a single socket becomes possible.
 
 Suggested-by: Marek Majkowski <marek@cloudflare.com>
 Reviewed-by: Lorenz Bauer <lmb@cloudflare.com>
 Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
 ---
- net/ipv6/udp.c | 37 ++++++++++++++++++++++++++++---------
- 1 file changed, 28 insertions(+), 9 deletions(-)
+ include/net/inet_hashtables.h | 36 +++++++++++++++++++++++++++++++++++
+ net/ipv4/inet_hashtables.c    | 15 ++++++++++++++-
+ 2 files changed, 50 insertions(+), 1 deletion(-)
 
-diff --git a/net/ipv6/udp.c b/net/ipv6/udp.c
-index ee2073329d25..934f41a5e6ca 100644
---- a/net/ipv6/udp.c
-+++ b/net/ipv6/udp.c
-@@ -197,28 +197,47 @@ struct sock *__udp6_lib_lookup(struct net *net,
- 			       int dif, int sdif, struct udp_table *udptable,
- 			       struct sk_buff *skb)
+diff --git a/include/net/inet_hashtables.h b/include/net/inet_hashtables.h
+index 6072dfbd1078..3fcbc8f66f88 100644
+--- a/include/net/inet_hashtables.h
++++ b/include/net/inet_hashtables.h
+@@ -422,4 +422,40 @@ int __inet_hash_connect(struct inet_timewait_death_row *death_row,
+ 
+ int inet_hash_connect(struct inet_timewait_death_row *death_row,
+ 		      struct sock *sk);
++
++static inline struct sock *bpf_sk_lookup_run(struct net *net,
++					     struct bpf_sk_lookup_kern *ctx)
++{
++	struct bpf_prog *prog;
++	int ret = BPF_OK;
++
++	rcu_read_lock();
++	prog = rcu_dereference(net->sk_lookup_prog);
++	if (prog)
++		ret = BPF_PROG_RUN(prog, ctx);
++	rcu_read_unlock();
++
++	if (ret = BPF_DROP)
++		return ERR_PTR(-ECONNREFUSED);
++	if (ret = BPF_REDIRECT)
++		return ctx->selected_sk;
++	return NULL;
++}
++
++static inline struct sock *inet_lookup_run_bpf(struct net *net, u8 protocol,
++					       __be32 saddr, __be16 sport,
++					       __be32 daddr, u16 dport)
++{
++	struct bpf_sk_lookup_kern ctx = {
++		.family		= AF_INET,
++		.protocol	= protocol,
++		.v4.saddr	= saddr,
++		.v4.daddr	= daddr,
++		.sport		= sport,
++		.dport		= dport,
++	};
++
++	return bpf_sk_lookup_run(net, &ctx);
++}
++
+ #endif /* _INET_HASHTABLES_H */
+diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
+index ab64834837c8..f4d07285591a 100644
+--- a/net/ipv4/inet_hashtables.c
++++ b/net/ipv4/inet_hashtables.c
+@@ -307,9 +307,22 @@ struct sock *__inet_lookup_listener(struct net *net,
+ 				    const int dif, const int sdif)
  {
-+	struct sock *result, *sk, *reuse_sk;
- 	unsigned short hnum = ntohs(dport);
- 	unsigned int hash2, slot2;
- 	struct udp_hslot *hslot2;
--	struct sock *result;
+ 	struct inet_listen_hashbucket *ilb2;
+-	struct sock *result = NULL;
++	struct sock *result, *reuse_sk;
+ 	unsigned int hash2;
  
- 	hash2 = ipv6_portaddr_hash(net, daddr, hnum);
- 	slot2 = hash2 & udptable->mask;
- 	hslot2 = &udptable->hash2[slot2];
- 
-+	/* Lookup connected or non-wildcard sockets */
- 	result = udp6_lib_lookup2(net, saddr, sport,
- 				  daddr, hnum, dif, sdif,
- 				  hslot2, skb);
--	if (!result) {
--		hash2 = ipv6_portaddr_hash(net, &in6addr_any, hnum);
--		slot2 = hash2 & udptable->mask;
-+	if (!IS_ERR_OR_NULL(result) && result->sk_state = TCP_ESTABLISHED)
-+		goto done;
- 
--		hslot2 = &udptable->hash2[slot2];
--
--		result = udp6_lib_lookup2(net, saddr, sport,
--					  &in6addr_any, hnum, dif, sdif,
--					  hslot2, skb);
 +	/* Lookup redirect from BPF */
-+	sk = inet6_lookup_run_bpf(net, udptable->protocol,
-+				  saddr, sport, daddr, hnum);
-+	if (IS_ERR(sk))
++	result = inet_lookup_run_bpf(net, hashinfo->protocol,
++				     saddr, sport, daddr, hnum);
++	if (IS_ERR(result))
 +		return NULL;
-+	if (sk) {
-+		reuse_sk = lookup_reuseport(net, sk, skb,
++	if (result) {
++		reuse_sk = lookup_reuseport(net, result, skb, doff,
 +					    saddr, sport, daddr, hnum);
-+		result = reuse_sk ? : sk;
++		if (reuse_sk)
++			result = reuse_sk;
 +		goto done;
- 	}
++	}
 +
-+	/* Got non-wildcard socket or error on first lookup */
-+	if (result)
-+		goto done;
-+
-+	/* Lookup wildcard sockets */
-+	hash2 = ipv6_portaddr_hash(net, &in6addr_any, hnum);
-+	slot2 = hash2 & udptable->mask;
-+	hslot2 = &udptable->hash2[slot2];
-+
-+	result = udp6_lib_lookup2(net, saddr, sport,
-+				  &in6addr_any, hnum, dif, sdif,
-+				  hslot2, skb);
-+done:
- 	if (IS_ERR(result))
- 		return NULL;
- 	return result;
+ 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
+ 	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
+ 
 -- 
 2.25.3
