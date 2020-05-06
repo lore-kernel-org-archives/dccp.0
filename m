@@ -1,45 +1,66 @@
-From: Alexei Starovoitov <alexei.starovoitov@gmail.com>
-Date: Fri, 15 May 2020 15:07:42 +0000
-Subject: Re: [PATCH bpf-next v2 05/17] inet: Run SK_LOOKUP BPF program on socket lookup
-Message-Id: <20200515150742.obhv4sdps5chduay@ast-mbp>
+From: Jakub Sitnicki <jakub@cloudflare.com>
+Date: Wed, 06 May 2020 12:54:59 +0000
+Subject: [PATCH bpf-next 03/17] inet: Store layer 4 protocol in inet_hashinfo
+Message-Id: <20200506125514.1020829-4-jakub@cloudflare.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20200511185218.1422406-6-jakub@cloudflare.com>
-In-Reply-To: <20200511185218.1422406-6-jakub@cloudflare.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Fri, May 15, 2020 at 02:28:30PM +0200, Jakub Sitnicki wrote:
-> On Mon, May 11, 2020 at 10:44 PM CEST, Alexei Starovoitov wrote:
-> > On Mon, May 11, 2020 at 08:52:06PM +0200, Jakub Sitnicki wrote:
-> >> Run a BPF program before looking up a listening socket on the receive path.
-> >> Program selects a listening socket to yield as result of socket lookup by
-> >> calling bpf_sk_assign() helper and returning BPF_REDIRECT code.
-> >>
-> >> Alternatively, program can also fail the lookup by returning with BPF_DROP,
-> >> or let the lookup continue as usual with BPF_OK on return.
-> >>
-> >> This lets the user match packets with listening sockets freely at the last
-> >> possible point on the receive path, where we know that packets are destined
-> >> for local delivery after undergoing policing, filtering, and routing.
-> >>
-> >> With BPF code selecting the socket, directing packets destined to an IP
-> >> range or to a port range to a single socket becomes possible.
-> >>
-> >> Suggested-by: Marek Majkowski <marek@cloudflare.com>
-> >> Reviewed-by: Lorenz Bauer <lmb@cloudflare.com>
-> >> Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
-> >> ---
-> 
-> [...]
-> 
-> > Also please switch to bpf_link way of attaching. All system wide attachments
-> > should be visible and easily debuggable via 'bpftool link show'.
-> > Currently we're converting tc and xdp hooks to bpf_link. This new hook
-> > should have it from the beginning.
-> 
-> Just to clarify, I understood that bpf(BPF_PROG_ATTACH/DETACH) doesn't
-> have to be supported for new hooks.
+Make it possible to identify the protocol of sockets stored in hashinfo
+without looking up a socket.
 
-Yes. Not only no need. I don't think attach/detach fits.
+Subsequent patches make use the new field at the socket lookup time to
+ensure that BPF program selects only sockets with matching protocol.
+
+Reviewed-by: Lorenz Bauer <lmb@cloudflare.com>
+Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
+---
+ include/net/inet_hashtables.h | 3 +++
+ net/dccp/proto.c              | 2 +-
+ net/ipv4/tcp_ipv4.c           | 2 +-
+ 3 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/include/net/inet_hashtables.h b/include/net/inet_hashtables.h
+index ad64ba6a057f..6072dfbd1078 100644
+--- a/include/net/inet_hashtables.h
++++ b/include/net/inet_hashtables.h
+@@ -144,6 +144,9 @@ struct inet_hashinfo {
+ 	unsigned int			lhash2_mask;
+ 	struct inet_listen_hashbucket	*lhash2;
+ 
++	/* Layer 4 protocol of the stored sockets */
++	int				protocol;
++
+ 	/* All the above members are written once at bootup and
+ 	 * never written again _or_ are predominantly read-access.
+ 	 *
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 4af8a98fe784..c826419e68e6 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -45,7 +45,7 @@ EXPORT_SYMBOL_GPL(dccp_statistics);
+ struct percpu_counter dccp_orphan_count;
+ EXPORT_SYMBOL_GPL(dccp_orphan_count);
+ 
+-struct inet_hashinfo dccp_hashinfo;
++struct inet_hashinfo dccp_hashinfo = { .protocol = IPPROTO_DCCP };
+ EXPORT_SYMBOL_GPL(dccp_hashinfo);
+ 
+ /* the maximum queue length for tx in packets. 0 is no limit */
+diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
+index 6c05f1ceb538..77e4f4e4c73c 100644
+--- a/net/ipv4/tcp_ipv4.c
++++ b/net/ipv4/tcp_ipv4.c
+@@ -87,7 +87,7 @@ static int tcp_v4_md5_hash_hdr(char *md5_hash, const struct tcp_md5sig_key *key,
+ 			       __be32 daddr, __be32 saddr, const struct tcphdr *th);
+ #endif
+ 
+-struct inet_hashinfo tcp_hashinfo;
++struct inet_hashinfo tcp_hashinfo = { .protocol = IPPROTO_TCP };
+ EXPORT_SYMBOL(tcp_hashinfo);
+ 
+ static u32 tcp_v4_init_seq(const struct sk_buff *skb)
+-- 
+2.25.3
