@@ -1,72 +1,90 @@
 From: Jakub Sitnicki <jakub@cloudflare.com>
-Date: Mon, 11 May 2020 18:52:05 +0000
-Subject: [PATCH bpf-next v2 04/17] inet: Extract helper for selecting socket from reuseport group
-Message-Id: <20200511185218.1422406-5-jakub@cloudflare.com>
+Date: Mon, 11 May 2020 18:52:08 +0000
+Subject: [PATCH bpf-next v2 07/17] inet6: Run SK_LOOKUP BPF program on socket lookup
+Message-Id: <20200511185218.1422406-8-jakub@cloudflare.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Prepare for calling into reuseport from __inet_lookup_listener as well.
+Following ipv4 stack changes, run a BPF program attached to netns before
+looking up a listening socket. Program can return a listening socket to use
+as result of socket lookup, fail the lookup, or take no action.
 
+Suggested-by: Marek Majkowski <marek@cloudflare.com>
+Reviewed-by: Lorenz Bauer <lmb@cloudflare.com>
 Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
 ---
- net/ipv4/inet_hashtables.c | 29 ++++++++++++++++++++---------
- 1 file changed, 20 insertions(+), 9 deletions(-)
+ include/net/inet6_hashtables.h | 20 ++++++++++++++++++++
+ net/ipv6/inet6_hashtables.c    | 15 ++++++++++++++-
+ 2 files changed, 34 insertions(+), 1 deletion(-)
 
-diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
-index 2bbaaf0c7176..ab64834837c8 100644
---- a/net/ipv4/inet_hashtables.c
-+++ b/net/ipv4/inet_hashtables.c
-@@ -246,6 +246,21 @@ static inline int compute_score(struct sock *sk, struct net *net,
- 	return score;
- }
+diff --git a/include/net/inet6_hashtables.h b/include/net/inet6_hashtables.h
+index 81b965953036..8b8c0cb92ea8 100644
+--- a/include/net/inet6_hashtables.h
++++ b/include/net/inet6_hashtables.h
+@@ -21,6 +21,7 @@
  
-+static inline struct sock *lookup_reuseport(struct net *net, struct sock *sk,
-+					    struct sk_buff *skb, int doff,
-+					    __be32 saddr, __be16 sport,
-+					    __be32 daddr, unsigned short hnum)
-+{
-+	struct sock *reuse_sk = NULL;
-+	u32 phash;
+ #include <net/ipv6.h>
+ #include <net/netns/hash.h>
++#include <net/inet_hashtables.h>
+ 
+ struct inet_hashinfo;
+ 
+@@ -103,6 +104,25 @@ struct sock *inet6_lookup(struct net *net, struct inet_hashinfo *hashinfo,
+ 			  const int dif);
+ 
+ int inet6_hash(struct sock *sk);
 +
-+	if (sk->sk_reuseport) {
-+		phash = inet_ehashfn(net, daddr, hnum, saddr, sport);
-+		reuse_sk = reuseport_select_sock(sk, phash, skb, doff);
-+	}
-+	return reuse_sk;
++static inline struct sock *inet6_lookup_run_bpf(struct net *net, u8 protocol,
++						const struct in6_addr *saddr,
++						__be16 sport,
++						const struct in6_addr *daddr,
++						u16 dport)
++{
++	struct bpf_sk_lookup_kern ctx = {
++		.family		= AF_INET6,
++		.protocol	= protocol,
++		.v6.saddr	= *saddr,
++		.v6.daddr	= *daddr,
++		.sport		= sport,
++		.dport		= dport,
++	};
++
++	return bpf_sk_lookup_run(net, &ctx);
 +}
 +
- /*
-  * Here are some nice properties to exploit here. The BSD API
-  * does not allow a listening sock to specify the remote port nor the
-@@ -265,21 +280,17 @@ static struct sock *inet_lhash2_lookup(struct net *net,
- 	struct inet_connection_sock *icsk;
- 	struct sock *sk, *result = NULL;
- 	int score, hiscore = 0;
--	u32 phash = 0;
+ #endif /* IS_ENABLED(CONFIG_IPV6) */
  
- 	inet_lhash2_for_each_icsk_rcu(icsk, &ilb2->head) {
- 		sk = (struct sock *)icsk;
- 		score = compute_score(sk, net, hnum, daddr,
- 				      dif, sdif, exact_dif);
- 		if (score > hiscore) {
--			if (sk->sk_reuseport) {
--				phash = inet_ehashfn(net, daddr, hnum,
--						     saddr, sport);
--				result = reuseport_select_sock(sk, phash,
--							       skb, doff);
--				if (result)
--					return result;
--			}
-+			result = lookup_reuseport(net, sk, skb, doff,
-+						  saddr, sport, daddr, hnum);
-+			if (result)
-+				return result;
+ #define INET6_MATCH(__sk, __net, __saddr, __daddr, __ports, __dif, __sdif) \
+diff --git a/net/ipv6/inet6_hashtables.c b/net/ipv6/inet6_hashtables.c
+index 03942eef8ab6..6d91de89fd2b 100644
+--- a/net/ipv6/inet6_hashtables.c
++++ b/net/ipv6/inet6_hashtables.c
+@@ -167,9 +167,22 @@ struct sock *inet6_lookup_listener(struct net *net,
+ 		const unsigned short hnum, const int dif, const int sdif)
+ {
+ 	struct inet_listen_hashbucket *ilb2;
+-	struct sock *result = NULL;
++	struct sock *result, *reuse_sk;
+ 	unsigned int hash2;
+ 
++	/* Lookup redirect from BPF */
++	result = inet6_lookup_run_bpf(net, hashinfo->protocol,
++				      saddr, sport, daddr, hnum);
++	if (IS_ERR(result))
++		return NULL;
++	if (result) {
++		reuse_sk = lookup_reuseport(net, result, skb, doff,
++					    saddr, sport, daddr, hnum);
++		if (reuse_sk)
++			result = reuse_sk;
++		goto done;
++	}
 +
- 			result = sk;
- 			hiscore = score;
- 		}
+ 	hash2 = ipv6_portaddr_hash(net, daddr, hnum);
+ 	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
+ 
 -- 
 2.25.3
