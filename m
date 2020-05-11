@@ -1,49 +1,47 @@
 From: Jakub Sitnicki <jakub@cloudflare.com>
-Date: Mon, 11 May 2020 18:52:07 +0000
-Subject: [PATCH bpf-next v2 06/17] inet6: Extract helper for selecting socket from reuseport group
-Message-Id: <20200511185218.1422406-7-jakub@cloudflare.com>
+Date: Mon, 11 May 2020 18:52:05 +0000
+Subject: [PATCH bpf-next v2 04/17] inet: Extract helper for selecting socket from reuseport group
+Message-Id: <20200511185218.1422406-5-jakub@cloudflare.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Prepare for calling into reuseport from inet6_lookup_listener as well.
+Prepare for calling into reuseport from __inet_lookup_listener as well.
 
 Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
 ---
- net/ipv6/inet6_hashtables.c | 31 ++++++++++++++++++++++---------
- 1 file changed, 22 insertions(+), 9 deletions(-)
+ net/ipv4/inet_hashtables.c | 29 ++++++++++++++++++++---------
+ 1 file changed, 20 insertions(+), 9 deletions(-)
 
-diff --git a/net/ipv6/inet6_hashtables.c b/net/ipv6/inet6_hashtables.c
-index fbe9d4295eac..03942eef8ab6 100644
---- a/net/ipv6/inet6_hashtables.c
-+++ b/net/ipv6/inet6_hashtables.c
-@@ -111,6 +111,23 @@ static inline int compute_score(struct sock *sk, struct net *net,
+diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
+index 2bbaaf0c7176..ab64834837c8 100644
+--- a/net/ipv4/inet_hashtables.c
++++ b/net/ipv4/inet_hashtables.c
+@@ -246,6 +246,21 @@ static inline int compute_score(struct sock *sk, struct net *net,
  	return score;
  }
  
 +static inline struct sock *lookup_reuseport(struct net *net, struct sock *sk,
 +					    struct sk_buff *skb, int doff,
-+					    const struct in6_addr *saddr,
-+					    __be16 sport,
-+					    const struct in6_addr *daddr,
-+					    unsigned short hnum)
++					    __be32 saddr, __be16 sport,
++					    __be32 daddr, unsigned short hnum)
 +{
 +	struct sock *reuse_sk = NULL;
 +	u32 phash;
 +
 +	if (sk->sk_reuseport) {
-+		phash = inet6_ehashfn(net, daddr, hnum, saddr, sport);
++		phash = inet_ehashfn(net, daddr, hnum, saddr, sport);
 +		reuse_sk = reuseport_select_sock(sk, phash, skb, doff);
 +	}
 +	return reuse_sk;
 +}
 +
- /* called with rcu_read_lock() */
- static struct sock *inet6_lhash2_lookup(struct net *net,
- 		struct inet_listen_hashbucket *ilb2,
-@@ -123,21 +140,17 @@ static struct sock *inet6_lhash2_lookup(struct net *net,
+ /*
+  * Here are some nice properties to exploit here. The BSD API
+  * does not allow a listening sock to specify the remote port nor the
+@@ -265,21 +280,17 @@ static struct sock *inet_lhash2_lookup(struct net *net,
  	struct inet_connection_sock *icsk;
  	struct sock *sk, *result = NULL;
  	int score, hiscore = 0;
@@ -51,12 +49,12 @@ index fbe9d4295eac..03942eef8ab6 100644
  
  	inet_lhash2_for_each_icsk_rcu(icsk, &ilb2->head) {
  		sk = (struct sock *)icsk;
- 		score = compute_score(sk, net, hnum, daddr, dif, sdif,
- 				      exact_dif);
+ 		score = compute_score(sk, net, hnum, daddr,
+ 				      dif, sdif, exact_dif);
  		if (score > hiscore) {
 -			if (sk->sk_reuseport) {
--				phash = inet6_ehashfn(net, daddr, hnum,
--						      saddr, sport);
+-				phash = inet_ehashfn(net, daddr, hnum,
+-						     saddr, sport);
 -				result = reuseport_select_sock(sk, phash,
 -							       skb, doff);
 -				if (result)
