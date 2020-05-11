@@ -1,58 +1,107 @@
-From: Martin KaFai Lau <kafai@fb.com>
-Date: Wed, 13 May 2020 18:10:20 +0000
-Subject: Re: [PATCH bpf-next v2 02/17] bpf: Introduce SK_LOOKUP program type with a dedicated attach point
-Message-Id: <20200513181020.dmj3fg3dbvuzl626@kafai-mbp.dhcp.thefacebook.com>
+From: Jakub Sitnicki <jakub@cloudflare.com>
+Date: Mon, 11 May 2020 18:52:06 +0000
+Subject: [PATCH bpf-next v2 05/17] inet: Run SK_LOOKUP BPF program on socket lookup
+Message-Id: <20200511185218.1422406-6-jakub@cloudflare.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20200511185218.1422406-3-jakub@cloudflare.com>
-In-Reply-To: <20200511185218.1422406-3-jakub@cloudflare.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, May 13, 2020 at 04:34:13PM +0200, Jakub Sitnicki wrote:
-> On Wed, May 13, 2020 at 07:41 AM CEST, Martin KaFai Lau wrote:
-> > On Mon, May 11, 2020 at 08:52:03PM +0200, Jakub Sitnicki wrote:
-> >
-> > [ ... ]
-> >
-> >> +BPF_CALL_3(bpf_sk_lookup_assign, struct bpf_sk_lookup_kern *, ctx,
-> >> +	   struct sock *, sk, u64, flags)
-> > The SK_LOOKUP bpf_prog may have already selected the proper reuseport sk.
-> > It is possible by looking up sk from sock_map.
-> >
-> > Thus, it is not always desired to do lookup_reuseport() after sk_assign()
-> > in patch 5.  e.g. reuseport_select_sock() just uses a normal hash if
-> > there is no reuse->prog.
-> >
-> > A flag (e.g. "BPF_F_REUSEPORT_SELECT") can be added here to
-> > specifically do the reuseport_select_sock() after sk_assign().
-> > If not set, reuseport_select_sock() should not be called.
-> 
-> That's true that in addition to steering connections to different
-> services with SK_LOOKUP, you could also, in the same program,
-> load-balance among sockets belonging to one service.
-> 
-> So skipping the reuseport socket selection, if sk_lookup already did
-> load-balancing sounds useful.
-> 
-> Thinking about our use-case, I think we would always pass
-> BPF_F_REUSEPORT_SELECT to sk_assign() because we either (i) know that
-> application is using reuseport and want it manage the load-balancing
-> socket group by itself, or (ii) don't know if application is using
-> reuseport and don't want to break expected behavior.
-Thanks for the explanation.
+Run a BPF program before looking up a listening socket on the receive path.
+Program selects a listening socket to yield as result of socket lookup by
+calling bpf_sk_assign() helper and returning BPF_REDIRECT code.
 
-> 
-> IOW, we'd like reuseport selection to run by default because application
-> expects it to happen if it was set up. OTOH, the application doesn't
-> have to be aware that there is sk_lookup attached (we can put one of its
-> sockets in sk_lookup SOCKMAP when systemd activates it).
-> 
-> Beacuse of that I'd be in favor of having a flag for sk_assign() that
-> disables reuseport selection on demand.
-> 
-> WDYT?
-Sure, it is hard to comment which use case is more common than
-another to take the default ;)
-I think there are use caes for both, so no strong opinion on this ;)
+Alternatively, program can also fail the lookup by returning with BPF_DROP,
+or let the lookup continue as usual with BPF_OK on return.
+
+This lets the user match packets with listening sockets freely at the last
+possible point on the receive path, where we know that packets are destined
+for local delivery after undergoing policing, filtering, and routing.
+
+With BPF code selecting the socket, directing packets destined to an IP
+range or to a port range to a single socket becomes possible.
+
+Suggested-by: Marek Majkowski <marek@cloudflare.com>
+Reviewed-by: Lorenz Bauer <lmb@cloudflare.com>
+Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
+---
+ include/net/inet_hashtables.h | 36 +++++++++++++++++++++++++++++++++++
+ net/ipv4/inet_hashtables.c    | 15 ++++++++++++++-
+ 2 files changed, 50 insertions(+), 1 deletion(-)
+
+diff --git a/include/net/inet_hashtables.h b/include/net/inet_hashtables.h
+index 6072dfbd1078..3fcbc8f66f88 100644
+--- a/include/net/inet_hashtables.h
++++ b/include/net/inet_hashtables.h
+@@ -422,4 +422,40 @@ int __inet_hash_connect(struct inet_timewait_death_row *death_row,
+ 
+ int inet_hash_connect(struct inet_timewait_death_row *death_row,
+ 		      struct sock *sk);
++
++static inline struct sock *bpf_sk_lookup_run(struct net *net,
++					     struct bpf_sk_lookup_kern *ctx)
++{
++	struct bpf_prog *prog;
++	int ret = BPF_OK;
++
++	rcu_read_lock();
++	prog = rcu_dereference(net->sk_lookup_prog);
++	if (prog)
++		ret = BPF_PROG_RUN(prog, ctx);
++	rcu_read_unlock();
++
++	if (ret = BPF_DROP)
++		return ERR_PTR(-ECONNREFUSED);
++	if (ret = BPF_REDIRECT)
++		return ctx->selected_sk;
++	return NULL;
++}
++
++static inline struct sock *inet_lookup_run_bpf(struct net *net, u8 protocol,
++					       __be32 saddr, __be16 sport,
++					       __be32 daddr, u16 dport)
++{
++	struct bpf_sk_lookup_kern ctx = {
++		.family		= AF_INET,
++		.protocol	= protocol,
++		.v4.saddr	= saddr,
++		.v4.daddr	= daddr,
++		.sport		= sport,
++		.dport		= dport,
++	};
++
++	return bpf_sk_lookup_run(net, &ctx);
++}
++
+ #endif /* _INET_HASHTABLES_H */
+diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
+index ab64834837c8..f4d07285591a 100644
+--- a/net/ipv4/inet_hashtables.c
++++ b/net/ipv4/inet_hashtables.c
+@@ -307,9 +307,22 @@ struct sock *__inet_lookup_listener(struct net *net,
+ 				    const int dif, const int sdif)
+ {
+ 	struct inet_listen_hashbucket *ilb2;
+-	struct sock *result = NULL;
++	struct sock *result, *reuse_sk;
+ 	unsigned int hash2;
+ 
++	/* Lookup redirect from BPF */
++	result = inet_lookup_run_bpf(net, hashinfo->protocol,
++				     saddr, sport, daddr, hnum);
++	if (IS_ERR(result))
++		return NULL;
++	if (result) {
++		reuse_sk = lookup_reuseport(net, result, skb, doff,
++					    saddr, sport, daddr, hnum);
++		if (reuse_sk)
++			result = reuse_sk;
++		goto done;
++	}
++
+ 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
+ 	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
+ 
+-- 
+2.25.3
