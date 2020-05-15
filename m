@@ -1,127 +1,44 @@
 From: Jakub Sitnicki <jakub@cloudflare.com>
-Date: Wed, 13 May 2020 14:50:30 +0000
+Date: Fri, 15 May 2020 12:28:30 +0000
 Subject: Re: [PATCH bpf-next v2 05/17] inet: Run SK_LOOKUP BPF program on socket lookup
-Message-Id: <87v9kzubwp.fsf@cloudflare.com>
+Message-Id: <87wo5d2xht.fsf@cloudflare.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20200511185218.1422406-6-jakub@cloudflare.com>
 In-Reply-To: <20200511185218.1422406-6-jakub@cloudflare.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="utf-8"
-Content-Transfer-Encoding: 8bit
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, May 13, 2020 at 04:21 PM CEST, Lorenz Bauer wrote:
-> On Tue, 12 May 2020 at 14:52, Jakub Sitnicki <jakub@cloudflare.com> wrote:
+On Mon, May 11, 2020 at 10:44 PM CEST, Alexei Starovoitov wrote:
+> On Mon, May 11, 2020 at 08:52:06PM +0200, Jakub Sitnicki wrote:
+>> Run a BPF program before looking up a listening socket on the receive path.
+>> Program selects a listening socket to yield as result of socket lookup by
+>> calling bpf_sk_assign() helper and returning BPF_REDIRECT code.
+>>
+>> Alternatively, program can also fail the lookup by returning with BPF_DROP,
+>> or let the lookup continue as usual with BPF_OK on return.
+>>
+>> This lets the user match packets with listening sockets freely at the last
+>> possible point on the receive path, where we know that packets are destined
+>> for local delivery after undergoing policing, filtering, and routing.
+>>
+>> With BPF code selecting the socket, directing packets destined to an IP
+>> range or to a port range to a single socket becomes possible.
+>>
+>> Suggested-by: Marek Majkowski <marek@cloudflare.com>
+>> Reviewed-by: Lorenz Bauer <lmb@cloudflare.com>
+>> Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
+>> ---
 
 [...]
 
->> So if IIUC the rough idea here would be like below?
->>
->> - 1st program calls
->>
->>   bpf_sk_assign(ctx, sk1, 0 /*flags*/) -> 0 (OK)
->>
->> - 2nd program calls
->>
->>   bpf_sk_assign(ctx, sk2, 0) -> -EBUSY (already selected)
->>   bpf_sk_assign(ctx, sk2, BPF_EXIST) -> 0 (OK, replace existing)
->>
->> In this case the last program to run has the final say, as opposed to
->> the semantics where DROP/REDIRECT terminates.
->
-> Does sk_assign from TC also gain BPF_EXIST semantics? As you know,
-> I'm a bit concerned that TC and sk_lookup sk_assign are actually to completely
-> separate helpers. This is a good way to figure out if its a good idea to
-> overload the name, imo.
+> Also please switch to bpf_link way of attaching. All system wide attachments
+> should be visible and easily debuggable via 'bpftool link show'.
+> Currently we're converting tc and xdp hooks to bpf_link. This new hook
+> should have it from the beginning.
 
-I don't have a strong opinion here. We could have a dedicated helper.
+Just to clarify, I understood that bpf(BPF_PROG_ATTACH/DETACH) doesn't
+have to be supported for new hooks.
 
-Personally I'm not finding it confusing. As a BPF user you know what
-program type you're working with (TC vs SK_LOOKUP), and both helper
-variants will be documented separately in the bpf-helpers man-page, like
-so:
-
-       int bpf_sk_assign(struct sk_buff *skb, struct bpf_sock *sk, u64
-       flags)
-
-              Description
-                     Helper is overloaded  depending  on  BPF  program
-                     type.     This     description     applies     to
-                     BPF_PROG_TYPE_SCHED_CLS                       and
-                     BPF_PROG_TYPE_SCHED_ACT programs.
-
-                     Assign  the  sk  to  the  skb. When combined with
-                     appropriate routing configuration to receive  the
-                     packet  towards  the socket, will cause skb to be
-                     delivered to the  specified  socket.   Subsequent
-                     redirection    of    skb   via    bpf_redirect(),
-                     bpf_clone_redirect() or other methods outside  of
-                     BPF may interfere with successful delivery to the
-                     socket.
-
-                     This operation is  only  valid  from  TC  ingress
-                     path.
-
-                     The flags argument must be zero.
-
-              Return 0  on  success,  or  a  negative errno in case of
-                     failure.
-
-                     · -EINVAL           Unsupported flags specified.
-
-                     · -ENOENT            Socket  is  unavailable  for
-                       assignment.
-
-                     · -ENETUNREACH       Socket is unreachable (wrong
-                       netns).
-
-                     ·
-
-                       -EOPNOTSUPP Unsupported operation, for  example
-                       a
-                              call from outside of TC ingress.
-
-                     · -ESOCKTNOSUPPORT   Socket  type  not  supported
-                       (reuseport).
-
-       int bpf_sk_assign(struct bpf_sk_lookup  *ctx,  struct  bpf_sock
-       *sk, u64 flags)
-
-              Description
-                     Helper  is  overloaded  depending  on BPF program
-                     type.     This     description     applies     to
-                     BPF_PROG_TYPE_SK_LOOKUP programs.
-
-                     Select the sk as a result of a socket lookup.
-
-                     For  the  operation to succeed passed socket must
-                     be compatible with the  packet  description  pro‐
-                     vided by the ctx object.
-
-                     L4  protocol (IPPROTO_TCP or IPPROTO_UDP) must be
-                     an exact  match.  While  IP  family  (AF_INET  or
-                     AF_INET6)  must be compatible, that is IPv6 sock‐
-                     ets that are not v6-only can be selected for IPv4
-                     packets.
-
-                     Only TCP listeners and UDP sockets, that is sock‐
-                     ets which have SOCK_RCU_FREE  flag  set,  can  be
-                     selected.
-
-                     The flags argument must be zero.
-
-              Return 0  on  success,  or  a  negative errno in case of
-                     failure.
-
-                     -EAFNOSUPPORT is socket  family  (sk->family)  is
-                     not compatible with packet family (ctx->family).
-
-                     -EINVAL if unsupported flags were specified.
-
-                     -EPROTOTYPE  if socket L4 protocol (sk->protocol)
-                     doesn't match packet protocol (ctx->protocol).
-
-                     -ESOCKTNOSUPPORT if socket does not use RCU free‐
-                     ing.
-
-But it would be helpful to hear what others think about it.
+Please correct me if I misunderstood.
