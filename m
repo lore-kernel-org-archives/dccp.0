@@ -1,29 +1,27 @@
 From: David Miller <davem@davemloft.net>
-Date: Tue, 09 Jun 2020 20:27:36 +0000
-Subject: Re: [PATCH] dccp: Fix possible memleak in dccp_init and dccp_fini
-Message-Id: <20200609.132736.1760843725831249479.davem@davemloft.net>
+Date: Mon, 01 Jun 2020 18:54:25 +0000
+Subject: Re: [PATCH v2] net: dccp: Add SIOCOUTQ IOCTL support (send buffer fill)
+Message-Id: <20200601.115425.2049687853139691101.davem@davemloft.net>
 List-Id: <dccp.vger.kernel.org>
-References: <20200609141816.33467-1-wanghai38@huawei.com>
-In-Reply-To: <20200609141816.33467-1-wanghai38@huawei.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Wang Hai <wanghai38@huawei.com>
-Date: Tue, 9 Jun 2020 22:18:16 +0800
+From: Richard Sailer <richard_siegfried@systemli.org>
+Date: Sat, 30 May 2020 18:31:59 +0200
 
-> There are some memory leaks in dccp_init() and dccp_fini().
-> 
-> In dccp_fini() and the error handling path in dccp_init(), free lhash2
-> is missing. Add inet_hashinfo2_free_mod() to do it.
-> 
-> If inet_hashinfo2_init_mod() failed in dccp_init(),
-> percpu_counter_destroy() should be called to destroy dccp_orphan_count.
-> It need to goto out_free_percpu when inet_hashinfo2_init_mod() failed.
-> 
-> Fixes: c92c81df93df ("net: dccp: fix kernel crash on module load")
-> Reported-by: Hulk Robot <hulkci@huawei.com>
-> Signed-off-by: Wang Hai <wanghai38@huawei.com>
+> @@ -375,6 +375,14 @@ int dccp_ioctl(struct sock *sk, int cmd, unsigned long arg)
+>  		goto out;
+>  
+>  	switch (cmd) {
+> +	case SIOCOUTQ: {
+> +		/* Using sk_wmem_alloc here because sk_wmem_queued is not used by DCCP and
+> +		 * always 0, comparably to UDP.
+> +		 */
+> +		int amount = sk_wmem_alloc_get(sk);
+> +		rc = put_user(amount, (int __user *)arg);
+> +	}
+> +		       break;
 
-Applied and queued up for -stable, thank you.
+Please fix this indentation.
