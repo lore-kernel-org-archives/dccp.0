@@ -1,41 +1,60 @@
-From: Jakub Sitnicki <jakub@cloudflare.com>
-Date: Wed, 06 May 2020 12:55:12 +0000
-Subject: [PATCH bpf-next 16/17] selftests/bpf: Rename test_sk_lookup_kern.c to test_ref_track_kern.c
-Message-Id: <20200506125514.1020829-17-jakub@cloudflare.com>
+From: Richard Sailer <richard_siegfried@systemli.org>
+Date: Wed, 03 Jun 2020 11:10:51 +0000
+Subject: [PATCH v3] net: dccp: Add SIOCOUTQ IOCTL support (send buffer fill)
+Message-Id: <20200603111051.12224-1-richard_siegfried@systemli.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Name the BPF C file after the test case that uses it.
+This adds support for the SIOCOUTQ IOCTL to get the send buffer fill
+of a DCCP socket, like UDP and TCP sockets already have.
 
-This frees up "test_sk_lookup" namespace for BPF sk_lookup program tests
-introduced by the following patch.
+Regarding the used data field: DCCP uses per packet sequence numbers,
+not per byte, so sequence numbers can't be used like in TCP. sk_wmem_queued
+is not used by DCCP and always 0, even in test on highly congested paths.
+Therefore this uses sk_wmem_alloc like in UDP.
 
-Signed-off-by: Jakub Sitnicki <jakub@cloudflare.com>
+Signed-off-by: Richard Sailer <richard_siegfried@systemli.org>
 ---
- tools/testing/selftests/bpf/prog_tests/reference_tracking.c     | 2 +-
- .../bpf/progs/{test_sk_lookup_kern.c => test_ref_track_kern.c}  | 0
- 2 files changed, 1 insertion(+), 1 deletion(-)
- rename tools/testing/selftests/bpf/progs/{test_sk_lookup_kern.c => test_ref_track_kern.c} (100%)
+v3: whitespace fixes
+---
+ Documentation/networking/dccp.txt | 2 ++
+ net/dccp/proto.c                  | 8 ++++++++
+ 2 files changed, 10 insertions(+)
 
-diff --git a/tools/testing/selftests/bpf/prog_tests/reference_tracking.c b/tools/testing/selftests/bpf/prog_tests/reference_tracking.c
-index fc0d7f4f02cf..106ca8bb2a8f 100644
---- a/tools/testing/selftests/bpf/prog_tests/reference_tracking.c
-+++ b/tools/testing/selftests/bpf/prog_tests/reference_tracking.c
-@@ -3,7 +3,7 @@
+diff --git a/Documentation/networking/dccp.txt b/Documentation/networking/dccp.txt
+index 55c575fcaf17d..682ecf8288827 100644
+--- a/Documentation/networking/dccp.txt
++++ b/Documentation/networking/dccp.txt
+@@ -185,6 +185,8 @@ FIONREAD
+ 	Works as in udp(7): returns in the `int' argument pointer the size of
+ 	the next pending datagram in bytes, or 0 when no datagram is pending.
  
- void test_reference_tracking(void)
- {
--	const char *file = "test_sk_lookup_kern.o";
-+	const char *file = "test_ref_track_kern.o";
- 	const char *obj_name = "ref_track";
- 	DECLARE_LIBBPF_OPTS(bpf_object_open_opts, open_opts,
- 		.object_name = obj_name,
-diff --git a/tools/testing/selftests/bpf/progs/test_sk_lookup_kern.c b/tools/testing/selftests/bpf/progs/test_ref_track_kern.c
-similarity index 100%
-rename from tools/testing/selftests/bpf/progs/test_sk_lookup_kern.c
-rename to tools/testing/selftests/bpf/progs/test_ref_track_kern.c
++SIOCOUTQ
++  Returns the number of data bytes in the local send queue.
+ 
+ Other tunables
+ =======
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 4af8a98fe7846..148de5ec585b2 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -375,6 +375,14 @@ int dccp_ioctl(struct sock *sk, int cmd, unsigned long arg)
+ 		goto out;
+ 
+ 	switch (cmd) {
++	case SIOCOUTQ: {
++		/* Using sk_wmem_alloc here because sk_wmem_queued is not used by DCCP and
++		 * always 0, comparably to UDP.
++		 */
++		int amount = sk_wmem_alloc_get(sk);
++		rc = put_user(amount, (int __user *)arg);
++	}
++		break;
+ 	case SIOCINQ: {
+ 		struct sk_buff *skb;
+ 		unsigned long amount = 0;
 -- 
-2.25.3
+2.26.2
