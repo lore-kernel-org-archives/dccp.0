@@ -1,56 +1,83 @@
-From: Richard Siegfried <richard_siegfried@systemli.org>
-Date: Wed, 03 Jun 2020 17:56:03 +0000
-Subject: Re: [PATCH v3] net: dccp: Add SIOCOUTQ IOCTL support (send buffer fill)
-Message-Id: <258679e7-9bce-1759-b33f-bdbe8efbcfe5@systemli.org>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="vQHYZDnDX6Y1IiS59lCMdX5ANX74K6vqL"
+From: Wang Hai <wanghai38@huawei.com>
+Date: Tue, 09 Jun 2020 14:18:16 +0000
+Subject: [PATCH] dccp: Fix possible memleak in dccp_init and dccp_fini
+Message-Id: <20200609141816.33467-1-wanghai38@huawei.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20200603111051.12224-1-richard_siegfried@systemli.org>
-In-Reply-To: <20200603111051.12224-1-richard_siegfried@systemli.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is an OpenPGP/MIME signed message (RFC 4880 and 3156)
---vQHYZDnDX6Y1IiS59lCMdX5ANX74K6vqL
-Content-Type: multipart/mixed; boundary="89ZoFm6EpSA8mjs7yRDFiFipwN8OfdQUl";
- protected-headers="v1"
-From: Richard Siegfried <richard_siegfried@systemli.org>
-To: David Miller <davem@davemloft.net>
-Cc: gerrit@erg.abdn.ac.uk, dccp@vger.kernel.org, netdev@vger.kernel.org
-Message-ID: <258679e7-9bce-1759-b33f-bdbe8efbcfe5@systemli.org>
-Subject: Re: [PATCH v3] net: dccp: Add SIOCOUTQ IOCTL support (send buffer
- fill)
-References: <20200603111051.12224-1-richard_siegfried@systemli.org>
- <20200603.104725.187287052578354245.davem@davemloft.net>
-In-Reply-To: <20200603.104725.187287052578354245.davem@davemloft.net>
+There are some memory leaks in dccp_init() and dccp_fini().
 
---89ZoFm6EpSA8mjs7yRDFiFipwN8OfdQUl
-Content-Type: text/plain; charset=utf-8
-Content-Language: en-US
-Content-Transfer-Encoding: quoted-printable
+In dccp_fini() and the error handling path in dccp_init(), free lhash2
+is missing. Add inet_hashinfo2_free_mod() to do it.
 
->=20
-> net-next is CLOSED
->=20
-Okay, I will resend in next merge window
+If inet_hashinfo2_init_mod() failed in dccp_init(),
+percpu_counter_destroy() should be called to destroy dccp_orphan_count.
+It need to goto out_free_percpu when inet_hashinfo2_init_mod() failed.
 
+Fixes: c92c81df93df ("net: dccp: fix kernel crash on module load")
+Reported-by: Hulk Robot <hulkci@huawei.com>
+Signed-off-by: Wang Hai <wanghai38@huawei.com>
+---
+ include/net/inet_hashtables.h | 6 ++++++
+ net/dccp/proto.c              | 7 +++++--
+ 2 files changed, 11 insertions(+), 2 deletions(-)
 
---89ZoFm6EpSA8mjs7yRDFiFipwN8OfdQUl--
-
---vQHYZDnDX6Y1IiS59lCMdX5ANX74K6vqL
-Content-Type: application/pgp-signature; name="signature.asc"
-Content-Description: OpenPGP digital signature
-Content-Disposition: attachment; filename="signature.asc"
-
------BEGIN PGP SIGNATURE-----
-
-iQEzBAEBCgAdFiEEBgAhuYrOnl9UC7I39kE5zAWb4eEFAl7X5DgACgkQ9kE5zAWb
-4eH+3gf8CsELBtW00HNITSoI2eYgKFKRVMK56gAjj6wcS0BUCZaGjoDHWRGoUFF0
-8tqzXr17VQhQKVWhpdl7kpXMhTHhkjxk2OyaMPHiOp8qHt0VrcFvyAk2qgMT9Kww
-oj0vsxYfzhdhcv+zx7sR/FqC/NUoQRp1NYj0LlzR67+7lH09n0WZz0xKZdXmSOCS
-JHV9xAg/PSJCNTxPbTSShOoENN85C8KxZaWJDQx3SJfmoroI5vGkvpRB/XiWZ+yh
-zEC+iej9PoBl1pkYLX+n09xgc6A+CY8pN/14m8aNTA+Ddu+FBFnZjy96vgl5B8/M
-+z1BFCEB8NGEPL75BnkCTrI8E+fqoA==
-=GAL6
------END PGP SIGNATURE-----
-
---vQHYZDnDX6Y1IiS59lCMdX5ANX74K6vqL--
+diff --git a/include/net/inet_hashtables.h b/include/net/inet_hashtables.h
+index ad64ba6..9256097 100644
+--- a/include/net/inet_hashtables.h
++++ b/include/net/inet_hashtables.h
+@@ -185,6 +185,12 @@ static inline spinlock_t *inet_ehash_lockp(
+ 
+ int inet_ehash_locks_alloc(struct inet_hashinfo *hashinfo);
+ 
++static inline void inet_hashinfo2_free_mod(struct inet_hashinfo *h)
++{
++	kfree(h->lhash2);
++	h->lhash2 = NULL;
++}
++
+ static inline void inet_ehash_locks_free(struct inet_hashinfo *hashinfo)
+ {
+ 	kvfree(hashinfo->ehash_locks);
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 4af8a98..c13b660 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -1139,14 +1139,14 @@ static int __init dccp_init(void)
+ 	inet_hashinfo_init(&dccp_hashinfo);
+ 	rc = inet_hashinfo2_init_mod(&dccp_hashinfo);
+ 	if (rc)
+-		goto out_fail;
++		goto out_free_percpu;
+ 	rc = -ENOBUFS;
+ 	dccp_hashinfo.bind_bucket_cachep  		kmem_cache_create("dccp_bind_bucket",
+ 				  sizeof(struct inet_bind_bucket), 0,
+ 				  SLAB_HWCACHE_ALIGN, NULL);
+ 	if (!dccp_hashinfo.bind_bucket_cachep)
+-		goto out_free_percpu;
++		goto out_free_hashinfo2;
+ 
+ 	/*
+ 	 * Size and allocate the main established and bind bucket
+@@ -1242,6 +1242,8 @@ static int __init dccp_init(void)
+ 	free_pages((unsigned long)dccp_hashinfo.ehash, ehash_order);
+ out_free_bind_bucket_cachep:
+ 	kmem_cache_destroy(dccp_hashinfo.bind_bucket_cachep);
++out_free_hashinfo2:
++	inet_hashinfo2_free_mod(&dccp_hashinfo);
+ out_free_percpu:
+ 	percpu_counter_destroy(&dccp_orphan_count);
+ out_fail:
+@@ -1265,6 +1267,7 @@ static void __exit dccp_fini(void)
+ 	kmem_cache_destroy(dccp_hashinfo.bind_bucket_cachep);
+ 	dccp_ackvec_exit();
+ 	dccp_sysctl_exit();
++	inet_hashinfo2_free_mod(&dccp_hashinfo);
+ 	percpu_counter_destroy(&dccp_orphan_count);
+ }
+ 
+-- 
+1.8.3.1
