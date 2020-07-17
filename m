@@ -1,52 +1,65 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Mon, 20 Jul 2020 12:47:18 +0000
-Subject: [PATCH 05/24] net: switch sock_setbindtodevice to sockptr_t
-Message-Id: <20200720124737.118617-6-hch@lst.de>
+Date: Fri, 17 Jul 2020 06:23:12 +0000
+Subject: [PATCH 03/22] net: streamline __sys_getsockopt
+Message-Id: <20200717062331.691152-4-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Pass a sockptr_t to prepare for set_fs-less handling of the kernel
-pointer from bpf-cgroup.
+Return early when sockfd_lookup_light fails to reduce a level of
+indentation for most of the function body.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- net/core/sock.c | 7 +++----
- 1 file changed, 3 insertions(+), 4 deletions(-)
+ net/socket.c | 31 ++++++++++++++-----------------
+ 1 file changed, 14 insertions(+), 17 deletions(-)
 
-diff --git a/net/core/sock.c b/net/core/sock.c
-index 91224709869389..bd20fc5cce0850 100644
---- a/net/core/sock.c
-+++ b/net/core/sock.c
-@@ -608,8 +608,7 @@ int sock_bindtoindex(struct sock *sk, int ifindex, bool lock_sk)
+diff --git a/net/socket.c b/net/socket.c
+index 49a6daf0293b83..b79376b17b45b7 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -2163,28 +2163,25 @@ static int __sys_getsockopt(int fd, int level, int optname,
+ 	int max_optlen;
+ 
+ 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+-	if (sock != NULL) {
+-		err = security_socket_getsockopt(sock, level, optname);
+-		if (err)
+-			goto out_put;
++	if (!sock)
++		return err;
+ 
+-		max_optlen = BPF_CGROUP_GETSOCKOPT_MAX_OPTLEN(optlen);
++	err = security_socket_getsockopt(sock, level, optname);
++	if (err)
++		goto out_put;
+ 
+-		if (level = SOL_SOCKET)
+-			err -			    sock_getsockopt(sock, level, optname, optval,
++	max_optlen = BPF_CGROUP_GETSOCKOPT_MAX_OPTLEN(optlen);
++
++	if (level = SOL_SOCKET)
++		err = sock_getsockopt(sock, level, optname, optval, optlen);
++	else
++		err = sock->ops->getsockopt(sock, level, optname, optval,
+ 					    optlen);
+-		else
+-			err -			    sock->ops->getsockopt(sock, level, optname, optval,
+-						  optlen);
+ 
+-		err = BPF_CGROUP_RUN_PROG_GETSOCKOPT(sock->sk, level, optname,
+-						     optval, optlen,
+-						     max_optlen, err);
++	err = BPF_CGROUP_RUN_PROG_GETSOCKOPT(sock->sk, level, optname, optval,
++					     optlen, max_optlen, err);
+ out_put:
+-		fput_light(sock->file, fput_needed);
+-	}
++	fput_light(sock->file, fput_needed);
+ 	return err;
  }
- EXPORT_SYMBOL(sock_bindtoindex);
  
--static int sock_setbindtodevice(struct sock *sk, char __user *optval,
--				int optlen)
-+static int sock_setbindtodevice(struct sock *sk, sockptr_t optval, int optlen)
- {
- 	int ret = -ENOPROTOOPT;
- #ifdef CONFIG_NETDEVICES
-@@ -631,7 +630,7 @@ static int sock_setbindtodevice(struct sock *sk, char __user *optval,
- 	memset(devname, 0, sizeof(devname));
- 
- 	ret = -EFAULT;
--	if (copy_from_user(devname, optval, optlen))
-+	if (copy_from_sockptr(devname, optval, optlen))
- 		goto out;
- 
- 	index = 0;
-@@ -839,7 +838,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 	 */
- 
- 	if (optname = SO_BINDTODEVICE)
--		return sock_setbindtodevice(sk, optval, optlen);
-+		return sock_setbindtodevice(sk, USER_SOCKPTR(optval), optlen);
- 
- 	if (optlen < sizeof(int))
- 		return -EINVAL;
 -- 
 2.27.0
