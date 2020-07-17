@@ -1,77 +1,74 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Thu, 23 Jul 2020 06:08:49 +0000
-Subject: [PATCH 07/26] net: switch sock_set_timeout to sockptr_t
-Message-Id: <20200723060908.50081-8-hch@lst.de>
+Date: Fri, 17 Jul 2020 06:23:22 +0000
+Subject: [PATCH 13/22] netfilter: split nf_sockopt
+Message-Id: <20200717062331.691152-14-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Pass a sockptr_t to prepare for set_fs-less handling of the kernel
-pointer from bpf-cgroup.
+Split nf_sockopt into a getsockopt and setsockopt side as they share
+very little code.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- net/core/sock.c | 15 +++++++++------
- 1 file changed, 9 insertions(+), 6 deletions(-)
+ net/netfilter/nf_sockopt.c | 30 +++++++++++++-----------------
+ 1 file changed, 13 insertions(+), 17 deletions(-)
 
-diff --git a/net/core/sock.c b/net/core/sock.c
-index 5b55bc9397f282..8b9eddaff868a5 100644
---- a/net/core/sock.c
-+++ b/net/core/sock.c
-@@ -361,7 +361,8 @@ static int sock_get_timeout(long timeo, void *optval, bool old_timeval)
- 	return sizeof(tv);
+diff --git a/net/netfilter/nf_sockopt.c b/net/netfilter/nf_sockopt.c
+index 02870993d335c9..90469b1f628a8e 100644
+--- a/net/netfilter/nf_sockopt.c
++++ b/net/netfilter/nf_sockopt.c
+@@ -89,36 +89,32 @@ static struct nf_sockopt_ops *nf_sockopt_find(struct sock *sk, u_int8_t pf,
+ 	return ops;
  }
  
--static int sock_set_timeout(long *timeo_p, char __user *optval, int optlen, bool old_timeval)
-+static int sock_set_timeout(long *timeo_p, sockptr_t optval, int optlen,
-+			    bool old_timeval)
+-/* Call get/setsockopt() */
+-static int nf_sockopt(struct sock *sk, u_int8_t pf, int val,
+-		      char __user *opt, int *len, int get)
++int nf_setsockopt(struct sock *sk, u_int8_t pf, int val, char __user *opt,
++		  unsigned int len)
  {
- 	struct __kernel_sock_timeval tv;
+ 	struct nf_sockopt_ops *ops;
+ 	int ret;
  
-@@ -371,7 +372,7 @@ static int sock_set_timeout(long *timeo_p, char __user *optval, int optlen, bool
- 		if (optlen < sizeof(tv32))
- 			return -EINVAL;
+-	ops = nf_sockopt_find(sk, pf, val, get);
++	ops = nf_sockopt_find(sk, pf, val, 0);
+ 	if (IS_ERR(ops))
+ 		return PTR_ERR(ops);
+-
+-	if (get)
+-		ret = ops->get(sk, val, opt, len);
+-	else
+-		ret = ops->set(sk, val, opt, *len);
+-
++	ret = ops->set(sk, val, opt, len);
+ 	module_put(ops->owner);
+ 	return ret;
+ }
+-
+-int nf_setsockopt(struct sock *sk, u_int8_t pf, int val, char __user *opt,
+-		  unsigned int len)
+-{
+-	return nf_sockopt(sk, pf, val, opt, &len, 0);
+-}
+ EXPORT_SYMBOL(nf_setsockopt);
  
--		if (copy_from_user(&tv32, optval, sizeof(tv32)))
-+		if (copy_from_sockptr(&tv32, optval, sizeof(tv32)))
- 			return -EFAULT;
- 		tv.tv_sec = tv32.tv_sec;
- 		tv.tv_usec = tv32.tv_usec;
-@@ -380,14 +381,14 @@ static int sock_set_timeout(long *timeo_p, char __user *optval, int optlen, bool
- 
- 		if (optlen < sizeof(old_tv))
- 			return -EINVAL;
--		if (copy_from_user(&old_tv, optval, sizeof(old_tv)))
-+		if (copy_from_sockptr(&old_tv, optval, sizeof(old_tv)))
- 			return -EFAULT;
- 		tv.tv_sec = old_tv.tv_sec;
- 		tv.tv_usec = old_tv.tv_usec;
- 	} else {
- 		if (optlen < sizeof(tv))
- 			return -EINVAL;
--		if (copy_from_user(&tv, optval, sizeof(tv)))
-+		if (copy_from_sockptr(&tv, optval, sizeof(tv)))
- 			return -EFAULT;
- 	}
- 	if (tv.tv_usec < 0 || tv.tv_usec >= USEC_PER_SEC)
-@@ -1051,12 +1052,14 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 
- 	case SO_RCVTIMEO_OLD:
- 	case SO_RCVTIMEO_NEW:
--		ret = sock_set_timeout(&sk->sk_rcvtimeo, optval, optlen, optname = SO_RCVTIMEO_OLD);
-+		ret = sock_set_timeout(&sk->sk_rcvtimeo, USER_SOCKPTR(optval),
-+				       optlen, optname = SO_RCVTIMEO_OLD);
- 		break;
- 
- 	case SO_SNDTIMEO_OLD:
- 	case SO_SNDTIMEO_NEW:
--		ret = sock_set_timeout(&sk->sk_sndtimeo, optval, optlen, optname = SO_SNDTIMEO_OLD);
-+		ret = sock_set_timeout(&sk->sk_sndtimeo, USER_SOCKPTR(optval),
-+				       optlen, optname = SO_SNDTIMEO_OLD);
- 		break;
- 
- 	case SO_ATTACH_FILTER: {
+ int nf_getsockopt(struct sock *sk, u_int8_t pf, int val, char __user *opt,
+ 		  int *len)
+ {
+-	return nf_sockopt(sk, pf, val, opt, len, 1);
++	struct nf_sockopt_ops *ops;
++	int ret;
++
++	ops = nf_sockopt_find(sk, pf, val, 1);
++	if (IS_ERR(ops))
++		return PTR_ERR(ops);
++	ret = ops->get(sk, val, opt, len);
++	module_put(ops->owner);
++	return ret;
+ }
+ EXPORT_SYMBOL(nf_getsockopt);
 -- 
 2.27.0
