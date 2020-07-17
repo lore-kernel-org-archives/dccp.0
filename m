@@ -1,272 +1,609 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Fri, 17 Jul 2020 06:23:13 +0000
-Subject: [PATCH 04/22] net: simplify cBPF setsockopt compat handling
-Message-Id: <20200717062331.691152-5-hch@lst.de>
+Date: Fri, 17 Jul 2020 06:23:26 +0000
+Subject: [PATCH 17/22] net/ipv4: remove compat_ip_{get,set}sockopt
+Message-Id: <20200717062331.691152-18-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Add a helper that copies either a native or compat bpf_fprog from
-userspace after verifying the length, and remove the compat setsockopt
-handlers that now aren't required.
+Handle the few cases that need special treatment in-line using
+in_compat_syscall().
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- include/linux/filter.h |  4 ++--
- include/net/compat.h   |  1 -
- net/compat.c           | 45 +-----------------------------------------
- net/core/filter.c      | 23 +++++++++++++++++++++
- net/core/sock.c        | 30 ++++++++++------------------
- net/packet/af_packet.c | 33 ++++---------------------------
- 6 files changed, 40 insertions(+), 96 deletions(-)
+ include/net/ip.h       |   4 -
+ net/dccp/ipv4.c        |   4 -
+ net/ipv4/ip_sockglue.c | 214 ++++++++++++-----------------------------
+ net/ipv4/raw.c         |  22 -----
+ net/ipv4/tcp_ipv4.c    |   4 -
+ net/ipv4/udp.c         |  24 -----
+ net/ipv4/udp_impl.h    |   6 --
+ net/ipv4/udplite.c     |   4 -
+ net/l2tp/l2tp_ip.c     |   4 -
+ net/sctp/protocol.c    |   4 -
+ 10 files changed, 61 insertions(+), 229 deletions(-)
 
-diff --git a/include/linux/filter.h b/include/linux/filter.h
-index 0b0144752d780a..4d049c8e1fbeaa 100644
---- a/include/linux/filter.h
-+++ b/include/linux/filter.h
-@@ -502,13 +502,11 @@ static inline bool insn_is_zext(const struct bpf_insn *insn)
- 		offsetof(TYPE, MEMBER);						\
- 	})
+diff --git a/include/net/ip.h b/include/net/ip.h
+index 862c9545833a95..3d34acc95ca825 100644
+--- a/include/net/ip.h
++++ b/include/net/ip.h
+@@ -727,10 +727,6 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char __user *optval,
+ 		  unsigned int optlen);
+ int ip_getsockopt(struct sock *sk, int level, int optname, char __user *optval,
+ 		  int __user *optlen);
+-int compat_ip_setsockopt(struct sock *sk, int level, int optname,
+-			 char __user *optval, unsigned int optlen);
+-int compat_ip_getsockopt(struct sock *sk, int level, int optname,
+-			 char __user *optval, int __user *optlen);
+ int ip_ra_control(struct sock *sk, unsigned char on,
+ 		  void (*destructor)(struct sock *));
  
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 316cc5ac0da72b..b91373eb1c7974 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -913,10 +913,6 @@ static const struct inet_connection_sock_af_ops dccp_ipv4_af_ops = {
+ 	.getsockopt	   = ip_getsockopt,
+ 	.addr2sockaddr	   = inet_csk_addr2sockaddr,
+ 	.sockaddr_len	   = sizeof(struct sockaddr_in),
 -#ifdef CONFIG_COMPAT
- /* A struct sock_filter is architecture independent. */
- struct compat_sock_fprog {
- 	u16		len;
- 	compat_uptr_t	filter;	/* struct sock_filter * */
- };
+-	.compat_setsockopt = compat_ip_setsockopt,
+-	.compat_getsockopt = compat_ip_getsockopt,
 -#endif
- 
- struct sock_fprog_kern {
- 	u16			len;
-@@ -1278,4 +1276,6 @@ struct bpf_sockopt_kern {
- 	s32		retval;
  };
  
-+int copy_bpf_fprog_from_user(struct sock_fprog *dst, void __user *src, int len);
-+
- #endif /* __LINUX_FILTER_H__ */
-diff --git a/include/net/compat.h b/include/net/compat.h
-index f241666117d88c..745db0d605b62b 100644
---- a/include/net/compat.h
-+++ b/include/net/compat.h
-@@ -61,7 +61,6 @@ int __get_compat_msghdr(struct msghdr *kmsg, struct compat_msghdr __user *umsg,
- 			compat_size_t *len);
- int get_compat_msghdr(struct msghdr *, struct compat_msghdr __user *,
- 		      struct sockaddr __user **, struct iovec **);
--struct sock_fprog __user *get_compat_bpf_fprog(char __user *optval);
- int put_cmsg_compat(struct msghdr*, int, int, int, void *);
- 
- int cmsghdr_from_user_compat_to_kern(struct msghdr *, struct sock *,
-diff --git a/net/compat.c b/net/compat.c
-index 5e3041a2c37d4d..3e6c2c5ff2609c 100644
---- a/net/compat.c
-+++ b/net/compat.c
-@@ -335,49 +335,6 @@ void scm_detach_fds_compat(struct msghdr *kmsg, struct scm_cookie *scm)
- 	__scm_destroy(scm);
+ static int dccp_v4_init_sock(struct sock *sk)
+diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
+index 73bb88fbe54661..86b3b9a7cea30d 100644
+--- a/net/ipv4/ip_sockglue.c
++++ b/net/ipv4/ip_sockglue.c
+@@ -679,20 +679,48 @@ static int set_mcast_msfilter(struct sock *sk, int ifindex,
+ 	return -EADDRNOTAVAIL;
  }
  
--/* allocate a 64-bit sock_fprog on the user stack for duration of syscall. */
--struct sock_fprog __user *get_compat_bpf_fprog(char __user *optval)
--{
--	struct compat_sock_fprog __user *fprog32 = (struct compat_sock_fprog __user *)optval;
--	struct sock_fprog __user *kfprog = compat_alloc_user_space(sizeof(struct sock_fprog));
--	struct compat_sock_fprog f32;
--	struct sock_fprog f;
--
--	if (copy_from_user(&f32, fprog32, sizeof(*fprog32)))
--		return NULL;
--	memset(&f, 0, sizeof(f));
--	f.len = f32.len;
--	f.filter = compat_ptr(f32.filter);
--	if (copy_to_user(kfprog, &f, sizeof(struct sock_fprog)))
--		return NULL;
--
--	return kfprog;
--}
--EXPORT_SYMBOL_GPL(get_compat_bpf_fprog);
--
--static int do_set_attach_filter(struct socket *sock, int level, int optname,
--				char __user *optval, unsigned int optlen)
--{
--	struct sock_fprog __user *kfprog;
--
--	kfprog = get_compat_bpf_fprog(optval);
--	if (!kfprog)
--		return -EFAULT;
--
--	return sock_setsockopt(sock, level, optname, (char __user *)kfprog,
--			      sizeof(struct sock_fprog));
--}
--
--static int compat_sock_setsockopt(struct socket *sock, int level, int optname,
--				char __user *optval, unsigned int optlen)
--{
--	if (optname = SO_ATTACH_FILTER ||
--	    optname = SO_ATTACH_REUSEPORT_CBPF)
--		return do_set_attach_filter(sock, level, optname,
--					    optval, optlen);
--	return sock_setsockopt(sock, level, optname, optval, optlen);
--}
--
- static int __compat_sys_setsockopt(int fd, int level, int optname,
- 				   char __user *optval, unsigned int optlen)
- {
-@@ -396,7 +353,7 @@ static int __compat_sys_setsockopt(int fd, int level, int optname,
- 		}
- 
- 		if (level = SOL_SOCKET)
--			err = compat_sock_setsockopt(sock, level,
-+			err = sock_setsockopt(sock, level,
- 					optname, optval, optlen);
- 		else if (sock->ops->compat_setsockopt)
- 			err = sock->ops->compat_setsockopt(sock, level,
-diff --git a/net/core/filter.c b/net/core/filter.c
-index bdd2382e655d85..2bf6624796d86f 100644
---- a/net/core/filter.c
-+++ b/net/core/filter.c
-@@ -77,6 +77,29 @@
- #include <net/transp_v6.h>
- #include <linux/btf_ids.h>
- 
-+int copy_bpf_fprog_from_user(struct sock_fprog *dst, void __user *src, int len)
++static int copy_group_source_from_user(struct group_source_req *greqs,
++		void __user *optval, int optlen)
 +{
 +	if (in_compat_syscall()) {
-+		struct compat_sock_fprog f32;
++		struct compat_group_source_req gr32;
 +
-+		if (len != sizeof(f32))
++		if (optlen != sizeof(gr32))
 +			return -EINVAL;
-+		if (copy_from_user(&f32, src, sizeof(f32)))
++		if (copy_from_user(&gr32, optval, sizeof(gr32)))
 +			return -EFAULT;
-+		memset(dst, 0, sizeof(*dst));
-+		dst->len = f32.len;
-+		dst->filter = compat_ptr(f32.filter);
++		greqs->gsr_interface = gr32.gsr_interface;
++		greqs->gsr_group = gr32.gsr_group;
++		greqs->gsr_source = gr32.gsr_source;
 +	} else {
-+		if (len != sizeof(*dst))
++		if (optlen != sizeof(*greqs))
 +			return -EINVAL;
-+		if (copy_from_user(dst, src, sizeof(*dst)))
++		if (copy_from_user(greqs, optval, sizeof(*greqs)))
 +			return -EFAULT;
 +	}
 +
 +	return 0;
 +}
-+EXPORT_SYMBOL_GPL(copy_bpf_fprog_from_user);
 +
- /**
-  *	sk_filter_trim_cap - run a packet through a socket filter
-  *	@sk: sock associated with &sk_buff
-diff --git a/net/core/sock.c b/net/core/sock.c
-index 11d6f77dd56207..e085df79482520 100644
---- a/net/core/sock.c
-+++ b/net/core/sock.c
-@@ -1059,19 +1059,14 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 		ret = sock_set_timeout(&sk->sk_sndtimeo, optval, optlen, optname = SO_SNDTIMEO_OLD);
- 		break;
+ static int do_mcast_group_source(struct sock *sk, int optname,
+-				 struct group_source_req *greqs)
++		void __user *optval, int optlen)
+ {
++	struct group_source_req greqs;
+ 	struct ip_mreq_source mreqs;
+ 	struct sockaddr_in *psin;
+ 	int omode, add, err;
  
--	case SO_ATTACH_FILTER:
--		ret = -EINVAL;
--		if (optlen = sizeof(struct sock_fprog)) {
--			struct sock_fprog fprog;
--
--			ret = -EFAULT;
--			if (copy_from_user(&fprog, optval, sizeof(fprog)))
--				break;
-+	case SO_ATTACH_FILTER: {
-+		struct sock_fprog fprog;
- 
-+		ret = copy_bpf_fprog_from_user(&fprog, optval, optlen);
-+		if (!ret)
- 			ret = sk_attach_filter(&fprog, sk);
--		}
- 		break;
--
-+	}
- 	case SO_ATTACH_BPF:
- 		ret = -EINVAL;
- 		if (optlen = sizeof(u32)) {
-@@ -1085,19 +1080,14 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 		}
- 		break;
- 
--	case SO_ATTACH_REUSEPORT_CBPF:
--		ret = -EINVAL;
--		if (optlen = sizeof(struct sock_fprog)) {
--			struct sock_fprog fprog;
--
--			ret = -EFAULT;
--			if (copy_from_user(&fprog, optval, sizeof(fprog)))
--				break;
-+	case SO_ATTACH_REUSEPORT_CBPF: {
-+		struct sock_fprog fprog;
- 
-+		ret = copy_bpf_fprog_from_user(&fprog, optval, optlen);
-+		if (!ret)
- 			ret = sk_reuseport_attach_filter(&fprog, sk);
--		}
- 		break;
--
-+	}
- 	case SO_ATTACH_REUSEPORT_EBPF:
- 		ret = -EINVAL;
- 		if (optlen = sizeof(u32)) {
-diff --git a/net/packet/af_packet.c b/net/packet/af_packet.c
-index 781fee93b7d5e3..35aee9e980536d 100644
---- a/net/packet/af_packet.c
-+++ b/net/packet/af_packet.c
-@@ -1545,10 +1545,10 @@ static int fanout_set_data_cbpf(struct packet_sock *po, char __user *data,
- 
- 	if (sock_flag(&po->sk, SOCK_FILTER_LOCKED))
- 		return -EPERM;
--	if (len != sizeof(fprog))
--		return -EINVAL;
--	if (copy_from_user(&fprog, data, len))
--		return -EFAULT;
+-	if (greqs->gsr_group.ss_family != AF_INET ||
+-	    greqs->gsr_source.ss_family != AF_INET)
++	err = copy_group_source_from_user(&greqs, optval, optlen);
++	if (err)
++		return err;
 +
-+	ret = copy_bpf_fprog_from_user(&fprog, data, len);
-+	if (ret)
-+		return ret;
++	if (greqs.gsr_group.ss_family != AF_INET ||
++	    greqs.gsr_source.ss_family != AF_INET)
+ 		return -EADDRNOTAVAIL;
  
- 	ret = bpf_prog_create_from_user(&new, &fprog, NULL, false);
- 	if (ret)
-@@ -4040,28 +4040,6 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
+-	psin = (struct sockaddr_in *)&greqs->gsr_group;
++	psin = (struct sockaddr_in *)&greqs.gsr_group;
+ 	mreqs.imr_multiaddr = psin->sin_addr.s_addr;
+-	psin = (struct sockaddr_in *)&greqs->gsr_source;
++	psin = (struct sockaddr_in *)&greqs.gsr_source;
+ 	mreqs.imr_sourceaddr = psin->sin_addr.s_addr;
+ 	mreqs.imr_interface = 0; /* use index for mc_source */
+ 
+@@ -705,21 +733,21 @@ static int do_mcast_group_source(struct sock *sk, int optname,
+ 	} else if (optname = MCAST_JOIN_SOURCE_GROUP) {
+ 		struct ip_mreqn mreq;
+ 
+-		psin = (struct sockaddr_in *)&greqs->gsr_group;
++		psin = (struct sockaddr_in *)&greqs.gsr_group;
+ 		mreq.imr_multiaddr = psin->sin_addr;
+ 		mreq.imr_address.s_addr = 0;
+-		mreq.imr_ifindex = greqs->gsr_interface;
++		mreq.imr_ifindex = greqs.gsr_interface;
+ 		err = ip_mc_join_group_ssm(sk, &mreq, MCAST_INCLUDE);
+ 		if (err && err != -EADDRINUSE)
+ 			return err;
+-		greqs->gsr_interface = mreq.imr_ifindex;
++		greqs.gsr_interface = mreq.imr_ifindex;
+ 		omode = MCAST_INCLUDE;
+ 		add = 1;
+ 	} else /* MCAST_LEAVE_SOURCE_GROUP */ {
+ 		omode = MCAST_INCLUDE;
+ 		add = 0;
+ 	}
+-	return ip_mc_source(add, omode, sk, &mreqs, greqs->gsr_interface);
++	return ip_mc_source(add, omode, sk, &mreqs, greqs.gsr_interface);
+ }
+ 
+ static int ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
+@@ -754,7 +782,6 @@ static int ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
+ 	return err;
+ }
+ 
+-#ifdef CONFIG_COMPAT
+ static int compat_ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
+ 		int optlen)
+ {
+@@ -788,23 +815,16 @@ static int compat_ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
+ 	if (offsetof(struct compat_group_filter, gf_slist[n]) > optlen)
+ 		goto out_free_gsf;
+ 
+-	rtnl_lock();
+-	lock_sock(sk);
+-
+ 	/* numsrc >= (4G-140)/128 overflow in 32 bits */
+ 	err = -ENOBUFS;
+ 	if (n > sock_net(sk)->ipv4.sysctl_igmp_max_msf)
+-		goto out_unlock;
++		goto out_free_gsf;
+ 	err = set_mcast_msfilter(sk, gf32->gf_interface, n, gf32->gf_fmode,
+ 				 &gf32->gf_group, gf32->gf_slist);
+-out_unlock:
+-	release_sock(sk);
+-	rtnl_unlock();
+ out_free_gsf:
+ 	kfree(p);
+ 	return err;
+ }
+-#endif
+ 
+ static int ip_mcast_join_leave(struct sock *sk, int optname,
+ 		void __user *optval, int optlen)
+@@ -828,14 +848,12 @@ static int ip_mcast_join_leave(struct sock *sk, int optname,
+ 	return ip_mc_leave_group(sk, &mreq);
+ }
+ 
+-#ifdef CONFIG_COMPAT
+ static int compat_ip_mcast_join_leave(struct sock *sk, int optname,
+ 		void __user *optval, int optlen)
+ {
+ 	struct compat_group_req greq;
+ 	struct ip_mreqn mreq = { };
+ 	struct sockaddr_in *psin;
+-	int err;
+ 
+ 	if (optlen < sizeof(struct compat_group_req))
+ 		return -EINVAL;
+@@ -848,17 +866,10 @@ static int compat_ip_mcast_join_leave(struct sock *sk, int optname,
+ 	mreq.imr_multiaddr = psin->sin_addr;
+ 	mreq.imr_ifindex = greq.gr_interface;
+ 
+-	rtnl_lock();
+-	lock_sock(sk);
+ 	if (optname = MCAST_JOIN_GROUP)
+-		err = ip_mc_join_group(sk, &mreq);
+-	else
+-		err = ip_mc_leave_group(sk, &mreq);
+-	release_sock(sk);
+-	rtnl_unlock();
+-	return err;
++		return ip_mc_join_group(sk, &mreq);
++	return ip_mc_leave_group(sk, &mreq);
+ }
+-#endif
+ 
+ static int do_ip_setsockopt(struct sock *sk, int level,
+ 			    int optname, char __user *optval, unsigned int optlen)
+@@ -1265,26 +1276,23 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 	}
+ 	case MCAST_JOIN_GROUP:
+ 	case MCAST_LEAVE_GROUP:
+-		err = ip_mcast_join_leave(sk, optname, optval, optlen);
++		if (in_compat_syscall())
++			err = compat_ip_mcast_join_leave(sk, optname, optval,
++							 optlen);
++		else
++			err = ip_mcast_join_leave(sk, optname, optval, optlen);
+ 		break;
+ 	case MCAST_JOIN_SOURCE_GROUP:
+ 	case MCAST_LEAVE_SOURCE_GROUP:
+ 	case MCAST_BLOCK_SOURCE:
+ 	case MCAST_UNBLOCK_SOURCE:
+-	{
+-		struct group_source_req greqs;
+-
+-		if (optlen != sizeof(struct group_source_req))
+-			goto e_inval;
+-		if (copy_from_user(&greqs, optval, sizeof(greqs))) {
+-			err = -EFAULT;
+-			break;
+-		}
+-		err = do_mcast_group_source(sk, optname, &greqs);
++		err = do_mcast_group_source(sk, optname, optval, optlen);
+ 		break;
+-	}
+ 	case MCAST_MSFILTER:
+-		err = ip_set_mcast_msfilter(sk, optval, optlen);
++		if (in_compat_syscall())
++			err = compat_ip_set_mcast_msfilter(sk, optval, optlen);
++		else
++			err = ip_set_mcast_msfilter(sk, optval, optlen);
+ 		break;
+ 	case IP_MULTICAST_ALL:
+ 		if (optlen < 1)
+@@ -1410,62 +1418,6 @@ int ip_setsockopt(struct sock *sk, int level,
+ }
+ EXPORT_SYMBOL(ip_setsockopt);
+ 
+-#ifdef CONFIG_COMPAT
+-int compat_ip_setsockopt(struct sock *sk, int level, int optname,
+-			 char __user *optval, unsigned int optlen)
+-{
+-	int err;
+-
+-	if (level != SOL_IP)
+-		return -ENOPROTOOPT;
+-
+-	switch (optname) {
+-	case MCAST_JOIN_GROUP:
+-	case MCAST_LEAVE_GROUP:
+-		return compat_ip_mcast_join_leave(sk, optname, optval, optlen);
+-	case MCAST_JOIN_SOURCE_GROUP:
+-	case MCAST_LEAVE_SOURCE_GROUP:
+-	case MCAST_BLOCK_SOURCE:
+-	case MCAST_UNBLOCK_SOURCE:
+-	{
+-		struct compat_group_source_req __user *gsr32 = (void __user *)optval;
+-		struct group_source_req greqs;
+-
+-		if (optlen != sizeof(struct compat_group_source_req))
+-			return -EINVAL;
+-
+-		if (get_user(greqs.gsr_interface, &gsr32->gsr_interface) ||
+-		    copy_from_user(&greqs.gsr_group, &gsr32->gsr_group,
+-				sizeof(greqs.gsr_group)) ||
+-		    copy_from_user(&greqs.gsr_source, &gsr32->gsr_source,
+-				sizeof(greqs.gsr_source)))
+-			return -EFAULT;
+-
+-		rtnl_lock();
+-		lock_sock(sk);
+-		err = do_mcast_group_source(sk, optname, &greqs);
+-		release_sock(sk);
+-		rtnl_unlock();
+-		return err;
+-	}
+-	case MCAST_MSFILTER:
+-		return compat_ip_set_mcast_msfilter(sk, optval, optlen);
+-	}
+-
+-	err = do_ip_setsockopt(sk, level, optname, optval, optlen);
+-#ifdef CONFIG_NETFILTER
+-	/* we need to exclude all possible ENOPROTOOPTs except default case */
+-	if (err = -ENOPROTOOPT && optname != IP_HDRINCL &&
+-			optname != IP_IPSEC_POLICY &&
+-			optname != IP_XFRM_POLICY &&
+-			!ip_mroute_opt(optname))
+-		err = nf_setsockopt(sk, PF_INET, optname, optval, optlen);
+-#endif
+-	return err;
+-}
+-EXPORT_SYMBOL(compat_ip_setsockopt);
+-#endif
+-
+ /*
+  *	Get the options. Note for future reference. The GET of IP options gets
+  *	the _received_ ones. The set sets the _sent_ ones.
+@@ -1507,22 +1459,18 @@ static int ip_get_mcast_msfilter(struct sock *sk, void __user *optval,
  	return 0;
  }
  
+-#ifdef CONFIG_COMPAT
+ static int compat_ip_get_mcast_msfilter(struct sock *sk, void __user *optval,
+-		int __user *optlen)
++		int __user *optlen, int len)
+ {
+ 	const int size0 = offsetof(struct compat_group_filter, gf_slist);
+ 	struct compat_group_filter __user *p = optval;
+ 	struct compat_group_filter gf32;
+ 	struct group_filter gf;
+-	int len, err;
+ 	int num;
++	int err;
+ 
+-	if (get_user(len, optlen))
+-		return -EFAULT;
+ 	if (len < size0)
+ 		return -EINVAL;
+-
+ 	if (copy_from_user(&gf32, p, size0))
+ 		return -EFAULT;
+ 
+@@ -1531,11 +1479,7 @@ static int compat_ip_get_mcast_msfilter(struct sock *sk, void __user *optval,
+ 	num = gf.gf_numsrc = gf32.gf_numsrc;
+ 	gf.gf_group = gf32.gf_group;
+ 
+-	rtnl_lock();
+-	lock_sock(sk);
+ 	err = ip_mc_gsfget(sk, &gf, p->gf_slist);
+-	release_sock(sk);
+-	rtnl_unlock();
+ 	if (err)
+ 		return err;
+ 	if (gf.gf_numsrc < num)
+@@ -1547,10 +1491,9 @@ static int compat_ip_get_mcast_msfilter(struct sock *sk, void __user *optval,
+ 		return -EFAULT;
+ 	return 0;
+ }
+-#endif
+ 
+ static int do_ip_getsockopt(struct sock *sk, int level, int optname,
+-			    char __user *optval, int __user *optlen, unsigned int flags)
++			    char __user *optval, int __user *optlen)
+ {
+ 	struct inet_sock *inet = inet_sk(sk);
+ 	bool needs_rtnl = getsockopt_needs_rtnl(optname);
+@@ -1707,7 +1650,11 @@ static int do_ip_getsockopt(struct sock *sk, int level, int optname,
+ 		goto out;
+ 	}
+ 	case MCAST_MSFILTER:
+-		err = ip_get_mcast_msfilter(sk, optval, optlen, len);
++		if (in_compat_syscall())
++			err = compat_ip_get_mcast_msfilter(sk, optval, optlen,
++							   len);
++		else
++			err = ip_get_mcast_msfilter(sk, optval, optlen, len);
+ 		goto out;
+ 	case IP_MULTICAST_ALL:
+ 		val = inet->mc_all;
+@@ -1724,7 +1671,7 @@ static int do_ip_getsockopt(struct sock *sk, int level, int optname,
+ 		msg.msg_control_is_user = true;
+ 		msg.msg_control_user = optval;
+ 		msg.msg_controllen = len;
+-		msg.msg_flags = flags;
++		msg.msg_flags = in_compat_syscall() ? MSG_CMSG_COMPAT : 0;
+ 
+ 		if (inet->cmsg_flags & IP_CMSG_PKTINFO) {
+ 			struct in_pktinfo info;
+@@ -1788,45 +1735,7 @@ int ip_getsockopt(struct sock *sk, int level,
+ {
+ 	int err;
+ 
+-	err = do_ip_getsockopt(sk, level, optname, optval, optlen, 0);
+-#if IS_ENABLED(CONFIG_BPFILTER_UMH)
+-	if (optname >= BPFILTER_IPT_SO_GET_INFO &&
+-	    optname < BPFILTER_IPT_GET_MAX)
+-		err = bpfilter_ip_get_sockopt(sk, optname, optval, optlen);
+-#endif
+-#ifdef CONFIG_NETFILTER
+-	/* we need to exclude all possible ENOPROTOOPTs except default case */
+-	if (err = -ENOPROTOOPT && optname != IP_PKTOPTIONS &&
+-			!ip_mroute_opt(optname)) {
+-		int len;
+-
+-		if (get_user(len, optlen))
+-			return -EFAULT;
+-
+-		err = nf_getsockopt(sk, PF_INET, optname, optval, &len);
+-		if (err >= 0)
+-			err = put_user(len, optlen);
+-		return err;
+-	}
+-#endif
+-	return err;
+-}
+-EXPORT_SYMBOL(ip_getsockopt);
 -
 -#ifdef CONFIG_COMPAT
--static int compat_packet_setsockopt(struct socket *sock, int level, int optname,
--				    char __user *optval, unsigned int optlen)
+-int compat_ip_getsockopt(struct sock *sk, int level, int optname,
+-			 char __user *optval, int __user *optlen)
 -{
--	struct packet_sock *po = pkt_sk(sock->sk);
+-	int err;
 -
--	if (level != SOL_PACKET)
--		return -ENOPROTOOPT;
--
--	if (optname = PACKET_FANOUT_DATA &&
--	    po->fanout && po->fanout->type = PACKET_FANOUT_CBPF) {
--		optval = (char __user *)get_compat_bpf_fprog(optval);
--		if (!optval)
--			return -EFAULT;
--		optlen = sizeof(struct sock_fprog);
+-	if (optname = MCAST_MSFILTER) {
+-		if (level != SOL_IP)
+-			return -EOPNOTSUPP;
+-		return compat_ip_get_mcast_msfilter(sk, optval, optlen);
 -	}
 -
--	return packet_setsockopt(sock, level, optname, optval, optlen);
+-	err = do_ip_getsockopt(sk, level, optname, optval, optlen,
+-		MSG_CMSG_COMPAT);
++	err = do_ip_getsockopt(sk, level, optname, optval, optlen);
+ 
+ #if IS_ENABLED(CONFIG_BPFILTER_UMH)
+ 	if (optname >= BPFILTER_IPT_SO_GET_INFO &&
+@@ -1850,5 +1759,4 @@ int compat_ip_getsockopt(struct sock *sk, int level, int optname,
+ #endif
+ 	return err;
+ }
+-EXPORT_SYMBOL(compat_ip_getsockopt);
+-#endif
++EXPORT_SYMBOL(ip_getsockopt);
+diff --git a/net/ipv4/raw.c b/net/ipv4/raw.c
+index 47665919048f9d..2a57d633b31e00 100644
+--- a/net/ipv4/raw.c
++++ b/net/ipv4/raw.c
+@@ -857,16 +857,6 @@ static int raw_setsockopt(struct sock *sk, int level, int optname,
+ 	return do_raw_setsockopt(sk, level, optname, optval, optlen);
+ }
+ 
+-#ifdef CONFIG_COMPAT
+-static int compat_raw_setsockopt(struct sock *sk, int level, int optname,
+-				 char __user *optval, unsigned int optlen)
+-{
+-	if (level != SOL_RAW)
+-		return compat_ip_setsockopt(sk, level, optname, optval, optlen);
+-	return do_raw_setsockopt(sk, level, optname, optval, optlen);
 -}
 -#endif
 -
- static int packet_notifier(struct notifier_block *this,
- 			   unsigned long msg, void *ptr)
+ static int do_raw_getsockopt(struct sock *sk, int level, int optname,
+ 			  char __user *optval, int __user *optlen)
  {
-@@ -4549,9 +4527,6 @@ static const struct proto_ops packet_ops = {
- 	.shutdown =	sock_no_shutdown,
- 	.setsockopt =	packet_setsockopt,
- 	.getsockopt =	packet_getsockopt,
+@@ -887,16 +877,6 @@ static int raw_getsockopt(struct sock *sk, int level, int optname,
+ 	return do_raw_getsockopt(sk, level, optname, optval, optlen);
+ }
+ 
 -#ifdef CONFIG_COMPAT
--	.compat_setsockopt = compat_packet_setsockopt,
+-static int compat_raw_getsockopt(struct sock *sk, int level, int optname,
+-				 char __user *optval, int __user *optlen)
+-{
+-	if (level != SOL_RAW)
+-		return compat_ip_getsockopt(sk, level, optname, optval, optlen);
+-	return do_raw_getsockopt(sk, level, optname, optval, optlen);
+-}
 -#endif
- 	.sendmsg =	packet_sendmsg,
- 	.recvmsg =	packet_recvmsg,
- 	.mmap =		packet_mmap,
+-
+ static int raw_ioctl(struct sock *sk, int cmd, unsigned long arg)
+ {
+ 	switch (cmd) {
+@@ -980,8 +960,6 @@ struct proto raw_prot = {
+ 	.usersize	   = sizeof_field(struct raw_sock, filter),
+ 	.h.raw_hash	   = &raw_v4_hashinfo,
+ #ifdef CONFIG_COMPAT
+-	.compat_setsockopt = compat_raw_setsockopt,
+-	.compat_getsockopt = compat_raw_getsockopt,
+ 	.compat_ioctl	   = compat_raw_ioctl,
+ #endif
+ 	.diag_destroy	   = raw_abort,
+diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
+index 116c11a0aaed62..e5b7ef9a288769 100644
+--- a/net/ipv4/tcp_ipv4.c
++++ b/net/ipv4/tcp_ipv4.c
+@@ -2134,10 +2134,6 @@ const struct inet_connection_sock_af_ops ipv4_specific = {
+ 	.getsockopt	   = ip_getsockopt,
+ 	.addr2sockaddr	   = inet_csk_addr2sockaddr,
+ 	.sockaddr_len	   = sizeof(struct sockaddr_in),
+-#ifdef CONFIG_COMPAT
+-	.compat_setsockopt = compat_ip_setsockopt,
+-	.compat_getsockopt = compat_ip_getsockopt,
+-#endif
+ 	.mtu_reduced	   = tcp_v4_mtu_reduced,
+ };
+ EXPORT_SYMBOL(ipv4_specific);
+diff --git a/net/ipv4/udp.c b/net/ipv4/udp.c
+index 073d346f515c44..d4be4471c424e3 100644
+--- a/net/ipv4/udp.c
++++ b/net/ipv4/udp.c
+@@ -2656,17 +2656,6 @@ int udp_setsockopt(struct sock *sk, int level, int optname,
+ 	return ip_setsockopt(sk, level, optname, optval, optlen);
+ }
+ 
+-#ifdef CONFIG_COMPAT
+-int compat_udp_setsockopt(struct sock *sk, int level, int optname,
+-			  char __user *optval, unsigned int optlen)
+-{
+-	if (level = SOL_UDP  ||  level = SOL_UDPLITE)
+-		return udp_lib_setsockopt(sk, level, optname, optval, optlen,
+-					  udp_push_pending_frames);
+-	return compat_ip_setsockopt(sk, level, optname, optval, optlen);
+-}
+-#endif
+-
+ int udp_lib_getsockopt(struct sock *sk, int level, int optname,
+ 		       char __user *optval, int __user *optlen)
+ {
+@@ -2732,15 +2721,6 @@ int udp_getsockopt(struct sock *sk, int level, int optname,
+ 	return ip_getsockopt(sk, level, optname, optval, optlen);
+ }
+ 
+-#ifdef CONFIG_COMPAT
+-int compat_udp_getsockopt(struct sock *sk, int level, int optname,
+-				 char __user *optval, int __user *optlen)
+-{
+-	if (level = SOL_UDP  ||  level = SOL_UDPLITE)
+-		return udp_lib_getsockopt(sk, level, optname, optval, optlen);
+-	return compat_ip_getsockopt(sk, level, optname, optval, optlen);
+-}
+-#endif
+ /**
+  * 	udp_poll - wait for a UDP event.
+  *	@file: - file struct
+@@ -2812,10 +2792,6 @@ struct proto udp_prot = {
+ 	.sysctl_rmem_offset	= offsetof(struct net, ipv4.sysctl_udp_rmem_min),
+ 	.obj_size		= sizeof(struct udp_sock),
+ 	.h.udp_table		= &udp_table,
+-#ifdef CONFIG_COMPAT
+-	.compat_setsockopt	= compat_udp_setsockopt,
+-	.compat_getsockopt	= compat_udp_getsockopt,
+-#endif
+ 	.diag_destroy		= udp_abort,
+ };
+ EXPORT_SYMBOL(udp_prot);
+diff --git a/net/ipv4/udp_impl.h b/net/ipv4/udp_impl.h
+index 6b2fa77eeb1c3e..ab313702c87f30 100644
+--- a/net/ipv4/udp_impl.h
++++ b/net/ipv4/udp_impl.h
+@@ -17,12 +17,6 @@ int udp_setsockopt(struct sock *sk, int level, int optname,
+ int udp_getsockopt(struct sock *sk, int level, int optname,
+ 		   char __user *optval, int __user *optlen);
+ 
+-#ifdef CONFIG_COMPAT
+-int compat_udp_setsockopt(struct sock *sk, int level, int optname,
+-			  char __user *optval, unsigned int optlen);
+-int compat_udp_getsockopt(struct sock *sk, int level, int optname,
+-			  char __user *optval, int __user *optlen);
+-#endif
+ int udp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int noblock,
+ 		int flags, int *addr_len);
+ int udp_sendpage(struct sock *sk, struct page *page, int offset, size_t size,
+diff --git a/net/ipv4/udplite.c b/net/ipv4/udplite.c
+index 5936d66d1ce2f2..bd8773b49e72ed 100644
+--- a/net/ipv4/udplite.c
++++ b/net/ipv4/udplite.c
+@@ -56,10 +56,6 @@ struct proto 	udplite_prot = {
+ 	.sysctl_mem	   = sysctl_udp_mem,
+ 	.obj_size	   = sizeof(struct udp_sock),
+ 	.h.udp_table	   = &udplite_table,
+-#ifdef CONFIG_COMPAT
+-	.compat_setsockopt = compat_udp_setsockopt,
+-	.compat_getsockopt = compat_udp_getsockopt,
+-#endif
+ };
+ EXPORT_SYMBOL(udplite_prot);
+ 
+diff --git a/net/l2tp/l2tp_ip.c b/net/l2tp/l2tp_ip.c
+index f8d7412cfb3d37..2a3fd31fb589dc 100644
+--- a/net/l2tp/l2tp_ip.c
++++ b/net/l2tp/l2tp_ip.c
+@@ -612,10 +612,6 @@ static struct proto l2tp_ip_prot = {
+ 	.hash		   = l2tp_ip_hash,
+ 	.unhash		   = l2tp_ip_unhash,
+ 	.obj_size	   = sizeof(struct l2tp_ip_sock),
+-#ifdef CONFIG_COMPAT
+-	.compat_setsockopt = compat_ip_setsockopt,
+-	.compat_getsockopt = compat_ip_getsockopt,
+-#endif
+ };
+ 
+ static const struct proto_ops l2tp_ip_ops = {
+diff --git a/net/sctp/protocol.c b/net/sctp/protocol.c
+index 8d25cc464efdf3..7ecaf7d575c097 100644
+--- a/net/sctp/protocol.c
++++ b/net/sctp/protocol.c
+@@ -1089,10 +1089,6 @@ static struct sctp_af sctp_af_inet = {
+ 	.net_header_len	   = sizeof(struct iphdr),
+ 	.sockaddr_len	   = sizeof(struct sockaddr_in),
+ 	.ip_options_len	   = sctp_v4_ip_options_len,
+-#ifdef CONFIG_COMPAT
+-	.compat_setsockopt = compat_ip_setsockopt,
+-	.compat_getsockopt = compat_ip_getsockopt,
+-#endif
+ };
+ 
+ struct sctp_pf *sctp_get_pf_specific(sa_family_t family)
 -- 
 2.27.0
