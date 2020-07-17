@@ -1,94 +1,205 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Thu, 23 Jul 2020 06:09:05 +0000
-Subject: [PATCH 23/26] net/tcp: switch ->md5_parse to sockptr_t
-Message-Id: <20200723060908.50081-24-hch@lst.de>
+Date: Fri, 17 Jul 2020 06:23:28 +0000
+Subject: [PATCH 19/22] net/ipv6: factor out MCAST_MSFILTER setsockopt helpers
+Message-Id: <20200717062331.691152-20-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Pass a sockptr_t to prepare for set_fs-less handling of the kernel
-pointer from bpf-cgroup.
+Factor out one helper each for setting the native and compat
+version of the MCAST_MSFILTER option.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- include/net/tcp.h   | 2 +-
- net/ipv4/tcp.c      | 3 ++-
- net/ipv4/tcp_ipv4.c | 4 ++--
- net/ipv6/tcp_ipv6.c | 4 ++--
- 4 files changed, 7 insertions(+), 6 deletions(-)
+ net/ipv6/ipv6_sockglue.c | 159 ++++++++++++++++++++-------------------
+ 1 file changed, 83 insertions(+), 76 deletions(-)
 
-diff --git a/include/net/tcp.h b/include/net/tcp.h
-index 9f7f7c0c110451..e3c8e1d820214c 100644
---- a/include/net/tcp.h
-+++ b/include/net/tcp.h
-@@ -2002,7 +2002,7 @@ struct tcp_sock_af_ops {
- 					 const struct sk_buff *skb);
- 	int		(*md5_parse)(struct sock *sk,
- 				     int optname,
--				     char __user *optval,
-+				     sockptr_t optval,
- 				     int optlen);
- #endif
- };
-diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
-index 58ede3d62b2e2c..49bf15c27deac7 100644
---- a/net/ipv4/tcp.c
-+++ b/net/ipv4/tcp.c
-@@ -3249,7 +3249,8 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
- #ifdef CONFIG_TCP_MD5SIG
- 	case TCP_MD5SIG:
- 	case TCP_MD5SIG_EXT:
--		err = tp->af_specific->md5_parse(sk, optname, optval, optlen);
-+		err = tp->af_specific->md5_parse(sk, optname,
-+						 USER_SOCKPTR(optval), optlen);
+diff --git a/net/ipv6/ipv6_sockglue.c b/net/ipv6/ipv6_sockglue.c
+index ef5656f876ac05..6aa49495d7bc0b 100644
+--- a/net/ipv6/ipv6_sockglue.c
++++ b/net/ipv6/ipv6_sockglue.c
+@@ -171,6 +171,87 @@ static int do_ipv6_mcast_group_source(struct sock *sk, int optname,
+ 	return ip6_mc_source(add, omode, sk, greqs);
+ }
+ 
++static int ipv6_set_mcast_msfilter(struct sock *sk, void __user *optval,
++		int optlen)
++{
++	struct group_filter *gsf;
++	int ret;
++
++	if (optlen < GROUP_FILTER_SIZE(0))
++		return -EINVAL;
++	if (optlen > sysctl_optmem_max)
++		return -ENOBUFS;
++
++	gsf = memdup_user(optval, optlen);
++	if (IS_ERR(gsf))
++		return PTR_ERR(gsf);
++
++	/* numsrc >= (4G-140)/128 overflow in 32 bits */
++	ret = -ENOBUFS;
++	if (gsf->gf_numsrc >= 0x1ffffffU ||
++	    gsf->gf_numsrc > sysctl_mld_max_msf)
++		goto out_free_gsf;
++
++	ret = -EINVAL;
++	if (GROUP_FILTER_SIZE(gsf->gf_numsrc) > optlen)
++		goto out_free_gsf;
++
++	ret = ip6_mc_msfilter(sk, gsf, gsf->gf_slist);
++out_free_gsf:
++	kfree(gsf);
++	return ret;
++}
++
++#ifdef CONFIG_COMPAT
++static int compat_ipv6_set_mcast_msfilter(struct sock *sk, void __user *optval,
++		int optlen)
++{
++	const int size0 = offsetof(struct compat_group_filter, gf_slist);
++	struct compat_group_filter *gf32;
++	void *p;
++	int ret;
++	int n;
++
++	if (optlen < size0)
++		return -EINVAL;
++	if (optlen > sysctl_optmem_max - 4)
++		return -ENOBUFS;
++
++	p = kmalloc(optlen + 4, GFP_KERNEL);
++	if (!p)
++		return -ENOMEM;
++
++	gf32 = p + 4; /* we want ->gf_group and ->gf_slist aligned */
++	ret = -EFAULT;
++	if (copy_from_user(gf32, optval, optlen))
++		goto out_free_p;
++
++	/* numsrc >= (4G-140)/128 overflow in 32 bits */
++	ret = -ENOBUFS;
++	n = gf32->gf_numsrc;
++	if (n >= 0x1ffffffU || n > sysctl_mld_max_msf)
++		goto out_free_p;
++
++	ret = -EINVAL;
++	if (offsetof(struct compat_group_filter, gf_slist[n]) > optlen)
++		goto out_free_p;
++
++	rtnl_lock();
++	lock_sock(sk);
++	ret = ip6_mc_msfilter(sk, &(struct group_filter){
++			.gf_interface = gf32->gf_interface,
++			.gf_group = gf32->gf_group,
++			.gf_fmode = gf32->gf_fmode,
++			.gf_numsrc = gf32->gf_numsrc}, gf32->gf_slist);
++	release_sock(sk);
++	rtnl_unlock();
++
++out_free_p:
++	kfree(p);
++	return ret;
++}
++#endif
++
+ static int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
+ 		    char __user *optval, unsigned int optlen)
+ {
+@@ -762,37 +843,8 @@ static int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
  		break;
- #endif
- 	case TCP_USER_TIMEOUT:
-diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
-index daa39d33702b13..f8913923a6c05e 100644
---- a/net/ipv4/tcp_ipv4.c
-+++ b/net/ipv4/tcp_ipv4.c
-@@ -1195,7 +1195,7 @@ static void tcp_clear_md5_list(struct sock *sk)
- }
+ 	}
+ 	case MCAST_MSFILTER:
+-	{
+-		struct group_filter *gsf;
+-
+-		if (optlen < GROUP_FILTER_SIZE(0))
+-			goto e_inval;
+-		if (optlen > sysctl_optmem_max) {
+-			retv = -ENOBUFS;
+-			break;
+-		}
+-		gsf = memdup_user(optval, optlen);
+-		if (IS_ERR(gsf)) {
+-			retv = PTR_ERR(gsf);
+-			break;
+-		}
+-		/* numsrc >= (4G-140)/128 overflow in 32 bits */
+-		if (gsf->gf_numsrc >= 0x1ffffffU ||
+-		    gsf->gf_numsrc > sysctl_mld_max_msf) {
+-			kfree(gsf);
+-			retv = -ENOBUFS;
+-			break;
+-		}
+-		if (GROUP_FILTER_SIZE(gsf->gf_numsrc) > optlen) {
+-			kfree(gsf);
+-			retv = -EINVAL;
+-			break;
+-		}
+-		retv = ip6_mc_msfilter(sk, gsf, gsf->gf_slist);
+-		kfree(gsf);
+-
++		retv = ipv6_set_mcast_msfilter(sk, optval, optlen);
+ 		break;
+-	}
+ 	case IPV6_ROUTER_ALERT:
+ 		if (optlen < sizeof(int))
+ 			goto e_inval;
+@@ -977,52 +1029,7 @@ int compat_ipv6_setsockopt(struct sock *sk, int level, int optname,
+ 		return err;
+ 	}
+ 	case MCAST_MSFILTER:
+-	{
+-		const int size0 = offsetof(struct compat_group_filter, gf_slist);
+-		struct compat_group_filter *gf32;
+-		void *p;
+-		int n;
+-
+-		if (optlen < size0)
+-			return -EINVAL;
+-		if (optlen > sysctl_optmem_max - 4)
+-			return -ENOBUFS;
+-
+-		p = kmalloc(optlen + 4, GFP_KERNEL);
+-		if (!p)
+-			return -ENOMEM;
+-
+-		gf32 = p + 4; /* we want ->gf_group and ->gf_slist aligned */
+-		if (copy_from_user(gf32, optval, optlen)) {
+-			err = -EFAULT;
+-			goto mc_msf_out;
+-		}
+-
+-		n = gf32->gf_numsrc;
+-		/* numsrc >= (4G-140)/128 overflow in 32 bits */
+-		if (n >= 0x1ffffffU ||
+-		    n > sysctl_mld_max_msf) {
+-			err = -ENOBUFS;
+-			goto mc_msf_out;
+-		}
+-		if (offsetof(struct compat_group_filter, gf_slist[n]) > optlen) {
+-			err = -EINVAL;
+-			goto mc_msf_out;
+-		}
+-
+-		rtnl_lock();
+-		lock_sock(sk);
+-		err = ip6_mc_msfilter(sk, &(struct group_filter){
+-				.gf_interface = gf32->gf_interface,
+-				.gf_group = gf32->gf_group,
+-				.gf_fmode = gf32->gf_fmode,
+-				.gf_numsrc = gf32->gf_numsrc}, gf32->gf_slist);
+-		release_sock(sk);
+-		rtnl_unlock();
+-mc_msf_out:
+-		kfree(p);
+-		return err;
+-	}
++		return compat_ipv6_set_mcast_msfilter(sk, optval, optlen);
+ 	}
  
- static int tcp_v4_parse_md5_keys(struct sock *sk, int optname,
--				 char __user *optval, int optlen)
-+				 sockptr_t optval, int optlen)
- {
- 	struct tcp_md5sig cmd;
- 	struct sockaddr_in *sin = (struct sockaddr_in *)&cmd.tcpm_addr;
-@@ -1206,7 +1206,7 @@ static int tcp_v4_parse_md5_keys(struct sock *sk, int optname,
- 	if (optlen < sizeof(cmd))
- 		return -EINVAL;
- 
--	if (copy_from_user(&cmd, optval, sizeof(cmd)))
-+	if (copy_from_sockptr(&cmd, optval, sizeof(cmd)))
- 		return -EFAULT;
- 
- 	if (sin->sin_family != AF_INET)
-diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
-index c34b7834fd84a8..305870a72352d6 100644
---- a/net/ipv6/tcp_ipv6.c
-+++ b/net/ipv6/tcp_ipv6.c
-@@ -567,7 +567,7 @@ static struct tcp_md5sig_key *tcp_v6_md5_lookup(const struct sock *sk,
- }
- 
- static int tcp_v6_parse_md5_keys(struct sock *sk, int optname,
--				 char __user *optval, int optlen)
-+				 sockptr_t optval, int optlen)
- {
- 	struct tcp_md5sig cmd;
- 	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&cmd.tcpm_addr;
-@@ -577,7 +577,7 @@ static int tcp_v6_parse_md5_keys(struct sock *sk, int optname,
- 	if (optlen < sizeof(cmd))
- 		return -EINVAL;
- 
--	if (copy_from_user(&cmd, optval, sizeof(cmd)))
-+	if (copy_from_sockptr(&cmd, optval, sizeof(cmd)))
- 		return -EFAULT;
- 
- 	if (sin6->sin6_family != AF_INET6)
+ 	err = do_ipv6_setsockopt(sk, level, optname, optval, optlen);
 -- 
 2.27.0
