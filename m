@@ -1,190 +1,208 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Thu, 23 Jul 2020 06:08:50 +0000
-Subject: [PATCH 08/26] net: switch sock_set_timeout to sockptr_t
-Message-Id: <20200723060908.50081-9-hch@lst.de>
+Date: Fri, 17 Jul 2020 06:23:24 +0000
+Subject: [PATCH 15/22] net/ipv4: factor out MCAST_MSFILTER setsockopt helpers
+Message-Id: <20200717062331.691152-16-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Pass a sockptr_t to prepare for set_fs-less handling of the kernel
-pointer from bpf-cgroup.
+Factor out one helper each for setting the native and compat
+version of the MCAST_MSFILTER option.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- include/net/sock.h   |  3 ++-
- net/core/sock.c      | 26 ++++++++++++--------------
- net/mptcp/protocol.c |  6 ++++--
- net/socket.c         |  3 ++-
- 4 files changed, 20 insertions(+), 18 deletions(-)
+ net/ipv4/ip_sockglue.c | 162 ++++++++++++++++++++++-------------------
+ 1 file changed, 86 insertions(+), 76 deletions(-)
 
-diff --git a/include/net/sock.h b/include/net/sock.h
-index 62e18fc8ac9f96..bfb2fe2fc36876 100644
---- a/include/net/sock.h
-+++ b/include/net/sock.h
-@@ -59,6 +59,7 @@
- #include <linux/filter.h>
- #include <linux/rculist_nulls.h>
- #include <linux/poll.h>
-+#include <linux/sockptr.h>
- 
- #include <linux/atomic.h>
- #include <linux/refcount.h>
-@@ -1669,7 +1670,7 @@ void sock_pfree(struct sk_buff *skb);
- #endif
- 
- int sock_setsockopt(struct socket *sock, int level, int op,
--		    char __user *optval, unsigned int optlen);
-+		    sockptr_t optval, unsigned int optlen);
- 
- int sock_getsockopt(struct socket *sock, int level, int op,
- 		    char __user *optval, int __user *optlen);
-diff --git a/net/core/sock.c b/net/core/sock.c
-index 8b9eddaff868a5..1444d7d53ba2fd 100644
---- a/net/core/sock.c
-+++ b/net/core/sock.c
-@@ -826,7 +826,7 @@ EXPORT_SYMBOL(sock_set_rcvbuf);
-  */
- 
- int sock_setsockopt(struct socket *sock, int level, int optname,
--		    char __user *optval, unsigned int optlen)
-+		    sockptr_t optval, unsigned int optlen)
- {
- 	struct sock_txtime sk_txtime;
- 	struct sock *sk = sock->sk;
-@@ -840,12 +840,12 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 	 */
- 
- 	if (optname = SO_BINDTODEVICE)
--		return sock_setbindtodevice(sk, USER_SOCKPTR(optval), optlen);
-+		return sock_setbindtodevice(sk, optval, optlen);
- 
- 	if (optlen < sizeof(int))
- 		return -EINVAL;
- 
--	if (get_user(val, (int __user *)optval))
-+	if (copy_from_sockptr(&val, optval, sizeof(val)))
- 		return -EFAULT;
- 
- 	valbool = val ? 1 : 0;
-@@ -958,7 +958,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 			ret = -EINVAL;	/* 1003.1g */
- 			break;
- 		}
--		if (copy_from_user(&ling, optval, sizeof(ling))) {
-+		if (copy_from_sockptr(&ling, optval, sizeof(ling))) {
- 			ret = -EFAULT;
- 			break;
- 		}
-@@ -1052,21 +1052,20 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 
- 	case SO_RCVTIMEO_OLD:
- 	case SO_RCVTIMEO_NEW:
--		ret = sock_set_timeout(&sk->sk_rcvtimeo, USER_SOCKPTR(optval),
-+		ret = sock_set_timeout(&sk->sk_rcvtimeo, optval,
- 				       optlen, optname = SO_RCVTIMEO_OLD);
- 		break;
- 
- 	case SO_SNDTIMEO_OLD:
- 	case SO_SNDTIMEO_NEW:
--		ret = sock_set_timeout(&sk->sk_sndtimeo, USER_SOCKPTR(optval),
-+		ret = sock_set_timeout(&sk->sk_sndtimeo, optval,
- 				       optlen, optname = SO_SNDTIMEO_OLD);
- 		break;
- 
- 	case SO_ATTACH_FILTER: {
- 		struct sock_fprog fprog;
- 
--		ret = copy_bpf_fprog_from_user(&fprog, USER_SOCKPTR(optval),
--					       optlen);
-+		ret = copy_bpf_fprog_from_user(&fprog, optval, optlen);
- 		if (!ret)
- 			ret = sk_attach_filter(&fprog, sk);
- 		break;
-@@ -1077,7 +1076,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 			u32 ufd;
- 
- 			ret = -EFAULT;
--			if (copy_from_user(&ufd, optval, sizeof(ufd)))
-+			if (copy_from_sockptr(&ufd, optval, sizeof(ufd)))
- 				break;
- 
- 			ret = sk_attach_bpf(ufd, sk);
-@@ -1087,8 +1086,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 	case SO_ATTACH_REUSEPORT_CBPF: {
- 		struct sock_fprog fprog;
- 
--		ret = copy_bpf_fprog_from_user(&fprog, USER_SOCKPTR(optval),
--					       optlen);
-+		ret = copy_bpf_fprog_from_user(&fprog, optval, optlen);
- 		if (!ret)
- 			ret = sk_reuseport_attach_filter(&fprog, sk);
- 		break;
-@@ -1099,7 +1097,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 			u32 ufd;
- 
- 			ret = -EFAULT;
--			if (copy_from_user(&ufd, optval, sizeof(ufd)))
-+			if (copy_from_sockptr(&ufd, optval, sizeof(ufd)))
- 				break;
- 
- 			ret = sk_reuseport_attach_bpf(ufd, sk);
-@@ -1179,7 +1177,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 
- 		if (sizeof(ulval) != sizeof(val) &&
- 		    optlen >= sizeof(ulval) &&
--		    get_user(ulval, (unsigned long __user *)optval)) {
-+		    copy_from_sockptr(&ulval, optval, sizeof(ulval))) {
- 			ret = -EFAULT;
- 			break;
- 		}
-@@ -1222,7 +1220,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 		if (optlen != sizeof(struct sock_txtime)) {
- 			ret = -EINVAL;
- 			break;
--		} else if (copy_from_user(&sk_txtime, optval,
-+		} else if (copy_from_sockptr(&sk_txtime, optval,
- 			   sizeof(struct sock_txtime))) {
- 			ret = -EFAULT;
- 			break;
-diff --git a/net/mptcp/protocol.c b/net/mptcp/protocol.c
-index f0b0b503c2628d..27b6f250b87dfd 100644
---- a/net/mptcp/protocol.c
-+++ b/net/mptcp/protocol.c
-@@ -1643,7 +1643,8 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
- 			return -EINVAL;
- 		}
- 
--		ret = sock_setsockopt(ssock, SOL_SOCKET, optname, optval, optlen);
-+		ret = sock_setsockopt(ssock, SOL_SOCKET, optname,
-+				      USER_SOCKPTR(optval), optlen);
- 		if (ret = 0) {
- 			if (optname = SO_REUSEPORT)
- 				sk->sk_reuseport = ssock->sk->sk_reuseport;
-@@ -1654,7 +1655,8 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
- 		return ret;
- 	}
- 
--	return sock_setsockopt(sk->sk_socket, SOL_SOCKET, optname, optval, optlen);
-+	return sock_setsockopt(sk->sk_socket, SOL_SOCKET, optname,
-+			       USER_SOCKPTR(optval), optlen);
+diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
+index 70d32c9476a2e3..b587dee006f882 100644
+--- a/net/ipv4/ip_sockglue.c
++++ b/net/ipv4/ip_sockglue.c
+@@ -722,6 +722,90 @@ static int do_mcast_group_source(struct sock *sk, int optname,
+ 	return ip_mc_source(add, omode, sk, &mreqs, greqs->gsr_interface);
  }
  
- static int mptcp_setsockopt_v6(struct mptcp_sock *msk, int optname,
-diff --git a/net/socket.c b/net/socket.c
-index 93846568c2fb7a..c97f83d879ae75 100644
---- a/net/socket.c
-+++ b/net/socket.c
-@@ -2130,7 +2130,8 @@ int __sys_setsockopt(int fd, int level, int optname, char __user *optval,
++static int ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
++		int optlen)
++{
++	struct group_filter *gsf = NULL;
++	int err;
++
++	if (optlen < GROUP_FILTER_SIZE(0))
++		return -EINVAL;
++	if (optlen > sysctl_optmem_max)
++		return -ENOBUFS;
++
++	gsf = memdup_user(optval, optlen);
++	if (IS_ERR(gsf))
++		return PTR_ERR(gsf);
++
++	/* numsrc >= (4G-140)/128 overflow in 32 bits */
++	err = -ENOBUFS;
++	if (gsf->gf_numsrc >= 0x1ffffff ||
++	    gsf->gf_numsrc > sock_net(sk)->ipv4.sysctl_igmp_max_msf)
++		goto out_free_gsf;
++
++	err = -EINVAL;
++	if (GROUP_FILTER_SIZE(gsf->gf_numsrc) > optlen)
++		goto out_free_gsf;
++
++	err = set_mcast_msfilter(sk, gsf->gf_interface, gsf->gf_numsrc,
++				 gsf->gf_fmode, &gsf->gf_group, gsf->gf_slist);
++out_free_gsf:
++	kfree(gsf);
++	return err;
++}
++
++#ifdef CONFIG_COMPAT
++static int compat_ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
++		int optlen)
++{
++	const int size0 = offsetof(struct compat_group_filter, gf_slist);
++	struct compat_group_filter *gf32;
++	unsigned int n;
++	void *p;
++	int err;
++
++	if (optlen < size0)
++		return -EINVAL;
++	if (optlen > sysctl_optmem_max - 4)
++		return -ENOBUFS;
++
++	p = kmalloc(optlen + 4, GFP_KERNEL);
++	if (!p)
++		return -ENOMEM;
++	gf32 = p + 4; /* we want ->gf_group and ->gf_slist aligned */
++
++	err = -EFAULT;
++	if (copy_from_user(gf32, optval, optlen))
++		goto out_free_gsf;
++
++	/* numsrc >= (4G-140)/128 overflow in 32 bits */
++	n = gf32->gf_numsrc;
++	err = -ENOBUFS;
++	if (n >= 0x1ffffff)
++		goto out_free_gsf;
++
++	err = -EINVAL;
++	if (offsetof(struct compat_group_filter, gf_slist[n]) > optlen)
++		goto out_free_gsf;
++
++	rtnl_lock();
++	lock_sock(sk);
++
++	/* numsrc >= (4G-140)/128 overflow in 32 bits */
++	err = -ENOBUFS;
++	if (n > sock_net(sk)->ipv4.sysctl_igmp_max_msf)
++		goto out_unlock;
++	err = set_mcast_msfilter(sk, gf32->gf_interface, n, gf32->gf_fmode,
++				 &gf32->gf_group, gf32->gf_slist);
++out_unlock:
++	release_sock(sk);
++	rtnl_unlock();
++out_free_gsf:
++	kfree(p);
++	return err;
++}
++#endif
++
+ static int do_ip_setsockopt(struct sock *sk, int level,
+ 			    int optname, char __user *optval, unsigned int optlen)
+ {
+@@ -1167,37 +1251,8 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 		break;
+ 	}
+ 	case MCAST_MSFILTER:
+-	{
+-		struct group_filter *gsf = NULL;
+-
+-		if (optlen < GROUP_FILTER_SIZE(0))
+-			goto e_inval;
+-		if (optlen > sysctl_optmem_max) {
+-			err = -ENOBUFS;
+-			break;
+-		}
+-		gsf = memdup_user(optval, optlen);
+-		if (IS_ERR(gsf)) {
+-			err = PTR_ERR(gsf);
+-			break;
+-		}
+-		/* numsrc >= (4G-140)/128 overflow in 32 bits */
+-		if (gsf->gf_numsrc >= 0x1ffffff ||
+-		    gsf->gf_numsrc > net->ipv4.sysctl_igmp_max_msf) {
+-			err = -ENOBUFS;
+-			goto mc_msf_out;
+-		}
+-		if (GROUP_FILTER_SIZE(gsf->gf_numsrc) > optlen) {
+-			err = -EINVAL;
+-			goto mc_msf_out;
+-		}
+-		err = set_mcast_msfilter(sk, gsf->gf_interface,
+-					 gsf->gf_numsrc, gsf->gf_fmode,
+-					 &gsf->gf_group, gsf->gf_slist);
+-mc_msf_out:
+-		kfree(gsf);
++		err = ip_set_mcast_msfilter(sk, optval, optlen);
+ 		break;
+-	}
+ 	case IP_MULTICAST_ALL:
+ 		if (optlen < 1)
+ 			goto e_inval;
+@@ -1391,52 +1446,7 @@ int compat_ip_setsockopt(struct sock *sk, int level, int optname,
+ 		return err;
+ 	}
+ 	case MCAST_MSFILTER:
+-	{
+-		const int size0 = offsetof(struct compat_group_filter, gf_slist);
+-		struct compat_group_filter *gf32;
+-		unsigned int n;
+-		void *p;
+-
+-		if (optlen < size0)
+-			return -EINVAL;
+-		if (optlen > sysctl_optmem_max - 4)
+-			return -ENOBUFS;
+-
+-		p = kmalloc(optlen + 4, GFP_KERNEL);
+-		if (!p)
+-			return -ENOMEM;
+-		gf32 = p + 4; /* we want ->gf_group and ->gf_slist aligned */
+-		if (copy_from_user(gf32, optval, optlen)) {
+-			err = -EFAULT;
+-			goto mc_msf_out;
+-		}
+-
+-		n = gf32->gf_numsrc;
+-		/* numsrc >= (4G-140)/128 overflow in 32 bits */
+-		if (n >= 0x1ffffff) {
+-			err = -ENOBUFS;
+-			goto mc_msf_out;
+-		}
+-		if (offsetof(struct compat_group_filter, gf_slist[n]) > optlen) {
+-			err = -EINVAL;
+-			goto mc_msf_out;
+-		}
+-
+-		rtnl_lock();
+-		lock_sock(sk);
+-		/* numsrc >= (4G-140)/128 overflow in 32 bits */
+-		if (n > sock_net(sk)->ipv4.sysctl_igmp_max_msf)
+-			err = -ENOBUFS;
+-		else
+-			err = set_mcast_msfilter(sk, gf32->gf_interface,
+-						 n, gf32->gf_fmode,
+-						 &gf32->gf_group, gf32->gf_slist);
+-		release_sock(sk);
+-		rtnl_unlock();
+-mc_msf_out:
+-		kfree(p);
+-		return err;
+-	}
++		return compat_ip_set_mcast_msfilter(sk, optval, optlen);
  	}
  
- 	if (level = SOL_SOCKET && !sock_use_custom_sol_socket(sock))
--		err = sock_setsockopt(sock, level, optname, optval, optlen);
-+		err = sock_setsockopt(sock, level, optname,
-+				      USER_SOCKPTR(optval), optlen);
- 	else if (unlikely(!sock->ops->setsockopt))
- 		err = -EOPNOTSUPP;
- 	else
+ 	err = do_ip_setsockopt(sk, level, optname, optval, optlen);
 -- 
 2.27.0
