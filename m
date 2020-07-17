@@ -1,133 +1,275 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Mon, 20 Jul 2020 12:47:26 +0000
-Subject: [PATCH 13/24] net/ipv4: switch ip_mroute_setsockopt to sockptr_t
-Message-Id: <20200720124737.118617-14-hch@lst.de>
+Date: Fri, 17 Jul 2020 06:23:19 +0000
+Subject: [PATCH 10/22] netfilter/ebtables: clean up compat {get,set}sockopt handling
+Message-Id: <20200717062331.691152-11-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Pass a sockptr_t to prepare for set_fs-less handling of the kernel
-pointer from bpf-cgroup.
+Merge the native and compat {get,set}sockopt handlers using
+in_compat_syscall().  Note that this required moving a fair
+amout of code around to be done sanely.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- include/linux/mroute.h |  5 +++--
- net/ipv4/ip_sockglue.c |  3 ++-
- net/ipv4/ipmr.c        | 14 +++++++-------
- 3 files changed, 12 insertions(+), 10 deletions(-)
+ net/bridge/netfilter/ebtables.c | 214 +++++++++++++++-----------------
+ 1 file changed, 98 insertions(+), 116 deletions(-)
 
-diff --git a/include/linux/mroute.h b/include/linux/mroute.h
-index 9a36fad9e068f6..6cbbfe94348cee 100644
---- a/include/linux/mroute.h
-+++ b/include/linux/mroute.h
-@@ -8,6 +8,7 @@
- #include <net/fib_notifier.h>
- #include <uapi/linux/mroute.h>
- #include <linux/mroute_base.h>
-+#include <linux/sockptr.h>
- 
- #ifdef CONFIG_IP_MROUTE
- static inline int ip_mroute_opt(int opt)
-@@ -15,7 +16,7 @@ static inline int ip_mroute_opt(int opt)
- 	return opt >= MRT_BASE && opt <= MRT_MAX;
+diff --git a/net/bridge/netfilter/ebtables.c b/net/bridge/netfilter/ebtables.c
+index c83ffe9121639c..fe13108af1f542 100644
+--- a/net/bridge/netfilter/ebtables.c
++++ b/net/bridge/netfilter/ebtables.c
+@@ -1451,86 +1451,6 @@ static int copy_everything_to_user(struct ebt_table *t, void __user *user,
+ 	   ebt_entry_to_user, entries, tmp.entries);
  }
  
--int ip_mroute_setsockopt(struct sock *, int, char __user *, unsigned int);
-+int ip_mroute_setsockopt(struct sock *, int, sockptr_t, unsigned int);
- int ip_mroute_getsockopt(struct sock *, int, char __user *, int __user *);
- int ipmr_ioctl(struct sock *sk, int cmd, void __user *arg);
- int ipmr_compat_ioctl(struct sock *sk, unsigned int cmd, void __user *arg);
-@@ -23,7 +24,7 @@ int ip_mr_init(void);
- bool ipmr_rule_default(const struct fib_rule *rule);
- #else
- static inline int ip_mroute_setsockopt(struct sock *sock, int optname,
--				       char __user *optval, unsigned int optlen)
-+				       sockptr_t optval, unsigned int optlen)
- {
- 	return -ENOPROTOOPT;
+-static int do_ebt_set_ctl(struct sock *sk,
+-	int cmd, void __user *user, unsigned int len)
+-{
+-	int ret;
+-	struct net *net = sock_net(sk);
+-
+-	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+-		return -EPERM;
+-
+-	switch (cmd) {
+-	case EBT_SO_SET_ENTRIES:
+-		ret = do_replace(net, user, len);
+-		break;
+-	case EBT_SO_SET_COUNTERS:
+-		ret = update_counters(net, user, len);
+-		break;
+-	default:
+-		ret = -EINVAL;
+-	}
+-	return ret;
+-}
+-
+-static int do_ebt_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
+-{
+-	int ret;
+-	struct ebt_replace tmp;
+-	struct ebt_table *t;
+-	struct net *net = sock_net(sk);
+-
+-	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+-		return -EPERM;
+-
+-	if (copy_from_user(&tmp, user, sizeof(tmp)))
+-		return -EFAULT;
+-
+-	tmp.name[sizeof(tmp.name) - 1] = '\0';
+-
+-	t = find_table_lock(net, tmp.name, &ret, &ebt_mutex);
+-	if (!t)
+-		return ret;
+-
+-	switch (cmd) {
+-	case EBT_SO_GET_INFO:
+-	case EBT_SO_GET_INIT_INFO:
+-		if (*len != sizeof(struct ebt_replace)) {
+-			ret = -EINVAL;
+-			mutex_unlock(&ebt_mutex);
+-			break;
+-		}
+-		if (cmd = EBT_SO_GET_INFO) {
+-			tmp.nentries = t->private->nentries;
+-			tmp.entries_size = t->private->entries_size;
+-			tmp.valid_hooks = t->valid_hooks;
+-		} else {
+-			tmp.nentries = t->table->nentries;
+-			tmp.entries_size = t->table->entries_size;
+-			tmp.valid_hooks = t->table->valid_hooks;
+-		}
+-		mutex_unlock(&ebt_mutex);
+-		if (copy_to_user(user, &tmp, *len) != 0) {
+-			ret = -EFAULT;
+-			break;
+-		}
+-		ret = 0;
+-		break;
+-
+-	case EBT_SO_GET_ENTRIES:
+-	case EBT_SO_GET_INIT_ENTRIES:
+-		ret = copy_everything_to_user(t, user, len, cmd);
+-		mutex_unlock(&ebt_mutex);
+-		break;
+-
+-	default:
+-		mutex_unlock(&ebt_mutex);
+-		ret = -EINVAL;
+-	}
+-
+-	return ret;
+-}
+-
+ #ifdef CONFIG_COMPAT
+ /* 32 bit-userspace compatibility definitions. */
+ struct compat_ebt_replace {
+@@ -2314,28 +2234,6 @@ static int compat_update_counters(struct net *net, void __user *user,
+ 					hlp.num_counters, user, len);
  }
-diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
-index 36f746e01741f6..ac495b0cff8ffb 100644
---- a/net/ipv4/ip_sockglue.c
-+++ b/net/ipv4/ip_sockglue.c
-@@ -925,7 +925,8 @@ static int do_ip_setsockopt(struct sock *sk, int level,
- 	if (optname = IP_ROUTER_ALERT)
- 		return ip_ra_control(sk, val ? 1 : 0, NULL);
- 	if (ip_mroute_opt(optname))
--		return ip_mroute_setsockopt(sk, optname, optval, optlen);
-+		return ip_mroute_setsockopt(sk, optname, USER_SOCKPTR(optval),
-+					    optlen);
  
- 	err = 0;
- 	if (needs_rtnl)
-diff --git a/net/ipv4/ipmr.c b/net/ipv4/ipmr.c
-index 678639c01e4882..cdf3a40f9ff5fc 100644
---- a/net/ipv4/ipmr.c
-+++ b/net/ipv4/ipmr.c
-@@ -1341,7 +1341,7 @@ static void mrtsock_destruct(struct sock *sk)
-  * MOSPF/PIM router set up we can clean this up.
-  */
- 
--int ip_mroute_setsockopt(struct sock *sk, int optname, char __user *optval,
-+int ip_mroute_setsockopt(struct sock *sk, int optname, sockptr_t optval,
- 			 unsigned int optlen)
+-static int compat_do_ebt_set_ctl(struct sock *sk,
+-		int cmd, void __user *user, unsigned int len)
+-{
+-	int ret;
+-	struct net *net = sock_net(sk);
+-
+-	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+-		return -EPERM;
+-
+-	switch (cmd) {
+-	case EBT_SO_SET_ENTRIES:
+-		ret = compat_do_replace(net, user, len);
+-		break;
+-	case EBT_SO_SET_COUNTERS:
+-		ret = compat_update_counters(net, user, len);
+-		break;
+-	default:
+-		ret = -EINVAL;
+-	}
+-	return ret;
+-}
+-
+ static int compat_do_ebt_get_ctl(struct sock *sk, int cmd,
+ 		void __user *user, int *len)
  {
+@@ -2344,14 +2242,6 @@ static int compat_do_ebt_get_ctl(struct sock *sk, int cmd,
+ 	struct ebt_table *t;
  	struct net *net = sock_net(sk);
-@@ -1413,7 +1413,7 @@ int ip_mroute_setsockopt(struct sock *sk, int optname, char __user *optval,
- 			ret = -EINVAL;
- 			break;
- 		}
--		if (copy_from_user(&vif, optval, sizeof(vif))) {
-+		if (copy_from_sockptr(&vif, optval, sizeof(vif))) {
- 			ret = -EFAULT;
- 			break;
- 		}
-@@ -1441,7 +1441,7 @@ int ip_mroute_setsockopt(struct sock *sk, int optname, char __user *optval,
- 			ret = -EINVAL;
- 			break;
- 		}
--		if (copy_from_user(&mfc, optval, sizeof(mfc))) {
-+		if (copy_from_sockptr(&val, optval, sizeof(val))) {
- 			ret = -EFAULT;
- 			break;
- 		}
-@@ -1459,7 +1459,7 @@ int ip_mroute_setsockopt(struct sock *sk, int optname, char __user *optval,
- 			ret = -EINVAL;
- 			break;
- 		}
--		if (get_user(val, (int __user *)optval)) {
-+		if (copy_from_sockptr(&val, optval, sizeof(val))) {
- 			ret = -EFAULT;
- 			break;
- 		}
-@@ -1471,7 +1471,7 @@ int ip_mroute_setsockopt(struct sock *sk, int optname, char __user *optval,
- 			ret = -EINVAL;
- 			break;
- 		}
--		if (get_user(val, (int __user *)optval)) {
-+		if (copy_from_sockptr(&val, optval, sizeof(val))) {
- 			ret = -EFAULT;
- 			break;
- 		}
-@@ -1486,7 +1486,7 @@ int ip_mroute_setsockopt(struct sock *sk, int optname, char __user *optval,
- 			ret = -EINVAL;
- 			break;
- 		}
--		if (get_user(val, (int __user *)optval)) {
-+		if (copy_from_sockptr(&val, optval, sizeof(val))) {
- 			ret = -EFAULT;
- 			break;
- 		}
-@@ -1508,7 +1508,7 @@ int ip_mroute_setsockopt(struct sock *sk, int optname, char __user *optval,
- 			ret = -EINVAL;
- 			break;
- 		}
--		if (get_user(uval, (u32 __user *)optval)) {
-+		if (copy_from_sockptr(&uval, optval, sizeof(uval))) {
- 			ret = -EFAULT;
- 			break;
- 		}
+ 
+-	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+-		return -EPERM;
+-
+-	/* try real handler in case userland supplied needed padding */
+-	if ((cmd = EBT_SO_GET_INFO ||
+-	     cmd = EBT_SO_GET_INIT_INFO) && *len != sizeof(tmp))
+-			return do_ebt_get_ctl(sk, cmd, user, len);
+-
+ 	if (copy_from_user(&tmp, user, sizeof(tmp)))
+ 		return -EFAULT;
+ 
+@@ -2413,20 +2303,112 @@ static int compat_do_ebt_get_ctl(struct sock *sk, int cmd,
+ }
+ #endif
+ 
++static int do_ebt_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
++{
++	struct net *net = sock_net(sk);
++	struct ebt_replace tmp;
++	struct ebt_table *t;
++	int ret;
++
++	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
++		return -EPERM;
++
++#ifdef CONFIG_COMPAT
++	/* try real handler in case userland supplied needed padding */
++	if (in_compat_syscall() &&
++	    ((cmd != EBT_SO_GET_INFO && cmd != EBT_SO_GET_INIT_INFO) ||
++	     *len != sizeof(tmp)))
++		return compat_do_ebt_get_ctl(sk, cmd, user, len);
++#endif
++
++	if (copy_from_user(&tmp, user, sizeof(tmp)))
++		return -EFAULT;
++
++	tmp.name[sizeof(tmp.name) - 1] = '\0';
++
++	t = find_table_lock(net, tmp.name, &ret, &ebt_mutex);
++	if (!t)
++		return ret;
++
++	switch (cmd) {
++	case EBT_SO_GET_INFO:
++	case EBT_SO_GET_INIT_INFO:
++		if (*len != sizeof(struct ebt_replace)) {
++			ret = -EINVAL;
++			mutex_unlock(&ebt_mutex);
++			break;
++		}
++		if (cmd = EBT_SO_GET_INFO) {
++			tmp.nentries = t->private->nentries;
++			tmp.entries_size = t->private->entries_size;
++			tmp.valid_hooks = t->valid_hooks;
++		} else {
++			tmp.nentries = t->table->nentries;
++			tmp.entries_size = t->table->entries_size;
++			tmp.valid_hooks = t->table->valid_hooks;
++		}
++		mutex_unlock(&ebt_mutex);
++		if (copy_to_user(user, &tmp, *len) != 0) {
++			ret = -EFAULT;
++			break;
++		}
++		ret = 0;
++		break;
++
++	case EBT_SO_GET_ENTRIES:
++	case EBT_SO_GET_INIT_ENTRIES:
++		ret = copy_everything_to_user(t, user, len, cmd);
++		mutex_unlock(&ebt_mutex);
++		break;
++
++	default:
++		mutex_unlock(&ebt_mutex);
++		ret = -EINVAL;
++	}
++
++	return ret;
++}
++
++static int do_ebt_set_ctl(struct sock *sk, int cmd, void __user *user,
++		unsigned int len)
++{
++	struct net *net = sock_net(sk);
++	int ret;
++
++	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
++		return -EPERM;
++
++	switch (cmd) {
++	case EBT_SO_SET_ENTRIES:
++#ifdef CONFIG_COMPAT
++		if (in_compat_syscall())
++			ret = compat_do_replace(net, user, len);
++		else
++#endif
++			ret = do_replace(net, user, len);
++		break;
++	case EBT_SO_SET_COUNTERS:
++#ifdef CONFIG_COMPAT
++		if (in_compat_syscall())
++			ret = compat_update_counters(net, user, len);
++		else
++#endif
++			ret = update_counters(net, user, len);
++		break;
++	default:
++		ret = -EINVAL;
++	}
++	return ret;
++}
++
+ static struct nf_sockopt_ops ebt_sockopts = {
+ 	.pf		= PF_INET,
+ 	.set_optmin	= EBT_BASE_CTL,
+ 	.set_optmax	= EBT_SO_SET_MAX + 1,
+ 	.set		= do_ebt_set_ctl,
+-#ifdef CONFIG_COMPAT
+-	.compat_set	= compat_do_ebt_set_ctl,
+-#endif
+ 	.get_optmin	= EBT_BASE_CTL,
+ 	.get_optmax	= EBT_SO_GET_MAX + 1,
+ 	.get		= do_ebt_get_ctl,
+-#ifdef CONFIG_COMPAT
+-	.compat_get	= compat_do_ebt_get_ctl,
+-#endif
+ 	.owner		= THIS_MODULE,
+ };
+ 
 -- 
 2.27.0
