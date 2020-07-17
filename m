@@ -1,208 +1,196 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Fri, 17 Jul 2020 06:23:24 +0000
-Subject: [PATCH 15/22] net/ipv4: factor out MCAST_MSFILTER setsockopt helpers
-Message-Id: <20200717062331.691152-16-hch@lst.de>
+Date: Fri, 17 Jul 2020 06:23:17 +0000
+Subject: [PATCH 08/22] netfilter/ip_tables: clean up compat {get,set}sockopt handling
+Message-Id: <20200717062331.691152-9-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Factor out one helper each for setting the native and compat
-version of the MCAST_MSFILTER option.
+Merge the native and compat {get,set}sockopt handlers using
+in_compat_syscall().
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- net/ipv4/ip_sockglue.c | 162 ++++++++++++++++++++++-------------------
- 1 file changed, 86 insertions(+), 76 deletions(-)
+ net/ipv4/netfilter/ip_tables.c | 86 +++++++++-------------------------
+ 1 file changed, 21 insertions(+), 65 deletions(-)
 
-diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
-index 70d32c9476a2e3..b587dee006f882 100644
---- a/net/ipv4/ip_sockglue.c
-+++ b/net/ipv4/ip_sockglue.c
-@@ -722,6 +722,90 @@ static int do_mcast_group_source(struct sock *sk, int optname,
- 	return ip_mc_source(add, omode, sk, &mreqs, greqs->gsr_interface);
+diff --git a/net/ipv4/netfilter/ip_tables.c b/net/ipv4/netfilter/ip_tables.c
+index 5bf9fa06aee0be..fbfad38f397949 100644
+--- a/net/ipv4/netfilter/ip_tables.c
++++ b/net/ipv4/netfilter/ip_tables.c
+@@ -944,8 +944,7 @@ static int compat_table_info(const struct xt_table_info *info,
+ }
+ #endif
+ 
+-static int get_info(struct net *net, void __user *user,
+-		    const int *len, int compat)
++static int get_info(struct net *net, void __user *user, const int *len)
+ {
+ 	char name[XT_TABLE_MAXNAMELEN];
+ 	struct xt_table *t;
+@@ -959,7 +958,7 @@ static int get_info(struct net *net, void __user *user,
+ 
+ 	name[XT_TABLE_MAXNAMELEN-1] = '\0';
+ #ifdef CONFIG_COMPAT
+-	if (compat)
++	if (in_compat_syscall())
+ 		xt_compat_lock(AF_INET);
+ #endif
+ 	t = xt_request_find_table_lock(net, AF_INET, name);
+@@ -969,7 +968,7 @@ static int get_info(struct net *net, void __user *user,
+ #ifdef CONFIG_COMPAT
+ 		struct xt_table_info tmp;
+ 
+-		if (compat) {
++		if (in_compat_syscall()) {
+ 			ret = compat_table_info(private, &tmp);
+ 			xt_compat_flush_offsets(AF_INET);
+ 			private = &tmp;
+@@ -995,7 +994,7 @@ static int get_info(struct net *net, void __user *user,
+ 	} else
+ 		ret = PTR_ERR(t);
+ #ifdef CONFIG_COMPAT
+-	if (compat)
++	if (in_compat_syscall())
+ 		xt_compat_unlock(AF_INET);
+ #endif
+ 	return ret;
+@@ -1153,7 +1152,7 @@ do_replace(struct net *net, const void __user *user, unsigned int len)
+ 
+ static int
+ do_add_counters(struct net *net, const void __user *user,
+-		unsigned int len, int compat)
++		unsigned int len)
+ {
+ 	unsigned int i;
+ 	struct xt_counters_info tmp;
+@@ -1164,7 +1163,8 @@ do_add_counters(struct net *net, const void __user *user,
+ 	struct ipt_entry *iter;
+ 	unsigned int addend;
+ 
+-	paddc = xt_copy_counters_from_user(user, len, &tmp, compat);
++	paddc = xt_copy_counters_from_user(user, len, &tmp,
++					   in_compat_syscall());
+ 	if (IS_ERR(paddc))
+ 		return PTR_ERR(paddc);
+ 
+@@ -1534,31 +1534,6 @@ compat_do_replace(struct net *net, void __user *user, unsigned int len)
+ 	return ret;
  }
  
-+static int ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
-+		int optlen)
-+{
-+	struct group_filter *gsf = NULL;
-+	int err;
-+
-+	if (optlen < GROUP_FILTER_SIZE(0))
-+		return -EINVAL;
-+	if (optlen > sysctl_optmem_max)
-+		return -ENOBUFS;
-+
-+	gsf = memdup_user(optval, optlen);
-+	if (IS_ERR(gsf))
-+		return PTR_ERR(gsf);
-+
-+	/* numsrc >= (4G-140)/128 overflow in 32 bits */
-+	err = -ENOBUFS;
-+	if (gsf->gf_numsrc >= 0x1ffffff ||
-+	    gsf->gf_numsrc > sock_net(sk)->ipv4.sysctl_igmp_max_msf)
-+		goto out_free_gsf;
-+
-+	err = -EINVAL;
-+	if (GROUP_FILTER_SIZE(gsf->gf_numsrc) > optlen)
-+		goto out_free_gsf;
-+
-+	err = set_mcast_msfilter(sk, gsf->gf_interface, gsf->gf_numsrc,
-+				 gsf->gf_fmode, &gsf->gf_group, gsf->gf_slist);
-+out_free_gsf:
-+	kfree(gsf);
-+	return err;
-+}
-+
-+#ifdef CONFIG_COMPAT
-+static int compat_ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
-+		int optlen)
-+{
-+	const int size0 = offsetof(struct compat_group_filter, gf_slist);
-+	struct compat_group_filter *gf32;
-+	unsigned int n;
-+	void *p;
-+	int err;
-+
-+	if (optlen < size0)
-+		return -EINVAL;
-+	if (optlen > sysctl_optmem_max - 4)
-+		return -ENOBUFS;
-+
-+	p = kmalloc(optlen + 4, GFP_KERNEL);
-+	if (!p)
-+		return -ENOMEM;
-+	gf32 = p + 4; /* we want ->gf_group and ->gf_slist aligned */
-+
-+	err = -EFAULT;
-+	if (copy_from_user(gf32, optval, optlen))
-+		goto out_free_gsf;
-+
-+	/* numsrc >= (4G-140)/128 overflow in 32 bits */
-+	n = gf32->gf_numsrc;
-+	err = -ENOBUFS;
-+	if (n >= 0x1ffffff)
-+		goto out_free_gsf;
-+
-+	err = -EINVAL;
-+	if (offsetof(struct compat_group_filter, gf_slist[n]) > optlen)
-+		goto out_free_gsf;
-+
-+	rtnl_lock();
-+	lock_sock(sk);
-+
-+	/* numsrc >= (4G-140)/128 overflow in 32 bits */
-+	err = -ENOBUFS;
-+	if (n > sock_net(sk)->ipv4.sysctl_igmp_max_msf)
-+		goto out_unlock;
-+	err = set_mcast_msfilter(sk, gf32->gf_interface, n, gf32->gf_fmode,
-+				 &gf32->gf_group, gf32->gf_slist);
-+out_unlock:
-+	release_sock(sk);
-+	rtnl_unlock();
-+out_free_gsf:
-+	kfree(p);
-+	return err;
-+}
-+#endif
-+
- static int do_ip_setsockopt(struct sock *sk, int level,
- 			    int optname, char __user *optval, unsigned int optlen)
- {
-@@ -1167,37 +1251,8 @@ static int do_ip_setsockopt(struct sock *sk, int level,
- 		break;
- 	}
- 	case MCAST_MSFILTER:
--	{
--		struct group_filter *gsf = NULL;
+-static int
+-compat_do_ipt_set_ctl(struct sock *sk,	int cmd, void __user *user,
+-		      unsigned int len)
+-{
+-	int ret;
 -
--		if (optlen < GROUP_FILTER_SIZE(0))
--			goto e_inval;
--		if (optlen > sysctl_optmem_max) {
--			err = -ENOBUFS;
--			break;
--		}
--		gsf = memdup_user(optval, optlen);
--		if (IS_ERR(gsf)) {
--			err = PTR_ERR(gsf);
--			break;
--		}
--		/* numsrc >= (4G-140)/128 overflow in 32 bits */
--		if (gsf->gf_numsrc >= 0x1ffffff ||
--		    gsf->gf_numsrc > net->ipv4.sysctl_igmp_max_msf) {
--			err = -ENOBUFS;
--			goto mc_msf_out;
--		}
--		if (GROUP_FILTER_SIZE(gsf->gf_numsrc) > optlen) {
--			err = -EINVAL;
--			goto mc_msf_out;
--		}
--		err = set_mcast_msfilter(sk, gsf->gf_interface,
--					 gsf->gf_numsrc, gsf->gf_fmode,
--					 &gsf->gf_group, gsf->gf_slist);
--mc_msf_out:
--		kfree(gsf);
-+		err = ip_set_mcast_msfilter(sk, optval, optlen);
- 		break;
+-	if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
+-		return -EPERM;
+-
+-	switch (cmd) {
+-	case IPT_SO_SET_REPLACE:
+-		ret = compat_do_replace(sock_net(sk), user, len);
+-		break;
+-
+-	case IPT_SO_SET_ADD_COUNTERS:
+-		ret = do_add_counters(sock_net(sk), user, len, 1);
+-		break;
+-
+-	default:
+-		ret = -EINVAL;
 -	}
- 	case IP_MULTICAST_ALL:
- 		if (optlen < 1)
- 			goto e_inval;
-@@ -1391,52 +1446,7 @@ int compat_ip_setsockopt(struct sock *sk, int level, int optname,
- 		return err;
- 	}
- 	case MCAST_MSFILTER:
--	{
--		const int size0 = offsetof(struct compat_group_filter, gf_slist);
--		struct compat_group_filter *gf32;
--		unsigned int n;
--		void *p;
 -
--		if (optlen < size0)
--			return -EINVAL;
--		if (optlen > sysctl_optmem_max - 4)
--			return -ENOBUFS;
+-	return ret;
+-}
 -
--		p = kmalloc(optlen + 4, GFP_KERNEL);
--		if (!p)
--			return -ENOMEM;
--		gf32 = p + 4; /* we want ->gf_group and ->gf_slist aligned */
--		if (copy_from_user(gf32, optval, optlen)) {
--			err = -EFAULT;
--			goto mc_msf_out;
--		}
+ struct compat_ipt_get_entries {
+ 	char name[XT_TABLE_MAXNAMELEN];
+ 	compat_uint_t size;
+@@ -1634,29 +1609,6 @@ compat_get_entries(struct net *net, struct compat_ipt_get_entries __user *uptr,
+ 	xt_compat_unlock(AF_INET);
+ 	return ret;
+ }
 -
--		n = gf32->gf_numsrc;
--		/* numsrc >= (4G-140)/128 overflow in 32 bits */
--		if (n >= 0x1ffffff) {
--			err = -ENOBUFS;
--			goto mc_msf_out;
--		}
--		if (offsetof(struct compat_group_filter, gf_slist[n]) > optlen) {
--			err = -EINVAL;
--			goto mc_msf_out;
--		}
+-static int do_ipt_get_ctl(struct sock *, int, void __user *, int *);
 -
--		rtnl_lock();
--		lock_sock(sk);
--		/* numsrc >= (4G-140)/128 overflow in 32 bits */
--		if (n > sock_net(sk)->ipv4.sysctl_igmp_max_msf)
--			err = -ENOBUFS;
--		else
--			err = set_mcast_msfilter(sk, gf32->gf_interface,
--						 n, gf32->gf_fmode,
--						 &gf32->gf_group, gf32->gf_slist);
--		release_sock(sk);
--		rtnl_unlock();
--mc_msf_out:
--		kfree(p);
--		return err;
+-static int
+-compat_do_ipt_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
+-{
+-	int ret;
+-
+-	if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
+-		return -EPERM;
+-
+-	switch (cmd) {
+-	case IPT_SO_GET_INFO:
+-		ret = get_info(sock_net(sk), user, len, 1);
+-		break;
+-	case IPT_SO_GET_ENTRIES:
+-		ret = compat_get_entries(sock_net(sk), user, len);
+-		break;
+-	default:
+-		ret = do_ipt_get_ctl(sk, cmd, user, len);
 -	}
-+		return compat_ip_set_mcast_msfilter(sk, optval, optlen);
- 	}
+-	return ret;
+-}
+ #endif
  
- 	err = do_ip_setsockopt(sk, level, optname, optval, optlen);
+ static int
+@@ -1669,11 +1621,16 @@ do_ipt_set_ctl(struct sock *sk, int cmd, void __user *user, unsigned int len)
+ 
+ 	switch (cmd) {
+ 	case IPT_SO_SET_REPLACE:
+-		ret = do_replace(sock_net(sk), user, len);
++#ifdef CONFIG_COMPAT
++		if (in_compat_syscall())
++			ret = compat_do_replace(sock_net(sk), user, len);
++		else
++#endif
++			ret = do_replace(sock_net(sk), user, len);
+ 		break;
+ 
+ 	case IPT_SO_SET_ADD_COUNTERS:
+-		ret = do_add_counters(sock_net(sk), user, len, 0);
++		ret = do_add_counters(sock_net(sk), user, len);
+ 		break;
+ 
+ 	default:
+@@ -1693,11 +1650,16 @@ do_ipt_get_ctl(struct sock *sk, int cmd, void __user *user, int *len)
+ 
+ 	switch (cmd) {
+ 	case IPT_SO_GET_INFO:
+-		ret = get_info(sock_net(sk), user, len, 0);
++		ret = get_info(sock_net(sk), user, len);
+ 		break;
+ 
+ 	case IPT_SO_GET_ENTRIES:
+-		ret = get_entries(sock_net(sk), user, len);
++#ifdef CONFIG_COMPAT
++		if (in_compat_syscall())
++			ret = compat_get_entries(sock_net(sk), user, len);
++		else
++#endif
++			ret = get_entries(sock_net(sk), user, len);
+ 		break;
+ 
+ 	case IPT_SO_GET_REVISION_MATCH:
+@@ -1886,15 +1848,9 @@ static struct nf_sockopt_ops ipt_sockopts = {
+ 	.set_optmin	= IPT_BASE_CTL,
+ 	.set_optmax	= IPT_SO_SET_MAX+1,
+ 	.set		= do_ipt_set_ctl,
+-#ifdef CONFIG_COMPAT
+-	.compat_set	= compat_do_ipt_set_ctl,
+-#endif
+ 	.get_optmin	= IPT_BASE_CTL,
+ 	.get_optmax	= IPT_SO_GET_MAX+1,
+ 	.get		= do_ipt_get_ctl,
+-#ifdef CONFIG_COMPAT
+-	.compat_get	= compat_do_ipt_get_ctl,
+-#endif
+ 	.owner		= THIS_MODULE,
+ };
+ 
 -- 
 2.27.0
