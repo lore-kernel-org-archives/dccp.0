@@ -1,155 +1,94 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Fri, 17 Jul 2020 06:23:25 +0000
-Subject: [PATCH 16/22] net/ipv4: factor out mcast join/leave setsockopt helpers
-Message-Id: <20200717062331.691152-17-hch@lst.de>
+Date: Mon, 20 Jul 2020 12:47:35 +0000
+Subject: [PATCH 22/24] net/tcp: switch ->md5_parse to sockptr_t
+Message-Id: <20200720124737.118617-23-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Factor out one helper each for setting the native and compat
-version of the MCAST_MSFILTER option.
+Pass a sockptr_t to prepare for set_fs-less handling of the kernel
+pointer from bpf-cgroup.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- net/ipv4/ip_sockglue.c | 109 +++++++++++++++++++++--------------------
- 1 file changed, 56 insertions(+), 53 deletions(-)
+ include/net/tcp.h   | 2 +-
+ net/ipv4/tcp.c      | 3 ++-
+ net/ipv4/tcp_ipv4.c | 4 ++--
+ net/ipv6/tcp_ipv6.c | 4 ++--
+ 4 files changed, 7 insertions(+), 6 deletions(-)
 
-diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
-index b587dee006f882..73bb88fbe54661 100644
---- a/net/ipv4/ip_sockglue.c
-+++ b/net/ipv4/ip_sockglue.c
-@@ -806,6 +806,60 @@ static int compat_ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
- }
+diff --git a/include/net/tcp.h b/include/net/tcp.h
+index 9f7f7c0c110451..e3c8e1d820214c 100644
+--- a/include/net/tcp.h
++++ b/include/net/tcp.h
+@@ -2002,7 +2002,7 @@ struct tcp_sock_af_ops {
+ 					 const struct sk_buff *skb);
+ 	int		(*md5_parse)(struct sock *sk,
+ 				     int optname,
+-				     char __user *optval,
++				     sockptr_t optval,
+ 				     int optlen);
  #endif
- 
-+static int ip_mcast_join_leave(struct sock *sk, int optname,
-+		void __user *optval, int optlen)
-+{
-+	struct ip_mreqn mreq = { };
-+	struct sockaddr_in *psin;
-+	struct group_req greq;
-+
-+	if (optlen < sizeof(struct group_req))
-+		return -EINVAL;
-+	if (copy_from_user(&greq, optval, sizeof(greq)))
-+		return -EFAULT;
-+
-+	psin = (struct sockaddr_in *)&greq.gr_group;
-+	if (psin->sin_family != AF_INET)
-+		return -EINVAL;
-+	mreq.imr_multiaddr = psin->sin_addr;
-+	mreq.imr_ifindex = greq.gr_interface;
-+	if (optname = MCAST_JOIN_GROUP)
-+		return ip_mc_join_group(sk, &mreq);
-+	return ip_mc_leave_group(sk, &mreq);
-+}
-+
-+#ifdef CONFIG_COMPAT
-+static int compat_ip_mcast_join_leave(struct sock *sk, int optname,
-+		void __user *optval, int optlen)
-+{
-+	struct compat_group_req greq;
-+	struct ip_mreqn mreq = { };
-+	struct sockaddr_in *psin;
-+	int err;
-+
-+	if (optlen < sizeof(struct compat_group_req))
-+		return -EINVAL;
-+	if (copy_from_user(&greq, optval, sizeof(greq)))
-+		return -EFAULT;
-+
-+	psin = (struct sockaddr_in *)&greq.gr_group;
-+	if (psin->sin_family != AF_INET)
-+		return -EINVAL;
-+	mreq.imr_multiaddr = psin->sin_addr;
-+	mreq.imr_ifindex = greq.gr_interface;
-+
-+	rtnl_lock();
-+	lock_sock(sk);
-+	if (optname = MCAST_JOIN_GROUP)
-+		err = ip_mc_join_group(sk, &mreq);
-+	else
-+		err = ip_mc_leave_group(sk, &mreq);
-+	release_sock(sk);
-+	rtnl_unlock();
-+	return err;
-+}
-+#endif
-+
- static int do_ip_setsockopt(struct sock *sk, int level,
- 			    int optname, char __user *optval, unsigned int optlen)
- {
-@@ -1211,29 +1265,8 @@ static int do_ip_setsockopt(struct sock *sk, int level,
- 	}
- 	case MCAST_JOIN_GROUP:
- 	case MCAST_LEAVE_GROUP:
--	{
--		struct group_req greq;
--		struct sockaddr_in *psin;
--		struct ip_mreqn mreq;
--
--		if (optlen < sizeof(struct group_req))
--			goto e_inval;
--		err = -EFAULT;
--		if (copy_from_user(&greq, optval, sizeof(greq)))
--			break;
--		psin = (struct sockaddr_in *)&greq.gr_group;
--		if (psin->sin_family != AF_INET)
--			goto e_inval;
--		memset(&mreq, 0, sizeof(mreq));
--		mreq.imr_multiaddr = psin->sin_addr;
--		mreq.imr_ifindex = greq.gr_interface;
--
--		if (optname = MCAST_JOIN_GROUP)
--			err = ip_mc_join_group(sk, &mreq);
--		else
--			err = ip_mc_leave_group(sk, &mreq);
-+		err = ip_mcast_join_leave(sk, optname, optval, optlen);
+ };
+diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
+index 58ede3d62b2e2c..49bf15c27deac7 100644
+--- a/net/ipv4/tcp.c
++++ b/net/ipv4/tcp.c
+@@ -3249,7 +3249,8 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
+ #ifdef CONFIG_TCP_MD5SIG
+ 	case TCP_MD5SIG:
+ 	case TCP_MD5SIG_EXT:
+-		err = tp->af_specific->md5_parse(sk, optname, optval, optlen);
++		err = tp->af_specific->md5_parse(sk, optname,
++						 USER_SOCKPTR(optval), optlen);
  		break;
--	}
- 	case MCAST_JOIN_SOURCE_GROUP:
- 	case MCAST_LEAVE_SOURCE_GROUP:
- 	case MCAST_BLOCK_SOURCE:
-@@ -1389,37 +1422,7 @@ int compat_ip_setsockopt(struct sock *sk, int level, int optname,
- 	switch (optname) {
- 	case MCAST_JOIN_GROUP:
- 	case MCAST_LEAVE_GROUP:
--	{
--		struct compat_group_req __user *gr32 = (void __user *)optval;
--		struct group_req greq;
--		struct sockaddr_in *psin = (struct sockaddr_in *)&greq.gr_group;
--		struct ip_mreqn mreq;
--
--		if (optlen < sizeof(struct compat_group_req))
--			return -EINVAL;
--
--		if (get_user(greq.gr_interface, &gr32->gr_interface) ||
--		    copy_from_user(&greq.gr_group, &gr32->gr_group,
--				sizeof(greq.gr_group)))
--			return -EFAULT;
--
--		if (psin->sin_family != AF_INET)
--			return -EINVAL;
--
--		memset(&mreq, 0, sizeof(mreq));
--		mreq.imr_multiaddr = psin->sin_addr;
--		mreq.imr_ifindex = greq.gr_interface;
--
--		rtnl_lock();
--		lock_sock(sk);
--		if (optname = MCAST_JOIN_GROUP)
--			err = ip_mc_join_group(sk, &mreq);
--		else
--			err = ip_mc_leave_group(sk, &mreq);
--		release_sock(sk);
--		rtnl_unlock();
--		return err;
--	}
-+		return compat_ip_mcast_join_leave(sk, optname, optval, optlen);
- 	case MCAST_JOIN_SOURCE_GROUP:
- 	case MCAST_LEAVE_SOURCE_GROUP:
- 	case MCAST_BLOCK_SOURCE:
+ #endif
+ 	case TCP_USER_TIMEOUT:
+diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
+index cd81b6e04efbfa..a03e70b3af2e6c 100644
+--- a/net/ipv4/tcp_ipv4.c
++++ b/net/ipv4/tcp_ipv4.c
+@@ -1194,7 +1194,7 @@ static void tcp_clear_md5_list(struct sock *sk)
+ }
+ 
+ static int tcp_v4_parse_md5_keys(struct sock *sk, int optname,
+-				 char __user *optval, int optlen)
++				 sockptr_t optval, int optlen)
+ {
+ 	struct tcp_md5sig cmd;
+ 	struct sockaddr_in *sin = (struct sockaddr_in *)&cmd.tcpm_addr;
+@@ -1205,7 +1205,7 @@ static int tcp_v4_parse_md5_keys(struct sock *sk, int optname,
+ 	if (optlen < sizeof(cmd))
+ 		return -EINVAL;
+ 
+-	if (copy_from_user(&cmd, optval, sizeof(cmd)))
++	if (copy_from_sockptr(&cmd, optval, sizeof(cmd)))
+ 		return -EFAULT;
+ 
+ 	if (sin->sin_family != AF_INET)
+diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
+index c34b7834fd84a8..305870a72352d6 100644
+--- a/net/ipv6/tcp_ipv6.c
++++ b/net/ipv6/tcp_ipv6.c
+@@ -567,7 +567,7 @@ static struct tcp_md5sig_key *tcp_v6_md5_lookup(const struct sock *sk,
+ }
+ 
+ static int tcp_v6_parse_md5_keys(struct sock *sk, int optname,
+-				 char __user *optval, int optlen)
++				 sockptr_t optval, int optlen)
+ {
+ 	struct tcp_md5sig cmd;
+ 	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&cmd.tcpm_addr;
+@@ -577,7 +577,7 @@ static int tcp_v6_parse_md5_keys(struct sock *sk, int optname,
+ 	if (optlen < sizeof(cmd))
+ 		return -EINVAL;
+ 
+-	if (copy_from_user(&cmd, optval, sizeof(cmd)))
++	if (copy_from_sockptr(&cmd, optval, sizeof(cmd)))
+ 		return -EFAULT;
+ 
+ 	if (sin6->sin6_family != AF_INET6)
 -- 
 2.27.0
