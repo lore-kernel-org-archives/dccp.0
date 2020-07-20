@@ -1,7 +1,7 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Thu, 23 Jul 2020 06:08:48 +0000
-Subject: [PATCH 06/26] net: switch sock_setbindtodevice to sockptr_t
-Message-Id: <20200723060908.50081-7-hch@lst.de>
+Date: Mon, 20 Jul 2020 12:47:36 +0000
+Subject: [PATCH 23/24] net/tcp: switch do_tcp_setsockopt to sockptr_t
+Message-Id: <20200720124737.118617-24-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -13,40 +13,130 @@ pointer from bpf-cgroup.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- net/core/sock.c | 7 +++----
- 1 file changed, 3 insertions(+), 4 deletions(-)
+ net/ipv4/tcp.c | 34 ++++++++++++++++------------------
+ 1 file changed, 16 insertions(+), 18 deletions(-)
 
-diff --git a/net/core/sock.c b/net/core/sock.c
-index 71fc7e4ddd0648..5b55bc9397f282 100644
---- a/net/core/sock.c
-+++ b/net/core/sock.c
-@@ -609,8 +609,7 @@ int sock_bindtoindex(struct sock *sk, int ifindex, bool lock_sk)
+diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
+index 49bf15c27deac7..71cbc61c335f71 100644
+--- a/net/ipv4/tcp.c
++++ b/net/ipv4/tcp.c
+@@ -2764,7 +2764,7 @@ static inline bool tcp_can_repair_sock(const struct sock *sk)
+ 		(sk->sk_state != TCP_LISTEN);
  }
- EXPORT_SYMBOL(sock_bindtoindex);
  
--static int sock_setbindtodevice(struct sock *sk, char __user *optval,
--				int optlen)
-+static int sock_setbindtodevice(struct sock *sk, sockptr_t optval, int optlen)
+-static int tcp_repair_set_window(struct tcp_sock *tp, char __user *optbuf, int len)
++static int tcp_repair_set_window(struct tcp_sock *tp, sockptr_t optbuf, int len)
  {
- 	int ret = -ENOPROTOOPT;
- #ifdef CONFIG_NETDEVICES
-@@ -632,7 +631,7 @@ static int sock_setbindtodevice(struct sock *sk, char __user *optval,
- 	memset(devname, 0, sizeof(devname));
+ 	struct tcp_repair_window opt;
  
- 	ret = -EFAULT;
--	if (copy_from_user(devname, optval, optlen))
-+	if (copy_from_sockptr(devname, optval, optlen))
- 		goto out;
+@@ -2774,7 +2774,7 @@ static int tcp_repair_set_window(struct tcp_sock *tp, char __user *optbuf, int l
+ 	if (len != sizeof(opt))
+ 		return -EINVAL;
  
- 	index = 0;
-@@ -840,7 +839,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
- 	 */
+-	if (copy_from_user(&opt, optbuf, sizeof(opt)))
++	if (copy_from_sockptr(&opt, optbuf, sizeof(opt)))
+ 		return -EFAULT;
  
- 	if (optname = SO_BINDTODEVICE)
--		return sock_setbindtodevice(sk, optval, optlen);
-+		return sock_setbindtodevice(sk, USER_SOCKPTR(optval), optlen);
+ 	if (opt.max_window < opt.snd_wnd)
+@@ -2796,17 +2796,17 @@ static int tcp_repair_set_window(struct tcp_sock *tp, char __user *optbuf, int l
+ 	return 0;
+ }
  
+-static int tcp_repair_options_est(struct sock *sk,
+-		struct tcp_repair_opt __user *optbuf, unsigned int len)
++static int tcp_repair_options_est(struct sock *sk, sockptr_t optbuf,
++		unsigned int len)
+ {
+ 	struct tcp_sock *tp = tcp_sk(sk);
+ 	struct tcp_repair_opt opt;
+ 
+ 	while (len >= sizeof(opt)) {
+-		if (copy_from_user(&opt, optbuf, sizeof(opt)))
++		if (copy_from_sockptr(&opt, optbuf, sizeof(opt)))
+ 			return -EFAULT;
+ 
+-		optbuf++;
++		sockptr_advance(optbuf, sizeof(opt));
+ 		len -= sizeof(opt);
+ 
+ 		switch (opt.opt_code) {
+@@ -3020,8 +3020,8 @@ EXPORT_SYMBOL(tcp_sock_set_keepcnt);
+ /*
+  *	Socket option code for TCP.
+  */
+-static int do_tcp_setsockopt(struct sock *sk, int level,
+-		int optname, char __user *optval, unsigned int optlen)
++static int do_tcp_setsockopt(struct sock *sk, int level, int optname,
++		sockptr_t optval, unsigned int optlen)
+ {
+ 	struct tcp_sock *tp = tcp_sk(sk);
+ 	struct inet_connection_sock *icsk = inet_csk(sk);
+@@ -3037,7 +3037,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
+ 		if (optlen < 1)
+ 			return -EINVAL;
+ 
+-		val = strncpy_from_user(name, optval,
++		val = strncpy_from_sockptr(name, optval,
+ 					min_t(long, TCP_CA_NAME_MAX-1, optlen));
+ 		if (val < 0)
+ 			return -EFAULT;
+@@ -3056,7 +3056,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
+ 		if (optlen < 1)
+ 			return -EINVAL;
+ 
+-		val = strncpy_from_user(name, optval,
++		val = strncpy_from_sockptr(name, optval,
+ 					min_t(long, TCP_ULP_NAME_MAX - 1,
+ 					      optlen));
+ 		if (val < 0)
+@@ -3079,7 +3079,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
+ 		    optlen != TCP_FASTOPEN_KEY_BUF_LENGTH)
+ 			return -EINVAL;
+ 
+-		if (copy_from_user(key, optval, optlen))
++		if (copy_from_sockptr(key, optval, optlen))
+ 			return -EFAULT;
+ 
+ 		if (optlen = TCP_FASTOPEN_KEY_BUF_LENGTH)
+@@ -3095,7 +3095,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
  	if (optlen < sizeof(int))
  		return -EINVAL;
+ 
+-	if (get_user(val, (int __user *)optval))
++	if (copy_from_sockptr(&val, optval, sizeof(val)))
+ 		return -EFAULT;
+ 
+ 	lock_sock(sk);
+@@ -3174,9 +3174,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
+ 		if (!tp->repair)
+ 			err = -EINVAL;
+ 		else if (sk->sk_state = TCP_ESTABLISHED)
+-			err = tcp_repair_options_est(sk,
+-					(struct tcp_repair_opt __user *)optval,
+-					optlen);
++			err = tcp_repair_options_est(sk, optval, optlen);
+ 		else
+ 			err = -EPERM;
+ 		break;
+@@ -3249,8 +3247,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
+ #ifdef CONFIG_TCP_MD5SIG
+ 	case TCP_MD5SIG:
+ 	case TCP_MD5SIG_EXT:
+-		err = tp->af_specific->md5_parse(sk, optname,
+-						 USER_SOCKPTR(optval), optlen);
++		err = tp->af_specific->md5_parse(sk, optname, optval, optlen);
+ 		break;
+ #endif
+ 	case TCP_USER_TIMEOUT:
+@@ -3334,7 +3331,8 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char __user *optval,
+ 	if (level != SOL_TCP)
+ 		return icsk->icsk_af_ops->setsockopt(sk, level, optname,
+ 						     optval, optlen);
+-	return do_tcp_setsockopt(sk, level, optname, optval, optlen);
++	return do_tcp_setsockopt(sk, level, optname, USER_SOCKPTR(optval),
++				 optlen);
+ }
+ EXPORT_SYMBOL(tcp_setsockopt);
+ 
 -- 
 2.27.0
