@@ -1,133 +1,77 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Mon, 20 Jul 2020 12:47:27 +0000
-Subject: [PATCH 14/24] net/ipv4: merge ip_options_get and ip_options_get_from_user
-Message-Id: <20200720124737.118617-15-hch@lst.de>
+Date: Mon, 20 Jul 2020 12:47:19 +0000
+Subject: [PATCH 06/24] net: switch sock_set_timeout to sockptr_t
+Message-Id: <20200720124737.118617-7-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Use the sockptr_t type to merge the versions.
+Pass a sockptr_t to prepare for set_fs-less handling of the kernel
+pointer from bpf-cgroup.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- include/net/ip.h       |  5 ++---
- net/ipv4/ip_options.c  | 43 +++++++++++-------------------------------
- net/ipv4/ip_sockglue.c |  7 ++++---
- 3 files changed, 17 insertions(+), 38 deletions(-)
+ net/core/sock.c | 15 +++++++++------
+ 1 file changed, 9 insertions(+), 6 deletions(-)
 
-diff --git a/include/net/ip.h b/include/net/ip.h
-index 3d34acc95ca825..d66ad3a9522081 100644
---- a/include/net/ip.h
-+++ b/include/net/ip.h
-@@ -23,6 +23,7 @@
- #include <linux/in.h>
- #include <linux/skbuff.h>
- #include <linux/jhash.h>
-+#include <linux/sockptr.h>
+diff --git a/net/core/sock.c b/net/core/sock.c
+index bd20fc5cce0850..d45bb1c2c36abf 100644
+--- a/net/core/sock.c
++++ b/net/core/sock.c
+@@ -360,7 +360,8 @@ static int sock_get_timeout(long timeo, void *optval, bool old_timeval)
+ 	return sizeof(tv);
+ }
  
- #include <net/inet_sock.h>
- #include <net/route.h>
-@@ -707,9 +708,7 @@ int __ip_options_compile(struct net *net, struct ip_options *opt,
- int ip_options_compile(struct net *net, struct ip_options *opt,
- 		       struct sk_buff *skb);
- int ip_options_get(struct net *net, struct ip_options_rcu **optp,
--		   unsigned char *data, int optlen);
--int ip_options_get_from_user(struct net *net, struct ip_options_rcu **optp,
--			     unsigned char __user *data, int optlen);
-+		   sockptr_t data, int optlen);
- void ip_options_undo(struct ip_options *opt);
- void ip_forward_options(struct sk_buff *skb);
- int ip_options_rcv_srr(struct sk_buff *skb, struct net_device *dev);
-diff --git a/net/ipv4/ip_options.c b/net/ipv4/ip_options.c
-index ddaa01ec2bce82..948747aac4e2d0 100644
---- a/net/ipv4/ip_options.c
-+++ b/net/ipv4/ip_options.c
-@@ -519,15 +519,20 @@ void ip_options_undo(struct ip_options *opt)
+-static int sock_set_timeout(long *timeo_p, char __user *optval, int optlen, bool old_timeval)
++static int sock_set_timeout(long *timeo_p, sockptr_t optval, int optlen,
++			    bool old_timeval)
+ {
+ 	struct __kernel_sock_timeval tv;
+ 
+@@ -370,7 +371,7 @@ static int sock_set_timeout(long *timeo_p, char __user *optval, int optlen, bool
+ 		if (optlen < sizeof(tv32))
+ 			return -EINVAL;
+ 
+-		if (copy_from_user(&tv32, optval, sizeof(tv32)))
++		if (copy_from_sockptr(&tv32, optval, sizeof(tv32)))
+ 			return -EFAULT;
+ 		tv.tv_sec = tv32.tv_sec;
+ 		tv.tv_usec = tv32.tv_usec;
+@@ -379,14 +380,14 @@ static int sock_set_timeout(long *timeo_p, char __user *optval, int optlen, bool
+ 
+ 		if (optlen < sizeof(old_tv))
+ 			return -EINVAL;
+-		if (copy_from_user(&old_tv, optval, sizeof(old_tv)))
++		if (copy_from_sockptr(&old_tv, optval, sizeof(old_tv)))
+ 			return -EFAULT;
+ 		tv.tv_sec = old_tv.tv_sec;
+ 		tv.tv_usec = old_tv.tv_usec;
+ 	} else {
+ 		if (optlen < sizeof(tv))
+ 			return -EINVAL;
+-		if (copy_from_user(&tv, optval, sizeof(tv)))
++		if (copy_from_sockptr(&tv, optval, sizeof(tv)))
+ 			return -EFAULT;
  	}
- }
+ 	if (tv.tv_usec < 0 || tv.tv_usec >= USEC_PER_SEC)
+@@ -1050,12 +1051,14 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
  
--static struct ip_options_rcu *ip_options_get_alloc(const int optlen)
-+int ip_options_get(struct net *net, struct ip_options_rcu **optp,
-+		   sockptr_t data, int optlen)
- {
--	return kzalloc(sizeof(struct ip_options_rcu) + ((optlen + 3) & ~3),
-+	struct ip_options_rcu *opt;
-+
-+	opt = kzalloc(sizeof(struct ip_options_rcu) + ((optlen + 3) & ~3),
- 		       GFP_KERNEL);
--}
-+	if (!opt)
-+		return -ENOMEM;
-+	if (optlen && copy_from_sockptr(opt->opt.__data, data, optlen)) {
-+		kfree(opt);
-+		return -EFAULT;
-+	}
+ 	case SO_RCVTIMEO_OLD:
+ 	case SO_RCVTIMEO_NEW:
+-		ret = sock_set_timeout(&sk->sk_rcvtimeo, optval, optlen, optname = SO_RCVTIMEO_OLD);
++		ret = sock_set_timeout(&sk->sk_rcvtimeo, USER_SOCKPTR(optval),
++				       optlen, optname = SO_RCVTIMEO_OLD);
+ 		break;
  
--static int ip_options_get_finish(struct net *net, struct ip_options_rcu **optp,
--				 struct ip_options_rcu *opt, int optlen)
--{
- 	while (optlen & 3)
- 		opt->opt.__data[optlen++] = IPOPT_END;
- 	opt->opt.optlen = optlen;
-@@ -540,32 +545,6 @@ static int ip_options_get_finish(struct net *net, struct ip_options_rcu **optp,
- 	return 0;
- }
+ 	case SO_SNDTIMEO_OLD:
+ 	case SO_SNDTIMEO_NEW:
+-		ret = sock_set_timeout(&sk->sk_sndtimeo, optval, optlen, optname = SO_SNDTIMEO_OLD);
++		ret = sock_set_timeout(&sk->sk_sndtimeo, USER_SOCKPTR(optval),
++				       optlen, optname = SO_SNDTIMEO_OLD);
+ 		break;
  
--int ip_options_get_from_user(struct net *net, struct ip_options_rcu **optp,
--			     unsigned char __user *data, int optlen)
--{
--	struct ip_options_rcu *opt = ip_options_get_alloc(optlen);
--
--	if (!opt)
--		return -ENOMEM;
--	if (optlen && copy_from_user(opt->opt.__data, data, optlen)) {
--		kfree(opt);
--		return -EFAULT;
--	}
--	return ip_options_get_finish(net, optp, opt, optlen);
--}
--
--int ip_options_get(struct net *net, struct ip_options_rcu **optp,
--		   unsigned char *data, int optlen)
--{
--	struct ip_options_rcu *opt = ip_options_get_alloc(optlen);
--
--	if (!opt)
--		return -ENOMEM;
--	if (optlen)
--		memcpy(opt->opt.__data, data, optlen);
--	return ip_options_get_finish(net, optp, opt, optlen);
--}
--
- void ip_forward_options(struct sk_buff *skb)
- {
- 	struct   ip_options *opt	= &(IPCB(skb)->opt);
-diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
-index ac495b0cff8ffb..b12f39b52008a3 100644
---- a/net/ipv4/ip_sockglue.c
-+++ b/net/ipv4/ip_sockglue.c
-@@ -280,7 +280,8 @@ int ip_cmsg_send(struct sock *sk, struct msghdr *msg, struct ipcm_cookie *ipc,
- 			err = cmsg->cmsg_len - sizeof(struct cmsghdr);
- 
- 			/* Our caller is responsible for freeing ipc->opt */
--			err = ip_options_get(net, &ipc->opt, CMSG_DATA(cmsg),
-+			err = ip_options_get(net, &ipc->opt,
-+					     KERNEL_SOCKPTR(CMSG_DATA(cmsg)),
- 					     err < 40 ? err : 40);
- 			if (err)
- 				return err;
-@@ -940,8 +941,8 @@ static int do_ip_setsockopt(struct sock *sk, int level,
- 
- 		if (optlen > 40)
- 			goto e_inval;
--		err = ip_options_get_from_user(sock_net(sk), &opt,
--					       optval, optlen);
-+		err = ip_options_get(sock_net(sk), &opt, USER_SOCKPTR(optval),
-+					      optlen);
- 		if (err)
- 			break;
- 		old = rcu_dereference_protected(inet->inet_opt,
+ 	case SO_ATTACH_FILTER: {
 -- 
 2.27.0
