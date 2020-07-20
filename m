@@ -1,7 +1,7 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Thu, 23 Jul 2020 06:09:07 +0000
-Subject: [PATCH 25/26] net: pass a sockptr_t into ->setsockopt
-Message-Id: <20200723060908.50081-26-hch@lst.de>
+Date: Mon, 20 Jul 2020 12:47:37 +0000
+Subject: [PATCH 24/24] net: pass a sockptr_t into ->setsockopt
+Message-Id: <20200720124737.118617-25-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -13,7 +13,6 @@ plain user pointer.  This removes the last remaining set_fs(KERNEL_DS)
 outside of architecture specific code.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
-Acked-by: Stefan Schmidt <stefan@datenfreihafen.org> [ieee802154]
 ---
  crypto/af_alg.c                           |  7 ++--
  drivers/crypto/chelsio/chtls/chtls_main.c | 18 ++++++-----
@@ -55,7 +54,7 @@ Acked-by: Stefan Schmidt <stefan@datenfreihafen.org> [ieee802154]
  net/kcm/kcmsock.c                         |  6 ++--
  net/l2tp/l2tp_ppp.c                       |  4 +--
  net/llc/af_llc.c                          |  4 +--
- net/mptcp/protocol.c                      | 12 +++----
+ net/mptcp/protocol.c                      | 14 ++++----
  net/netlink/af_netlink.c                  |  4 +--
  net/netrom/af_netrom.c                    |  4 +--
  net/nfc/llcp_sock.c                       |  6 ++--
@@ -76,7 +75,7 @@ Acked-by: Stefan Schmidt <stefan@datenfreihafen.org> [ieee802154]
  net/vmw_vsock/af_vsock.c                  |  4 +--
  net/x25/af_x25.c                          |  4 +--
  net/xdp/xsk.c                             |  8 ++---
- 61 files changed, 246 insertions(+), 258 deletions(-)
+ 61 files changed, 248 insertions(+), 258 deletions(-)
 
 diff --git a/crypto/af_alg.c b/crypto/af_alg.c
 index 29f71428520b4b..892242a42c3ec9 100644
@@ -821,10 +820,10 @@ index 59c039d73c6d58..94a9405658dc61 100644
  
  		break;
 diff --git a/net/core/sock.c b/net/core/sock.c
-index 1444d7d53ba2fd..2c5dd139777541 100644
+index 9cf8318bc51de4..ff22629f10ce92 100644
 --- a/net/core/sock.c
 +++ b/net/core/sock.c
-@@ -3211,7 +3211,7 @@ EXPORT_SYMBOL(sock_common_recvmsg);
+@@ -3210,7 +3210,7 @@ EXPORT_SYMBOL(sock_common_recvmsg);
   *	Set socket options on an inet socket.
   */
  int sock_common_setsockopt(struct socket *sock, int level, int optname,
@@ -847,10 +846,10 @@ index 434eea91b7679d..9cc9d1ee6cdb9a 100644
  int dccp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size);
  int dccp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 9e453611107f16..2e9e8449698fb4 100644
+index fd92d3fe321f08..9e58787047f197 100644
 --- a/net/dccp/proto.c
 +++ b/net/dccp/proto.c
-@@ -411,7 +411,7 @@ int dccp_ioctl(struct sock *sk, int cmd, unsigned long arg)
+@@ -402,7 +402,7 @@ int dccp_ioctl(struct sock *sk, int cmd, unsigned long arg)
  EXPORT_SYMBOL_GPL(dccp_ioctl);
  
  static int dccp_setsockopt_service(struct sock *sk, const __be32 service,
@@ -859,7 +858,7 @@ index 9e453611107f16..2e9e8449698fb4 100644
  {
  	struct dccp_sock *dp = dccp_sk(sk);
  	struct dccp_service_list *sl = NULL;
-@@ -426,9 +426,9 @@ static int dccp_setsockopt_service(struct sock *sk, const __be32 service,
+@@ -417,9 +417,9 @@ static int dccp_setsockopt_service(struct sock *sk, const __be32 service,
  			return -ENOMEM;
  
  		sl->dccpsl_nr = optlen / sizeof(u32) - 1;
@@ -872,7 +871,7 @@ index 9e453611107f16..2e9e8449698fb4 100644
  		    dccp_list_has_service(sl, DCCP_SERVICE_INVALID_VALUE)) {
  			kfree(sl);
  			return -EFAULT;
-@@ -482,7 +482,7 @@ static int dccp_setsockopt_cscov(struct sock *sk, int cscov, bool rx)
+@@ -473,7 +473,7 @@ static int dccp_setsockopt_cscov(struct sock *sk, int cscov, bool rx)
  }
  
  static int dccp_setsockopt_ccid(struct sock *sk, int type,
@@ -881,7 +880,7 @@ index 9e453611107f16..2e9e8449698fb4 100644
  {
  	u8 *val;
  	int rc = 0;
-@@ -490,7 +490,7 @@ static int dccp_setsockopt_ccid(struct sock *sk, int type,
+@@ -481,7 +481,7 @@ static int dccp_setsockopt_ccid(struct sock *sk, int type,
  	if (optlen < 1 || optlen > DCCP_FEAT_MAX_SP_VALS)
  		return -EINVAL;
  
@@ -890,7 +889,7 @@ index 9e453611107f16..2e9e8449698fb4 100644
  	if (IS_ERR(val))
  		return PTR_ERR(val);
  
-@@ -507,7 +507,7 @@ static int dccp_setsockopt_ccid(struct sock *sk, int type,
+@@ -498,7 +498,7 @@ static int dccp_setsockopt_ccid(struct sock *sk, int type,
  }
  
  static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
@@ -899,7 +898,7 @@ index 9e453611107f16..2e9e8449698fb4 100644
  {
  	struct dccp_sock *dp = dccp_sk(sk);
  	int val, err = 0;
-@@ -529,7 +529,7 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
+@@ -520,7 +520,7 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
  	if (optlen < (int)sizeof(int))
  		return -EINVAL;
  
@@ -908,7 +907,7 @@ index 9e453611107f16..2e9e8449698fb4 100644
  		return -EFAULT;
  
  	if (optname = DCCP_SOCKOPT_SERVICE)
-@@ -572,8 +572,8 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
+@@ -563,8 +563,8 @@ static int do_dccp_setsockopt(struct sock *sk, int level, int optname,
  	return err;
  }
  
@@ -1108,10 +1107,10 @@ index 71cbc61c335f71..27de9380ed140e 100644
  EXPORT_SYMBOL(tcp_setsockopt);
  
 diff --git a/net/ipv4/udp.c b/net/ipv4/udp.c
-index c6cb2d09dbc75e..5a6a2f6d86b99d 100644
+index 641303aa17d3dd..00b794a1035ce1 100644
 --- a/net/ipv4/udp.c
 +++ b/net/ipv4/udp.c
-@@ -2703,12 +2703,12 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
+@@ -2647,12 +2647,12 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
  }
  EXPORT_SYMBOL(udp_lib_setsockopt);
  
@@ -1219,10 +1218,10 @@ index 594e01ad670aa6..874f01cd7aec42 100644
  	switch (level) {
  	case SOL_RAW:
 diff --git a/net/ipv6/udp.c b/net/ipv6/udp.c
-index 2df1e6c9d7cbf6..15818e18655d71 100644
+index 05353b31fa07bc..85238620541c3e 100644
 --- a/net/ipv6/udp.c
 +++ b/net/ipv6/udp.c
-@@ -1618,12 +1618,12 @@ void udpv6_destroy_sock(struct sock *sk)
+@@ -1561,12 +1561,12 @@ void udpv6_destroy_sock(struct sock *sk)
  /*
   *	Socket option code for UDP
   */
@@ -1300,10 +1299,10 @@ index 56fac24a627a54..56dad9565bc93b 100644
  	valbool = val ? 1 : 0;
  
 diff --git a/net/l2tp/l2tp_ppp.c b/net/l2tp/l2tp_ppp.c
-index f894dc27539399..f91ed2efa86909 100644
+index c54cb59593ef81..c8842b2317409a 100644
 --- a/net/l2tp/l2tp_ppp.c
 +++ b/net/l2tp/l2tp_ppp.c
-@@ -1245,7 +1245,7 @@ static int pppol2tp_session_setsockopt(struct sock *sk,
+@@ -1244,7 +1244,7 @@ static int pppol2tp_session_setsockopt(struct sock *sk,
   * session or the special tunnel type.
   */
  static int pppol2tp_setsockopt(struct socket *sock, int level, int optname,
@@ -1312,7 +1311,7 @@ index f894dc27539399..f91ed2efa86909 100644
  {
  	struct sock *sk = sock->sk;
  	struct l2tp_session *session;
-@@ -1259,7 +1259,7 @@ static int pppol2tp_setsockopt(struct socket *sock, int level, int optname,
+@@ -1258,7 +1258,7 @@ static int pppol2tp_setsockopt(struct socket *sock, int level, int optname,
  	if (optlen < sizeof(int))
  		return -EINVAL;
  
@@ -1344,7 +1343,7 @@ index 6140a3e46c26f1..7180979114e494 100644
  		goto out;
  	rc = -EINVAL;
 diff --git a/net/mptcp/protocol.c b/net/mptcp/protocol.c
-index 27b6f250b87dfd..a16b08343d4f58 100644
+index 27b6f250b87dfd..30a8e697b9db9c 100644
 --- a/net/mptcp/protocol.c
 +++ b/net/mptcp/protocol.c
 @@ -1627,7 +1627,7 @@ static void mptcp_destroy(struct sock *sk)
@@ -1356,23 +1355,25 @@ index 27b6f250b87dfd..a16b08343d4f58 100644
  {
  	struct sock *sk = (struct sock *)msk;
  	struct socket *ssock;
-@@ -1643,8 +1643,7 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
+@@ -1643,8 +1643,8 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
  			return -EINVAL;
  		}
  
 -		ret = sock_setsockopt(ssock, SOL_SOCKET, optname,
 -				      USER_SOCKPTR(optval), optlen);
-+		ret = sock_setsockopt(ssock, SOL_SOCKET, optname, optval, optlen);
++		ret = sock_setsockopt(ssock, SOL_SOCKET, optname, optval,
++				      optlen);
  		if (ret = 0) {
  			if (optname = SO_REUSEPORT)
  				sk->sk_reuseport = ssock->sk->sk_reuseport;
-@@ -1655,12 +1654,11 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
+@@ -1655,12 +1655,12 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
  		return ret;
  	}
  
 -	return sock_setsockopt(sk->sk_socket, SOL_SOCKET, optname,
 -			       USER_SOCKPTR(optval), optlen);
-+	return sock_setsockopt(sk->sk_socket, SOL_SOCKET, optname, optval, optlen);
++	return sock_setsockopt(sk->sk_socket, SOL_SOCKET, optname, optval,
++			       optlen);
  }
  
  static int mptcp_setsockopt_v6(struct mptcp_sock *msk, int optname,
@@ -1381,7 +1382,7 @@ index 27b6f250b87dfd..a16b08343d4f58 100644
  {
  	struct sock *sk = (struct sock *)msk;
  	int ret = -EOPNOTSUPP;
-@@ -1687,7 +1685,7 @@ static int mptcp_setsockopt_v6(struct mptcp_sock *msk, int optname,
+@@ -1687,7 +1687,7 @@ static int mptcp_setsockopt_v6(struct mptcp_sock *msk, int optname,
  }
  
  static int mptcp_setsockopt(struct sock *sk, int level, int optname,
@@ -1391,10 +1392,10 @@ index 27b6f250b87dfd..a16b08343d4f58 100644
  	struct mptcp_sock *msk = mptcp_sk(sk);
  	struct sock *ssk;
 diff --git a/net/netlink/af_netlink.c b/net/netlink/af_netlink.c
-index 3cd58f0c2de436..d8921b8337445b 100644
+index 4f2c3b14ddbfa3..1d9750068cd65b 100644
 --- a/net/netlink/af_netlink.c
 +++ b/net/netlink/af_netlink.c
-@@ -1621,7 +1621,7 @@ static void netlink_update_socket_mc(struct netlink_sock *nlk,
+@@ -1620,7 +1620,7 @@ static void netlink_update_socket_mc(struct netlink_sock *nlk,
  }
  
  static int netlink_setsockopt(struct socket *sock, int level, int optname,
@@ -1403,7 +1404,7 @@ index 3cd58f0c2de436..d8921b8337445b 100644
  {
  	struct sock *sk = sock->sk;
  	struct netlink_sock *nlk = nlk_sk(sk);
-@@ -1632,7 +1632,7 @@ static int netlink_setsockopt(struct socket *sock, int level, int optname,
+@@ -1631,7 +1631,7 @@ static int netlink_setsockopt(struct socket *sock, int level, int optname,
  		return -ENOPROTOOPT;
  
  	if (optlen >= sizeof(int) &&
