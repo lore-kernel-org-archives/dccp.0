@@ -1,188 +1,205 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Mon, 20 Jul 2020 12:47:32 +0000
-Subject: [PATCH 19/24] net/ipv6: factor out a ipv6_set_opt_hdr helper
-Message-Id: <20200720124737.118617-20-hch@lst.de>
+Date: Mon, 20 Jul 2020 12:47:23 +0000
+Subject: [PATCH 10/24] netfilter: switch xt_copy_counters to sockptr_t
+Message-Id: <20200720124737.118617-11-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Factour out a helper to set the IPv6 option headers from
-do_ipv6_setsockopt.
+Pass a sockptr_t to prepare for set_fs-less handling of the kernel
+pointer from bpf-cgroup.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- net/ipv6/ipv6_sockglue.c | 150 +++++++++++++++++++--------------------
- 1 file changed, 75 insertions(+), 75 deletions(-)
+ include/linux/netfilter/x_tables.h |  4 ++--
+ net/ipv4/netfilter/arp_tables.c    |  7 +++----
+ net/ipv4/netfilter/ip_tables.c     |  7 +++----
+ net/ipv6/netfilter/ip6_tables.c    |  6 +++---
+ net/netfilter/x_tables.c           | 20 ++++++++++----------
+ 5 files changed, 21 insertions(+), 23 deletions(-)
 
-diff --git a/net/ipv6/ipv6_sockglue.c b/net/ipv6/ipv6_sockglue.c
-index 3897fb55372d38..90442c8366dff2 100644
---- a/net/ipv6/ipv6_sockglue.c
-+++ b/net/ipv6/ipv6_sockglue.c
-@@ -315,6 +315,80 @@ static int compat_ipv6_mcast_join_leave(struct sock *sk, int optname,
- 	return ipv6_sock_mc_drop(sk, gr32.gr_interface, &psin6->sin6_addr);
+diff --git a/include/linux/netfilter/x_tables.h b/include/linux/netfilter/x_tables.h
+index b8b943ee7b8b66..5deb099d156dcb 100644
+--- a/include/linux/netfilter/x_tables.h
++++ b/include/linux/netfilter/x_tables.h
+@@ -301,8 +301,8 @@ int xt_target_to_user(const struct xt_entry_target *t,
+ int xt_data_to_user(void __user *dst, const void *src,
+ 		    int usersize, int size, int aligned_size);
+ 
+-void *xt_copy_counters_from_user(const void __user *user, unsigned int len,
+-				 struct xt_counters_info *info);
++void *xt_copy_counters(sockptr_t arg, unsigned int len,
++		       struct xt_counters_info *info);
+ struct xt_counters *xt_counters_alloc(unsigned int counters);
+ 
+ struct xt_table *xt_register_table(struct net *net,
+diff --git a/net/ipv4/netfilter/arp_tables.c b/net/ipv4/netfilter/arp_tables.c
+index 2c8a4dad39d748..6d24b686c7f00a 100644
+--- a/net/ipv4/netfilter/arp_tables.c
++++ b/net/ipv4/netfilter/arp_tables.c
+@@ -996,8 +996,7 @@ static int do_replace(struct net *net, const void __user *user,
+ 	return ret;
  }
  
-+static int ipv6_set_opt_hdr(struct sock *sk, int optname, void __user *optval,
-+		int optlen)
-+{
-+	struct ipv6_pinfo *np = inet6_sk(sk);
-+	struct ipv6_opt_hdr *new = NULL;
-+	struct net *net = sock_net(sk);
-+	struct ipv6_txoptions *opt;
-+	int err;
-+
-+	/* hop-by-hop / destination options are privileged option */
-+	if (optname != IPV6_RTHDR && !ns_capable(net->user_ns, CAP_NET_RAW))
-+		return -EPERM;
-+
-+	/* remove any sticky options header with a zero option
-+	 * length, per RFC3542.
-+	 */
-+	if (optlen > 0) {
-+		if (!optval)
-+			return -EINVAL;
-+		if (optlen < sizeof(struct ipv6_opt_hdr) ||
-+		    optlen & 0x7 ||
-+		    optlen > 8 * 255)
-+			return -EINVAL;
-+
-+		new = memdup_user(optval, optlen);
-+		if (IS_ERR(new))
-+			return PTR_ERR(new);
-+		if (unlikely(ipv6_optlen(new) > optlen)) {
-+			kfree(new);
-+			return -EINVAL;
-+		}
-+	}
-+
-+	opt = rcu_dereference_protected(np->opt, lockdep_sock_is_held(sk));
-+	opt = ipv6_renew_options(sk, opt, optname, new);
-+	kfree(new);
-+	if (IS_ERR(opt))
-+		return PTR_ERR(opt);
-+
-+	/* routing header option needs extra check */
-+	err = -EINVAL;
-+	if (optname = IPV6_RTHDR && opt && opt->srcrt) {
-+		struct ipv6_rt_hdr *rthdr = opt->srcrt;
-+		switch (rthdr->type) {
-+#if IS_ENABLED(CONFIG_IPV6_MIP6)
-+		case IPV6_SRCRT_TYPE_2:
-+			if (rthdr->hdrlen != 2 || rthdr->segments_left != 1)
-+				goto sticky_done;
-+			break;
-+#endif
-+		case IPV6_SRCRT_TYPE_4:
-+		{
-+			struct ipv6_sr_hdr *srh +				(struct ipv6_sr_hdr *)opt->srcrt;
-+
-+			if (!seg6_validate_srh(srh, optlen, false))
-+				goto sticky_done;
-+			break;
-+		}
-+		default:
-+			goto sticky_done;
-+		}
-+	}
-+
-+	err = 0;
-+	opt = ipv6_update_options(sk, opt);
-+sticky_done:
-+	if (opt) {
-+		atomic_sub(opt->tot_len, &sk->sk_omem_alloc);
-+		txopt_put(opt);
-+	}
-+	return err;
-+}
-+
- static int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
- 		    char __user *optval, unsigned int optlen)
+-static int do_add_counters(struct net *net, const void __user *user,
+-			   unsigned int len)
++static int do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
  {
-@@ -580,82 +654,8 @@ static int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
- 	case IPV6_RTHDRDSTOPTS:
- 	case IPV6_RTHDR:
- 	case IPV6_DSTOPTS:
--	{
--		struct ipv6_txoptions *opt;
--		struct ipv6_opt_hdr *new = NULL;
--
--		/* hop-by-hop / destination options are privileged option */
--		retv = -EPERM;
--		if (optname != IPV6_RTHDR && !ns_capable(net->user_ns, CAP_NET_RAW))
--			break;
--
--		/* remove any sticky options header with a zero option
--		 * length, per RFC3542.
--		 */
--		if (optlen = 0)
--			optval = NULL;
--		else if (!optval)
--			goto e_inval;
--		else if (optlen < sizeof(struct ipv6_opt_hdr) ||
--			 optlen & 0x7 || optlen > 8 * 255)
--			goto e_inval;
--		else {
--			new = memdup_user(optval, optlen);
--			if (IS_ERR(new)) {
--				retv = PTR_ERR(new);
--				break;
--			}
--			if (unlikely(ipv6_optlen(new) > optlen)) {
--				kfree(new);
--				goto e_inval;
--			}
--		}
--
--		opt = rcu_dereference_protected(np->opt,
--						lockdep_sock_is_held(sk));
--		opt = ipv6_renew_options(sk, opt, optname, new);
--		kfree(new);
--		if (IS_ERR(opt)) {
--			retv = PTR_ERR(opt);
--			break;
--		}
--
--		/* routing header option needs extra check */
--		retv = -EINVAL;
--		if (optname = IPV6_RTHDR && opt && opt->srcrt) {
--			struct ipv6_rt_hdr *rthdr = opt->srcrt;
--			switch (rthdr->type) {
--#if IS_ENABLED(CONFIG_IPV6_MIP6)
--			case IPV6_SRCRT_TYPE_2:
--				if (rthdr->hdrlen != 2 ||
--				    rthdr->segments_left != 1)
--					goto sticky_done;
--
--				break;
--#endif
--			case IPV6_SRCRT_TYPE_4:
--			{
--				struct ipv6_sr_hdr *srh = (struct ipv6_sr_hdr *)
--							  opt->srcrt;
--
--				if (!seg6_validate_srh(srh, optlen, false))
--					goto sticky_done;
--				break;
--			}
--			default:
--				goto sticky_done;
--			}
--		}
--
--		retv = 0;
--		opt = ipv6_update_options(sk, opt);
--sticky_done:
--		if (opt) {
--			atomic_sub(opt->tot_len, &sk->sk_omem_alloc);
--			txopt_put(opt);
--		}
-+		retv = ipv6_set_opt_hdr(sk, optname, optval, optlen);
- 		break;
--	}
+ 	unsigned int i;
+ 	struct xt_counters_info tmp;
+@@ -1008,7 +1007,7 @@ static int do_add_counters(struct net *net, const void __user *user,
+ 	struct arpt_entry *iter;
+ 	unsigned int addend;
  
- 	case IPV6_PKTINFO:
+-	paddc = xt_copy_counters_from_user(user, len, &tmp);
++	paddc = xt_copy_counters(arg, len, &tmp);
+ 	if (IS_ERR(paddc))
+ 		return PTR_ERR(paddc);
+ 
+@@ -1420,7 +1419,7 @@ static int do_arpt_set_ctl(struct sock *sk, int cmd, void __user *user, unsigned
+ 		break;
+ 
+ 	case ARPT_SO_SET_ADD_COUNTERS:
+-		ret = do_add_counters(sock_net(sk), user, len);
++		ret = do_add_counters(sock_net(sk), USER_SOCKPTR(user), len);
+ 		break;
+ 
+ 	default:
+diff --git a/net/ipv4/netfilter/ip_tables.c b/net/ipv4/netfilter/ip_tables.c
+index 161901dd1cae7f..4697d09c98dc3e 100644
+--- a/net/ipv4/netfilter/ip_tables.c
++++ b/net/ipv4/netfilter/ip_tables.c
+@@ -1151,8 +1151,7 @@ do_replace(struct net *net, const void __user *user, unsigned int len)
+ }
+ 
+ static int
+-do_add_counters(struct net *net, const void __user *user,
+-		unsigned int len)
++do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
+ {
+ 	unsigned int i;
+ 	struct xt_counters_info tmp;
+@@ -1163,7 +1162,7 @@ do_add_counters(struct net *net, const void __user *user,
+ 	struct ipt_entry *iter;
+ 	unsigned int addend;
+ 
+-	paddc = xt_copy_counters_from_user(user, len, &tmp);
++	paddc = xt_copy_counters(arg, len, &tmp);
+ 	if (IS_ERR(paddc))
+ 		return PTR_ERR(paddc);
+ 
+@@ -1629,7 +1628,7 @@ do_ipt_set_ctl(struct sock *sk, int cmd, void __user *user, unsigned int len)
+ 		break;
+ 
+ 	case IPT_SO_SET_ADD_COUNTERS:
+-		ret = do_add_counters(sock_net(sk), user, len);
++		ret = do_add_counters(sock_net(sk), USER_SOCKPTR(user), len);
+ 		break;
+ 
+ 	default:
+diff --git a/net/ipv6/netfilter/ip6_tables.c b/net/ipv6/netfilter/ip6_tables.c
+index fd1f8f93123188..a787aba30e2db7 100644
+--- a/net/ipv6/netfilter/ip6_tables.c
++++ b/net/ipv6/netfilter/ip6_tables.c
+@@ -1168,7 +1168,7 @@ do_replace(struct net *net, const void __user *user, unsigned int len)
+ }
+ 
+ static int
+-do_add_counters(struct net *net, const void __user *user, unsigned int len)
++do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
+ {
+ 	unsigned int i;
+ 	struct xt_counters_info tmp;
+@@ -1179,7 +1179,7 @@ do_add_counters(struct net *net, const void __user *user, unsigned int len)
+ 	struct ip6t_entry *iter;
+ 	unsigned int addend;
+ 
+-	paddc = xt_copy_counters_from_user(user, len, &tmp);
++	paddc = xt_copy_counters(arg, len, &tmp);
+ 	if (IS_ERR(paddc))
+ 		return PTR_ERR(paddc);
+ 	t = xt_find_table_lock(net, AF_INET6, tmp.name);
+@@ -1637,7 +1637,7 @@ do_ip6t_set_ctl(struct sock *sk, int cmd, void __user *user, unsigned int len)
+ 		break;
+ 
+ 	case IP6T_SO_SET_ADD_COUNTERS:
+-		ret = do_add_counters(sock_net(sk), user, len);
++		ret = do_add_counters(sock_net(sk), USER_SOCKPTR(user), len);
+ 		break;
+ 
+ 	default:
+diff --git a/net/netfilter/x_tables.c b/net/netfilter/x_tables.c
+index 32bab45af7e415..b97eb4b538fd4e 100644
+--- a/net/netfilter/x_tables.c
++++ b/net/netfilter/x_tables.c
+@@ -1028,9 +1028,9 @@ int xt_check_target(struct xt_tgchk_param *par,
+ EXPORT_SYMBOL_GPL(xt_check_target);
+ 
+ /**
+- * xt_copy_counters_from_user - copy counters and metadata from userspace
++ * xt_copy_counters - copy counters and metadata from a sockptr_t
+  *
+- * @user: src pointer to userspace memory
++ * @arg: src sockptr
+  * @len: alleged size of userspace memory
+  * @info: where to store the xt_counters_info metadata
+  *
+@@ -1047,8 +1047,8 @@ EXPORT_SYMBOL_GPL(xt_check_target);
+  * Return: returns pointer that caller has to test via IS_ERR().
+  * If IS_ERR is false, caller has to vfree the pointer.
+  */
+-void *xt_copy_counters_from_user(const void __user *user, unsigned int len,
+-				 struct xt_counters_info *info)
++void *xt_copy_counters(sockptr_t arg, unsigned int len,
++		       struct xt_counters_info *info)
+ {
+ 	void *mem;
+ 	u64 size;
+@@ -1062,12 +1062,12 @@ void *xt_copy_counters_from_user(const void __user *user, unsigned int len,
+ 			return ERR_PTR(-EINVAL);
+ 
+ 		len -= sizeof(compat_tmp);
+-		if (copy_from_user(&compat_tmp, user, sizeof(compat_tmp)) != 0)
++		if (copy_from_sockptr(&compat_tmp, arg, sizeof(compat_tmp)) != 0)
+ 			return ERR_PTR(-EFAULT);
+ 
+ 		memcpy(info->name, compat_tmp.name, sizeof(info->name) - 1);
+ 		info->num_counters = compat_tmp.num_counters;
+-		user += sizeof(compat_tmp);
++		sockptr_advance(arg, sizeof(compat_tmp));
+ 	} else
+ #endif
  	{
+@@ -1075,10 +1075,10 @@ void *xt_copy_counters_from_user(const void __user *user, unsigned int len,
+ 			return ERR_PTR(-EINVAL);
+ 
+ 		len -= sizeof(*info);
+-		if (copy_from_user(info, user, sizeof(*info)) != 0)
++		if (copy_from_sockptr(info, arg, sizeof(*info)) != 0)
+ 			return ERR_PTR(-EFAULT);
+ 
+-		user += sizeof(*info);
++		sockptr_advance(arg, sizeof(*info));
+ 	}
+ 	info->name[sizeof(info->name) - 1] = '\0';
+ 
+@@ -1092,13 +1092,13 @@ void *xt_copy_counters_from_user(const void __user *user, unsigned int len,
+ 	if (!mem)
+ 		return ERR_PTR(-ENOMEM);
+ 
+-	if (copy_from_user(mem, user, len) = 0)
++	if (copy_from_sockptr(mem, arg, len) = 0)
+ 		return mem;
+ 
+ 	vfree(mem);
+ 	return ERR_PTR(-EFAULT);
+ }
+-EXPORT_SYMBOL_GPL(xt_copy_counters_from_user);
++EXPORT_SYMBOL_GPL(xt_copy_counters);
+ 
+ #ifdef CONFIG_COMPAT
+ int xt_compat_target_offset(const struct xt_target *target)
 -- 
 2.27.0
