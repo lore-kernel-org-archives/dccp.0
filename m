@@ -1,7 +1,7 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Mon, 20 Jul 2020 12:47:35 +0000
-Subject: [PATCH 22/24] net/tcp: switch ->md5_parse to sockptr_t
-Message-Id: <20200720124737.118617-23-hch@lst.de>
+Date: Mon, 20 Jul 2020 12:47:18 +0000
+Subject: [PATCH 05/24] net: switch sock_setbindtodevice to sockptr_t
+Message-Id: <20200720124737.118617-6-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -13,82 +13,40 @@ pointer from bpf-cgroup.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- include/net/tcp.h   | 2 +-
- net/ipv4/tcp.c      | 3 ++-
- net/ipv4/tcp_ipv4.c | 4 ++--
- net/ipv6/tcp_ipv6.c | 4 ++--
- 4 files changed, 7 insertions(+), 6 deletions(-)
+ net/core/sock.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
 
-diff --git a/include/net/tcp.h b/include/net/tcp.h
-index 9f7f7c0c110451..e3c8e1d820214c 100644
---- a/include/net/tcp.h
-+++ b/include/net/tcp.h
-@@ -2002,7 +2002,7 @@ struct tcp_sock_af_ops {
- 					 const struct sk_buff *skb);
- 	int		(*md5_parse)(struct sock *sk,
- 				     int optname,
--				     char __user *optval,
-+				     sockptr_t optval,
- 				     int optlen);
- #endif
- };
-diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
-index 58ede3d62b2e2c..49bf15c27deac7 100644
---- a/net/ipv4/tcp.c
-+++ b/net/ipv4/tcp.c
-@@ -3249,7 +3249,8 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
- #ifdef CONFIG_TCP_MD5SIG
- 	case TCP_MD5SIG:
- 	case TCP_MD5SIG_EXT:
--		err = tp->af_specific->md5_parse(sk, optname, optval, optlen);
-+		err = tp->af_specific->md5_parse(sk, optname,
-+						 USER_SOCKPTR(optval), optlen);
- 		break;
- #endif
- 	case TCP_USER_TIMEOUT:
-diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
-index cd81b6e04efbfa..a03e70b3af2e6c 100644
---- a/net/ipv4/tcp_ipv4.c
-+++ b/net/ipv4/tcp_ipv4.c
-@@ -1194,7 +1194,7 @@ static void tcp_clear_md5_list(struct sock *sk)
+diff --git a/net/core/sock.c b/net/core/sock.c
+index 91224709869389..bd20fc5cce0850 100644
+--- a/net/core/sock.c
++++ b/net/core/sock.c
+@@ -608,8 +608,7 @@ int sock_bindtoindex(struct sock *sk, int ifindex, bool lock_sk)
  }
+ EXPORT_SYMBOL(sock_bindtoindex);
  
- static int tcp_v4_parse_md5_keys(struct sock *sk, int optname,
--				 char __user *optval, int optlen)
-+				 sockptr_t optval, int optlen)
+-static int sock_setbindtodevice(struct sock *sk, char __user *optval,
+-				int optlen)
++static int sock_setbindtodevice(struct sock *sk, sockptr_t optval, int optlen)
  {
- 	struct tcp_md5sig cmd;
- 	struct sockaddr_in *sin = (struct sockaddr_in *)&cmd.tcpm_addr;
-@@ -1205,7 +1205,7 @@ static int tcp_v4_parse_md5_keys(struct sock *sk, int optname,
- 	if (optlen < sizeof(cmd))
+ 	int ret = -ENOPROTOOPT;
+ #ifdef CONFIG_NETDEVICES
+@@ -631,7 +630,7 @@ static int sock_setbindtodevice(struct sock *sk, char __user *optval,
+ 	memset(devname, 0, sizeof(devname));
+ 
+ 	ret = -EFAULT;
+-	if (copy_from_user(devname, optval, optlen))
++	if (copy_from_sockptr(devname, optval, optlen))
+ 		goto out;
+ 
+ 	index = 0;
+@@ -839,7 +838,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
+ 	 */
+ 
+ 	if (optname = SO_BINDTODEVICE)
+-		return sock_setbindtodevice(sk, optval, optlen);
++		return sock_setbindtodevice(sk, USER_SOCKPTR(optval), optlen);
+ 
+ 	if (optlen < sizeof(int))
  		return -EINVAL;
- 
--	if (copy_from_user(&cmd, optval, sizeof(cmd)))
-+	if (copy_from_sockptr(&cmd, optval, sizeof(cmd)))
- 		return -EFAULT;
- 
- 	if (sin->sin_family != AF_INET)
-diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
-index c34b7834fd84a8..305870a72352d6 100644
---- a/net/ipv6/tcp_ipv6.c
-+++ b/net/ipv6/tcp_ipv6.c
-@@ -567,7 +567,7 @@ static struct tcp_md5sig_key *tcp_v6_md5_lookup(const struct sock *sk,
- }
- 
- static int tcp_v6_parse_md5_keys(struct sock *sk, int optname,
--				 char __user *optval, int optlen)
-+				 sockptr_t optval, int optlen)
- {
- 	struct tcp_md5sig cmd;
- 	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&cmd.tcpm_addr;
-@@ -577,7 +577,7 @@ static int tcp_v6_parse_md5_keys(struct sock *sk, int optname,
- 	if (optlen < sizeof(cmd))
- 		return -EINVAL;
- 
--	if (copy_from_user(&cmd, optval, sizeof(cmd)))
-+	if (copy_from_sockptr(&cmd, optval, sizeof(cmd)))
- 		return -EFAULT;
- 
- 	if (sin6->sin6_family != AF_INET6)
 -- 
 2.27.0
