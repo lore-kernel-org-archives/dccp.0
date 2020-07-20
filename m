@@ -1,7 +1,7 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Mon, 20 Jul 2020 12:47:23 +0000
-Subject: [PATCH 10/24] netfilter: switch xt_copy_counters to sockptr_t
-Message-Id: <20200720124737.118617-11-hch@lst.de>
+Date: Mon, 20 Jul 2020 12:47:28 +0000
+Subject: [PATCH 15/24] net/ipv4: switch do_ip_setsockopt to sockptr_t
+Message-Id: <20200720124737.118617-16-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -13,193 +13,252 @@ pointer from bpf-cgroup.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- include/linux/netfilter/x_tables.h |  4 ++--
- net/ipv4/netfilter/arp_tables.c    |  7 +++----
- net/ipv4/netfilter/ip_tables.c     |  7 +++----
- net/ipv6/netfilter/ip6_tables.c    |  6 +++---
- net/netfilter/x_tables.c           | 20 ++++++++++----------
- 5 files changed, 21 insertions(+), 23 deletions(-)
+ net/ipv4/ip_sockglue.c | 68 ++++++++++++++++++++----------------------
+ 1 file changed, 33 insertions(+), 35 deletions(-)
 
-diff --git a/include/linux/netfilter/x_tables.h b/include/linux/netfilter/x_tables.h
-index b8b943ee7b8b66..5deb099d156dcb 100644
---- a/include/linux/netfilter/x_tables.h
-+++ b/include/linux/netfilter/x_tables.h
-@@ -301,8 +301,8 @@ int xt_target_to_user(const struct xt_entry_target *t,
- int xt_data_to_user(void __user *dst, const void *src,
- 		    int usersize, int size, int aligned_size);
- 
--void *xt_copy_counters_from_user(const void __user *user, unsigned int len,
--				 struct xt_counters_info *info);
-+void *xt_copy_counters(sockptr_t arg, unsigned int len,
-+		       struct xt_counters_info *info);
- struct xt_counters *xt_counters_alloc(unsigned int counters);
- 
- struct xt_table *xt_register_table(struct net *net,
-diff --git a/net/ipv4/netfilter/arp_tables.c b/net/ipv4/netfilter/arp_tables.c
-index 2c8a4dad39d748..6d24b686c7f00a 100644
---- a/net/ipv4/netfilter/arp_tables.c
-+++ b/net/ipv4/netfilter/arp_tables.c
-@@ -996,8 +996,7 @@ static int do_replace(struct net *net, const void __user *user,
- 	return ret;
+diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
+index b12f39b52008a3..f7f1507b89fe24 100644
+--- a/net/ipv4/ip_sockglue.c
++++ b/net/ipv4/ip_sockglue.c
+@@ -683,15 +683,15 @@ static int set_mcast_msfilter(struct sock *sk, int ifindex,
+ 	return -EADDRNOTAVAIL;
  }
  
--static int do_add_counters(struct net *net, const void __user *user,
--			   unsigned int len)
-+static int do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
+-static int copy_group_source_from_user(struct group_source_req *greqs,
+-		void __user *optval, int optlen)
++static int copy_group_source_from_sockptr(struct group_source_req *greqs,
++		sockptr_t optval, int optlen)
  {
- 	unsigned int i;
- 	struct xt_counters_info tmp;
-@@ -1008,7 +1007,7 @@ static int do_add_counters(struct net *net, const void __user *user,
- 	struct arpt_entry *iter;
- 	unsigned int addend;
+ 	if (in_compat_syscall()) {
+ 		struct compat_group_source_req gr32;
  
--	paddc = xt_copy_counters_from_user(user, len, &tmp);
-+	paddc = xt_copy_counters(arg, len, &tmp);
- 	if (IS_ERR(paddc))
- 		return PTR_ERR(paddc);
- 
-@@ -1420,7 +1419,7 @@ static int do_arpt_set_ctl(struct sock *sk, int cmd, void __user *user, unsigned
- 		break;
- 
- 	case ARPT_SO_SET_ADD_COUNTERS:
--		ret = do_add_counters(sock_net(sk), user, len);
-+		ret = do_add_counters(sock_net(sk), USER_SOCKPTR(user), len);
- 		break;
- 
- 	default:
-diff --git a/net/ipv4/netfilter/ip_tables.c b/net/ipv4/netfilter/ip_tables.c
-index 161901dd1cae7f..4697d09c98dc3e 100644
---- a/net/ipv4/netfilter/ip_tables.c
-+++ b/net/ipv4/netfilter/ip_tables.c
-@@ -1151,8 +1151,7 @@ do_replace(struct net *net, const void __user *user, unsigned int len)
- }
- 
- static int
--do_add_counters(struct net *net, const void __user *user,
--		unsigned int len)
-+do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
- {
- 	unsigned int i;
- 	struct xt_counters_info tmp;
-@@ -1163,7 +1162,7 @@ do_add_counters(struct net *net, const void __user *user,
- 	struct ipt_entry *iter;
- 	unsigned int addend;
- 
--	paddc = xt_copy_counters_from_user(user, len, &tmp);
-+	paddc = xt_copy_counters(arg, len, &tmp);
- 	if (IS_ERR(paddc))
- 		return PTR_ERR(paddc);
- 
-@@ -1629,7 +1628,7 @@ do_ipt_set_ctl(struct sock *sk, int cmd, void __user *user, unsigned int len)
- 		break;
- 
- 	case IPT_SO_SET_ADD_COUNTERS:
--		ret = do_add_counters(sock_net(sk), user, len);
-+		ret = do_add_counters(sock_net(sk), USER_SOCKPTR(user), len);
- 		break;
- 
- 	default:
-diff --git a/net/ipv6/netfilter/ip6_tables.c b/net/ipv6/netfilter/ip6_tables.c
-index fd1f8f93123188..a787aba30e2db7 100644
---- a/net/ipv6/netfilter/ip6_tables.c
-+++ b/net/ipv6/netfilter/ip6_tables.c
-@@ -1168,7 +1168,7 @@ do_replace(struct net *net, const void __user *user, unsigned int len)
- }
- 
- static int
--do_add_counters(struct net *net, const void __user *user, unsigned int len)
-+do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
- {
- 	unsigned int i;
- 	struct xt_counters_info tmp;
-@@ -1179,7 +1179,7 @@ do_add_counters(struct net *net, const void __user *user, unsigned int len)
- 	struct ip6t_entry *iter;
- 	unsigned int addend;
- 
--	paddc = xt_copy_counters_from_user(user, len, &tmp);
-+	paddc = xt_copy_counters(arg, len, &tmp);
- 	if (IS_ERR(paddc))
- 		return PTR_ERR(paddc);
- 	t = xt_find_table_lock(net, AF_INET6, tmp.name);
-@@ -1637,7 +1637,7 @@ do_ip6t_set_ctl(struct sock *sk, int cmd, void __user *user, unsigned int len)
- 		break;
- 
- 	case IP6T_SO_SET_ADD_COUNTERS:
--		ret = do_add_counters(sock_net(sk), user, len);
-+		ret = do_add_counters(sock_net(sk), USER_SOCKPTR(user), len);
- 		break;
- 
- 	default:
-diff --git a/net/netfilter/x_tables.c b/net/netfilter/x_tables.c
-index 32bab45af7e415..b97eb4b538fd4e 100644
---- a/net/netfilter/x_tables.c
-+++ b/net/netfilter/x_tables.c
-@@ -1028,9 +1028,9 @@ int xt_check_target(struct xt_tgchk_param *par,
- EXPORT_SYMBOL_GPL(xt_check_target);
- 
- /**
-- * xt_copy_counters_from_user - copy counters and metadata from userspace
-+ * xt_copy_counters - copy counters and metadata from a sockptr_t
-  *
-- * @user: src pointer to userspace memory
-+ * @arg: src sockptr
-  * @len: alleged size of userspace memory
-  * @info: where to store the xt_counters_info metadata
-  *
-@@ -1047,8 +1047,8 @@ EXPORT_SYMBOL_GPL(xt_check_target);
-  * Return: returns pointer that caller has to test via IS_ERR().
-  * If IS_ERR is false, caller has to vfree the pointer.
-  */
--void *xt_copy_counters_from_user(const void __user *user, unsigned int len,
--				 struct xt_counters_info *info)
-+void *xt_copy_counters(sockptr_t arg, unsigned int len,
-+		       struct xt_counters_info *info)
- {
- 	void *mem;
- 	u64 size;
-@@ -1062,12 +1062,12 @@ void *xt_copy_counters_from_user(const void __user *user, unsigned int len,
- 			return ERR_PTR(-EINVAL);
- 
- 		len -= sizeof(compat_tmp);
--		if (copy_from_user(&compat_tmp, user, sizeof(compat_tmp)) != 0)
-+		if (copy_from_sockptr(&compat_tmp, arg, sizeof(compat_tmp)) != 0)
- 			return ERR_PTR(-EFAULT);
- 
- 		memcpy(info->name, compat_tmp.name, sizeof(info->name) - 1);
- 		info->num_counters = compat_tmp.num_counters;
--		user += sizeof(compat_tmp);
-+		sockptr_advance(arg, sizeof(compat_tmp));
- 	} else
- #endif
- 	{
-@@ -1075,10 +1075,10 @@ void *xt_copy_counters_from_user(const void __user *user, unsigned int len,
- 			return ERR_PTR(-EINVAL);
- 
- 		len -= sizeof(*info);
--		if (copy_from_user(info, user, sizeof(*info)) != 0)
-+		if (copy_from_sockptr(info, arg, sizeof(*info)) != 0)
- 			return ERR_PTR(-EFAULT);
- 
--		user += sizeof(*info);
-+		sockptr_advance(arg, sizeof(*info));
+ 		if (optlen != sizeof(gr32))
+ 			return -EINVAL;
+-		if (copy_from_user(&gr32, optval, sizeof(gr32)))
++		if (copy_from_sockptr(&gr32, optval, sizeof(gr32)))
+ 			return -EFAULT;
+ 		greqs->gsr_interface = gr32.gsr_interface;
+ 		greqs->gsr_group = gr32.gsr_group;
+@@ -699,7 +699,7 @@ static int copy_group_source_from_user(struct group_source_req *greqs,
+ 	} else {
+ 		if (optlen != sizeof(*greqs))
+ 			return -EINVAL;
+-		if (copy_from_user(greqs, optval, sizeof(*greqs)))
++		if (copy_from_sockptr(greqs, optval, sizeof(*greqs)))
+ 			return -EFAULT;
  	}
- 	info->name[sizeof(info->name) - 1] = '\0';
  
-@@ -1092,13 +1092,13 @@ void *xt_copy_counters_from_user(const void __user *user, unsigned int len,
- 	if (!mem)
- 		return ERR_PTR(-ENOMEM);
- 
--	if (copy_from_user(mem, user, len) = 0)
-+	if (copy_from_sockptr(mem, arg, len) = 0)
- 		return mem;
- 
- 	vfree(mem);
- 	return ERR_PTR(-EFAULT);
+@@ -707,14 +707,14 @@ static int copy_group_source_from_user(struct group_source_req *greqs,
  }
--EXPORT_SYMBOL_GPL(xt_copy_counters_from_user);
-+EXPORT_SYMBOL_GPL(xt_copy_counters);
  
- #ifdef CONFIG_COMPAT
- int xt_compat_target_offset(const struct xt_target *target)
+ static int do_mcast_group_source(struct sock *sk, int optname,
+-		void __user *optval, int optlen)
++		sockptr_t optval, int optlen)
+ {
+ 	struct group_source_req greqs;
+ 	struct ip_mreq_source mreqs;
+ 	struct sockaddr_in *psin;
+ 	int omode, add, err;
+ 
+-	err = copy_group_source_from_user(&greqs, optval, optlen);
++	err = copy_group_source_from_sockptr(&greqs, optval, optlen);
+ 	if (err)
+ 		return err;
+ 
+@@ -754,8 +754,7 @@ static int do_mcast_group_source(struct sock *sk, int optname,
+ 	return ip_mc_source(add, omode, sk, &mreqs, greqs.gsr_interface);
+ }
+ 
+-static int ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
+-		int optlen)
++static int ip_set_mcast_msfilter(struct sock *sk, sockptr_t optval, int optlen)
+ {
+ 	struct group_filter *gsf = NULL;
+ 	int err;
+@@ -765,7 +764,7 @@ static int ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
+ 	if (optlen > sysctl_optmem_max)
+ 		return -ENOBUFS;
+ 
+-	gsf = memdup_user(optval, optlen);
++	gsf = memdup_sockptr(optval, optlen);
+ 	if (IS_ERR(gsf))
+ 		return PTR_ERR(gsf);
+ 
+@@ -786,7 +785,7 @@ static int ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
+ 	return err;
+ }
+ 
+-static int compat_ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
++static int compat_ip_set_mcast_msfilter(struct sock *sk, sockptr_t optval,
+ 		int optlen)
+ {
+ 	const int size0 = offsetof(struct compat_group_filter, gf_slist);
+@@ -806,7 +805,7 @@ static int compat_ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
+ 	gf32 = p + 4; /* we want ->gf_group and ->gf_slist aligned */
+ 
+ 	err = -EFAULT;
+-	if (copy_from_user(gf32, optval, optlen))
++	if (copy_from_sockptr(gf32, optval, optlen))
+ 		goto out_free_gsf;
+ 
+ 	/* numsrc >= (4G-140)/128 overflow in 32 bits */
+@@ -831,7 +830,7 @@ static int compat_ip_set_mcast_msfilter(struct sock *sk, void __user *optval,
+ }
+ 
+ static int ip_mcast_join_leave(struct sock *sk, int optname,
+-		void __user *optval, int optlen)
++		sockptr_t optval, int optlen)
+ {
+ 	struct ip_mreqn mreq = { };
+ 	struct sockaddr_in *psin;
+@@ -839,7 +838,7 @@ static int ip_mcast_join_leave(struct sock *sk, int optname,
+ 
+ 	if (optlen < sizeof(struct group_req))
+ 		return -EINVAL;
+-	if (copy_from_user(&greq, optval, sizeof(greq)))
++	if (copy_from_sockptr(&greq, optval, sizeof(greq)))
+ 		return -EFAULT;
+ 
+ 	psin = (struct sockaddr_in *)&greq.gr_group;
+@@ -853,7 +852,7 @@ static int ip_mcast_join_leave(struct sock *sk, int optname,
+ }
+ 
+ static int compat_ip_mcast_join_leave(struct sock *sk, int optname,
+-		void __user *optval, int optlen)
++		sockptr_t optval, int optlen)
+ {
+ 	struct compat_group_req greq;
+ 	struct ip_mreqn mreq = { };
+@@ -861,7 +860,7 @@ static int compat_ip_mcast_join_leave(struct sock *sk, int optname,
+ 
+ 	if (optlen < sizeof(struct compat_group_req))
+ 		return -EINVAL;
+-	if (copy_from_user(&greq, optval, sizeof(greq)))
++	if (copy_from_sockptr(&greq, optval, sizeof(greq)))
+ 		return -EFAULT;
+ 
+ 	psin = (struct sockaddr_in *)&greq.gr_group;
+@@ -875,8 +874,8 @@ static int compat_ip_mcast_join_leave(struct sock *sk, int optname,
+ 	return ip_mc_leave_group(sk, &mreq);
+ }
+ 
+-static int do_ip_setsockopt(struct sock *sk, int level,
+-			    int optname, char __user *optval, unsigned int optlen)
++static int do_ip_setsockopt(struct sock *sk, int level, int optname,
++		sockptr_t optval, unsigned int optlen)
+ {
+ 	struct inet_sock *inet = inet_sk(sk);
+ 	struct net *net = sock_net(sk);
+@@ -910,12 +909,12 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 	case IP_RECVFRAGSIZE:
+ 	case IP_RECVERR_RFC4884:
+ 		if (optlen >= sizeof(int)) {
+-			if (get_user(val, (int __user *) optval))
++			if (copy_from_sockptr(&val, optval, sizeof(val)))
+ 				return -EFAULT;
+ 		} else if (optlen >= sizeof(char)) {
+ 			unsigned char ucval;
+ 
+-			if (get_user(ucval, (unsigned char __user *) optval))
++			if (copy_from_sockptr(&ucval, optval, sizeof(ucval)))
+ 				return -EFAULT;
+ 			val = (int) ucval;
+ 		}
+@@ -926,8 +925,7 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 	if (optname = IP_ROUTER_ALERT)
+ 		return ip_ra_control(sk, val ? 1 : 0, NULL);
+ 	if (ip_mroute_opt(optname))
+-		return ip_mroute_setsockopt(sk, optname, USER_SOCKPTR(optval),
+-					    optlen);
++		return ip_mroute_setsockopt(sk, optname, optval, optlen);
+ 
+ 	err = 0;
+ 	if (needs_rtnl)
+@@ -941,8 +939,7 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 
+ 		if (optlen > 40)
+ 			goto e_inval;
+-		err = ip_options_get(sock_net(sk), &opt, USER_SOCKPTR(optval),
+-					      optlen);
++		err = ip_options_get(sock_net(sk), &opt, optval, optlen);
+ 		if (err)
+ 			break;
+ 		old = rcu_dereference_protected(inet->inet_opt,
+@@ -1140,17 +1137,17 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 
+ 		err = -EFAULT;
+ 		if (optlen >= sizeof(struct ip_mreqn)) {
+-			if (copy_from_user(&mreq, optval, sizeof(mreq)))
++			if (copy_from_sockptr(&mreq, optval, sizeof(mreq)))
+ 				break;
+ 		} else {
+ 			memset(&mreq, 0, sizeof(mreq));
+ 			if (optlen >= sizeof(struct ip_mreq)) {
+-				if (copy_from_user(&mreq, optval,
+-						   sizeof(struct ip_mreq)))
++				if (copy_from_sockptr(&mreq, optval,
++						      sizeof(struct ip_mreq)))
+ 					break;
+ 			} else if (optlen >= sizeof(struct in_addr)) {
+-				if (copy_from_user(&mreq.imr_address, optval,
+-						   sizeof(struct in_addr)))
++				if (copy_from_sockptr(&mreq.imr_address, optval,
++						      sizeof(struct in_addr)))
+ 					break;
+ 			}
+ 		}
+@@ -1202,11 +1199,12 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 			goto e_inval;
+ 		err = -EFAULT;
+ 		if (optlen >= sizeof(struct ip_mreqn)) {
+-			if (copy_from_user(&mreq, optval, sizeof(mreq)))
++			if (copy_from_sockptr(&mreq, optval, sizeof(mreq)))
+ 				break;
+ 		} else {
+ 			memset(&mreq, 0, sizeof(mreq));
+-			if (copy_from_user(&mreq, optval, sizeof(struct ip_mreq)))
++			if (copy_from_sockptr(&mreq, optval,
++					      sizeof(struct ip_mreq)))
+ 				break;
+ 		}
+ 
+@@ -1226,7 +1224,7 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 			err = -ENOBUFS;
+ 			break;
+ 		}
+-		msf = memdup_user(optval, optlen);
++		msf = memdup_sockptr(optval, optlen);
+ 		if (IS_ERR(msf)) {
+ 			err = PTR_ERR(msf);
+ 			break;
+@@ -1257,7 +1255,7 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 
+ 		if (optlen != sizeof(struct ip_mreq_source))
+ 			goto e_inval;
+-		if (copy_from_user(&mreqs, optval, sizeof(mreqs))) {
++		if (copy_from_sockptr(&mreqs, optval, sizeof(mreqs))) {
+ 			err = -EFAULT;
+ 			break;
+ 		}
+@@ -1324,8 +1322,7 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 		err = -EPERM;
+ 		if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
+ 			break;
+-		err = xfrm_user_policy(sk, optname, USER_SOCKPTR(optval),
+-				       optlen);
++		err = xfrm_user_policy(sk, optname, optval, optlen);
+ 		break;
+ 
+ 	case IP_TRANSPARENT:
+@@ -1412,7 +1409,8 @@ int ip_setsockopt(struct sock *sk, int level,
+ 	if (level != SOL_IP)
+ 		return -ENOPROTOOPT;
+ 
+-	err = do_ip_setsockopt(sk, level, optname, optval, optlen);
++	err = do_ip_setsockopt(sk, level, optname, USER_SOCKPTR(optval),
++			       optlen);
+ #if IS_ENABLED(CONFIG_BPFILTER_UMH)
+ 	if (optname >= BPFILTER_IPT_SO_SET_REPLACE &&
+ 	    optname < BPFILTER_IPT_SET_MAX)
 -- 
 2.27.0
