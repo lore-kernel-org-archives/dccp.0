@@ -1,56 +1,109 @@
-From: Matthieu Baerts <matthieu.baerts@tessares.net>
-Date: Wed, 22 Jul 2020 08:26:42 +0000
-Subject: Re: [MPTCP] [PATCH 24/24] net: pass a sockptr_t into ->setsockopt
-Message-Id: <b3665200-2476-9d35-8dea-d5da141c6b70@tessares.net>
+From: Christoph Hellwig <hch@lst.de>
+Date: Mon, 20 Jul 2020 12:47:21 +0000
+Subject: [PATCH 08/24] net/xfrm: switch xfrm_user_policy to sockptr_t
+Message-Id: <20200720124737.118617-9-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hi Christoph,
+Pass a sockptr_t to prepare for set_fs-less handling of the kernel
+pointer from bpf-cgroup.
 
-On 20/07/2020 14:47, Christoph Hellwig wrote:
-> Rework the remaining setsockopt code to pass a sockptr_t instead of a
-> plain user pointer.  This removes the last remaining set_fs(KERNEL_DS)
-> outside of architecture specific code.
-> 
-> Signed-off-by: Christoph Hellwig <hch@lst.de>
-> ---
+Signed-off-by: Christoph Hellwig <hch@lst.de>
+---
+ include/net/xfrm.h       | 8 +++++---
+ net/ipv4/ip_sockglue.c   | 3 ++-
+ net/ipv6/ipv6_sockglue.c | 3 ++-
+ net/xfrm/xfrm_state.c    | 6 +++---
+ 4 files changed, 12 insertions(+), 8 deletions(-)
 
-...
-> diff --git a/net/mptcp/protocol.c b/net/mptcp/protocol.c
-> index 27b6f250b87dfd..30a8e697b9db9c 100644
-> --- a/net/mptcp/protocol.c
-> +++ b/net/mptcp/protocol.c
-> @@ -1627,7 +1627,7 @@ static void mptcp_destroy(struct sock *sk)
->   }
->   
->   static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
-> -				       char __user *optval, unsigned int optlen)
-> +				       sockptr_t optval, unsigned int optlen)
->   {
->   	struct sock *sk = (struct sock *)msk;
->   	struct socket *ssock;
-> @@ -1643,8 +1643,8 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
->   			return -EINVAL;
->   		}
->   
-> -		ret = sock_setsockopt(ssock, SOL_SOCKET, optname,
-> -				      USER_SOCKPTR(optval), optlen);
-> +		ret = sock_setsockopt(ssock, SOL_SOCKET, optname, optval,
-> +				      optlen);
-
-A very small detail related to the modifications in MPTCP code, only if 
-you have to send a v2 and if you don't mind: may you move "optlen" to 
-the previous line like it was before your patch 7/24. Same below at the 
-end of the function.
-
-That would reduce the global diff in MPTCP files to function signatures 
-only.
-
-Cheers,
-Matt
+diff --git a/include/net/xfrm.h b/include/net/xfrm.h
+index f9e1fda82ddfc0..5e81868b574a73 100644
+--- a/include/net/xfrm.h
++++ b/include/net/xfrm.h
+@@ -15,6 +15,7 @@
+ #include <linux/audit.h>
+ #include <linux/slab.h>
+ #include <linux/refcount.h>
++#include <linux/sockptr.h>
+ 
+ #include <net/sock.h>
+ #include <net/dst.h>
+@@ -1609,10 +1610,11 @@ int xfrm6_find_1stfragopt(struct xfrm_state *x, struct sk_buff *skb,
+ void xfrm6_local_rxpmtu(struct sk_buff *skb, u32 mtu);
+ int xfrm4_udp_encap_rcv(struct sock *sk, struct sk_buff *skb);
+ int xfrm6_udp_encap_rcv(struct sock *sk, struct sk_buff *skb);
+-int xfrm_user_policy(struct sock *sk, int optname,
+-		     u8 __user *optval, int optlen);
++int xfrm_user_policy(struct sock *sk, int optname, sockptr_t optval,
++		     int optlen);
+ #else
+-static inline int xfrm_user_policy(struct sock *sk, int optname, u8 __user *optval, int optlen)
++static inline int xfrm_user_policy(struct sock *sk, int optname,
++				   sockptr_t optval, int optlen)
+ {
+  	return -ENOPROTOOPT;
+ }
+diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
+index a5ea02d7a183eb..da933f99b5d517 100644
+--- a/net/ipv4/ip_sockglue.c
++++ b/net/ipv4/ip_sockglue.c
+@@ -1322,7 +1322,8 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 		err = -EPERM;
+ 		if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
+ 			break;
+-		err = xfrm_user_policy(sk, optname, optval, optlen);
++		err = xfrm_user_policy(sk, optname, USER_SOCKPTR(optval),
++				       optlen);
+ 		break;
+ 
+ 	case IP_TRANSPARENT:
+diff --git a/net/ipv6/ipv6_sockglue.c b/net/ipv6/ipv6_sockglue.c
+index add8f791229945..56a74707c61741 100644
+--- a/net/ipv6/ipv6_sockglue.c
++++ b/net/ipv6/ipv6_sockglue.c
+@@ -935,7 +935,8 @@ static int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
+ 		retv = -EPERM;
+ 		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+ 			break;
+-		retv = xfrm_user_policy(sk, optname, optval, optlen);
++		retv = xfrm_user_policy(sk, optname, USER_SOCKPTR(optval),
++					optlen);
+ 		break;
+ 
+ 	case IPV6_ADDR_PREFERENCES:
+diff --git a/net/xfrm/xfrm_state.c b/net/xfrm/xfrm_state.c
+index 8be2d926acc21d..69520ad3d83bfb 100644
+--- a/net/xfrm/xfrm_state.c
++++ b/net/xfrm/xfrm_state.c
+@@ -2264,7 +2264,7 @@ static bool km_is_alive(const struct km_event *c)
+ 	return is_alive;
+ }
+ 
+-int xfrm_user_policy(struct sock *sk, int optname, u8 __user *optval, int optlen)
++int xfrm_user_policy(struct sock *sk, int optname, sockptr_t optval, int optlen)
+ {
+ 	int err;
+ 	u8 *data;
+@@ -2274,7 +2274,7 @@ int xfrm_user_policy(struct sock *sk, int optname, u8 __user *optval, int optlen
+ 	if (in_compat_syscall())
+ 		return -EOPNOTSUPP;
+ 
+-	if (!optval && !optlen) {
++	if (sockptr_is_null(optval) && !optlen) {
+ 		xfrm_sk_policy_insert(sk, XFRM_POLICY_IN, NULL);
+ 		xfrm_sk_policy_insert(sk, XFRM_POLICY_OUT, NULL);
+ 		__sk_dst_reset(sk);
+@@ -2284,7 +2284,7 @@ int xfrm_user_policy(struct sock *sk, int optname, u8 __user *optval, int optlen
+ 	if (optlen <= 0 || optlen > PAGE_SIZE)
+ 		return -EMSGSIZE;
+ 
+-	data = memdup_user(optval, optlen);
++	data = memdup_sockptr(optval, optlen);
+ 	if (IS_ERR(data))
+ 		return PTR_ERR(data);
+ 
 -- 
-Tessares | Belgium | Hybrid Access Solutions
-www.tessares.net
+2.27.0
