@@ -1,7 +1,7 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Thu, 23 Jul 2020 06:08:59 +0000
-Subject: [PATCH 17/26] net/ipv6: switch ip6_mroute_setsockopt to sockptr_t
-Message-Id: <20200723060908.50081-18-hch@lst.de>
+Date: Mon, 20 Jul 2020 12:47:29 +0000
+Subject: [PATCH 16/24] net/ipv6: switch ip6_mroute_setsockopt to sockptr_t
+Message-Id: <20200720124737.118617-17-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
