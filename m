@@ -1,7 +1,7 @@
 From: David Laight <David.Laight@ACULAB.COM>
-Date: Tue, 21 Jul 2020 09:38:23 +0000
+Date: Tue, 21 Jul 2020 10:26:58 +0000
 Subject: RE: get rid of the address_space override in setsockopt
-Message-Id: <60c52e31e9f240718fcda0dd5c2faeca@AcuMS.aculab.com>
+Message-Id: <ae6a743aaea3406596dbc89e332b6b3e@AcuMS.aculab.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20200720124737.118617-1-hch@lst.de>
 In-Reply-To: <20200720124737.118617-1-hch@lst.de>
@@ -12,7 +12,7 @@ To: dccp@vger.kernel.org
 
 From: Christoph Hellwig
 > Sent: 20 July 2020 13:47
->
+> 
 > setsockopt is the last place in architecture-independ code that still
 > uses set_fs to force the uaccess routines to operate on kernel pointers.
 > 
@@ -22,10 +22,15 @@ From: Christoph Hellwig
 > helpers and moving them over to it before finally doing the main
 > setsockopt method.
 
-Are you planning to make the equivalent change to getsockopt()?
-Having mismatched interfaces would be very strange.
+Another 'gotcha' ...
+
+On an least some architectures (possibly only m68k) IIRC all structures
+are actually passed by reference.
+(This used to be true for sparc - but it may have changed in the
+last 30 years.)
 
 	David
+ 
 
 -
 Registered Address Lakeside, Bramley Road, Mount Farm, Milton Keynes, MK1 1PT, UK
