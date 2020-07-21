@@ -1,7 +1,7 @@
 From: David Laight <David.Laight@ACULAB.COM>
-Date: Tue, 21 Jul 2020 09:55:20 +0000
+Date: Tue, 21 Jul 2020 10:14:20 +0000
 Subject: RE: [PATCH 03/24] net: add a new sockptr_t type
-Message-Id: <9b7ae3245bad474db2a3889bc1c1a329@AcuMS.aculab.com>
+Message-Id: <6727969f2f6e467fa2d43f9773cefa27@AcuMS.aculab.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20200720124737.118617-4-hch@lst.de>
 In-Reply-To: <20200720124737.118617-4-hch@lst.de>
@@ -10,40 +10,46 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Eric Biggers
-> Sent: 20 July 2020 17:38
-...
-> How does this not introduce a massive security hole when
-> CONFIG_ARCH_HAS_NON_OVERLAPPING_ADDRESS_SPACE?
+From: Christoph Hellwig
+> Sent: 20 July 2020 13:47
 > 
-> AFAICS, userspace can pass in a pointer >= TASK_SIZE,
-> and this code makes it be treated as a kernel pointer.
+> Add a uptr_t type that can hold a pointer to either a user or kernel
+> memory region, and simply helpers to copy to and from it.  For
+> architectures like x86 that have non-overlapping user and kernel
+> address space it just is a union and uses a TASK_SIZE check to
+> select the proper copy routine.  For architectures with overlapping
+> address spaces a flag to indicate the address space is used instead.
+> 
+...
+> +#else /* CONFIG_ARCH_HAS_NON_OVERLAPPING_ADDRESS_SPACE */
+> +typedef struct {
+> +	union {
+> +		void		*kernel;
+> +		void __user	*user;
+> +	};
+> +	bool		is_kernel : 1;
+> +} sockptr_t;
 
-One thought I've had is that on 64-bit architectures there
-is almost always some part of the KVA that can never be valid
-and is larger than the maximum size of a user VA.
+If you need to do that you might as well make it a struct
+where either the kernel or user address is defined.
+Far safer for all architectures.
 
-If the user address is offset into this invalid area
-then it can always be distinguished from a kernel address.
+Indeed you could add the length (to save passing an
+extra parameter through the layers).
 
-Indeed it may be worth considering offsetting kernel
-addresses as well.
+The system call code could even copy the code into a
+kernel buffer (setting both pointers).
+So that code that didn't need to access beyond the end
+of the implied buffer (most of it) could just access the
+kernel buffer.
 
-This forces code to use the correct accessors.
+For getsockopt() you'd need some way of supressing the
+'default' copy back of the user buffer.
 
-It doesn't solve the problem for 32bit systems with
-CONFIG_ARCH_HAS_NON_OVERLAPPING_ADDRESS_SPACE since
-they are likely to have all 32bit addresses available
-to both use and kernel.
-
-If you end up with a 'fat pointer' then it may be worth
-adding the length and making it a 'buffer descriptor'.
-This can then be passed by address and the reduced
-number of parameters will probably offset the cost
-of the extra indirection.
-
-The read/write functions could then take the 'buffer descriptor',
-offset and length as parameters.
+This would also allow some of the sctp getsockopt to
+read (usually 4 bytes) from the 'user' buffer without
+the wrapper code always having to read in the entire
+user buffer.
 
 	David
 
