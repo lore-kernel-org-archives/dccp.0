@@ -1,7 +1,7 @@
-From: Alexei Starovoitov <alexei.starovoitov@gmail.com>
-Date: Wed, 22 Jul 2020 17:09:41 +0000
-Subject: Re: get rid of the address_space override in setsockopt
-Message-Id: <CAADnVQKy0+rsRftEzp4PvxQtj7uOwybz0Nd4_h0FR37p2Q=X4w@mail.gmail.com>
+From: Christoph Hellwig <hch@lst.de>
+Date: Thu, 23 Jul 2020 06:08:42 +0000
+Subject: get rid of the address_space override in setsockopt v2
+Message-Id: <20200723060908.50081-1-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 References: <20200720124737.118617-1-hch@lst.de>
 In-Reply-To: <20200720124737.118617-1-hch@lst.de>
@@ -10,22 +10,118 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, Jul 22, 2020 at 12:56 AM Christoph Hellwig <hch@lst.de> wrote:
->
-> On Mon, Jul 20, 2020 at 01:47:56PM -0700, Alexei Starovoitov wrote:
-> > > a kernel pointer.  This is something that works for most common sockopts
-> > > (and is something that the ePBF support relies on), but unfortunately
-> > > in various corner cases we either don't use the passed in length, or in
-> > > one case actually copy data back from setsockopt, so we unfortunately
-> > > can't just always do the copy in the highlevel code, which would have
-> > > been much nicer.
-> >
-> > could you rebase on bpf-next tree and we can route it this way then?
-> > we'll also test the whole thing before applying.
->
-> The bpf-next tree is missing all my previous setsockopt cleanups, so
-> there series won't apply.
+Hi Dave,
 
-Right. I've realized that after sending that email two days ago.
-Now bpf-next->net-next PR is pending and as soon as it's merged
-bpf-next will have all the recent bits.
+setsockopt is the last place in architecture-independ code that still
+uses set_fs to force the uaccess routines to operate on kernel pointers.
+
+This series adds a new sockptr_t type that can contained either a kernel
+or user pointer, and which has accessors that do the right thing, and
+then uses it for setsockopt, starting by refactoring some low-level
+helpers and moving them over to it before finally doing the main
+setsockopt method.
+
+Note that apparently the eBPF selftests do not even cover this path, so
+the series has been tested with a testing patch that always copies the
+data first and passes a kernel pointer.  This is something that works for
+most common sockopts (and is something that the ePBF support relies on),
+but unfortunately in various corner cases we either don't use the passed
+in length, or in one case actually copy data back from setsockopt, or in
+case of bpfilter straight out do not work with kernel pointers at all.
+
+Against net-next/master.
+
+Changes since v1:
+ - check that users don't pass in kernel addresses
+ - more bpfilter cleanups
+ - cosmetic mptcp tweak
+
+Diffstat:
+ crypto/af_alg.c                           |    7 
+ drivers/crypto/chelsio/chtls/chtls_main.c |   18 -
+ drivers/isdn/mISDN/socket.c               |    4 
+ include/linux/bpfilter.h                  |    6 
+ include/linux/filter.h                    |    3 
+ include/linux/mroute.h                    |    5 
+ include/linux/mroute6.h                   |    8 
+ include/linux/net.h                       |    4 
+ include/linux/netfilter.h                 |    6 
+ include/linux/netfilter/x_tables.h        |    4 
+ include/linux/sockptr.h                   |  132 ++++++++++++
+ include/net/inet_connection_sock.h        |    3 
+ include/net/ip.h                          |    7 
+ include/net/ipv6.h                        |    6 
+ include/net/sctp/structs.h                |    2 
+ include/net/sock.h                        |    7 
+ include/net/tcp.h                         |    6 
+ include/net/udp.h                         |    2 
+ include/net/xfrm.h                        |    8 
+ net/atm/common.c                          |    6 
+ net/atm/common.h                          |    2 
+ net/atm/pvc.c                             |    2 
+ net/atm/svc.c                             |    6 
+ net/ax25/af_ax25.c                        |    6 
+ net/bluetooth/hci_sock.c                  |    8 
+ net/bluetooth/l2cap_sock.c                |   22 +-
+ net/bluetooth/rfcomm/sock.c               |   12 -
+ net/bluetooth/sco.c                       |    6 
+ net/bpfilter/bpfilter_kern.c              |   55 ++---
+ net/bridge/netfilter/ebtables.c           |   46 +---
+ net/caif/caif_socket.c                    |    8 
+ net/can/j1939/socket.c                    |   12 -
+ net/can/raw.c                             |   16 -
+ net/core/filter.c                         |    6 
+ net/core/sock.c                           |   36 +--
+ net/dccp/dccp.h                           |    2 
+ net/dccp/proto.c                          |   20 -
+ net/decnet/af_decnet.c                    |   13 -
+ net/ieee802154/socket.c                   |    6 
+ net/ipv4/bpfilter/sockopt.c               |   16 -
+ net/ipv4/ip_options.c                     |   43 +---
+ net/ipv4/ip_sockglue.c                    |   66 +++---
+ net/ipv4/ipmr.c                           |   14 -
+ net/ipv4/netfilter/arp_tables.c           |   33 +--
+ net/ipv4/netfilter/ip_tables.c            |   29 +-
+ net/ipv4/raw.c                            |    8 
+ net/ipv4/tcp.c                            |   30 +-
+ net/ipv4/tcp_ipv4.c                       |    4 
+ net/ipv4/udp.c                            |   11 -
+ net/ipv4/udp_impl.h                       |    4 
+ net/ipv6/ip6_flowlabel.c                  |  317 ++++++++++++++++--------------
+ net/ipv6/ip6mr.c                          |   17 -
+ net/ipv6/ipv6_sockglue.c                  |  203 +++++++++----------
+ net/ipv6/netfilter/ip6_tables.c           |   28 +-
+ net/ipv6/raw.c                            |   10 
+ net/ipv6/tcp_ipv6.c                       |    4 
+ net/ipv6/udp.c                            |    7 
+ net/ipv6/udp_impl.h                       |    4 
+ net/iucv/af_iucv.c                        |    4 
+ net/kcm/kcmsock.c                         |    6 
+ net/l2tp/l2tp_ppp.c                       |    4 
+ net/llc/af_llc.c                          |    4 
+ net/mptcp/protocol.c                      |    6 
+ net/netfilter/ipvs/ip_vs_ctl.c            |    4 
+ net/netfilter/nf_sockopt.c                |    2 
+ net/netfilter/x_tables.c                  |   20 -
+ net/netlink/af_netlink.c                  |    4 
+ net/netrom/af_netrom.c                    |    4 
+ net/nfc/llcp_sock.c                       |    6 
+ net/packet/af_packet.c                    |   39 +--
+ net/phonet/pep.c                          |    4 
+ net/rds/af_rds.c                          |   30 +-
+ net/rds/rdma.c                            |   14 -
+ net/rds/rds.h                             |    6 
+ net/rose/af_rose.c                        |    4 
+ net/rxrpc/af_rxrpc.c                      |    8 
+ net/rxrpc/ar-internal.h                   |    4 
+ net/rxrpc/key.c                           |    9 
+ net/sctp/socket.c                         |    4 
+ net/smc/af_smc.c                          |    4 
+ net/socket.c                              |   24 --
+ net/tipc/socket.c                         |    8 
+ net/tls/tls_main.c                        |   17 -
+ net/vmw_vsock/af_vsock.c                  |    4 
+ net/x25/af_x25.c                          |    4 
+ net/xdp/xsk.c                             |    8 
+ net/xfrm/xfrm_state.c                     |    6 
+ 87 files changed, 894 insertions(+), 743 deletions(-)
