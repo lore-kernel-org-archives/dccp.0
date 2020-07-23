@@ -1,155 +1,109 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Fri, 17 Jul 2020 06:23:20 +0000
-Subject: [PATCH 11/22] netfilter: remove the compat_{get,set} methods
-Message-Id: <20200717062331.691152-12-hch@lst.de>
+Date: Thu, 23 Jul 2020 06:08:51 +0000
+Subject: [PATCH 09/26] net/xfrm: switch xfrm_user_policy to sockptr_t
+Message-Id: <20200723060908.50081-10-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-All instances handle compat sockopts via in_compat_syscall() now, so
-remove the compat_{get,set} methods as well as the
-compat_nf_{get,set}sockopt wrappers.
+Pass a sockptr_t to prepare for set_fs-less handling of the kernel
+pointer from bpf-cgroup.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- include/linux/netfilter.h  | 14 -------------
- net/ipv4/ip_sockglue.c     |  5 ++---
- net/ipv6/ipv6_sockglue.c   |  5 ++---
- net/netfilter/nf_sockopt.c | 42 --------------------------------------
- 4 files changed, 4 insertions(+), 62 deletions(-)
+ include/net/xfrm.h       | 8 +++++---
+ net/ipv4/ip_sockglue.c   | 3 ++-
+ net/ipv6/ipv6_sockglue.c | 3 ++-
+ net/xfrm/xfrm_state.c    | 6 +++---
+ 4 files changed, 12 insertions(+), 8 deletions(-)
 
-diff --git a/include/linux/netfilter.h b/include/linux/netfilter.h
-index eb312e7ca36ee5..711b4d4486f042 100644
---- a/include/linux/netfilter.h
-+++ b/include/linux/netfilter.h
-@@ -164,17 +164,9 @@ struct nf_sockopt_ops {
- 	int set_optmin;
- 	int set_optmax;
- 	int (*set)(struct sock *sk, int optval, void __user *user, unsigned int len);
--#ifdef CONFIG_COMPAT
--	int (*compat_set)(struct sock *sk, int optval,
--			void __user *user, unsigned int len);
--#endif
- 	int get_optmin;
- 	int get_optmax;
- 	int (*get)(struct sock *sk, int optval, void __user *user, int *len);
--#ifdef CONFIG_COMPAT
--	int (*compat_get)(struct sock *sk, int optval,
--			void __user *user, int *len);
--#endif
- 	/* Use the module struct to lock set/get code in place */
- 	struct module *owner;
- };
-@@ -350,12 +342,6 @@ int nf_setsockopt(struct sock *sk, u_int8_t pf, int optval, char __user *opt,
- 		  unsigned int len);
- int nf_getsockopt(struct sock *sk, u_int8_t pf, int optval, char __user *opt,
- 		  int *len);
--#ifdef CONFIG_COMPAT
--int compat_nf_setsockopt(struct sock *sk, u_int8_t pf, int optval,
--		char __user *opt, unsigned int len);
--int compat_nf_getsockopt(struct sock *sk, u_int8_t pf, int optval,
--		char __user *opt, int *len);
--#endif
+diff --git a/include/net/xfrm.h b/include/net/xfrm.h
+index f9e1fda82ddfc0..5e81868b574a73 100644
+--- a/include/net/xfrm.h
++++ b/include/net/xfrm.h
+@@ -15,6 +15,7 @@
+ #include <linux/audit.h>
+ #include <linux/slab.h>
+ #include <linux/refcount.h>
++#include <linux/sockptr.h>
  
- struct flowi;
- struct nf_queue_entry;
+ #include <net/sock.h>
+ #include <net/dst.h>
+@@ -1609,10 +1610,11 @@ int xfrm6_find_1stfragopt(struct xfrm_state *x, struct sk_buff *skb,
+ void xfrm6_local_rxpmtu(struct sk_buff *skb, u32 mtu);
+ int xfrm4_udp_encap_rcv(struct sock *sk, struct sk_buff *skb);
+ int xfrm6_udp_encap_rcv(struct sock *sk, struct sk_buff *skb);
+-int xfrm_user_policy(struct sock *sk, int optname,
+-		     u8 __user *optval, int optlen);
++int xfrm_user_policy(struct sock *sk, int optname, sockptr_t optval,
++		     int optlen);
+ #else
+-static inline int xfrm_user_policy(struct sock *sk, int optname, u8 __user *optval, int optlen)
++static inline int xfrm_user_policy(struct sock *sk, int optname,
++				   sockptr_t optval, int optlen)
+ {
+  	return -ENOPROTOOPT;
+ }
 diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
-index 84ec3703c90916..95f4248c6fc5ed 100644
+index a5ea02d7a183eb..da933f99b5d517 100644
 --- a/net/ipv4/ip_sockglue.c
 +++ b/net/ipv4/ip_sockglue.c
-@@ -1446,8 +1446,7 @@ int compat_ip_setsockopt(struct sock *sk, int level, int optname,
- 			optname != IP_IPSEC_POLICY &&
- 			optname != IP_XFRM_POLICY &&
- 			!ip_mroute_opt(optname))
--		err = compat_nf_setsockopt(sk, PF_INET, optname, optval,
--					   optlen);
-+		err = nf_setsockopt(sk, PF_INET, optname, optval, optlen);
- #endif
- 	return err;
- }
-@@ -1821,7 +1820,7 @@ int compat_ip_getsockopt(struct sock *sk, int level, int optname,
- 		if (get_user(len, optlen))
- 			return -EFAULT;
+@@ -1322,7 +1322,8 @@ static int do_ip_setsockopt(struct sock *sk, int level,
+ 		err = -EPERM;
+ 		if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN))
+ 			break;
+-		err = xfrm_user_policy(sk, optname, optval, optlen);
++		err = xfrm_user_policy(sk, optname, USER_SOCKPTR(optval),
++				       optlen);
+ 		break;
  
--		err = compat_nf_getsockopt(sk, PF_INET, optname, optval, &len);
-+		err = nf_getsockopt(sk, PF_INET, optname, optval, &len);
- 		if (err >= 0)
- 			err = put_user(len, optlen);
- 		return err;
+ 	case IP_TRANSPARENT:
 diff --git a/net/ipv6/ipv6_sockglue.c b/net/ipv6/ipv6_sockglue.c
-index 6ab44ec2c369da..6adfbdcb7979bd 100644
+index add8f791229945..56a74707c61741 100644
 --- a/net/ipv6/ipv6_sockglue.c
 +++ b/net/ipv6/ipv6_sockglue.c
-@@ -1030,8 +1030,7 @@ int compat_ipv6_setsockopt(struct sock *sk, int level, int optname,
- 	/* we need to exclude all possible ENOPROTOOPTs except default case */
- 	if (err = -ENOPROTOOPT && optname != IPV6_IPSEC_POLICY &&
- 	    optname != IPV6_XFRM_POLICY)
--		err = compat_nf_setsockopt(sk, PF_INET6, optname, optval,
--					   optlen);
-+		err = nf_setsockopt(sk, PF_INET6, optname, optval, optlen);
- #endif
- 	return err;
- }
-@@ -1531,7 +1530,7 @@ int compat_ipv6_getsockopt(struct sock *sk, int level, int optname,
- 		if (get_user(len, optlen))
- 			return -EFAULT;
+@@ -935,7 +935,8 @@ static int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
+ 		retv = -EPERM;
+ 		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+ 			break;
+-		retv = xfrm_user_policy(sk, optname, optval, optlen);
++		retv = xfrm_user_policy(sk, optname, USER_SOCKPTR(optval),
++					optlen);
+ 		break;
  
--		err = compat_nf_getsockopt(sk, PF_INET6, optname, optval, &len);
-+		err = nf_getsockopt(sk, PF_INET6, optname, optval, &len);
- 		if (err >= 0)
- 			err = put_user(len, optlen);
- 	}
-diff --git a/net/netfilter/nf_sockopt.c b/net/netfilter/nf_sockopt.c
-index 46cb3786e0ec5c..02870993d335c9 100644
---- a/net/netfilter/nf_sockopt.c
-+++ b/net/netfilter/nf_sockopt.c
-@@ -122,45 +122,3 @@ int nf_getsockopt(struct sock *sk, u_int8_t pf, int val, char __user *opt,
- 	return nf_sockopt(sk, pf, val, opt, len, 1);
+ 	case IPV6_ADDR_PREFERENCES:
+diff --git a/net/xfrm/xfrm_state.c b/net/xfrm/xfrm_state.c
+index 8be2d926acc21d..69520ad3d83bfb 100644
+--- a/net/xfrm/xfrm_state.c
++++ b/net/xfrm/xfrm_state.c
+@@ -2264,7 +2264,7 @@ static bool km_is_alive(const struct km_event *c)
+ 	return is_alive;
  }
- EXPORT_SYMBOL(nf_getsockopt);
--
--#ifdef CONFIG_COMPAT
--static int compat_nf_sockopt(struct sock *sk, u_int8_t pf, int val,
--			     char __user *opt, int *len, int get)
--{
--	struct nf_sockopt_ops *ops;
--	int ret;
--
--	ops = nf_sockopt_find(sk, pf, val, get);
--	if (IS_ERR(ops))
--		return PTR_ERR(ops);
--
--	if (get) {
--		if (ops->compat_get)
--			ret = ops->compat_get(sk, val, opt, len);
--		else
--			ret = ops->get(sk, val, opt, len);
--	} else {
--		if (ops->compat_set)
--			ret = ops->compat_set(sk, val, opt, *len);
--		else
--			ret = ops->set(sk, val, opt, *len);
--	}
--
--	module_put(ops->owner);
--	return ret;
--}
--
--int compat_nf_setsockopt(struct sock *sk, u_int8_t pf,
--		int val, char __user *opt, unsigned int len)
--{
--	return compat_nf_sockopt(sk, pf, val, opt, &len, 0);
--}
--EXPORT_SYMBOL(compat_nf_setsockopt);
--
--int compat_nf_getsockopt(struct sock *sk, u_int8_t pf,
--		int val, char __user *opt, int *len)
--{
--	return compat_nf_sockopt(sk, pf, val, opt, len, 1);
--}
--EXPORT_SYMBOL(compat_nf_getsockopt);
--#endif
+ 
+-int xfrm_user_policy(struct sock *sk, int optname, u8 __user *optval, int optlen)
++int xfrm_user_policy(struct sock *sk, int optname, sockptr_t optval, int optlen)
+ {
+ 	int err;
+ 	u8 *data;
+@@ -2274,7 +2274,7 @@ int xfrm_user_policy(struct sock *sk, int optname, u8 __user *optval, int optlen
+ 	if (in_compat_syscall())
+ 		return -EOPNOTSUPP;
+ 
+-	if (!optval && !optlen) {
++	if (sockptr_is_null(optval) && !optlen) {
+ 		xfrm_sk_policy_insert(sk, XFRM_POLICY_IN, NULL);
+ 		xfrm_sk_policy_insert(sk, XFRM_POLICY_OUT, NULL);
+ 		__sk_dst_reset(sk);
+@@ -2284,7 +2284,7 @@ int xfrm_user_policy(struct sock *sk, int optname, u8 __user *optval, int optlen
+ 	if (optlen <= 0 || optlen > PAGE_SIZE)
+ 		return -EMSGSIZE;
+ 
+-	data = memdup_user(optval, optlen);
++	data = memdup_sockptr(optval, optlen);
+ 	if (IS_ERR(data))
+ 		return PTR_ERR(data);
+ 
 -- 
 2.27.0
