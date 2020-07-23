@@ -1,7 +1,7 @@
-From: Eric Dumazet <edumazet@google.com>
-Date: Thu, 23 Jul 2020 16:40:27 +0000
+From: Christoph Hellwig <hch@lst.de>
+Date: Thu, 23 Jul 2020 16:44:32 +0000
 Subject: Re: [PATCH 04/26] net: add a new sockptr_t type
-Message-Id: <CANn89iJ3LKth-iWwh0+P3D3RqtDNv4AyXkkzhXr0oSEvE_JoRQ@mail.gmail.com>
+Message-Id: <20200723164432.GA20917@lst.de>
 List-Id: <dccp.vger.kernel.org>
 References: <20200723060908.50081-5-hch@lst.de>
 In-Reply-To: <20200723060908.50081-5-hch@lst.de>
@@ -10,48 +10,17 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, Jul 22, 2020 at 11:09 PM Christoph Hellwig <hch@lst.de> wrote:
->
-> Add a uptr_t type that can hold a pointer to either a user or kernel
-> memory region, and simply helpers to copy to and from it.
->
-> Signed-off-by: Christoph Hellwig <hch@lst.de>
-> ---
->  include/linux/sockptr.h | 104 ++++++++++++++++++++++++++++++++++++++++
->  1 file changed, 104 insertions(+)
->  create mode 100644 include/linux/sockptr.h
->
-> diff --git a/include/linux/sockptr.h b/include/linux/sockptr.h
-> new file mode 100644
-> index 00000000000000..700856e13ea0c4
-> --- /dev/null
-> +++ b/include/linux/sockptr.h
-> @@ -0,0 +1,104 @@
-> +/* SPDX-License-Identifier: GPL-2.0-only */
-> +/*
-> + * Copyright (c) 2020 Christoph Hellwig.
-> + *
-> + * Support for "universal" pointers that can point to either kernel or userspace
-> + * memory.
-> + */
-> +#ifndef _LINUX_SOCKPTR_H
-> +#define _LINUX_SOCKPTR_H
-> +
-> +#include <linux/slab.h>
-> +#include <linux/uaccess.h>
-> +
-> +typedef struct {
-> +       union {
-> +               void            *kernel;
-> +               void __user     *user;
-> +       };
-> +       bool            is_kernel : 1;
-> +} sockptr_t;
->
+On Thu, Jul 23, 2020 at 09:40:27AM -0700, Eric Dumazet wrote:
+> I am not sure why you chose sockptr_t   for something that really seems generic.
+> 
+> Or is it really meant to be exclusive to setsockopt() and/or getsockopt() ?
+> 
+> If the first user of this had been futex code, we would have used
+> futexptr_t, I guess.
 
-I am not sure why you chose sockptr_t   for something that really seems generic.
-
-Or is it really meant to be exclusive to setsockopt() and/or getsockopt() ?
-
-If the first user of this had been futex code, we would have used
-futexptr_t, I guess.
+It was originally intended to be generic and called uptr_t, based
+on me misunderstanding that Linus wanted a file operation for it,
+which he absolutely didn't and hate with passion.  So the plan is to
+only use it for setsockopt for now, although there are some arguments
+for also using it in sendmsg/recvmsg.  There is no need to use it for
+getsockopt.
