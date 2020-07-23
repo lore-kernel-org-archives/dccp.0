@@ -1,379 +1,190 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Mon, 20 Jul 2020 12:47:30 +0000
-Subject: [PATCH 17/24] net/ipv6: split up ipv6_flowlabel_opt
-Message-Id: <20200720124737.118617-18-hch@lst.de>
+Date: Thu, 23 Jul 2020 06:08:50 +0000
+Subject: [PATCH 08/26] net: switch sock_set_timeout to sockptr_t
+Message-Id: <20200723060908.50081-9-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Split ipv6_flowlabel_opt into a subfunction for each action and a small
-wrapper.
+Pass a sockptr_t to prepare for set_fs-less handling of the kernel
+pointer from bpf-cgroup.
 
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- net/ipv6/ip6_flowlabel.c | 311 +++++++++++++++++++++------------------
- 1 file changed, 167 insertions(+), 144 deletions(-)
+ include/net/sock.h   |  3 ++-
+ net/core/sock.c      | 26 ++++++++++++--------------
+ net/mptcp/protocol.c |  6 ++++--
+ net/socket.c         |  3 ++-
+ 4 files changed, 20 insertions(+), 18 deletions(-)
 
-diff --git a/net/ipv6/ip6_flowlabel.c b/net/ipv6/ip6_flowlabel.c
-index ce4fbba4acce7e..27ee6de9beffc4 100644
---- a/net/ipv6/ip6_flowlabel.c
-+++ b/net/ipv6/ip6_flowlabel.c
-@@ -533,187 +533,210 @@ int ipv6_flowlabel_opt_get(struct sock *sk, struct in6_flowlabel_req *freq,
- 	return -ENOENT;
- }
+diff --git a/include/net/sock.h b/include/net/sock.h
+index 62e18fc8ac9f96..bfb2fe2fc36876 100644
+--- a/include/net/sock.h
++++ b/include/net/sock.h
+@@ -59,6 +59,7 @@
+ #include <linux/filter.h>
+ #include <linux/rculist_nulls.h>
+ #include <linux/poll.h>
++#include <linux/sockptr.h>
  
--int ipv6_flowlabel_opt(struct sock *sk, char __user *optval, int optlen)
-+#define socklist_dereference(__sflp) \
-+	rcu_dereference_protected(__sflp, lockdep_is_held(&ip6_sk_fl_lock))
-+
-+static int ipv6_flowlabel_put(struct sock *sk, struct in6_flowlabel_req *freq)
+ #include <linux/atomic.h>
+ #include <linux/refcount.h>
+@@ -1669,7 +1670,7 @@ void sock_pfree(struct sk_buff *skb);
+ #endif
+ 
+ int sock_setsockopt(struct socket *sock, int level, int op,
+-		    char __user *optval, unsigned int optlen);
++		    sockptr_t optval, unsigned int optlen);
+ 
+ int sock_getsockopt(struct socket *sock, int level, int op,
+ 		    char __user *optval, int __user *optlen);
+diff --git a/net/core/sock.c b/net/core/sock.c
+index 8b9eddaff868a5..1444d7d53ba2fd 100644
+--- a/net/core/sock.c
++++ b/net/core/sock.c
+@@ -826,7 +826,7 @@ EXPORT_SYMBOL(sock_set_rcvbuf);
+  */
+ 
+ int sock_setsockopt(struct socket *sock, int level, int optname,
+-		    char __user *optval, unsigned int optlen)
++		    sockptr_t optval, unsigned int optlen)
  {
--	int uninitialized_var(err);
--	struct net *net = sock_net(sk);
- 	struct ipv6_pinfo *np = inet6_sk(sk);
--	struct in6_flowlabel_req freq;
--	struct ipv6_fl_socklist *sfl1 = NULL;
--	struct ipv6_fl_socklist *sfl;
- 	struct ipv6_fl_socklist __rcu **sflp;
--	struct ip6_flowlabel *fl, *fl1 = NULL;
--
-+	struct ipv6_fl_socklist *sfl;
+ 	struct sock_txtime sk_txtime;
+ 	struct sock *sk = sock->sk;
+@@ -840,12 +840,12 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
+ 	 */
  
--	if (optlen < sizeof(freq))
--		return -EINVAL;
-+	if (freq->flr_flags & IPV6_FL_F_REFLECT) {
-+		if (sk->sk_protocol != IPPROTO_TCP)
-+			return -ENOPROTOOPT;
-+		if (!np->repflow)
-+			return -ESRCH;
-+		np->flow_label = 0;
-+		np->repflow = 0;
-+		return 0;
-+	}
+ 	if (optname = SO_BINDTODEVICE)
+-		return sock_setbindtodevice(sk, USER_SOCKPTR(optval), optlen);
++		return sock_setbindtodevice(sk, optval, optlen);
  
--	if (copy_from_user(&freq, optval, sizeof(freq)))
--		return -EFAULT;
-+	spin_lock_bh(&ip6_sk_fl_lock);
-+	for (sflp = &np->ipv6_fl_list;
-+	     (sfl = socklist_dereference(*sflp)) != NULL;
-+	     sflp = &sfl->next) {
-+		if (sfl->fl->label = freq->flr_label)
-+			goto found;
-+	}
-+	spin_unlock_bh(&ip6_sk_fl_lock);
-+	return -ESRCH;
-+found:
-+	if (freq->flr_label = (np->flow_label & IPV6_FLOWLABEL_MASK))
-+		np->flow_label &= ~IPV6_FLOWLABEL_MASK;
-+	*sflp = sfl->next;
-+	spin_unlock_bh(&ip6_sk_fl_lock);
-+	fl_release(sfl->fl);
-+	kfree_rcu(sfl, rcu);
-+	return 0;
-+}
-+		
-+static int ipv6_flowlabel_renew(struct sock *sk, struct in6_flowlabel_req *freq)
-+{
-+	struct ipv6_pinfo *np = inet6_sk(sk);
-+	struct net *net = sock_net(sk);
-+	struct ipv6_fl_socklist *sfl;
-+	int err;
+ 	if (optlen < sizeof(int))
+ 		return -EINVAL;
  
--	switch (freq.flr_action) {
--	case IPV6_FL_A_PUT:
--		if (freq.flr_flags & IPV6_FL_F_REFLECT) {
--			if (sk->sk_protocol != IPPROTO_TCP)
--				return -ENOPROTOOPT;
--			if (!np->repflow)
--				return -ESRCH;
--			np->flow_label = 0;
--			np->repflow = 0;
--			return 0;
--		}
--		spin_lock_bh(&ip6_sk_fl_lock);
--		for (sflp = &np->ipv6_fl_list;
--		     (sfl = rcu_dereference_protected(*sflp,
--						      lockdep_is_held(&ip6_sk_fl_lock))) != NULL;
--		     sflp = &sfl->next) {
--			if (sfl->fl->label = freq.flr_label) {
--				if (freq.flr_label = (np->flow_label&IPV6_FLOWLABEL_MASK))
--					np->flow_label &= ~IPV6_FLOWLABEL_MASK;
--				*sflp = sfl->next;
--				spin_unlock_bh(&ip6_sk_fl_lock);
--				fl_release(sfl->fl);
--				kfree_rcu(sfl, rcu);
--				return 0;
--			}
-+	rcu_read_lock_bh();
-+	for_each_sk_fl_rcu(np, sfl) {
-+		if (sfl->fl->label = freq->flr_label) {
-+			err = fl6_renew(sfl->fl, freq->flr_linger,
-+					freq->flr_expires);
-+			rcu_read_unlock_bh();
-+			return err;
+-	if (get_user(val, (int __user *)optval))
++	if (copy_from_sockptr(&val, optval, sizeof(val)))
+ 		return -EFAULT;
+ 
+ 	valbool = val ? 1 : 0;
+@@ -958,7 +958,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
+ 			ret = -EINVAL;	/* 1003.1g */
+ 			break;
  		}
--		spin_unlock_bh(&ip6_sk_fl_lock);
--		return -ESRCH;
-+	}
-+	rcu_read_unlock_bh();
- 
--	case IPV6_FL_A_RENEW:
--		rcu_read_lock_bh();
--		for_each_sk_fl_rcu(np, sfl) {
--			if (sfl->fl->label = freq.flr_label) {
--				err = fl6_renew(sfl->fl, freq.flr_linger, freq.flr_expires);
--				rcu_read_unlock_bh();
--				return err;
--			}
--		}
--		rcu_read_unlock_bh();
-+	if (freq->flr_share = IPV6_FL_S_NONE &&
-+	    ns_capable(net->user_ns, CAP_NET_ADMIN)) {
-+		struct ip6_flowlabel *fl = fl_lookup(net, freq->flr_label);
- 
--		if (freq.flr_share = IPV6_FL_S_NONE &&
--		    ns_capable(net->user_ns, CAP_NET_ADMIN)) {
--			fl = fl_lookup(net, freq.flr_label);
--			if (fl) {
--				err = fl6_renew(fl, freq.flr_linger, freq.flr_expires);
--				fl_release(fl);
--				return err;
--			}
-+		if (fl) {
-+			err = fl6_renew(fl, freq->flr_linger,
-+					freq->flr_expires);
-+			fl_release(fl);
-+			return err;
+-		if (copy_from_user(&ling, optval, sizeof(ling))) {
++		if (copy_from_sockptr(&ling, optval, sizeof(ling))) {
+ 			ret = -EFAULT;
+ 			break;
  		}
--		return -ESRCH;
--
--	case IPV6_FL_A_GET:
--		if (freq.flr_flags & IPV6_FL_F_REFLECT) {
--			struct net *net = sock_net(sk);
--			if (net->ipv6.sysctl.flowlabel_consistency) {
--				net_info_ratelimited("Can not set IPV6_FL_F_REFLECT if flowlabel_consistency sysctl is enable\n");
--				return -EPERM;
--			}
-+	}
-+	return -ESRCH;
-+}
+@@ -1052,21 +1052,20 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
  
--			if (sk->sk_protocol != IPPROTO_TCP)
--				return -ENOPROTOOPT;
-+static int ipv6_flowlabel_get(struct sock *sk, struct in6_flowlabel_req *freq,
-+		void __user *optval, int optlen)
-+{
-+	struct ipv6_fl_socklist *sfl, *sfl1 = NULL;
-+	struct ip6_flowlabel *fl, *fl1 = NULL;
-+	struct ipv6_pinfo *np = inet6_sk(sk);
-+	struct net *net = sock_net(sk);
-+	int uninitialized_var(err);
+ 	case SO_RCVTIMEO_OLD:
+ 	case SO_RCVTIMEO_NEW:
+-		ret = sock_set_timeout(&sk->sk_rcvtimeo, USER_SOCKPTR(optval),
++		ret = sock_set_timeout(&sk->sk_rcvtimeo, optval,
+ 				       optlen, optname = SO_RCVTIMEO_OLD);
+ 		break;
  
--			np->repflow = 1;
--			return 0;
-+	if (freq->flr_flags & IPV6_FL_F_REFLECT) {
-+		if (net->ipv6.sysctl.flowlabel_consistency) {
-+			net_info_ratelimited("Can not set IPV6_FL_F_REFLECT if flowlabel_consistency sysctl is enable\n");
-+			return -EPERM;
+ 	case SO_SNDTIMEO_OLD:
+ 	case SO_SNDTIMEO_NEW:
+-		ret = sock_set_timeout(&sk->sk_sndtimeo, USER_SOCKPTR(optval),
++		ret = sock_set_timeout(&sk->sk_sndtimeo, optval,
+ 				       optlen, optname = SO_SNDTIMEO_OLD);
+ 		break;
+ 
+ 	case SO_ATTACH_FILTER: {
+ 		struct sock_fprog fprog;
+ 
+-		ret = copy_bpf_fprog_from_user(&fprog, USER_SOCKPTR(optval),
+-					       optlen);
++		ret = copy_bpf_fprog_from_user(&fprog, optval, optlen);
+ 		if (!ret)
+ 			ret = sk_attach_filter(&fprog, sk);
+ 		break;
+@@ -1077,7 +1076,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
+ 			u32 ufd;
+ 
+ 			ret = -EFAULT;
+-			if (copy_from_user(&ufd, optval, sizeof(ufd)))
++			if (copy_from_sockptr(&ufd, optval, sizeof(ufd)))
+ 				break;
+ 
+ 			ret = sk_attach_bpf(ufd, sk);
+@@ -1087,8 +1086,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
+ 	case SO_ATTACH_REUSEPORT_CBPF: {
+ 		struct sock_fprog fprog;
+ 
+-		ret = copy_bpf_fprog_from_user(&fprog, USER_SOCKPTR(optval),
+-					       optlen);
++		ret = copy_bpf_fprog_from_user(&fprog, optval, optlen);
+ 		if (!ret)
+ 			ret = sk_reuseport_attach_filter(&fprog, sk);
+ 		break;
+@@ -1099,7 +1097,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
+ 			u32 ufd;
+ 
+ 			ret = -EFAULT;
+-			if (copy_from_user(&ufd, optval, sizeof(ufd)))
++			if (copy_from_sockptr(&ufd, optval, sizeof(ufd)))
+ 				break;
+ 
+ 			ret = sk_reuseport_attach_bpf(ufd, sk);
+@@ -1179,7 +1177,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
+ 
+ 		if (sizeof(ulval) != sizeof(val) &&
+ 		    optlen >= sizeof(ulval) &&
+-		    get_user(ulval, (unsigned long __user *)optval)) {
++		    copy_from_sockptr(&ulval, optval, sizeof(ulval))) {
+ 			ret = -EFAULT;
+ 			break;
+ 		}
+@@ -1222,7 +1220,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
+ 		if (optlen != sizeof(struct sock_txtime)) {
+ 			ret = -EINVAL;
+ 			break;
+-		} else if (copy_from_user(&sk_txtime, optval,
++		} else if (copy_from_sockptr(&sk_txtime, optval,
+ 			   sizeof(struct sock_txtime))) {
+ 			ret = -EFAULT;
+ 			break;
+diff --git a/net/mptcp/protocol.c b/net/mptcp/protocol.c
+index f0b0b503c2628d..27b6f250b87dfd 100644
+--- a/net/mptcp/protocol.c
++++ b/net/mptcp/protocol.c
+@@ -1643,7 +1643,8 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
+ 			return -EINVAL;
  		}
  
--		if (freq.flr_label & ~IPV6_FLOWLABEL_MASK)
--			return -EINVAL;
-+		if (sk->sk_protocol != IPPROTO_TCP)
-+			return -ENOPROTOOPT;
-+		np->repflow = 1;
-+		return 0;
-+	}
- 
--		if (net->ipv6.sysctl.flowlabel_state_ranges &&
--		    (freq.flr_label & IPV6_FLOWLABEL_STATELESS_FLAG))
--			return -ERANGE;
-+	if (freq->flr_label & ~IPV6_FLOWLABEL_MASK)
-+		return -EINVAL;
-+	if (net->ipv6.sysctl.flowlabel_state_ranges &&
-+	    (freq->flr_label & IPV6_FLOWLABEL_STATELESS_FLAG))
-+		return -ERANGE;
- 
--		fl = fl_create(net, sk, &freq, optval, optlen, &err);
--		if (!fl)
--			return err;
--		sfl1 = kmalloc(sizeof(*sfl1), GFP_KERNEL);
-+	fl = fl_create(net, sk, freq, optval, optlen, &err);
-+	if (!fl)
-+		return err;
- 
--		if (freq.flr_label) {
--			err = -EEXIST;
--			rcu_read_lock_bh();
--			for_each_sk_fl_rcu(np, sfl) {
--				if (sfl->fl->label = freq.flr_label) {
--					if (freq.flr_flags&IPV6_FL_F_EXCL) {
--						rcu_read_unlock_bh();
--						goto done;
--					}
--					fl1 = sfl->fl;
--					if (!atomic_inc_not_zero(&fl1->users))
--						fl1 = NULL;
--					break;
-+	sfl1 = kmalloc(sizeof(*sfl1), GFP_KERNEL);
-+
-+	if (freq->flr_label) {
-+		err = -EEXIST;
-+		rcu_read_lock_bh();
-+		for_each_sk_fl_rcu(np, sfl) {
-+			if (sfl->fl->label = freq->flr_label) {
-+				if (freq->flr_flags & IPV6_FL_F_EXCL) {
-+					rcu_read_unlock_bh();
-+					goto done;
- 				}
-+				fl1 = sfl->fl;
-+				if (!atomic_inc_not_zero(&fl1->users))
-+					fl1 = NULL;
-+				break;
- 			}
--			rcu_read_unlock_bh();
-+		}
-+		rcu_read_unlock_bh();
- 
--			if (!fl1)
--				fl1 = fl_lookup(net, freq.flr_label);
--			if (fl1) {
-+		if (!fl1)
-+			fl1 = fl_lookup(net, freq->flr_label);
-+		if (fl1) {
- recheck:
--				err = -EEXIST;
--				if (freq.flr_flags&IPV6_FL_F_EXCL)
--					goto release;
--				err = -EPERM;
--				if (fl1->share = IPV6_FL_S_EXCL ||
--				    fl1->share != fl->share ||
--				    ((fl1->share = IPV6_FL_S_PROCESS) &&
--				     (fl1->owner.pid != fl->owner.pid)) ||
--				    ((fl1->share = IPV6_FL_S_USER) &&
--				     !uid_eq(fl1->owner.uid, fl->owner.uid)))
--					goto release;
--
--				err = -ENOMEM;
--				if (!sfl1)
--					goto release;
--				if (fl->linger > fl1->linger)
--					fl1->linger = fl->linger;
--				if ((long)(fl->expires - fl1->expires) > 0)
--					fl1->expires = fl->expires;
--				fl_link(np, sfl1, fl1);
--				fl_free(fl);
--				return 0;
-+			err = -EEXIST;
-+			if (freq->flr_flags&IPV6_FL_F_EXCL)
-+				goto release;
-+			err = -EPERM;
-+			if (fl1->share = IPV6_FL_S_EXCL ||
-+			    fl1->share != fl->share ||
-+			    ((fl1->share = IPV6_FL_S_PROCESS) &&
-+			     (fl1->owner.pid != fl->owner.pid)) ||
-+			    ((fl1->share = IPV6_FL_S_USER) &&
-+			     !uid_eq(fl1->owner.uid, fl->owner.uid)))
-+				goto release;
-+
-+			err = -ENOMEM;
-+			if (!sfl1)
-+				goto release;
-+			if (fl->linger > fl1->linger)
-+				fl1->linger = fl->linger;
-+			if ((long)(fl->expires - fl1->expires) > 0)
-+				fl1->expires = fl->expires;
-+			fl_link(np, sfl1, fl1);
-+			fl_free(fl);
-+			return 0;
- 
- release:
--				fl_release(fl1);
--				goto done;
--			}
--		}
--		err = -ENOENT;
--		if (!(freq.flr_flags&IPV6_FL_F_CREATE))
-+			fl_release(fl1);
- 			goto done;
-+		}
-+	}
-+	err = -ENOENT;
-+	if (!(freq->flr_flags & IPV6_FL_F_CREATE))
-+		goto done;
- 
--		err = -ENOMEM;
--		if (!sfl1)
--			goto done;
-+	err = -ENOMEM;
-+	if (!sfl1)
-+		goto done;
- 
--		err = mem_check(sk);
--		if (err != 0)
--			goto done;
-+	err = mem_check(sk);
-+	if (err != 0)
-+		goto done;
- 
--		fl1 = fl_intern(net, fl, freq.flr_label);
--		if (fl1)
--			goto recheck;
-+	fl1 = fl_intern(net, fl, freq->flr_label);
-+	if (fl1)
-+		goto recheck;
- 
--		if (!freq.flr_label) {
--			if (copy_to_user(&((struct in6_flowlabel_req __user *) optval)->flr_label,
--					 &fl->label, sizeof(fl->label))) {
--				/* Intentionally ignore fault. */
--			}
-+	if (!freq->flr_label) {
-+		if (copy_to_user(&((struct in6_flowlabel_req __user *) optval)->flr_label,
-+				 &fl->label, sizeof(fl->label))) {
-+			/* Intentionally ignore fault. */
- 		}
--
--		fl_link(np, sfl1, fl);
--		return 0;
--
--	default:
--		return -EINVAL;
+-		ret = sock_setsockopt(ssock, SOL_SOCKET, optname, optval, optlen);
++		ret = sock_setsockopt(ssock, SOL_SOCKET, optname,
++				      USER_SOCKPTR(optval), optlen);
+ 		if (ret = 0) {
+ 			if (optname = SO_REUSEPORT)
+ 				sk->sk_reuseport = ssock->sk->sk_reuseport;
+@@ -1654,7 +1655,8 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
+ 		return ret;
  	}
  
-+	fl_link(np, sfl1, fl);
-+	return 0;
- done:
- 	fl_free(fl);
- 	kfree(sfl1);
- 	return err;
+-	return sock_setsockopt(sk->sk_socket, SOL_SOCKET, optname, optval, optlen);
++	return sock_setsockopt(sk->sk_socket, SOL_SOCKET, optname,
++			       USER_SOCKPTR(optval), optlen);
  }
  
-+int ipv6_flowlabel_opt(struct sock *sk, char __user *optval, int optlen)
-+{
-+	struct in6_flowlabel_req freq;
-+
-+	if (optlen < sizeof(freq))
-+		return -EINVAL;
-+	if (copy_from_user(&freq, optval, sizeof(freq)))
-+		return -EFAULT;
-+
-+	switch (freq.flr_action) {
-+	case IPV6_FL_A_PUT:
-+		return ipv6_flowlabel_put(sk, &freq);
-+	case IPV6_FL_A_RENEW:
-+		return ipv6_flowlabel_renew(sk, &freq);
-+	case IPV6_FL_A_GET:
-+		return ipv6_flowlabel_get(sk, &freq, optval, optlen);
-+	default:
-+		return -EINVAL;
-+	}
-+}
-+
- #ifdef CONFIG_PROC_FS
+ static int mptcp_setsockopt_v6(struct mptcp_sock *msk, int optname,
+diff --git a/net/socket.c b/net/socket.c
+index 93846568c2fb7a..c97f83d879ae75 100644
+--- a/net/socket.c
++++ b/net/socket.c
+@@ -2130,7 +2130,8 @@ int __sys_setsockopt(int fd, int level, int optname, char __user *optval,
+ 	}
  
- struct ip6fl_iter_state {
+ 	if (level = SOL_SOCKET && !sock_use_custom_sol_socket(sock))
+-		err = sock_setsockopt(sock, level, optname, optval, optlen);
++		err = sock_setsockopt(sock, level, optname,
++				      USER_SOCKPTR(optval), optlen);
+ 	else if (unlikely(!sock->ops->setsockopt))
+ 		err = -EOPNOTSUPP;
+ 	else
 -- 
 2.27.0
