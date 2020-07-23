@@ -1,51 +1,81 @@
 From: Christoph Hellwig <hch@lst.de>
-Date: Thu, 23 Jul 2020 06:08:52 +0000
-Subject: [PATCH 10/26] netfilter: remove the unused user argument to do_update_counters
-Message-Id: <20200723060908.50081-11-hch@lst.de>
+Date: Thu, 23 Jul 2020 06:09:04 +0000
+Subject: [PATCH 22/26] net/udp: switch udp_lib_setsockopt to sockptr_t
+Message-Id: <20200723060908.50081-23-hch@lst.de>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
+Pass a sockptr_t to prepare for set_fs-less handling of the kernel
+pointer from bpf-cgroup.
+
 Signed-off-by: Christoph Hellwig <hch@lst.de>
 ---
- net/bridge/netfilter/ebtables.c | 9 ++++-----
- 1 file changed, 4 insertions(+), 5 deletions(-)
+ include/net/udp.h | 2 +-
+ net/ipv4/udp.c    | 7 ++++---
+ net/ipv6/udp.c    | 3 ++-
+ 3 files changed, 7 insertions(+), 5 deletions(-)
 
-diff --git a/net/bridge/netfilter/ebtables.c b/net/bridge/netfilter/ebtables.c
-index fe13108af1f542..12f8929667bf43 100644
---- a/net/bridge/netfilter/ebtables.c
-+++ b/net/bridge/netfilter/ebtables.c
-@@ -1242,9 +1242,8 @@ void ebt_unregister_table(struct net *net, struct ebt_table *table,
- 
- /* userspace just supplied us with counters */
- static int do_update_counters(struct net *net, const char *name,
--				struct ebt_counter __user *counters,
--				unsigned int num_counters,
--				const void __user *user, unsigned int len)
-+			      struct ebt_counter __user *counters,
-+			      unsigned int num_counters, unsigned int len)
+diff --git a/include/net/udp.h b/include/net/udp.h
+index 17a9e86a807638..295d52a7359827 100644
+--- a/include/net/udp.h
++++ b/include/net/udp.h
+@@ -306,7 +306,7 @@ struct sk_buff *skb_udp_tunnel_segment(struct sk_buff *skb,
+ int udp_lib_getsockopt(struct sock *sk, int level, int optname,
+ 		       char __user *optval, int __user *optlen);
+ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
+-		       char __user *optval, unsigned int optlen,
++		       sockptr_t optval, unsigned int optlen,
+ 		       int (*push_pending_frames)(struct sock *));
+ struct sock *udp4_lib_lookup(struct net *net, __be32 saddr, __be16 sport,
+ 			     __be32 daddr, __be16 dport, int dif);
+diff --git a/net/ipv4/udp.c b/net/ipv4/udp.c
+index bb95cddcb040a6..c6cb2d09dbc75e 100644
+--- a/net/ipv4/udp.c
++++ b/net/ipv4/udp.c
+@@ -2588,7 +2588,7 @@ void udp_destroy_sock(struct sock *sk)
+  *	Socket option code for UDP
+  */
+ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
+-		       char __user *optval, unsigned int optlen,
++		       sockptr_t optval, unsigned int optlen,
+ 		       int (*push_pending_frames)(struct sock *))
  {
- 	int i, ret;
- 	struct ebt_counter *tmp;
-@@ -1299,7 +1298,7 @@ static int update_counters(struct net *net, const void __user *user,
+ 	struct udp_sock *up = udp_sk(sk);
+@@ -2599,7 +2599,7 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
+ 	if (optlen < sizeof(int))
  		return -EINVAL;
  
- 	return do_update_counters(net, hlp.name, hlp.counters,
--				hlp.num_counters, user, len);
-+				  hlp.num_counters, len);
+-	if (get_user(val, (int __user *)optval))
++	if (copy_from_sockptr(&val, optval, sizeof(val)))
+ 		return -EFAULT;
+ 
+ 	valbool = val ? 1 : 0;
+@@ -2707,7 +2707,8 @@ int udp_setsockopt(struct sock *sk, int level, int optname,
+ 		   char __user *optval, unsigned int optlen)
+ {
+ 	if (level = SOL_UDP  ||  level = SOL_UDPLITE)
+-		return udp_lib_setsockopt(sk, level, optname, optval, optlen,
++		return udp_lib_setsockopt(sk, level, optname,
++					  USER_SOCKPTR(optval), optlen,
+ 					  udp_push_pending_frames);
+ 	return ip_setsockopt(sk, level, optname, optval, optlen);
  }
- 
- static inline int ebt_obj_to_user(char __user *um, const char *_name,
-@@ -2231,7 +2230,7 @@ static int compat_update_counters(struct net *net, void __user *user,
- 		return update_counters(net, user, len);
- 
- 	return do_update_counters(net, hlp.name, compat_ptr(hlp.counters),
--					hlp.num_counters, user, len);
-+				  hlp.num_counters, len);
+diff --git a/net/ipv6/udp.c b/net/ipv6/udp.c
+index 7c1143feb2bf7e..2df1e6c9d7cbf6 100644
+--- a/net/ipv6/udp.c
++++ b/net/ipv6/udp.c
+@@ -1622,7 +1622,8 @@ int udpv6_setsockopt(struct sock *sk, int level, int optname,
+ 		     char __user *optval, unsigned int optlen)
+ {
+ 	if (level = SOL_UDP  ||  level = SOL_UDPLITE)
+-		return udp_lib_setsockopt(sk, level, optname, optval, optlen,
++		return udp_lib_setsockopt(sk, level, optname,
++					  USER_SOCKPTR(optval), optlen,
+ 					  udp_v6_push_pending_frames);
+ 	return ipv6_setsockopt(sk, level, optname, optval, optlen);
  }
- 
- static int compat_do_ebt_get_ctl(struct sock *sk, int cmd,
 -- 
 2.27.0
