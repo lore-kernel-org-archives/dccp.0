@@ -1,7 +1,7 @@
-From: Joe Perches <joe@perches.com>
-Date: Wed, 09 Sep 2020 22:47:24 +0000
+From: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+Date: Thu, 10 Sep 2020 06:28:12 +0000
 Subject: Re: [trivial PATCH] treewide: Convert switch/case fallthrough; to break;
-Message-Id: <b3d6f71aea87f4bb88554f1a3fdaee0b2feb158c.camel@perches.com>
+Message-Id: <20200910082812.057a04e6@coco.lan>
 List-Id: <dccp.vger.kernel.org>
 References: <e6387578c75736d61b2fe70d9783d91329a97eb4.camel@perches.com>
 In-Reply-To: <e6387578c75736d61b2fe70d9783d91329a97eb4.camel@perches.com>
@@ -10,33 +10,43 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, 2020-09-09 at 19:36 -0300, Jason Gunthorpe wrote:
-> On Wed, Sep 09, 2020 at 01:06:39PM -0700, Joe Perches wrote:
-> > fallthrough to a separate case/default label break; isn't very readable.
-> > 
-> > Convert pseudo-keyword fallthrough; statements to a simple break; when
-> > the next label is case or default and the only statement in the next
-> > label block is break;
-> > 
-> > Found using:
-> > 
-> > $ grep-2.5.4 -rP --include=*.[ch] -n "fallthrough;(\s*(case\s+\w+|default)\s*:\s*){1,7}break;" *
-> > 
-> > Miscellanea:
-> > 
-> > o Move or coalesce a couple label blocks above a default: block.
-> > 
-> > Signed-off-by: Joe Perches <joe@perches.com>
-> > ---
-> > 
-> > Compiled allyesconfig x86-64 only.
-> > A few files for other arches were not compiled.
-> 
-> IB part looks OK, I prefer it like this
-> 
-> You could do the same for continue as well, I saw a few of those..
+Em Wed, 09 Sep 2020 13:06:39 -0700
+Joe Perches <joe@perches.com> escreveu:
 
-I saw some continue uses as well but wasn't sure
-and didn't look to see if the switch/case with
-continue was in a for/while loop.
+> fallthrough to a separate case/default label break; isn't very readable.
+> 
+> Convert pseudo-keyword fallthrough; statements to a simple break; when
+> the next label is case or default and the only statement in the next
+> label block is break;
+> 
+> Found using:
+> 
+> $ grep-2.5.4 -rP --include=*.[ch] -n "fallthrough;(\s*(case\s+\w+|default)\s*:\s*){1,7}break;" *
+> 
+> Miscellanea:
+> 
+> o Move or coalesce a couple label blocks above a default: block.
+> 
+> Signed-off-by: Joe Perches <joe@perches.com>
+> ---
+> 
+> Compiled allyesconfig x86-64 only.
+> A few files for other arches were not compiled.
+> 
 
+
+>  drivers/media/dvb-frontends/drxd_hard.c                   |  2 +-
+>  drivers/media/i2c/ov5640.c                                |  2 +-
+>  drivers/media/i2c/ov6650.c                                |  5 ++---
+>  drivers/media/i2c/smiapp/smiapp-core.c                    |  2 +-
+>  drivers/media/i2c/tvp5150.c                               |  2 +-
+>  drivers/media/pci/ddbridge/ddbridge-core.c                |  2 +-
+>  drivers/media/usb/cpia2/cpia2_core.c                      |  2 +-
+
+For media drivers:
+
+Reviewed-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+
+Thanks,
+Mauro
