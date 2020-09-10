@@ -1,52 +1,58 @@
-From: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
-Date: Thu, 10 Sep 2020 06:28:12 +0000
+From: Wolfram Sang <wsa@kernel.org>
+Date: Thu, 10 Sep 2020 06:53:12 +0000
 Subject: Re: [trivial PATCH] treewide: Convert switch/case fallthrough; to break;
-Message-Id: <20200910082812.057a04e6@coco.lan>
+Message-Id: <20200910065312.GH1031@ninjato>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="OpLPJvDmhXTZE4Lg"
 List-Id: <dccp.vger.kernel.org>
 References: <e6387578c75736d61b2fe70d9783d91329a97eb4.camel@perches.com>
 In-Reply-To: <e6387578c75736d61b2fe70d9783d91329a97eb4.camel@perches.com>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Em Wed, 09 Sep 2020 13:06:39 -0700
-Joe Perches <joe@perches.com> escreveu:
 
-> fallthrough to a separate case/default label break; isn't very readable.
-> 
-> Convert pseudo-keyword fallthrough; statements to a simple break; when
-> the next label is case or default and the only statement in the next
-> label block is break;
-> 
-> Found using:
-> 
-> $ grep-2.5.4 -rP --include=*.[ch] -n "fallthrough;(\s*(case\s+\w+|default)\s*:\s*){1,7}break;" *
-> 
-> Miscellanea:
-> 
-> o Move or coalesce a couple label blocks above a default: block.
-> 
-> Signed-off-by: Joe Perches <joe@perches.com>
-> ---
-> 
-> Compiled allyesconfig x86-64 only.
-> A few files for other arches were not compiled.
-> 
+--OpLPJvDmhXTZE4Lg
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
 
 
->  drivers/media/dvb-frontends/drxd_hard.c                   |  2 +-
->  drivers/media/i2c/ov5640.c                                |  2 +-
->  drivers/media/i2c/ov6650.c                                |  5 ++---
->  drivers/media/i2c/smiapp/smiapp-core.c                    |  2 +-
->  drivers/media/i2c/tvp5150.c                               |  2 +-
->  drivers/media/pci/ddbridge/ddbridge-core.c                |  2 +-
->  drivers/media/usb/cpia2/cpia2_core.c                      |  2 +-
+> diff --git a/drivers/i2c/busses/i2c-i801.c b/drivers/i2c/busses/i2c-i801.c
+> index e32ef3f01fe8..b13b1cbcac29 100644
+> --- a/drivers/i2c/busses/i2c-i801.c
+> +++ b/drivers/i2c/busses/i2c-i801.c
+> @@ -1785,7 +1785,7 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
+>  		fallthrough;
+>  	case PCI_DEVICE_ID_INTEL_82801CA_3:
+>  		priv->features |= FEATURE_HOST_NOTIFY;
+> -		fallthrough;
+> +		break;
+>  	case PCI_DEVICE_ID_INTEL_82801BA_2:
+>  	case PCI_DEVICE_ID_INTEL_82801AB_3:
+>  	case PCI_DEVICE_ID_INTEL_82801AA_3:
 
-For media drivers:
+I am not the maintainer (Jean is) but I suggest to drop this hunk. The
+code is more complex with multiple 'fallthrough', so this change alone
+actually makes the code inconsistent. A rework would need a seperate
+patch.
 
-Reviewed-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
 
+--OpLPJvDmhXTZE4Lg
+Content-Type: application/pgp-signature; name="signature.asc"
 
-Thanks,
-Mauro
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAABCgAdFiEEOZGx6rniZ1Gk92RdFA3kzBSgKbYFAl9ZzVQACgkQFA3kzBSg
+KbYNuA//cymFe0KsFqywRHv3eBWJhoqwvWN2Xhwrx5/b6N3kkKGTo61aOo1ZI2gU
+55rQoGusy8OzGXaxlyhNS8Ea9ztPZc/tHEohOHKPYr52ErUMXlbMo3I3q7sZAZEI
+O/bRlnPKUCKqKOpZBin0ri6NE3FNYybTW30HgIk/LFUeCuaup10cUcxCmPfXHlNc
+M/2M2tBVyyBOqlVVsPxIfEZ4jGDaikxt7mBZDj4QMJnivnuMFuuz8U7gYzkXIHfO
+4ahGx+dBLCCInwFNFjEIPr+biq6Bgt/Vl9bbgN/BYbzdgbbJcikEhWHd9FxEoxQ5
+Y4M6/HxLDuCwTLIoFHjVifsFHK4Emk5ECc0xBWjHu3CJDunZSmy6yS5gbD1BrstW
+Djf0Ue1kyqnVPBDKE0EwFmwz1z1V14bhhXVC1fkiJjTpYRA6g3zMwH1oan6XIbGj
+v4OuWFDkQLEfzCCBIASGS849HtQ4rNafKxX3KQ3qxngh7XBrK7X92SLf3qRJurdt
+h5Ozd/zYDzyKQ1nOf/XWAOP5SKZH2ANjTrFKgIZE8MRkTmbzrlZkCnDnFD0pKPlB
+Z9h9uPZ7kifAejwaRPfsTu6/B9XJafMKfLa3hKTg2kgO+p67ItBEQ0W8wrXLE1/1
+c5FW5PqdkjKnx/9yUqosjEsHV2goh1guE4cziLkF1pZXcrElbtk=
+=ZP3J
+-----END PGP SIGNATURE-----
+
+--OpLPJvDmhXTZE4Lg--
