@@ -1,20 +1,45 @@
-From: Andrew Lunn <andrew@lunn.ch>
-Date: Wed, 28 Oct 2020 01:20:47 +0000
-Subject: Re: [PATCH net-next] net: dccp: Fix most of the kerneldoc warnings
-Message-Id: <20201028012047.GB931318@lunn.ch>
+From: Kleber Sacilotto de Souza <kleber.souza@canonical.com>
+Date: Tue, 13 Oct 2020 17:18:49 +0000
+Subject: [PATCH 2/2] Revert "dccp: don't free ccid2_hc_tx_sock struct in dccp_disconnect()"
+Message-Id: <20201013171849.236025-3-kleber.souza@canonical.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20201028011412.931250-1-andrew@lunn.ch>
-In-Reply-To: <20201028011412.931250-1-andrew@lunn.ch>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-There are two W=1 warnings left after this patch is applied:
+From: Thadeu Lima de Souza Cascardo <cascardo@canonical.com>
 
-net/dccp/ccids/ccid2.c:365: warning: Function parameter or member 'mrtt' not described in 'ccid2_rtt_estimator'
-net/dccp/ccids/lib/tfrc_equation.c:695: warning: Function parameter or member 'loss_event_rate' not described in 'tfrc_invert_loss_event_rate'
+This reverts commit 2677d20677314101293e6da0094ede7b5526d2b1.
 
-It would be nice is somebody could fix those as well.
+This fixes an issue that after disconnect, dccps_hc_tx_ccid will still be
+kept, allowing the socket to be reused as a listener socket, and the cloned
+socket will free its dccps_hc_tx_ccid, leading to a later use after free,
+when the listener socket is closed.
 
-   Andrew
+This addresses CVE-2020-16119.
+
+Fixes: 2677d2067731 (dccp: don't free ccid2_hc_tx_sock struct in dccp_disconnect())
+Reported-by: Hadar Manor
+Signed-off-by: Thadeu Lima de Souza Cascardo <cascardo@canonical.com>
+Signed-off-by: Kleber Sacilotto de Souza <kleber.souza@canonical.com>
+---
+ net/dccp/proto.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 6d705d90c614..359e848dba6c 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -279,7 +279,9 @@ int dccp_disconnect(struct sock *sk, int flags)
+ 
+ 	dccp_clear_xmit_timers(sk);
+ 	ccid_hc_rx_delete(dp->dccps_hc_rx_ccid, sk);
++	ccid_hc_tx_delete(dp->dccps_hc_tx_ccid, sk);
+ 	dp->dccps_hc_rx_ccid = NULL;
++	dp->dccps_hc_tx_ccid = NULL;
+ 
+ 	__skb_queue_purge(&sk->sk_receive_queue);
+ 	__skb_queue_purge(&sk->sk_write_queue);
+-- 
+2.25.1
