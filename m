@@ -1,33 +1,64 @@
 From: Jakub Kicinski <kuba@kernel.org>
-Date: Tue, 10 Nov 2020 16:16:55 +0000
-Subject: Re: [PATCH 1/2] dccp: ccid: move timers to struct dccp_sock
-Message-Id: <20201110081655.29cbcd34@kicinski-fedora-pc1c0hjn.dhcp.thefacebook.com>
+Date: Mon, 11 Jan 2021 05:27:58 +0000
+Subject: [PATCH net 8/9] MAINTAINERS: dccp: move Gerrit Renker to CREDITS
+Message-Id: <20210111052759.2144758-9-kuba@kernel.org>
 List-Id: <dccp.vger.kernel.org>
-References: <20201013171849.236025-2-kleber.souza@canonical.com>
-In-Reply-To: <20201013171849.236025-2-kleber.souza@canonical.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Tue, 10 Nov 2020 08:19:32 -0300 Thadeu Lima de Souza Cascardo wrote:
-> Yeah, I agree with your initial email. The patch I submitted for that fix needs
-> rework, which is what I tried and failed so far. I need to get back to some
-> testing of my latest fix and find out what needs fixing there.
-> 
-> But I am also saying that simply doing a del_timer_sync on disconnect paths
-> won't do, because there are non-disconnect paths where there is a CCID that we
-> will remove and replace and that will still trigger a timer UAF.
-> 
-> So I have been working on a fix that involves a refcnt on ccid itself. But I
-> want to test that it really fixes the problem and I have spent most of the time
-> finding out a way to trigger the timer in a race with the disconnect path.
+As far as I can tell we haven't heard from Gerrit for roughly
+5 years now. DCCP patch would really benefit from some review.
+Gerrit was the last maintainer so mark this entry as orphaned.
 
-Sounds good, thanks a lot for working on this!
+Subsystem DCCP PROTOCOL
+  Changes 38 / 166 (22%)
+  (No activity)
+  Top reviewers:
+    [6]: kstewart@linuxfoundation.org
+    [6]: allison@lohutok.net
+    [5]: edumazet@google.com
+  INACTIVE MAINTAINER Gerrit Renker <gerrit@erg.abdn.ac.uk>
 
-> And that same test has showed me that this timer UAF will happen regardless of
-> commit 2677d20677314101293e6da0094ede7b5526d2b1, which led me into stating that
-> reverting it should be done in any case.
-> 
-> I think I can find some time this week to work a little further on the fix for
-> the time UAF.
+Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+---
+CC: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+CC: dccp@vger.kernel.org
+---
+ CREDITS     | 4 ++++
+ MAINTAINERS | 3 +--
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/CREDITS b/CREDITS
+index ce8eae8c5aa4..9add7e6a4fa0 100644
+--- a/CREDITS
++++ b/CREDITS
+@@ -1288,6 +1288,10 @@ D: Major kbuild rework during the 2.5 cycle
+ D: ISDN Maintainer
+ S: USA
+ 
++N: Gerrit Renker
++E: gerrit@erg.abdn.ac.uk
++D: DCCP protocol support.
++
+ N: Philip Gladstone
+ E: philip@gladstonefamily.net
+ D: Kernel / timekeeping stuff
+diff --git a/MAINTAINERS b/MAINTAINERS
+index a5d69857f85a..17736ec96ec4 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -4920,9 +4920,8 @@ F:	Documentation/scsi/dc395x.rst
+ F:	drivers/scsi/dc395x.*
+ 
+ DCCP PROTOCOL
+-M:	Gerrit Renker <gerrit@erg.abdn.ac.uk>
+ L:	dccp@vger.kernel.org
+-S:	Maintained
++S:	Orphan
+ W:	http://www.linuxfoundation.org/collaborate/workgroups/networking/dccp
+ F:	include/linux/dccp.h
+ F:	include/linux/tfrc.h
+-- 
+2.26.2
