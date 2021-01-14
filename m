@@ -1,7 +1,7 @@
 From: Jakub Kicinski <kuba@kernel.org>
-Date: Mon, 11 Jan 2021 05:27:58 +0000
-Subject: [PATCH net 8/9] MAINTAINERS: dccp: move Gerrit Renker to CREDITS
-Message-Id: <20210111052759.2144758-9-kuba@kernel.org>
+Date: Thu, 14 Jan 2021 01:49:12 +0000
+Subject: [PATCH net v2 7/7] MAINTAINERS: dccp: move Gerrit Renker to CREDITS
+Message-Id: <20210114014912.2519931-8-kuba@kernel.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -46,7 +46,7 @@ index ce8eae8c5aa4..9add7e6a4fa0 100644
  E: philip@gladstonefamily.net
  D: Kernel / timekeeping stuff
 diff --git a/MAINTAINERS b/MAINTAINERS
-index a5d69857f85a..17736ec96ec4 100644
+index 18e75e29c672..2a6dc5bfa08c 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
 @@ -4920,9 +4920,8 @@ F:	Documentation/scsi/dc395x.rst
