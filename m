@@ -1,64 +1,32 @@
-From: Jakub Kicinski <kuba@kernel.org>
-Date: Thu, 14 Jan 2021 01:49:12 +0000
-Subject: [PATCH net v2 7/7] MAINTAINERS: dccp: move Gerrit Renker to CREDITS
-Message-Id: <20210114014912.2519931-8-kuba@kernel.org>
+From: Zheng Yongjun <zhengyongjun3@huawei.com>
+Date: Thu, 04 Feb 2021 07:28:20 +0000
+Subject: [PATCH net-next] dccp: Return the correct errno code
+Message-Id: <20210204072820.17723-1-zhengyongjun3@huawei.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-As far as I can tell we haven't heard from Gerrit for roughly
-5 years now. DCCP patch would really benefit from some review.
-Gerrit was the last maintainer so mark this entry as orphaned.
+When kalloc or kmemdup failed, should return ENOMEM rather than ENOBUF.
 
-Subsystem DCCP PROTOCOL
-  Changes 38 / 166 (22%)
-  (No activity)
-  Top reviewers:
-    [6]: kstewart@linuxfoundation.org
-    [6]: allison@lohutok.net
-    [5]: edumazet@google.com
-  INACTIVE MAINTAINER Gerrit Renker <gerrit@erg.abdn.ac.uk>
-
-Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+Signed-off-by: Zheng Yongjun <zhengyongjun3@huawei.com>
 ---
-CC: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-CC: dccp@vger.kernel.org
----
- CREDITS     | 4 ++++
- MAINTAINERS | 3 +--
- 2 files changed, 5 insertions(+), 2 deletions(-)
+ net/dccp/feat.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/CREDITS b/CREDITS
-index ce8eae8c5aa4..9add7e6a4fa0 100644
---- a/CREDITS
-+++ b/CREDITS
-@@ -1288,6 +1288,10 @@ D: Major kbuild rework during the 2.5 cycle
- D: ISDN Maintainer
- S: USA
- 
-+N: Gerrit Renker
-+E: gerrit@erg.abdn.ac.uk
-+D: DCCP protocol support.
-+
- N: Philip Gladstone
- E: philip@gladstonefamily.net
- D: Kernel / timekeeping stuff
-diff --git a/MAINTAINERS b/MAINTAINERS
-index 18e75e29c672..2a6dc5bfa08c 100644
---- a/MAINTAINERS
-+++ b/MAINTAINERS
-@@ -4920,9 +4920,8 @@ F:	Documentation/scsi/dc395x.rst
- F:	drivers/scsi/dc395x.*
- 
- DCCP PROTOCOL
--M:	Gerrit Renker <gerrit@erg.abdn.ac.uk>
- L:	dccp@vger.kernel.org
--S:	Maintained
-+S:	Orphan
- W:	http://www.linuxfoundation.org/collaborate/workgroups/networking/dccp
- F:	include/linux/dccp.h
- F:	include/linux/tfrc.h
+diff --git a/net/dccp/feat.c b/net/dccp/feat.c
+index 788dd629c420..4cb813bee7b4 100644
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -371,7 +371,7 @@ static int dccp_feat_clone_sp_val(dccp_feat_val *fval, u8 const *val, u8 len)
+ 		fval->sp.vec = kmemdup(val, len, gfp_any());
+ 		if (fval->sp.vec = NULL) {
+ 			fval->sp.len = 0;
+-			return -ENOBUFS;
++			return -ENOMEM;
+ 		}
+ 	}
+ 	return 0;
 -- 
-2.26.2
+2.22.0
