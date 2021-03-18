@@ -1,7 +1,7 @@
-From: Mat Martineau <mathew.j.martineau@linux.intel.com>
-Date: Wed, 17 Mar 2021 22:58:54 +0000
+From: Eric Dumazet <edumazet@google.com>
+Date: Thu, 18 Mar 2021 09:45:50 +0000
 Subject: Re: [PATCH net] ipv6: weaken the v4mapped source check
-Message-Id: <b5f2f124-cdd1-ce9a-49e-878ad45d385@linux.intel.com>
+Message-Id: <CANn89iLFMpSOwvhuT3_-yCZS1Ff7Vc5RPuO_DCNyYon3VSQW+w@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20210317165515.1914146-1-kuba@kernel.org>
 In-Reply-To: <20210317165515.1914146-1-kuba@kernel.org>
@@ -10,9 +10,8 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-
-On Wed, 17 Mar 2021, Jakub Kicinski wrote:
-
+On Wed, Mar 17, 2021 at 5:55 PM Jakub Kicinski <kuba@kernel.org> wrote:
+>
 > This reverts commit 6af1799aaf3f1bc8defedddfa00df3192445bbf3.
 >
 > Commit 6af1799aaf3f ("ipv6: drop incoming packets having a v4mapped
@@ -20,7 +19,7 @@ On Wed, 17 Mar 2021, Jakub Kicinski wrote:
 > Use of such addresses on the wire is indeed questionable and not
 > allowed on public Internet. As the commit pointed out
 >
->  https://tools.ietf.org/html/draft-itojun-v6ops-v4mapped-harmful-02
+>   https://tools.ietf.org/html/draft-itojun-v6ops-v4mapped-harmful-02
 >
 > lists potential issues.
 >
@@ -41,93 +40,8 @@ On Wed, 17 Mar 2021, Jakub Kicinski wrote:
 > Reported-by: Sunyi Shao <sunyishao@fb.com>
 > Signed-off-by: Jakub Kicinski <kuba@kernel.org>
 > ---
-> net/dccp/ipv6.c      |  5 +++++
-> net/ipv6/ip6_input.c | 10 ----------
-> net/ipv6/tcp_ipv6.c  |  5 +++++
-> net/mptcp/subflow.c  |  5 +++++
-> 4 files changed, 15 insertions(+), 10 deletions(-)
-
-Jakub -
-
-Thanks for keeping the MPTCP code in sync. The IPv6 and v4mapped MPTCP 
-selftests still pass. For the MPTCP content:
-
-Acked-by: Mat Martineau <mathew.j.martineau@linux.intel.com>
 
 
->
-> diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
-> index 1f73603913f5..2be5c69824f9 100644
-> --- a/net/dccp/ipv6.c
-> +++ b/net/dccp/ipv6.c
-> @@ -319,6 +319,11 @@ static int dccp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
-> 	if (!ipv6_unicast_destination(skb))
-> 		return 0;	/* discard, don't send a reset here */
->
-> +	if (ipv6_addr_v4mapped(&ipv6_hdr(skb)->saddr)) {
-> +		__IP6_INC_STATS(sock_net(sk), NULL, IPSTATS_MIB_INHDRERRORS);
-> +		return 0;
-> +	}
-> +
-> 	if (dccp_bad_service_code(sk, service)) {
-> 		dcb->dccpd_reset_code = DCCP_RESET_CODE_BAD_SERVICE_CODE;
-> 		goto drop;
-> diff --git a/net/ipv6/ip6_input.c b/net/ipv6/ip6_input.c
-> index e9d2a4a409aa..80256717868e 100644
-> --- a/net/ipv6/ip6_input.c
-> +++ b/net/ipv6/ip6_input.c
-> @@ -245,16 +245,6 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
-> 	if (ipv6_addr_is_multicast(&hdr->saddr))
-> 		goto err;
->
-> -	/* While RFC4291 is not explicit about v4mapped addresses
-> -	 * in IPv6 headers, it seems clear linux dual-stack
-> -	 * model can not deal properly with these.
-> -	 * Security models could be fooled by ::ffff:127.0.0.1 for example.
-> -	 *
-> -	 * https://tools.ietf.org/html/draft-itojun-v6ops-v4mapped-harmful-02
-> -	 */
-> -	if (ipv6_addr_v4mapped(&hdr->saddr))
-> -		goto err;
-> -
-> 	skb->transport_header = skb->network_header + sizeof(*hdr);
-> 	IP6CB(skb)->nhoff = offsetof(struct ipv6hdr, nexthdr);
->
-> diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
-> index bd44ded7e50c..d0f007741e8e 100644
-> --- a/net/ipv6/tcp_ipv6.c
-> +++ b/net/ipv6/tcp_ipv6.c
-> @@ -1175,6 +1175,11 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
-> 	if (!ipv6_unicast_destination(skb))
-> 		goto drop;
->
-> +	if (ipv6_addr_v4mapped(&ipv6_hdr(skb)->saddr)) {
-> +		__IP6_INC_STATS(sock_net(sk), NULL, IPSTATS_MIB_INHDRERRORS);
-> +		return 0;
-> +	}
-> +
-> 	return tcp_conn_request(&tcp6_request_sock_ops,
-> 				&tcp_request_sock_ipv6_ops, sk, skb);
->
-> diff --git a/net/mptcp/subflow.c b/net/mptcp/subflow.c
-> index 3d47d670e665..d17d39ccdf34 100644
-> --- a/net/mptcp/subflow.c
-> +++ b/net/mptcp/subflow.c
-> @@ -477,6 +477,11 @@ static int subflow_v6_conn_request(struct sock *sk, struct sk_buff *skb)
-> 	if (!ipv6_unicast_destination(skb))
-> 		goto drop;
->
-> +	if (ipv6_addr_v4mapped(&ipv6_hdr(skb)->saddr)) {
-> +		__IP6_INC_STATS(sock_net(sk), NULL, IPSTATS_MIB_INHDRERRORS);
-> +		return 0;
-> +	}
-> +
-> 	return tcp_conn_request(&mptcp_subflow_request_sock_ops,
-> 				&subflow_request_sock_ipv6_ops, sk, skb);
->
-> -- 
-> 2.30.2
+Reviewed-by: Eric Dumazet <edumazet@google.com>
 
---
-Mat Martineau
-Intel
+Thanks !
