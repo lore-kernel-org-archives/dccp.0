@@ -1,71 +1,134 @@
-From: Arnd Bergmann <arnd@kernel.org>
-Date: Mon, 22 Mar 2021 10:43:32 +0000
-Subject: [PATCH net-next 2/5] dccp: avoid Wempty-body warning
-Message-Id: <20210322104343.948660-2-arnd@kernel.org>
+From: Richard Sailer <richard_siegfried@systemli.org>
+Date: Sun, 25 Apr 2021 17:32:19 +0000
+Subject: [PATCH net-next] dccp: add getsockopt option for CCID2: DCCP_SOCKOPT_CCID_TX_INFO
+Message-Id: <20210425173219.175324-1-richard_siegfried@systemli.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Arnd Bergmann <arnd@arndb.de>
+CCID 3 already has the getsockopt() option DCCP_SOCKOPT_CCID_TX_INFO,
+this commit also adds it for CCID2. It returns tx and congestion control
+information in struct ccid_tx_info.
 
-There are a couple of warnings in this driver when building with W=1:
-
-net/dccp/output.c: In function 'dccp_xmit_packet':
-net/dccp/output.c:283:71: error: suggest braces around empty body in an 'if' statement [-Werror=empty-body]
-  283 |                 dccp_pr_debug("transmit_skb() returned err=%d\n", err);
-      |                                                                       ^
-net/dccp/ackvec.c: In function 'dccp_ackvec_update_old':
-net/dccp/ackvec.c:163:80: error: suggest braces around empty body in an 'else' statement [-Werror=empty-body]
-  163 |                                               (unsigned long long)seqno, state);
-      |                                                                                ^
-
-Change the empty debug macros to no_printk(), which avoids the
-warnings and adds useful format string checks.
-
-Signed-off-by: Arnd Bergmann <arnd@arndb.de>
+This also adds doc in Documentation/networking/dccp.rst and defines
+the struct in include/uapi/linux/dccp.h to make it accessible to userspace.
 ---
- net/dccp/dccp.h  | 6 +++---
- net/dccp/proto.c | 2 --
- 2 files changed, 3 insertions(+), 5 deletions(-)
+ Documentation/networking/dccp.rst | 22 +++++++++++----------
+ include/uapi/linux/dccp.h         | 16 ++++++++++++++++
+ net/dccp/ccids/ccid2.c            | 32 +++++++++++++++++++++++++++++++
+ 3 files changed, 60 insertions(+), 10 deletions(-)
 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 9cc9d1ee6cdb..8a5163620bc3 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -41,9 +41,9 @@ extern bool dccp_debug;
- #define dccp_pr_debug_cat(format, a...)   DCCP_PRINTK(dccp_debug, format, ##a)
- #define dccp_debug(fmt, a...)		  dccp_pr_debug_cat(KERN_DEBUG fmt, ##a)
- #else
--#define dccp_pr_debug(format, a...)
--#define dccp_pr_debug_cat(format, a...)
--#define dccp_debug(format, a...)
-+#define dccp_pr_debug(format, a...)	  no_printk(format, ##a)
-+#define dccp_pr_debug_cat(format, a...)	  no_printk(format, ##a)
-+#define dccp_debug(format, a...)	  no_printk(format, ##a)
+diff --git a/Documentation/networking/dccp.rst b/Documentation/networking/dccp.rst
+index 91e5c33ba3ff..8f2852817773 100644
+--- a/Documentation/networking/dccp.rst
++++ b/Documentation/networking/dccp.rst
+@@ -126,16 +126,18 @@ DCCP_SOCKOPT_RECV_CSCOV is for the receiver and has a different meaning: it
+ 	restrictive this setting (see [RFC 4340, sec. 9.2.1]). Partial coverage
+ 	settings are inherited to the child socket after accept().
+ 
+-The following two options apply to CCID 3 exclusively and are getsockopt()-only.
+-In either case, a TFRC info struct (defined in <linux/tfrc.h>) is returned.
+-
+-DCCP_SOCKOPT_CCID_RX_INFO
+-	Returns a ``struct tfrc_rx_info`` in optval; the buffer for optval and
+-	optlen must be set to at least sizeof(struct tfrc_rx_info).
+-
+-DCCP_SOCKOPT_CCID_TX_INFO
+-	Returns a ``struct tfrc_tx_info`` in optval; the buffer for optval and
+-	optlen must be set to at least sizeof(struct tfrc_tx_info).
++DCCP_SOCKOPT_CCID_RX_INFO (CCID3 only, getsockopt() only)
++	Returns a ``struct tfrc_rx_info`` (defined in <linux/tfrc.h>) in optval;
++	the buffer for optval and optlen must be at least sizeof(struct tfrc_rx_info).
++
++DCCP_SOCKOPT_CCID_TX_INFO (getsockopt() only)
++	CCID 3:
++	Returns a ``struct tfrc_tx_info`` (defined in <linux/tfrc.h>) in optval;
++	the buffer for optval and optlen must be at least sizeof(struct tfrc_tx_info).
++
++	CCID 2:
++	Returns a ``struct ccid2_tx_info`` (defined in <uapi/linux/dccp.h>) in optval;
++	the buffer for optval and optlen must be at least sizeof(struct ccid2_tx_info).
+ 
+ On unidirectional connections it is useful to close the unused half-connection
+ via shutdown (SHUT_WR or SHUT_RD): this will reduce per-packet processing costs.
+diff --git a/include/uapi/linux/dccp.h b/include/uapi/linux/dccp.h
+index 6e1978dbcf7c..5d5290b8788a 100644
+--- a/include/uapi/linux/dccp.h
++++ b/include/uapi/linux/dccp.h
+@@ -47,6 +47,22 @@ struct dccp_hdr {
+ 	__be16	dccph_seq;
+ };
+ 
++/**  struct ccid2_tx_info (Congestion Control Infos)
++ *
++ * @tx_cwnd:                 max number of packets the path can handle
++ * @tx_srtt:                 smoothed RTT estimate, scaled by 2^3
++ * @tx_pipe:                 estimate of "in flight" packets
++ * @buffer_fill              number of bytes in send buffer
++ * @cur_mss                  current MSS (in bytes) (pMTU - header_sizes)
++ */
++struct ccid2_tx_info {
++	__u32	tx_cwnd;
++	__u32	tx_srtt;
++	__u32	tx_pipe;
++	int	buffer_fill;
++	__u32	cur_mss;
++};
++
+ /**
+  * struct dccp_hdr_ext - the low bits of a 48 bit seq packet
+  *
+diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
+index 4d9823d6dced..3f40265552c5 100644
+--- a/net/dccp/ccids/ccid2.c
++++ b/net/dccp/ccids/ccid2.c
+@@ -22,6 +22,37 @@ static bool ccid2_debug;
+ #define ccid2_pr_debug(format, a...)
  #endif
  
- extern struct inet_hashinfo dccp_hashinfo;
-diff --git a/net/dccp/proto.c b/net/dccp/proto.c
-index 6d705d90c614..97a175eaf247 100644
---- a/net/dccp/proto.c
-+++ b/net/dccp/proto.c
-@@ -51,7 +51,6 @@ EXPORT_SYMBOL_GPL(dccp_hashinfo);
- /* the maximum queue length for tx in packets. 0 is no limit */
- int sysctl_dccp_tx_qlen __read_mostly = 5;
- 
--#ifdef CONFIG_IP_DCCP_DEBUG
- static const char *dccp_state_name(const int state)
++int ccid2_hc_tx_getsockopt(struct sock *sk, const int optname, int len,
++                           u32 __user *optval, int __user *optlen)
++{
++	const struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
++	struct dccp_sock *dp = dccp_sk(sk);
++	struct ccid2_tx_info ccid2_info;
++	const void *val;
++
++	switch (optname) {
++	case DCCP_SOCKOPT_CCID_TX_INFO:
++		if (len < sizeof(ccid2_info))
++			return -EINVAL;
++		memset(&ccid2_info, 0, sizeof(ccid2_info));
++		ccid2_info.tx_cwnd	   = hc->tx_cwnd;
++		ccid2_info.tx_srtt         = hc->tx_srtt;
++		ccid2_info.tx_pipe         = hc->tx_pipe;
++		ccid2_info.buffer_fill     = sk_wmem_alloc_get(sk);
++		ccid2_info.cur_mss         = dp->dccps_mss_cache;
++		len = sizeof(ccid2_info);
++		val = &ccid2_info;
++		break;
++	default:
++		return -ENOPROTOOPT;
++	}
++
++	if (put_user(len, optlen) || copy_to_user(optval, val, len))
++		return -EFAULT;
++
++	return 0;
++}
++
+ static int ccid2_hc_tx_alloc_seq(struct ccid2_hc_tx_sock *hc)
  {
- 	static const char *const dccp_state_names[] = {
-@@ -73,7 +72,6 @@ static const char *dccp_state_name(const int state)
- 	else
- 		return dccp_state_names[state];
- }
--#endif
+ 	struct ccid2_seq *seqp;
+@@ -785,6 +816,7 @@ struct ccid_operations ccid2_ops = {
+ 	.ccid_hc_tx_packet_recv	  = ccid2_hc_tx_packet_recv,
+ 	.ccid_hc_rx_obj_size	  = sizeof(struct ccid2_hc_rx_sock),
+ 	.ccid_hc_rx_packet_recv	  = ccid2_hc_rx_packet_recv,
++	.ccid_hc_tx_getsockopt    = ccid2_hc_tx_getsockopt,
+ };
  
- void dccp_set_state(struct sock *sk, const int state)
- {
+ #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
 -- 
-2.29.2
+2.30.2
