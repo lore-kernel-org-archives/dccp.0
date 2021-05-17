@@ -1,134 +1,220 @@
-From: Richard Sailer <richard_siegfried@systemli.org>
-Date: Sun, 25 Apr 2021 17:32:19 +0000
-Subject: [PATCH net-next] dccp: add getsockopt option for CCID2: DCCP_SOCKOPT_CCID_TX_INFO
-Message-Id: <20210425173219.175324-1-richard_siegfried@systemli.org>
+From: Yejune Deng <yejune.deng@gmail.com>
+Date: Mon, 17 May 2021 12:22:05 +0000
+Subject: [PATCH] net: Remove the member netns_ok
+Message-Id: <1621254125-21588-1-git-send-email-yejunedeng@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-CCID 3 already has the getsockopt() option DCCP_SOCKOPT_CCID_TX_INFO,
-this commit also adds it for CCID2. It returns tx and congestion control
-information in struct ccid_tx_info.
+Every protocol has the 'netns_ok' member and it is euqal to 1. The
+'if (!prot->netns_ok)' always false in inet_add_protocol().
 
-This also adds doc in Documentation/networking/dccp.rst and defines
-the struct in include/uapi/linux/dccp.h to make it accessible to userspace.
+Signed-off-by: Yejune Deng <yejunedeng@gmail.com>
 ---
- Documentation/networking/dccp.rst | 22 +++++++++++----------
- include/uapi/linux/dccp.h         | 16 ++++++++++++++++
- net/dccp/ccids/ccid2.c            | 32 +++++++++++++++++++++++++++++++
- 3 files changed, 60 insertions(+), 10 deletions(-)
+ include/net/protocol.h    | 1 -
+ net/dccp/ipv4.c           | 1 -
+ net/ipv4/af_inet.c        | 4 ----
+ net/ipv4/gre_demux.c      | 1 -
+ net/ipv4/ipmr.c           | 1 -
+ net/ipv4/protocol.c       | 6 ------
+ net/ipv4/tunnel4.c        | 3 ---
+ net/ipv4/udplite.c        | 1 -
+ net/ipv4/xfrm4_protocol.c | 3 ---
+ net/l2tp/l2tp_ip.c        | 1 -
+ net/sctp/protocol.c       | 1 -
+ 11 files changed, 23 deletions(-)
 
-diff --git a/Documentation/networking/dccp.rst b/Documentation/networking/dccp.rst
-index 91e5c33ba3ff..8f2852817773 100644
---- a/Documentation/networking/dccp.rst
-+++ b/Documentation/networking/dccp.rst
-@@ -126,16 +126,18 @@ DCCP_SOCKOPT_RECV_CSCOV is for the receiver and has a different meaning: it
- 	restrictive this setting (see [RFC 4340, sec. 9.2.1]). Partial coverage
- 	settings are inherited to the child socket after accept().
+diff --git a/include/net/protocol.h b/include/net/protocol.h
+index 2b778e1..f51c06a 100644
+--- a/include/net/protocol.h
++++ b/include/net/protocol.h
+@@ -43,7 +43,6 @@ struct net_protocol {
+ 	int			(*err_handler)(struct sk_buff *skb, u32 info);
  
--The following two options apply to CCID 3 exclusively and are getsockopt()-only.
--In either case, a TFRC info struct (defined in <linux/tfrc.h>) is returned.
--
--DCCP_SOCKOPT_CCID_RX_INFO
--	Returns a ``struct tfrc_rx_info`` in optval; the buffer for optval and
--	optlen must be set to at least sizeof(struct tfrc_rx_info).
--
--DCCP_SOCKOPT_CCID_TX_INFO
--	Returns a ``struct tfrc_tx_info`` in optval; the buffer for optval and
--	optlen must be set to at least sizeof(struct tfrc_tx_info).
-+DCCP_SOCKOPT_CCID_RX_INFO (CCID3 only, getsockopt() only)
-+	Returns a ``struct tfrc_rx_info`` (defined in <linux/tfrc.h>) in optval;
-+	the buffer for optval and optlen must be at least sizeof(struct tfrc_rx_info).
-+
-+DCCP_SOCKOPT_CCID_TX_INFO (getsockopt() only)
-+	CCID 3:
-+	Returns a ``struct tfrc_tx_info`` (defined in <linux/tfrc.h>) in optval;
-+	the buffer for optval and optlen must be at least sizeof(struct tfrc_tx_info).
-+
-+	CCID 2:
-+	Returns a ``struct ccid2_tx_info`` (defined in <uapi/linux/dccp.h>) in optval;
-+	the buffer for optval and optlen must be at least sizeof(struct ccid2_tx_info).
- 
- On unidirectional connections it is useful to close the unused half-connection
- via shutdown (SHUT_WR or SHUT_RD): this will reduce per-packet processing costs.
-diff --git a/include/uapi/linux/dccp.h b/include/uapi/linux/dccp.h
-index 6e1978dbcf7c..5d5290b8788a 100644
---- a/include/uapi/linux/dccp.h
-+++ b/include/uapi/linux/dccp.h
-@@ -47,6 +47,22 @@ struct dccp_hdr {
- 	__be16	dccph_seq;
+ 	unsigned int		no_policy:1,
+-				netns_ok:1,
+ 				/* does the protocol do more stringent
+ 				 * icmp tag validation than simple
+ 				 * socket lookup?
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index ffc601a..f81c1df 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -977,7 +977,6 @@ static const struct net_protocol dccp_v4_protocol = {
+ 	.handler	= dccp_v4_rcv,
+ 	.err_handler	= dccp_v4_err,
+ 	.no_policy	= 1,
+-	.netns_ok	= 1,
+ 	.icmp_strict_tag_validation = 1,
  };
  
-+/**  struct ccid2_tx_info (Congestion Control Infos)
-+ *
-+ * @tx_cwnd:                 max number of packets the path can handle
-+ * @tx_srtt:                 smoothed RTT estimate, scaled by 2^3
-+ * @tx_pipe:                 estimate of "in flight" packets
-+ * @buffer_fill              number of bytes in send buffer
-+ * @cur_mss                  current MSS (in bytes) (pMTU - header_sizes)
-+ */
-+struct ccid2_tx_info {
-+	__u32	tx_cwnd;
-+	__u32	tx_srtt;
-+	__u32	tx_pipe;
-+	int	buffer_fill;
-+	__u32	cur_mss;
-+};
-+
- /**
-  * struct dccp_hdr_ext - the low bits of a 48 bit seq packet
-  *
-diff --git a/net/dccp/ccids/ccid2.c b/net/dccp/ccids/ccid2.c
-index 4d9823d6dced..3f40265552c5 100644
---- a/net/dccp/ccids/ccid2.c
-+++ b/net/dccp/ccids/ccid2.c
-@@ -22,6 +22,37 @@ static bool ccid2_debug;
- #define ccid2_pr_debug(format, a...)
+diff --git a/net/ipv4/af_inet.c b/net/ipv4/af_inet.c
+index f17870e..d9bccad6 100644
+--- a/net/ipv4/af_inet.c
++++ b/net/ipv4/af_inet.c
+@@ -1720,7 +1720,6 @@ EXPORT_SYMBOL_GPL(snmp_fold_field64);
+ #ifdef CONFIG_IP_MULTICAST
+ static const struct net_protocol igmp_protocol = {
+ 	.handler =	igmp_rcv,
+-	.netns_ok =	1,
+ };
  #endif
  
-+int ccid2_hc_tx_getsockopt(struct sock *sk, const int optname, int len,
-+                           u32 __user *optval, int __user *optlen)
-+{
-+	const struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
-+	struct dccp_sock *dp = dccp_sk(sk);
-+	struct ccid2_tx_info ccid2_info;
-+	const void *val;
-+
-+	switch (optname) {
-+	case DCCP_SOCKOPT_CCID_TX_INFO:
-+		if (len < sizeof(ccid2_info))
-+			return -EINVAL;
-+		memset(&ccid2_info, 0, sizeof(ccid2_info));
-+		ccid2_info.tx_cwnd	   = hc->tx_cwnd;
-+		ccid2_info.tx_srtt         = hc->tx_srtt;
-+		ccid2_info.tx_pipe         = hc->tx_pipe;
-+		ccid2_info.buffer_fill     = sk_wmem_alloc_get(sk);
-+		ccid2_info.cur_mss         = dp->dccps_mss_cache;
-+		len = sizeof(ccid2_info);
-+		val = &ccid2_info;
-+		break;
-+	default:
-+		return -ENOPROTOOPT;
-+	}
-+
-+	if (put_user(len, optlen) || copy_to_user(optval, val, len))
-+		return -EFAULT;
-+
-+	return 0;
-+}
-+
- static int ccid2_hc_tx_alloc_seq(struct ccid2_hc_tx_sock *hc)
- {
- 	struct ccid2_seq *seqp;
-@@ -785,6 +816,7 @@ struct ccid_operations ccid2_ops = {
- 	.ccid_hc_tx_packet_recv	  = ccid2_hc_tx_packet_recv,
- 	.ccid_hc_rx_obj_size	  = sizeof(struct ccid2_hc_rx_sock),
- 	.ccid_hc_rx_packet_recv	  = ccid2_hc_rx_packet_recv,
-+	.ccid_hc_tx_getsockopt    = ccid2_hc_tx_getsockopt,
+@@ -1733,7 +1732,6 @@ static struct net_protocol tcp_protocol = {
+ 	.handler	=	tcp_v4_rcv,
+ 	.err_handler	=	tcp_v4_err,
+ 	.no_policy	=	1,
+-	.netns_ok	=	1,
+ 	.icmp_strict_tag_validation = 1,
  };
  
- #ifdef CONFIG_IP_DCCP_CCID2_DEBUG
+@@ -1746,14 +1744,12 @@ static struct net_protocol udp_protocol = {
+ 	.handler =	udp_rcv,
+ 	.err_handler =	udp_err,
+ 	.no_policy =	1,
+-	.netns_ok =	1,
+ };
+ 
+ static const struct net_protocol icmp_protocol = {
+ 	.handler =	icmp_rcv,
+ 	.err_handler =	icmp_err,
+ 	.no_policy =	1,
+-	.netns_ok =	1,
+ };
+ 
+ static __net_init int ipv4_mib_init_net(struct net *net)
+diff --git a/net/ipv4/gre_demux.c b/net/ipv4/gre_demux.c
+index 5d1e6fe..cbb2b4b 100644
+--- a/net/ipv4/gre_demux.c
++++ b/net/ipv4/gre_demux.c
+@@ -195,7 +195,6 @@ static int gre_err(struct sk_buff *skb, u32 info)
+ static const struct net_protocol net_gre_protocol = {
+ 	.handler     = gre_rcv,
+ 	.err_handler = gre_err,
+-	.netns_ok    = 1,
+ };
+ 
+ static int __init gre_init(void)
+diff --git a/net/ipv4/ipmr.c b/net/ipv4/ipmr.c
+index 939792a..12b564b 100644
+--- a/net/ipv4/ipmr.c
++++ b/net/ipv4/ipmr.c
+@@ -3007,7 +3007,6 @@ static const struct seq_operations ipmr_mfc_seq_ops = {
+ #ifdef CONFIG_IP_PIMSM_V2
+ static const struct net_protocol pim_protocol = {
+ 	.handler	=	pim_rcv,
+-	.netns_ok	=	1,
+ };
+ #endif
+ 
+diff --git a/net/ipv4/protocol.c b/net/ipv4/protocol.c
+index 9a8c089..6913979 100644
+--- a/net/ipv4/protocol.c
++++ b/net/ipv4/protocol.c
+@@ -31,12 +31,6 @@ EXPORT_SYMBOL(inet_offloads);
+ 
+ int inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)
+ {
+-	if (!prot->netns_ok) {
+-		pr_err("Protocol %u is not namespace aware, cannot register.\n",
+-			protocol);
+-		return -EINVAL;
+-	}
+-
+ 	return !cmpxchg((const struct net_protocol **)&inet_protos[protocol],
+ 			NULL, prot) ? 0 : -1;
+ }
+diff --git a/net/ipv4/tunnel4.c b/net/ipv4/tunnel4.c
+index e44aaf4..5048c47 100644
+--- a/net/ipv4/tunnel4.c
++++ b/net/ipv4/tunnel4.c
+@@ -218,7 +218,6 @@ static const struct net_protocol tunnel4_protocol = {
+ 	.handler	=	tunnel4_rcv,
+ 	.err_handler	=	tunnel4_err,
+ 	.no_policy	=	1,
+-	.netns_ok	=	1,
+ };
+ 
+ #if IS_ENABLED(CONFIG_IPV6)
+@@ -226,7 +225,6 @@ static const struct net_protocol tunnel64_protocol = {
+ 	.handler	=	tunnel64_rcv,
+ 	.err_handler	=	tunnel64_err,
+ 	.no_policy	=	1,
+-	.netns_ok	=	1,
+ };
+ #endif
+ 
+@@ -235,7 +233,6 @@ static const struct net_protocol tunnelmpls4_protocol = {
+ 	.handler	=	tunnelmpls4_rcv,
+ 	.err_handler	=	tunnelmpls4_err,
+ 	.no_policy	=	1,
+-	.netns_ok	=	1,
+ };
+ #endif
+ 
+diff --git a/net/ipv4/udplite.c b/net/ipv4/udplite.c
+index bd8773b..cd1cd68 100644
+--- a/net/ipv4/udplite.c
++++ b/net/ipv4/udplite.c
+@@ -31,7 +31,6 @@ static const struct net_protocol udplite_protocol = {
+ 	.handler	= udplite_rcv,
+ 	.err_handler	= udplite_err,
+ 	.no_policy	= 1,
+-	.netns_ok	= 1,
+ };
+ 
+ struct proto 	udplite_prot = {
+diff --git a/net/ipv4/xfrm4_protocol.c b/net/ipv4/xfrm4_protocol.c
+index ea595c8..2fe5860 100644
+--- a/net/ipv4/xfrm4_protocol.c
++++ b/net/ipv4/xfrm4_protocol.c
+@@ -181,21 +181,18 @@ static const struct net_protocol esp4_protocol = {
+ 	.handler	=	xfrm4_esp_rcv,
+ 	.err_handler	=	xfrm4_esp_err,
+ 	.no_policy	=	1,
+-	.netns_ok	=	1,
+ };
+ 
+ static const struct net_protocol ah4_protocol = {
+ 	.handler	=	xfrm4_ah_rcv,
+ 	.err_handler	=	xfrm4_ah_err,
+ 	.no_policy	=	1,
+-	.netns_ok	=	1,
+ };
+ 
+ static const struct net_protocol ipcomp4_protocol = {
+ 	.handler	=	xfrm4_ipcomp_rcv,
+ 	.err_handler	=	xfrm4_ipcomp_err,
+ 	.no_policy	=	1,
+-	.netns_ok	=	1,
+ };
+ 
+ static const struct xfrm_input_afinfo xfrm4_input_afinfo = {
+diff --git a/net/l2tp/l2tp_ip.c b/net/l2tp/l2tp_ip.c
+index 97ae125..536c30d 100644
+--- a/net/l2tp/l2tp_ip.c
++++ b/net/l2tp/l2tp_ip.c
+@@ -635,7 +635,6 @@ static struct inet_protosw l2tp_ip_protosw = {
+ 
+ static struct net_protocol l2tp_ip_protocol __read_mostly = {
+ 	.handler	= l2tp_ip_recv,
+-	.netns_ok	= 1,
+ };
+ 
+ static int __init l2tp_ip_init(void)
+diff --git a/net/sctp/protocol.c b/net/sctp/protocol.c
+index 6f2bbfe..baa4e77 100644
+--- a/net/sctp/protocol.c
++++ b/net/sctp/protocol.c
+@@ -1171,7 +1171,6 @@ static const struct net_protocol sctp_protocol = {
+ 	.handler     = sctp4_rcv,
+ 	.err_handler = sctp_v4_err,
+ 	.no_policy   = 1,
+-	.netns_ok    = 1,
+ 	.icmp_strict_tag_validation = 1,
+ };
+ 
 -- 
-2.30.2
+2.7.4
