@@ -1,44 +1,34 @@
-From: patchwork-bot+netdevbpf@kernel.org
-Date: Mon, 17 May 2021 22:40:09 +0000
-Subject: Re: [PATCH] net: Remove the member netns_ok
-Message-Id: <162129120995.10606.11207863324142799499.git-patchwork-notify@kernel.org>
+From: Baokun Li <libaokun1@huawei.com>
+Date: Thu, 10 Jun 2021 13:26:03 +0000
+Subject: [PATCH -next] dccp: tfrc: fix doc warnings in tfrc_equation.c
+Message-Id: <20210610132603.597563-1-libaokun1@huawei.com>
 List-Id: <dccp.vger.kernel.org>
-References: <1621254125-21588-1-git-send-email-yejunedeng@gmail.com>
-In-Reply-To: <1621254125-21588-1-git-send-email-yejunedeng@gmail.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hello:
+Add description for `tfrc_invert_loss_event_rate` to fix the W=1 warnings:
 
-This patch was applied to netdev/net-next.git (refs/heads/master):
+ net/dccp/ccids/lib/tfrc_equation.c:695: warning: Function parameter or
+  member 'loss_event_rate' not described in 'tfrc_invert_loss_event_rate'
 
-On Mon, 17 May 2021 20:22:05 +0800 you wrote:
-> Every protocol has the 'netns_ok' member and it is euqal to 1. The
-> 'if (!prot->netns_ok)' always false in inet_add_protocol().
-> 
-> Signed-off-by: Yejune Deng <yejunedeng@gmail.com>
-> ---
->  include/net/protocol.h    | 1 -
->  net/dccp/ipv4.c           | 1 -
->  net/ipv4/af_inet.c        | 4 ----
->  net/ipv4/gre_demux.c      | 1 -
->  net/ipv4/ipmr.c           | 1 -
->  net/ipv4/protocol.c       | 6 ------
->  net/ipv4/tunnel4.c        | 3 ---
->  net/ipv4/udplite.c        | 1 -
->  net/ipv4/xfrm4_protocol.c | 3 ---
->  net/l2tp/l2tp_ip.c        | 1 -
->  net/sctp/protocol.c       | 1 -
->  11 files changed, 23 deletions(-)
+Signed-off-by: Baokun Li <libaokun1@huawei.com>
+---
+ net/dccp/ccids/lib/tfrc_equation.c | 1 +
+ 1 file changed, 1 insertion(+)
 
-Here is the summary with links:
-  - net: Remove the member netns_ok
-    https://git.kernel.org/netdev/net-next/c/5796254e467b
-
-You are awesome, thank you!
---
-Deet-doot-dot, I am a bot.
-https://korg.docs.kernel.org/patchwork/pwbot.html
-
+diff --git a/net/dccp/ccids/lib/tfrc_equation.c b/net/dccp/ccids/lib/tfrc_equation.c
+index e2a337fa9ff7..92a8c6bea316 100644
+--- a/net/dccp/ccids/lib/tfrc_equation.c
++++ b/net/dccp/ccids/lib/tfrc_equation.c
+@@ -688,6 +688,7 @@ u32 tfrc_calc_x_reverse_lookup(u32 fvalue)
+ 
+ /**
+  * tfrc_invert_loss_event_rate  -  Compute p so that 10^6 corresponds to 100%
++ * @loss_event_rate: loss event rate to invert
+  * When @loss_event_rate is large, there is a chance that p is truncated to 0.
+  * To avoid re-entering slow-start in that case, we set p = TFRC_SMALLEST_P > 0.
+  */
+-- 
+2.31.1
