@@ -1,35 +1,48 @@
-From: patchwork-bot+netdevbpf@kernel.org
-Date: Thu, 10 Jun 2021 21:10:04 +0000
-Subject: Re: [PATCH -next] dccp: tfrc: fix doc warnings in tfrc_equation.c
-Message-Id: <162335940461.9889.13117955024428183893.git-patchwork-notify@kernel.org>
+From: Randy Dunlap <rdunlap@infradead.org>
+Date: Sun, 08 Aug 2021 23:04:40 +0000
+Subject: [PATCH -net] dccp: add do-while-0 stubs for dccp_pr_debug macros
+Message-Id: <20210808230440.15784-1-rdunlap@infradead.org>
 List-Id: <dccp.vger.kernel.org>
-References: <20210610132603.597563-1-libaokun1@huawei.com>
-In-Reply-To: <20210610132603.597563-1-libaokun1@huawei.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hello:
+GCC complains about empty macros in an 'if' statement, so convert
+them to 'do {} while (0)' macros.
 
-This patch was applied to netdev/net-next.git (refs/heads/master):
+Fixes these build warnings:
 
-On Thu, 10 Jun 2021 21:26:03 +0800 you wrote:
-> Add description for `tfrc_invert_loss_event_rate` to fix the W=1 warnings:
-> 
->  net/dccp/ccids/lib/tfrc_equation.c:695: warning: Function parameter or
->   member 'loss_event_rate' not described in 'tfrc_invert_loss_event_rate'
-> 
-> Signed-off-by: Baokun Li <libaokun1@huawei.com>
-> 
-> [...]
+net/dccp/output.c: In function 'dccp_xmit_packet':
+../net/dccp/output.c:283:71: warning: suggest braces around empty body in an 'if' statement [-Wempty-body]
+  283 |                 dccp_pr_debug("transmit_skb() returned err=%d\n", err);
+net/dccp/ackvec.c: In function 'dccp_ackvec_update_old':
+../net/dccp/ackvec.c:163:80: warning: suggest braces around empty body in an 'else' statement [-Wempty-body]
+  163 |                                               (unsigned long long)seqno, state);
 
-Here is the summary with links:
-  - [-next] dccp: tfrc: fix doc warnings in tfrc_equation.c
-    https://git.kernel.org/netdev/net-next/c/cb8e2e4300fc
+Fixes: dc841e30eaea ("dccp: Extend CCID packet dequeueing interface")
+Fixes: 380240864451 ("dccp ccid-2: Update code for the Ack Vector input/registration routine")
+Signed-off-by: Randy Dunlap <rdunlap@infradead.org>
+Cc: dccp@vger.kernel.org
+Cc: "David S. Miller" <davem@davemloft.net>
+Cc: Jakub Kicinski <kuba@kernel.org>
+Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+---
+ net/dccp/dccp.h |    6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
 
-You are awesome, thank you!
---
-Deet-doot-dot, I am a bot.
-https://korg.docs.kernel.org/patchwork/pwbot.html
-
+--- linux-next-20210806.orig/net/dccp/dccp.h
++++ linux-next-20210806/net/dccp/dccp.h
+@@ -41,9 +41,9 @@ extern bool dccp_debug;
+ #define dccp_pr_debug_cat(format, a...)   DCCP_PRINTK(dccp_debug, format, ##a)
+ #define dccp_debug(fmt, a...)		  dccp_pr_debug_cat(KERN_DEBUG fmt, ##a)
+ #else
+-#define dccp_pr_debug(format, a...)
+-#define dccp_pr_debug_cat(format, a...)
+-#define dccp_debug(format, a...)
++#define dccp_pr_debug(format, a...)	  do {} while (0)
++#define dccp_pr_debug_cat(format, a...)	  do {} while (0)
++#define dccp_debug(format, a...)	  do {} while (0)
+ #endif
+ 
+ extern struct inet_hashinfo dccp_hashinfo;
