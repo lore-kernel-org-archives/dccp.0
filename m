@@ -1,48 +1,40 @@
-From: Randy Dunlap <rdunlap@infradead.org>
-Date: Sun, 08 Aug 2021 23:04:40 +0000
-Subject: [PATCH -net] dccp: add do-while-0 stubs for dccp_pr_debug macros
-Message-Id: <20210808230440.15784-1-rdunlap@infradead.org>
+From: patchwork-bot+netdevbpf@kernel.org
+Date: Mon, 09 Aug 2021 09:10:05 +0000
+Subject: Re: [PATCH -net] dccp: add do-while-0 stubs for dccp_pr_debug macros
+Message-Id: <162850020556.22991.14180369324728108258.git-patchwork-notify@kernel.org>
 List-Id: <dccp.vger.kernel.org>
+References: <20210808230440.15784-1-rdunlap@infradead.org>
+In-Reply-To: <20210808230440.15784-1-rdunlap@infradead.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-GCC complains about empty macros in an 'if' statement, so convert
-them to 'do {} while (0)' macros.
+Hello:
 
-Fixes these build warnings:
+This patch was applied to netdev/net.git (refs/heads/master):
 
-net/dccp/output.c: In function 'dccp_xmit_packet':
-../net/dccp/output.c:283:71: warning: suggest braces around empty body in an 'if' statement [-Wempty-body]
-  283 |                 dccp_pr_debug("transmit_skb() returned err=%d\n", err);
-net/dccp/ackvec.c: In function 'dccp_ackvec_update_old':
-../net/dccp/ackvec.c:163:80: warning: suggest braces around empty body in an 'else' statement [-Wempty-body]
-  163 |                                               (unsigned long long)seqno, state);
+On Sun,  8 Aug 2021 16:04:40 -0700 you wrote:
+> GCC complains about empty macros in an 'if' statement, so convert
+> them to 'do {} while (0)' macros.
+> 
+> Fixes these build warnings:
+> 
+> net/dccp/output.c: In function 'dccp_xmit_packet':
+> ../net/dccp/output.c:283:71: warning: suggest braces around empty body in an 'if' statement [-Wempty-body]
+>   283 |                 dccp_pr_debug("transmit_skb() returned err=%d\n", err);
+> net/dccp/ackvec.c: In function 'dccp_ackvec_update_old':
+> ../net/dccp/ackvec.c:163:80: warning: suggest braces around empty body in an 'else' statement [-Wempty-body]
+>   163 |                                               (unsigned long long)seqno, state);
+> 
+> [...]
 
-Fixes: dc841e30eaea ("dccp: Extend CCID packet dequeueing interface")
-Fixes: 380240864451 ("dccp ccid-2: Update code for the Ack Vector input/registration routine")
-Signed-off-by: Randy Dunlap <rdunlap@infradead.org>
-Cc: dccp@vger.kernel.org
-Cc: "David S. Miller" <davem@davemloft.net>
-Cc: Jakub Kicinski <kuba@kernel.org>
-Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
----
- net/dccp/dccp.h |    6 +++---
- 1 file changed, 3 insertions(+), 3 deletions(-)
+Here is the summary with links:
+  - [-net] dccp: add do-while-0 stubs for dccp_pr_debug macros
+    https://git.kernel.org/netdev/net/c/86aab09a4870
 
---- linux-next-20210806.orig/net/dccp/dccp.h
-+++ linux-next-20210806/net/dccp/dccp.h
-@@ -41,9 +41,9 @@ extern bool dccp_debug;
- #define dccp_pr_debug_cat(format, a...)   DCCP_PRINTK(dccp_debug, format, ##a)
- #define dccp_debug(fmt, a...)		  dccp_pr_debug_cat(KERN_DEBUG fmt, ##a)
- #else
--#define dccp_pr_debug(format, a...)
--#define dccp_pr_debug_cat(format, a...)
--#define dccp_debug(format, a...)
-+#define dccp_pr_debug(format, a...)	  do {} while (0)
-+#define dccp_pr_debug_cat(format, a...)	  do {} while (0)
-+#define dccp_debug(format, a...)	  do {} while (0)
- #endif
- 
- extern struct inet_hashinfo dccp_hashinfo;
+You are awesome, thank you!
+--
+Deet-doot-dot, I am a bot.
+https://korg.docs.kernel.org/patchwork/pwbot.html
+
