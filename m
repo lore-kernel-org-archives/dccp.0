@@ -1,58 +1,44 @@
-From: Sasha Levin <sashal@kernel.org>
-Date: Tue, 24 Aug 2021 16:54:38 +0000
-Subject: [PATCH 5.13 038/127] dccp: add do-while-0 stubs for dccp_pr_debug macros
-Message-Id: <20210824165607.709387-39-sashal@kernel.org>
+From: Kees Cook <keescook@chromium.org>
+Date: Wed, 18 Aug 2021 06:05:12 +0000
+Subject: [PATCH v2 42/63] net: dccp: Use memset_startat() for TP zeroing
+Message-Id: <20210818060533.3569517-43-keescook@chromium.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Randy Dunlap <rdunlap@infradead.org>
+In preparation for FORTIFY_SOURCE performing compile-time and run-time
+field bounds checking for memset(), avoid intentionally writing across
+neighboring fields.
 
-[ Upstream commit 86aab09a4870bb8346c9579864588c3d7f555299 ]
+Use memset_startat() so memset() doesn't get confused about writing
+beyond the destination member that is intended to be the starting point
+of zeroing through the end of the struct.
 
-GCC complains about empty macros in an 'if' statement, so convert
-them to 'do {} while (0)' macros.
-
-Fixes these build warnings:
-
-net/dccp/output.c: In function 'dccp_xmit_packet':
-../net/dccp/output.c:283:71: warning: suggest braces around empty body in an 'if' statement [-Wempty-body]
-  283 |                 dccp_pr_debug("transmit_skb() returned err=%d\n", err);
-net/dccp/ackvec.c: In function 'dccp_ackvec_update_old':
-../net/dccp/ackvec.c:163:80: warning: suggest braces around empty body in an 'else' statement [-Wempty-body]
-  163 |                                               (unsigned long long)seqno, state);
-
-Fixes: dc841e30eaea ("dccp: Extend CCID packet dequeueing interface")
-Fixes: 380240864451 ("dccp ccid-2: Update code for the Ack Vector input/registration routine")
-Signed-off-by: Randy Dunlap <rdunlap@infradead.org>
-Cc: dccp@vger.kernel.org
 Cc: "David S. Miller" <davem@davemloft.net>
 Cc: Jakub Kicinski <kuba@kernel.org>
-Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: David S. Miller <davem@davemloft.net>
-Signed-off-by: Sasha Levin <sashal@kernel.org>
+Cc: dccp@vger.kernel.org
+Cc: netdev@vger.kernel.org
+Signed-off-by: Kees Cook <keescook@chromium.org>
 ---
- net/dccp/dccp.h | 6 +++---
- 1 file changed, 3 insertions(+), 3 deletions(-)
+ net/dccp/trace.h | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
 
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index 9cc9d1ee6cdb..c5c1d2b8045e 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -41,9 +41,9 @@ extern bool dccp_debug;
- #define dccp_pr_debug_cat(format, a...)   DCCP_PRINTK(dccp_debug, format, ##a)
- #define dccp_debug(fmt, a...)		  dccp_pr_debug_cat(KERN_DEBUG fmt, ##a)
- #else
--#define dccp_pr_debug(format, a...)
--#define dccp_pr_debug_cat(format, a...)
--#define dccp_debug(format, a...)
-+#define dccp_pr_debug(format, a...)	  do {} while (0)
-+#define dccp_pr_debug_cat(format, a...)	  do {} while (0)
-+#define dccp_debug(format, a...)	  do {} while (0)
- #endif
+diff --git a/net/dccp/trace.h b/net/dccp/trace.h
+index 5062421beee9..5a43b3508c7f 100644
+--- a/net/dccp/trace.h
++++ b/net/dccp/trace.h
+@@ -60,9 +60,7 @@ TRACE_EVENT(dccp_probe,
+ 			__entry->tx_t_ipi = hc->tx_t_ipi;
+ 		} else {
+ 			__entry->tx_s = 0;
+-			memset(&__entry->tx_rtt, 0, (void *)&__entry->tx_t_ipi -
+-			       (void *)&__entry->tx_rtt +
+-			       sizeof(__entry->tx_t_ipi));
++			memset_startat(__entry, 0, tx_rtt);
+ 		}
+ 	),
  
- extern struct inet_hashinfo dccp_hashinfo;
 -- 
 2.30.2
