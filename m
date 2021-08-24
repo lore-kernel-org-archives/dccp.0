@@ -1,7 +1,7 @@
 From: Sasha Levin <sashal@kernel.org>
-Date: Tue, 24 Aug 2021 17:02:27 +0000
-Subject: [PATCH 4.19 61/84] dccp: add do-while-0 stubs for dccp_pr_debug macros
-Message-Id: <20210824170250.710392-62-sashal@kernel.org>
+Date: Tue, 24 Aug 2021 17:00:32 +0000
+Subject: [PATCH 5.4 27/61] dccp: add do-while-0 stubs for dccp_pr_debug macros
+Message-Id: <20210824170106.710221-28-sashal@kernel.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -38,10 +38,10 @@ Signed-off-by: Sasha Levin <sashal@kernel.org>
  1 file changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index f91e3816806b..aec3c724665f 100644
+index 9c3b27c257bb..cb818617699c 100644
 --- a/net/dccp/dccp.h
 +++ b/net/dccp/dccp.h
-@@ -44,9 +44,9 @@ extern bool dccp_debug;
+@@ -41,9 +41,9 @@ extern bool dccp_debug;
  #define dccp_pr_debug_cat(format, a...)   DCCP_PRINTK(dccp_debug, format, ##a)
  #define dccp_debug(fmt, a...)		  dccp_pr_debug_cat(KERN_DEBUG fmt, ##a)
  #else
