@@ -1,17 +1,58 @@
-From: Dmitry Vyukov <dvyukov@google.com>
-Date: Mon, 30 Aug 2021 08:50:35 +0000
-Subject: [syzbot] BUG: please report to dccp@vger.kernel.org => prev = NUM, last = NUM at net/dccp/ccids/lib/
-Message-Id: <20210830085035.2763839-1-dvyukov@google.com>
+From: Sasha Levin <sashal@kernel.org>
+Date: Tue, 24 Aug 2021 16:58:09 +0000
+Subject: [PATCH 5.10 39/98] dccp: add do-while-0 stubs for dccp_pr_debug macros
+Message-Id: <20210824165908.709932-40-sashal@kernel.org>
 List-Id: <dccp.vger.kernel.org>
-References: <20180408215707.GE685@sol.localdomain>
-In-Reply-To: <20180408215707.GE685@sol.localdomain>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This is the same as:
+From: Randy Dunlap <rdunlap@infradead.org>
 
-#syz dup: BUG: please report to dccp@vger.kernel.org => prev = 0, last = 0 at net/dccp/ccids/lib/packet_history.c:LINE/tfrc_rx_hist_sample_rtt()
+[ Upstream commit 86aab09a4870bb8346c9579864588c3d7f555299 ]
 
-https://syzkaller.appspot.com/bug?id81c535c265ca965edc49c0ac3d0a9850d26eb1
+GCC complains about empty macros in an 'if' statement, so convert
+them to 'do {} while (0)' macros.
+
+Fixes these build warnings:
+
+net/dccp/output.c: In function 'dccp_xmit_packet':
+../net/dccp/output.c:283:71: warning: suggest braces around empty body in an 'if' statement [-Wempty-body]
+  283 |                 dccp_pr_debug("transmit_skb() returned err=%d\n", err);
+net/dccp/ackvec.c: In function 'dccp_ackvec_update_old':
+../net/dccp/ackvec.c:163:80: warning: suggest braces around empty body in an 'else' statement [-Wempty-body]
+  163 |                                               (unsigned long long)seqno, state);
+
+Fixes: dc841e30eaea ("dccp: Extend CCID packet dequeueing interface")
+Fixes: 380240864451 ("dccp ccid-2: Update code for the Ack Vector input/registration routine")
+Signed-off-by: Randy Dunlap <rdunlap@infradead.org>
+Cc: dccp@vger.kernel.org
+Cc: "David S. Miller" <davem@davemloft.net>
+Cc: Jakub Kicinski <kuba@kernel.org>
+Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+Signed-off-by: Sasha Levin <sashal@kernel.org>
+---
+ net/dccp/dccp.h | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
+index 9cc9d1ee6cdb..c5c1d2b8045e 100644
+--- a/net/dccp/dccp.h
++++ b/net/dccp/dccp.h
+@@ -41,9 +41,9 @@ extern bool dccp_debug;
+ #define dccp_pr_debug_cat(format, a...)   DCCP_PRINTK(dccp_debug, format, ##a)
+ #define dccp_debug(fmt, a...)		  dccp_pr_debug_cat(KERN_DEBUG fmt, ##a)
+ #else
+-#define dccp_pr_debug(format, a...)
+-#define dccp_pr_debug_cat(format, a...)
+-#define dccp_debug(format, a...)
++#define dccp_pr_debug(format, a...)	  do {} while (0)
++#define dccp_pr_debug_cat(format, a...)	  do {} while (0)
++#define dccp_debug(format, a...)	  do {} while (0)
+ #endif
+ 
+ extern struct inet_hashinfo dccp_hashinfo;
+-- 
+2.30.2
