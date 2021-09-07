@@ -1,58 +1,33 @@
-From: Sasha Levin <sashal@kernel.org>
-Date: Tue, 24 Aug 2021 17:07:34 +0000
-Subject: [PATCH 4.4 22/31] dccp: add do-while-0 stubs for dccp_pr_debug macros
-Message-Id: <20210824170743.710957-23-sashal@kernel.org>
+From: "Lin, Zhenpeng" <zplin@psu.edu>
+Date: Tue, 07 Sep 2021 18:28:28 +0000
+Subject: [PATCH] dccp: don't duplicate ccid when cloning dccp sock
+Message-Id: <D95F1297-95A1-4AC9-B0C2-803C453B1BAE@psu.edu>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From: Randy Dunlap <rdunlap@infradead.org>
-
-[ Upstream commit 86aab09a4870bb8346c9579864588c3d7f555299 ]
-
-GCC complains about empty macros in an 'if' statement, so convert
-them to 'do {} while (0)' macros.
-
-Fixes these build warnings:
-
-net/dccp/output.c: In function 'dccp_xmit_packet':
-../net/dccp/output.c:283:71: warning: suggest braces around empty body in an 'if' statement [-Wempty-body]
-  283 |                 dccp_pr_debug("transmit_skb() returned err=%d\n", err);
-net/dccp/ackvec.c: In function 'dccp_ackvec_update_old':
-../net/dccp/ackvec.c:163:80: warning: suggest braces around empty body in an 'else' statement [-Wempty-body]
-  163 |                                               (unsigned long long)seqno, state);
-
-Fixes: dc841e30eaea ("dccp: Extend CCID packet dequeueing interface")
-Fixes: 380240864451 ("dccp ccid-2: Update code for the Ack Vector input/registration routine")
-Signed-off-by: Randy Dunlap <rdunlap@infradead.org>
-Cc: dccp@vger.kernel.org
-Cc: "David S. Miller" <davem@davemloft.net>
-Cc: Jakub Kicinski <kuba@kernel.org>
-Cc: Gerrit Renker <gerrit@erg.abdn.ac.uk>
-Signed-off-by: David S. Miller <davem@davemloft.net>
-Signed-off-by: Sasha Levin <sashal@kernel.org>
----
- net/dccp/dccp.h | 6 +++---
- 1 file changed, 3 insertions(+), 3 deletions(-)
-
-diff --git a/net/dccp/dccp.h b/net/dccp/dccp.h
-index b0e28d24e1a7..e50fc19690c8 100644
---- a/net/dccp/dccp.h
-+++ b/net/dccp/dccp.h
-@@ -44,9 +44,9 @@ extern bool dccp_debug;
- #define dccp_pr_debug_cat(format, a...)   DCCP_PRINTK(dccp_debug, format, ##a)
- #define dccp_debug(fmt, a...)		  dccp_pr_debug_cat(KERN_DEBUG fmt, ##a)
- #else
--#define dccp_pr_debug(format, a...)
--#define dccp_pr_debug_cat(format, a...)
--#define dccp_debug(format, a...)
-+#define dccp_pr_debug(format, a...)	  do {} while (0)
-+#define dccp_pr_debug_cat(format, a...)	  do {} while (0)
-+#define dccp_debug(format, a...)	  do {} while (0)
- #endif
- 
- extern struct inet_hashinfo dccp_hashinfo;
--- 
-2.30.2
+Q29tbWl0IDI2NzdkMjA2NzczMSAoImRjY3A6IGRvbid0IGZyZWUgY2NpZDJfaGNfdHhfc29jayAu
+Li4iKSBmaXhlZA0KYSBVQUYgYnV0IHJlaW50cm9kdWNlZCBDVkUtMjAxNy02MDc0Lg0KDQpXaGVu
+IHRoZSBzb2NrIGlzIGNsb25lZCwgdHdvIGRjY3BzX2hjX3R4X2NjaWQgd2lsbCByZWZlcmVuY2Ug
+dG8gdGhlDQpzYW1lIGNjaWQuIFNvIG9uZSBjYW4gZnJlZSB0aGUgY2NpZCBvYmplY3QgdHdpY2Ug
+ZnJvbSB0d28gc29ja3MgYWZ0ZXINCmNsb25pbmcuDQoNClRoaXMgaXNzdWUgd2FzIGZvdW5kIGJ5
+ICJIYWRhciBNYW5vciIgYXMgd2VsbCBhbmQgYXNzaWduZWQgd2l0aA0KQ1ZFLTIwMjAtMTYxMTks
+IHdoaWNoIHdhcyBmaXhlZCBpbiBVYnVudHUncyBrZXJuZWwuIFNvIGhlcmUgSSBwb3J0DQp0aGUg
+cGF0Y2ggZnJvbSBVYnVudHUgdG8gZml4IGl0Lg0KDQpUaGUgcGF0Y2ggcHJldmVudHMgY2xvbmVk
+IHNvY2tzIGZyb20gcmVmZXJlbmNpbmcgdGhlIHNhbWUgY2NpZC4NCg0KRml4ZXM6IDI2NzdkMjA2
+NzczMTQxMCAoImRjY3A6IGRvbid0IGZyZWUgY2NpZDJfaGNfdHhfc29jayAuLi4iKQ0KU2lnbmVk
+LW9mZi1ieTogWmhlbnBlbmcgTGluIDx6cGxpbkBwc3UuZWR1Pg0KLS0tDQpuZXQvZGNjcC9taW5p
+c29ja3MuYyB8IDIgKysNCjEgZmlsZSBjaGFuZ2VkLCAyIGluc2VydGlvbnMoKykNCg0KZGlmZiAt
+LWdpdCBhL25ldC9kY2NwL21pbmlzb2Nrcy5jIGIvbmV0L2RjY3AvbWluaXNvY2tzLmMNCmluZGV4
+IGM1Yzc0YTM0ZDEzOS4uOTFlN2EyMjAyNjk3IDEwMDY0NA0KLS0tIGEvbmV0L2RjY3AvbWluaXNv
+Y2tzLmMNCisrKyBiL25ldC9kY2NwL21pbmlzb2Nrcy5jDQpAQCAtOTQsNiArOTQsOCBAQCBzdHJ1
+Y3Qgc29jayAqZGNjcF9jcmVhdGVfb3BlbnJlcV9jaGlsZChjb25zdCBzdHJ1Y3Qgc29jayAqc2ss
+DQoJCW5ld2RwLT5kY2Nwc19yb2xlCSAgICA9IERDQ1BfUk9MRV9TRVJWRVI7DQoJCW5ld2RwLT5k
+Y2Nwc19oY19yeF9hY2t2ZWMgICA9IE5VTEw7DQoJCW5ld2RwLT5kY2Nwc19zZXJ2aWNlX2xpc3Qg
+ICA9IE5VTEw7DQorCQluZXdkcC0+ZGNjcHNfaGNfcnhfY2NpZCAgICAgPSBOVUxMOw0KKwkJbmV3
+ZHAtPmRjY3BzX2hjX3R4X2NjaWQgICAgID0gTlVMTDsNCgkJbmV3ZHAtPmRjY3BzX3NlcnZpY2UJ
+ICAgID0gZHJlcS0+ZHJlcV9zZXJ2aWNlOw0KCQluZXdkcC0+ZGNjcHNfdGltZXN0YW1wX2VjaG8g
+PSBkcmVxLT5kcmVxX3RpbWVzdGFtcF9lY2hvOw0KCQluZXdkcC0+ZGNjcHNfdGltZXN0YW1wX3Rp
+bWUgPSBkcmVxLT5kcmVxX3RpbWVzdGFtcF90aW1lOw0KLS0NCjIuMjUuMQ0KDQo
