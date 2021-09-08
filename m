@@ -1,7 +1,7 @@
-From: "Lin, Zhenpeng" <zplin@psu.edu>
-Date: Wed, 08 Sep 2021 03:40:59 +0000
-Subject: [PATCH] dccp: don't duplicate ccid when cloning dccp sock
-Message-Id: <F3E0B9C9-14F1-43F5-AC6C-E5DB346A8090@psu.edu>
+From: patchwork-bot+netdevbpf@kernel.org
+Date: Wed, 08 Sep 2021 10:40:08 +0000
+Subject: Re: [PATCH] dccp: don't duplicate ccid when cloning dccp sock
+Message-Id: <163109760806.16056.10288524962758514205.git-patchwork-notify@kernel.org>
 List-Id: <dccp.vger.kernel.org>
 References: <D95F1297-95A1-4AC9-B0C2-803C453B1BAE@psu.edu>
 In-Reply-To: <D95F1297-95A1-4AC9-B0C2-803C453B1BAE@psu.edu>
@@ -10,26 +10,26 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Q29tbWl0IDI2NzdkMjA2NzczMSAoImRjY3A6IGRvbid0IGZyZWUgY2NpZDJfaGNfdHhfc29jayAu
-Li4iKSBmaXhlZA0KYSBVQUYgYnV0IHJlaW50cm9kdWNlZCBDVkUtMjAxNy02MDc0Lg0KDQpXaGVu
-IHRoZSBzb2NrIGlzIGNsb25lZCwgdHdvIGRjY3BzX2hjX3R4X2NjaWQgd2lsbCByZWZlcmVuY2Ug
-dG8gdGhlDQpzYW1lIGNjaWQuIFNvIG9uZSBjYW4gZnJlZSB0aGUgY2NpZCBvYmplY3QgdHdpY2Ug
-ZnJvbSB0d28gc29ja3MgYWZ0ZXINCmNsb25pbmcuDQoNClRoaXMgaXNzdWUgd2FzIGZvdW5kIGJ5
-ICJIYWRhciBNYW5vciIgYXMgd2VsbCBhbmQgYXNzaWduZWQgd2l0aA0KQ1ZFLTIwMjAtMTYxMTks
-IHdoaWNoIHdhcyBmaXhlZCBpbiBVYnVudHUncyBrZXJuZWwuIFNvIGhlcmUgSSBwb3J0DQp0aGUg
-cGF0Y2ggZnJvbSBVYnVudHUgdG8gZml4IGl0Lg0KDQpUaGUgcGF0Y2ggcHJldmVudHMgY2xvbmVk
-IHNvY2tzIGZyb20gcmVmZXJlbmNpbmcgdGhlIHNhbWUgY2NpZC4NCg0KRml4ZXM6IDI2NzdkMjA2
-NzczMTQxMCAoImRjY3A6IGRvbid0IGZyZWUgY2NpZDJfaGNfdHhfc29jayAuLi4iKQ0KU2lnbmVk
-LW9mZi1ieTogWmhlbnBlbmcgTGluIDx6cGxpbkBwc3UuZWR1Pg0KLS0tDQogbmV0L2RjY3AvbWlu
-aXNvY2tzLmMgfCAyICsrDQogMSBmaWxlIGNoYW5nZWQsIDIgaW5zZXJ0aW9ucygrKQ0KDQpkaWZm
-IC0tZ2l0IGEvbmV0L2RjY3AvbWluaXNvY2tzLmMgYi9uZXQvZGNjcC9taW5pc29ja3MuYw0KaW5k
-ZXggYzVjNzRhMzRkMTM5Li45MWU3YTIyMDI2OTcgMTAwNjQ0DQotLS0gYS9uZXQvZGNjcC9taW5p
-c29ja3MuYw0KKysrIGIvbmV0L2RjY3AvbWluaXNvY2tzLmMNCkBAIC05NCw2ICs5NCw4IEBAIHN0
-cnVjdCBzb2NrICpkY2NwX2NyZWF0ZV9vcGVucmVxX2NoaWxkKGNvbnN0IHN0cnVjdCBzb2NrICpz
-aywNCiAJCW5ld2RwLT5kY2Nwc19yb2xlCSAgICA9IERDQ1BfUk9MRV9TRVJWRVI7DQogCQluZXdk
-cC0+ZGNjcHNfaGNfcnhfYWNrdmVjICAgPSBOVUxMOw0KIAkJbmV3ZHAtPmRjY3BzX3NlcnZpY2Vf
-bGlzdCAgID0gTlVMTDsNCisJCW5ld2RwLT5kY2Nwc19oY19yeF9jY2lkICAgICA9IE5VTEw7DQor
-CQluZXdkcC0+ZGNjcHNfaGNfdHhfY2NpZCAgICAgPSBOVUxMOw0KIAkJbmV3ZHAtPmRjY3BzX3Nl
-cnZpY2UJICAgID0gZHJlcS0+ZHJlcV9zZXJ2aWNlOw0KIAkJbmV3ZHAtPmRjY3BzX3RpbWVzdGFt
-cF9lY2hvID0gZHJlcS0+ZHJlcV90aW1lc3RhbXBfZWNobzsNCiAJCW5ld2RwLT5kY2Nwc190aW1l
-c3RhbXBfdGltZSA9IGRyZXEtPmRyZXFfdGltZXN0YW1wX3RpbWU7DQotLQ0KMi4yNS4xDQoNCg=
+Hello:
+
+This patch was applied to netdev/net.git (refs/heads/master):
+
+On Wed, 8 Sep 2021 03:40:59 +0000 you wrote:
+> Commit 2677d2067731 ("dccp: don't free ccid2_hc_tx_sock ...") fixed
+> a UAF but reintroduced CVE-2017-6074.
+> 
+> When the sock is cloned, two dccps_hc_tx_ccid will reference to the
+> same ccid. So one can free the ccid object twice from two socks after
+> cloning.
+> 
+> [...]
+
+Here is the summary with links:
+  - dccp: don't duplicate ccid when cloning dccp sock
+    https://git.kernel.org/netdev/net/c/d9ea761fdd19
+
+You are awesome, thank you!
+--
+Deet-doot-dot, I am a bot.
+https://korg.docs.kernel.org/patchwork/pwbot.html
+
