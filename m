@@ -1,39 +1,40 @@
-From: patchwork-bot+netdevbpf@kernel.org
-Date: Wed, 24 Nov 2021 04:30:08 +0000
-Subject: Re: [PATCH net-next 0/2] dccp/tcp: Minor fixes for inet_csk_listen_start().
-Message-Id: <163772820876.18836.15309450997633192155.git-patchwork-notify@kernel.org>
+From: Kees Cook <keescook@chromium.org>
+Date: Thu, 18 Nov 2021 20:30:19 +0000
+Subject: [PATCH] net: dccp: Use memset_startat() for TP zeroing
+Message-Id: <20211118203019.1286474-1-keescook@chromium.org>
 List-Id: <dccp.vger.kernel.org>
-References: <20211122101622.50572-1-kuniyu@amazon.co.jp>
-In-Reply-To: <20211122101622.50572-1-kuniyu@amazon.co.jp>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hello:
+In preparation for FORTIFY_SOURCE performing compile-time and run-time
+field bounds checking for memset(), avoid intentionally writing across
+neighboring fields.
 
-This series was applied to netdev/net-next.git (master)
-by Jakub Kicinski <kuba@kernel.org>:
+Use memset_startat() so memset() doesn't get confused about writing
+beyond the destination member that is intended to be the starting point
+of zeroing through the end of the struct.
 
-On Mon, 22 Nov 2021 19:16:20 +0900 you wrote:
-> The first patch removes an unused argument, and the second removes a stale
-> comment.
-> 
-> 
-> Kuniyuki Iwashima (2):
->   dccp/tcp: Remove an unused argument in inet_csk_listen_start().
->   dccp: Inline dccp_listen_start().
-> 
-> [...]
+Signed-off-by: Kees Cook <keescook@chromium.org>
+---
+ net/dccp/trace.h | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
 
-Here is the summary with links:
-  - [net-next,1/2] dccp/tcp: Remove an unused argument in inet_csk_listen_start().
-    https://git.kernel.org/netdev/net-next/c/e7049395b1c3
-  - [net-next,2/2] dccp: Inline dccp_listen_start().
-    https://git.kernel.org/netdev/net-next/c/b4a8e7493d74
-
-You are awesome, thank you!
+diff --git a/net/dccp/trace.h b/net/dccp/trace.h
+index 5062421beee9..5a43b3508c7f 100644
+--- a/net/dccp/trace.h
++++ b/net/dccp/trace.h
+@@ -60,9 +60,7 @@ TRACE_EVENT(dccp_probe,
+ 			__entry->tx_t_ipi = hc->tx_t_ipi;
+ 		} else {
+ 			__entry->tx_s = 0;
+-			memset(&__entry->tx_rtt, 0, (void *)&__entry->tx_t_ipi -
+-			       (void *)&__entry->tx_rtt +
+-			       sizeof(__entry->tx_t_ipi));
++			memset_startat(__entry, 0, tx_rtt);
+ 		}
+ 	),
+ 
 -- 
-Deet-doot-dot, I am a bot.
-https://korg.docs.kernel.org/patchwork/pwbot.html
-
+2.30.2
