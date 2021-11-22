@@ -1,37 +1,65 @@
-From: patchwork-bot+netdevbpf@kernel.org
-Date: Fri, 19 Nov 2021 11:50:15 +0000
-Subject: Re: [PATCH] net: dccp: Use memset_startat() for TP zeroing
-Message-Id: <163732261562.10547.7623991356352277593.git-patchwork-notify@kernel.org>
+From: Kuniyuki Iwashima <kuniyu@amazon.co.jp>
+Date: Mon, 22 Nov 2021 10:16:22 +0000
+Subject: [PATCH net-next 2/2] dccp: Inline dccp_listen_start().
+Message-Id: <20211122101622.50572-3-kuniyu@amazon.co.jp>
 List-Id: <dccp.vger.kernel.org>
-References: <20211118203019.1286474-1-keescook@chromium.org>
-In-Reply-To: <20211118203019.1286474-1-keescook@chromium.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hello:
+This patch inlines dccp_listen_start() and removes a stale comment in
+inet_dccp_listen() so that it looks like inet_listen().
 
-This patch was applied to netdev/net-next.git (master)
-by David S. Miller <davem@davemloft.net>:
+Signed-off-by: Kuniyuki Iwashima <kuniyu@amazon.co.jp>
+---
+ net/dccp/proto.c | 27 +++++++++++----------------
+ 1 file changed, 11 insertions(+), 16 deletions(-)
 
-On Thu, 18 Nov 2021 12:30:19 -0800 you wrote:
-> In preparation for FORTIFY_SOURCE performing compile-time and run-time
-> field bounds checking for memset(), avoid intentionally writing across
-> neighboring fields.
-> 
-> Use memset_startat() so memset() doesn't get confused about writing
-> beyond the destination member that is intended to be the starting point
-> of zeroing through the end of the struct.
-> 
-> [...]
-
-Here is the summary with links:
-  - net: dccp: Use memset_startat() for TP zeroing
-    https://git.kernel.org/netdev/net-next/c/f5455a1d9d49
-
-You are awesome, thank you!
+diff --git a/net/dccp/proto.c b/net/dccp/proto.c
+index 55b8f958cdd2..a976b4d29892 100644
+--- a/net/dccp/proto.c
++++ b/net/dccp/proto.c
+@@ -238,17 +238,6 @@ void dccp_destroy_sock(struct sock *sk)
+ 
+ EXPORT_SYMBOL_GPL(dccp_destroy_sock);
+ 
+-static inline int dccp_listen_start(struct sock *sk)
+-{
+-	struct dccp_sock *dp = dccp_sk(sk);
+-
+-	dp->dccps_role = DCCP_ROLE_LISTEN;
+-	/* do not start to listen if feature negotiation setup fails */
+-	if (dccp_feat_finalise_settings(dp))
+-		return -EPROTO;
+-	return inet_csk_listen_start(sk);
+-}
+-
+ static inline int dccp_need_reset(int state)
+ {
+ 	return state != DCCP_CLOSED && state != DCCP_LISTEN &&
+@@ -931,11 +920,17 @@ int inet_dccp_listen(struct socket *sock, int backlog)
+ 	 * we can only allow the backlog to be adjusted.
+ 	 */
+ 	if (old_state != DCCP_LISTEN) {
+-		/*
+-		 * FIXME: here it probably should be sk->sk_prot->listen_start
+-		 * see tcp_listen_start
+-		 */
+-		err = dccp_listen_start(sk);
++		struct dccp_sock *dp = dccp_sk(sk);
++
++		dp->dccps_role = DCCP_ROLE_LISTEN;
++
++		/* do not start to listen if feature negotiation setup fails */
++		if (dccp_feat_finalise_settings(dp)) {
++			err = -EPROTO;
++			goto out;
++		}
++
++		err = inet_csk_listen_start(sk);
+ 		if (err)
+ 			goto out;
+ 	}
 -- 
-Deet-doot-dot, I am a bot.
-https://korg.docs.kernel.org/patchwork/pwbot.html
-
+2.30.2
