@@ -1,54 +1,35 @@
-From: David Ahern <dsahern@kernel.org>
-Date: Fri, 22 Apr 2022 02:32:35 +0000
-Subject: Re: [PATCH net-next 2/3] ipv4: Avoid using RTO_ONLINK with ip_route_connect().
-Message-Id: <5f09f4d0-71d0-f122-d83e-6071fc2945b2@kernel.org>
+From: Kuniyuki Iwashima <kuniyu@amazon.co.jp>
+Date: Thu, 19 May 2022 07:51:19 +0000
+Subject: Re: [PATCH net-next v5 1/2] net: Add a second bind table hashed by port and address
+Message-Id: <20220519075119.87442-1-kuniyu@amazon.co.jp>
 List-Id: <dccp.vger.kernel.org>
-References: <492f91626cab774d7dda27147629c3d56537f847.1650470610.git.gnault@redhat.com>
-In-Reply-To: <492f91626cab774d7dda27147629c3d56537f847.1650470610.git.gnault@redhat.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 4/20/22 5:21 PM, Guillaume Nault wrote:
-> Now that ip_rt_fix_tos() doesn't reset ->flowi4_scope unconditionally,
-> we don't have to rely on the RTO_ONLINK bit to properly set the scope
-> of a flowi4 structure. We can just set ->flowi4_scope explicitly and
-> avoid using RTO_ONLINK in ->flowi4_tos.
+From: Joanne Koong <joannelkoong@gmail.com>
+Date: Wed, 18 May 2022 16:19:11 -0700
+> We currently have one tcp bind table (bhash) which hashes by port
+> number only. In the socket bind path, we check for bind conflicts by
+> traversing the specified port's inet_bind2_bucket while holding the
+> bucket's spinlock (see inet_csk_get_port() and inet_csk_bind_conflict()).
 > 
-> This patch converts callers of ip_route_connect(). Instead of setting
-> the tos parameter with RT_CONN_FLAGS(sk), as all callers do, we can:
+> In instances where there are tons of sockets hashed to the same port
+> at different addresses, checking for a bind conflict is time-intensive
+> and can cause softirq cpu lockups, as well as stops new tcp connections
+> since __inet_inherit_port() also contests for the spinlock.
 > 
->   1- Drop the tos parameter from ip_route_connect(): its value was
->      entirely based on sk, which is also passed as parameter.
+> This patch proposes adding a second bind table, bhash2, that hashes by
+> port and ip address. Searching the bhash2 table leads to significantly
+> faster conflict resolution and less time holding the spinlock.
 > 
->   2- Set ->flowi4_scope depending on the SOCK_LOCALROUTE socket option
->      instead of always initialising it with RT_SCOPE_UNIVERSE (let's
->      define ip_sock_rt_scope() for this purpose).
-> 
->   3- Avoid overloading ->flowi4_tos with RTO_ONLINK: since the scope is
->      now properly initialised, we don't need to tell ip_rt_fix_tos() to
->      adjust ->flowi4_scope for us. So let's define ip_sock_rt_tos(),
->      which is the same as RT_CONN_FLAGS() but without the RTO_ONLINK
->      bit overload.
-> 
-> Note:
->   In the original ip_route_connect() code, __ip_route_output_key()
->   might clear the RTO_ONLINK bit of fl4->flowi4_tos (because of
->   ip_rt_fix_tos()). Therefore flowi4_update_output() had to reuse the
->   original tos variable. Now that we don't set RTO_ONLINK any more,
->   this is not a problem and we can use fl4->flowi4_tos in
->   flowi4_update_output().
-> 
-> Signed-off-by: Guillaume Nault <gnault@redhat.com>
-> ---
->  include/net/route.h | 36 ++++++++++++++++++++++++------------
->  net/dccp/ipv4.c     |  5 ++---
->  net/ipv4/af_inet.c  |  6 +++---
->  net/ipv4/datagram.c |  7 +++----
->  net/ipv4/tcp_ipv4.c |  5 ++---
->  5 files changed, 34 insertions(+), 25 deletions(-)
-> 
+> Signed-off-by: Joanne Koong <joannelkoong@gmail.com>
+> Reviewed-by: Eric Dumazet <edumazet@google.com>
 
-Reviewed-by: David Ahern <dsahern@kernel.org>
+Acked-by: Kuniyuki Iwashima <kuniyu@amazon.co.jp>
 
+To maintainers:
+lore and patchwork seem to miss this version...?
+
+Thank you.
