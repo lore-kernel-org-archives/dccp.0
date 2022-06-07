@@ -1,62 +1,119 @@
-From: Joanne Koong <joannelkoong@gmail.com>
-Date: Wed, 01 Jun 2022 18:31:08 +0000
-Subject: Re: [PATCH net-next v1 1/2] net: Update bhash2 when socket's rcv saddr changes
-Message-Id: <CAJnrk1bkLFwAmmQviJeeHKSHygUqG8LH81RYnx6+mJOLZF8tjw@mail.gmail.com>
+From: Randy Dunlap <rdunlap@infradead.org>
+Date: Tue, 07 Jun 2022 01:35:21 +0000
+Subject: Re: [syzbot] BUG: "hc->tx_t_ipi == NUM" holds (exception!) at net/dccp/ccids/ccid3.c:LINE/ccid3_upda
+Message-Id: <9e700705-fae6-503e-1f3c-f12f537f0ca1@infradead.org>
 List-Id: <dccp.vger.kernel.org>
-References: <CANn89i+pg8guF+XeOngSMa4vUD81g=u-pCBpi0Yp2WB9PQZvdg@mail.gmail.com>
-In-Reply-To: <CANn89i+pg8guF+XeOngSMa4vUD81g=u-pCBpi0Yp2WB9PQZvdg@mail.gmail.com>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="windows-1252"
+Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On Wed, Jun 1, 2022 at 2:58 AM Paolo Abeni <pabeni@redhat.com> wrote:
->
+Hi,
+
+On 1/10/22 08:16, syzbot wrote:
 > Hello,
->
-> On Tue, 2022-05-31 at 15:04 -0700, Eric Dumazet wrote:
-> > On Tue, May 24, 2022 at 4:20 PM Joanne Koong <joannelkoong@gmail.com> wrote:
-> > >
-> > > Commit d5a42de8bdbe ("net: Add a second bind table hashed by port and
-> > > address") added a second bind table, bhash2, that hashes by a socket's port
-> > > and rcv address.
-> > >
-> > > However, there are two cases where the socket's rcv saddr can change
-> > > after it has been binded:
-> > >
-> > > 1) The case where there is a bind() call on "::" (IPADDR_ANY) and then
-> > > a connect() call. The kernel will assign the socket an address when it
-> > > handles the connect()
-> > >
-> > > 2) In inet_sk_reselect_saddr(), which is called when rerouting fails
-> > > when rebuilding the sk header (invoked by inet_sk_rebuild_header)
-> > >
-> > > In these two cases, we need to update the bhash2 table by removing the
-> > > entry for the old address, and adding a new entry reflecting the updated
-> > > address.
-> > >
-> > > Reported-by: syzbot+015d756bbd1f8b5c8f09@syzkaller.appspotmail.com
-> > > Fixes: d5a42de8bdbe ("net: Add a second bind table hashed by port and address")
-> > > Signed-off-by: Joanne Koong <joannelkoong@gmail.com>
-> > > ---
-> >
-> > Reviewed-by: Eric Dumazet <edumzet@google.com>
-> >
-> Apparently this patch (and 2/2) did not reach the ML nor patchwork (let
-> alone my inbox ;). I've no idea on the root cause, sorry.
->
-> @Joanne: could you please re-post the series? (you can retain Eric's
-> review tag)
->
-For some reason, my patches recently haven't been getting through to
-the netdev mailing list but they've been going through ok to the bpf
-one; John, Jakub, and I are looking into it and doing some
-investigations :)
+>=20
+> syzbot found the following issue on:
+>=20
+> HEAD commit:    82192cb497f9 Merge branch 'ena-capabilities-field-and-cos=
+m..
+> git tree:       net-next
+> console output: https://syzkaller.appspot.com/x/log.txt?x=12ec95c7b00000
+> kernel config:  https://syzkaller.appspot.com/x/.config?x22a0a6462d9ff7d
+> dashboard link: https://syzkaller.appspot.com/bug?extid=94641ba6c1d768b1e=
+35e
+> compiler:       gcc (Debian 10.2.1-6) 10.2.1 20210110, GNU ld (GNU Binuti=
+ls for Debian) 2.35.2
+> syz repro:      https://syzkaller.appspot.com/x/repro.syz?x=100ea4e3b00000
+> C reproducer:   https://syzkaller.appspot.com/x/repro.c?x=13977b73b00000
+>=20
+> Bisection is inconclusive: the issue happens on the oldest tested release.
 
-I will resend this series again.
+Regarding commit 793734b587a6:
+Author: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Date:   Mon Feb 27 12:29:44 2012 -0700
 
-Thanks for taking a look at this patchset, Eric and Paolo.
-> Thanks!
->
-> Paolo
->
+    dccp ccid-3: replace incorrect BUG_ON
+
+
+Is this an algorithm (RFC) problem or a Linux implementation problem?
+
+Could we round a calculated 0 (unbounded) t_ipi up to 1?
+
+Or is just something "nasty" that the reproducer program is doing?
+
+
+I ran the C reproducer for about 15 seconds and got 71 occurrences
+of this
+	DCCP_BUG_ON(hc->tx_t_ipi =3D 0);
+
+>=20
+> bisection log:  https://syzkaller.appspot.com/x/bisect.txt?x=13698c63b000=
+00
+> final oops:     https://syzkaller.appspot.com/x/report.txt?x=10e98c63b000=
+00
+> console output: https://syzkaller.appspot.com/x/log.txt?x=17698c63b00000
+>=20
+> IMPORTANT: if you fix the issue, please add the following tag to the comm=
+it:
+> Reported-by: syzbot+94641ba6c1d768b1e35e@syzkaller.appspotmail.com
+>=20
+> BUG: "hc->tx_t_ipi =3D 0" holds (exception!) at net/dccp/ccids/ccid3.c:90=
+/ccid3_update_send_interval()
+> CPU: 0 PID: 29976 Comm: syz-executor890 Not tainted 5.16.0-rc8-syzkaller =
+#0
+> Hardware name: Google Google Compute Engine/Google Compute Engine, BIOS G=
+oogle 01/01/2011
+> Call Trace:
+>  <TASK>
+>  __dump_stack lib/dump_stack.c:88 [inline]
+>  dump_stack_lvl+0xcd/0x134 lib/dump_stack.c:106
+>  ccid3_update_send_interval net/dccp/ccids/ccid3.c:90 [inline]
+>  ccid3_update_send_interval.cold+0x87/0x93 net/dccp/ccids/ccid3.c:86
+>  ccid3_hc_tx_update_s net/dccp/ccids/ccid3.c:169 [inline]
+>  ccid3_hc_tx_packet_sent+0x12e/0x160 net/dccp/ccids/ccid3.c:353
+>  ccid_hc_tx_packet_sent net/dccp/ccid.h:175 [inline]
+>  dccp_xmit_packet+0x2f2/0x750 net/dccp/output.c:289
+>  dccp_write_xmit+0x16d/0x1d0 net/dccp/output.c:366
+>  dccp_sendmsg+0x922/0xc90 net/dccp/proto.c:783
+>  inet_sendmsg+0x99/0xe0 net/ipv4/af_inet.c:819
+>  sock_sendmsg_nosec net/socket.c:705 [inline]
+>  sock_sendmsg+0xcf/0x120 net/socket.c:725
+>  ____sys_sendmsg+0x331/0x810 net/socket.c:2413
+>  ___sys_sendmsg+0xf3/0x170 net/socket.c:2467
+>  __sys_sendmmsg+0x195/0x470 net/socket.c:2553
+>  __do_sys_sendmmsg net/socket.c:2582 [inline]
+>  __se_sys_sendmmsg net/socket.c:2579 [inline]
+>  __x64_sys_sendmmsg+0x99/0x100 net/socket.c:2579
+>  do_syscall_x64 arch/x86/entry/common.c:50 [inline]
+>  do_syscall_64+0x35/0xb0 arch/x86/entry/common.c:80
+>  entry_SYSCALL_64_after_hwframe+0x44/0xae
+> RIP: 0033:0x7f2cf5f36da9
+> Code: 28 00 00 00 75 05 48 83 c4 28 c3 e8 e1 15 00 00 90 48 89 f8 48 89 f=
+7 48 89 d6 48 89 ca 4d 89 c2 4d 89 c8 4c 8b 4c 24 08 0f 05 <48> 3d 01 f0 ff=
+ ff 73 01 c3 48 c7 c1 b8 ff ff ff f7 d8 64 89 01 48
+> RSP: 002b:00007f2cf5ee4308 EFLAGS: 00000246 ORIG_RAX: 0000000000000133
+> RAX: ffffffffffffffda RBX: 0000000000000002 RCX: 00007f2cf5f36da9
+> RDX: 0000000000000001 RSI: 000000002000bf40 RDI: 0000000000000004
+> RBP: 00007f2cf5fbf4c8 R08: 0000000000000000 R09: 0000000000000000
+> R10: 0000000000000000 R11: 0000000000000246 R12: 00007f2cf5fbf4c0
+> R13: 00007f2cf5f8c5dc R14: 00007f2cf5ee4400 R15: 0000000000022000
+>  </TASK>
+>=20
+>=20
+> ---
+> This report is generated by a bot. It may contain errors.
+> See https://goo.gl/tpsmEJ for more information about syzbot.
+> syzbot engineers can be reached at syzkaller@googlegroups.com.
+>=20
+> syzbot will keep track of this issue. See:
+> https://goo.gl/tpsmEJ#status for how to communicate with syzbot.
+> For information about bisection process see: https://goo.gl/tpsmEJ#bisect=
+ion
+> syzbot can test patches for this issue, for details see:
+> https://goo.gl/tpsmEJ#testing-patches
+
+thanks.
+
+--=20
+~Randy
