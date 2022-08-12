@@ -1,7 +1,7 @@
 From: Joanne Koong <joannelkoong@gmail.com>
-Date: Mon, 22 Aug 2022 18:10:21 +0000
-Subject: [PATCH RESEND net-next v4 1/3] net: Add a bhash2 table hashed by port and address
-Message-Id: <20220822181023.3979645-2-joannelkoong@gmail.com>
+Date: Fri, 12 Aug 2022 20:29:03 +0000
+Subject: [PATCH net-next v4 1/3] net: Add a bhash2 table hashed by port + address
+Message-Id: <20220812202905.1599234-2-joannelkoong@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -222,7 +222,7 @@ index e9cf2157ed8a..44a419b9e3d5 100644
  /* Caller must disable local BH processing. */
  int __inet_inherit_port(const struct sock *sk, struct sock *child);
 diff --git a/include/net/sock.h b/include/net/sock.h
-index d08cfe190a78..ca469980e006 100644
+index 05a1bbdf5805..5efcd0dd9a93 100644
 --- a/include/net/sock.h
 +++ b/include/net/sock.h
 @@ -348,6 +348,7 @@ struct sk_filter;
@@ -241,7 +241,7 @@ index d08cfe190a78..ca469980e006 100644
  };
  
  enum sk_pacing {
-@@ -870,6 +872,16 @@ static inline void sk_add_bind_node(struct sock *sk,
+@@ -845,6 +847,16 @@ static inline void sk_add_bind_node(struct sock *sk,
  	hlist_add_head(&sk->sk_bind_node, list);
  }
  
@@ -258,7 +258,7 @@ index d08cfe190a78..ca469980e006 100644
  #define sk_for_each(__sk, list) \
  	hlist_for_each_entry(__sk, list, sk_node)
  #define sk_for_each_rcu(__sk, list) \
-@@ -887,6 +899,8 @@ static inline void sk_add_bind_node(struct sock *sk,
+@@ -862,6 +874,8 @@ static inline void sk_add_bind_node(struct sock *sk,
  	hlist_for_each_entry_safe(__sk, tmp, list, sk_node)
  #define sk_for_each_bound(__sk, list) \
  	hlist_for_each_entry(__sk, list, sk_bind_node)
@@ -1249,10 +1249,10 @@ index b9d995b5ce24..60d77e234a68 100644
  
  /*
 diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
-index bbe218753662..6ec28968c1f5 100644
+index 970e9a2cca4a..76484451f586 100644
 --- a/net/ipv4/tcp.c
 +++ b/net/ipv4/tcp.c
-@@ -4736,6 +4736,12 @@ void __init tcp_init(void)
+@@ -4739,6 +4739,12 @@ void __init tcp_init(void)
  				  SLAB_HWCACHE_ALIGN | SLAB_PANIC |
  				  SLAB_ACCOUNT,
  				  NULL);
@@ -1265,7 +1265,7 @@ index bbe218753662..6ec28968c1f5 100644
  
  	/* Size and allocate the main established and bind bucket
  	 * hash tables.
-@@ -4759,7 +4765,7 @@ void __init tcp_init(void)
+@@ -4762,7 +4768,7 @@ void __init tcp_init(void)
  		panic("TCP: failed to alloc ehash_locks");
  	tcp_hashinfo.bhash =
  		alloc_large_system_hash("TCP bind",
@@ -1274,7 +1274,7 @@ index bbe218753662..6ec28968c1f5 100644
  					tcp_hashinfo.ehash_mask + 1,
  					17, /* one slot per 128 KB of memory */
  					0,
-@@ -4768,9 +4774,12 @@ void __init tcp_init(void)
+@@ -4771,9 +4777,12 @@ void __init tcp_init(void)
  					0,
  					64 * 1024);
  	tcp_hashinfo.bhash_size = 1U << tcp_hashinfo.bhash_size;
