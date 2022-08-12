@@ -1,36 +1,32 @@
 From: Joanne Koong <joannelkoong@gmail.com>
-Date: Mon, 22 Aug 2022 18:10:22 +0000
-Subject: [PATCH RESEND net-next v4 2/3] selftests/net: Add test for timing a bind request to a port with a po
-Message-Id: <20220822181023.3979645-3-joannelkoong@gmail.com>
+Date: Fri, 12 Aug 2022 20:29:02 +0000
+Subject: [PATCH net-next v4 0/3] Add a second bind table hashed by port + address
+Message-Id: <20220812202905.1599234-1-joannelkoong@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This test populates the bhash table for a given port with
-MAX_THREADS * MAX_CONNECTIONS sockets, and then times how long
-a bind request on the port takes.
+Currently, there is one bind hashtable (bhash) that hashes by port only.
+This patchset adds a second bind table (bhash2) that hashes by port and
+address.
 
-When populating the bhash table, we create the sockets and then bind
-the sockets to the same address and port (SO_REUSEADDR and SO_REUSEPORT
-are set). When timing how long a bind on the port takes, we bind on a
-different address without SO_REUSEPORT set. We do not set SO_REUSEPORT
-because we are interested in the case where the bind request does not
-go through the tb->fastreuseport path, which is fragile (eg
-tb->fastreuseport path does not work if binding with a different uid).
+The motivation for adding bhash2 is to expedite bind requests in situations
+where the port has many sockets in its bhash table entry (eg a large number
+of sockets bound to different addresses on the same port), which makes checking
+bind conflicts costly especially given that we acquire the table entry spinlock
+while doing so, which can cause softirq cpu lockups and can prevent new tcp
+connections.
 
-To run the script:
-    Usage: ./bind_bhash.sh [-6 | -4] [-p port] [-a address]
-	    6: use ipv6
-	    4: use ipv4
-	    port: Port number
-	    address: ip address
+We ran into this problem at Meta where the traffic team binds a large number
+of IPs to port 443 and the bind() call took a significant amount of time
+which led to cpu softirq lockups, which caused packet drops and other failures
+on the machine.
 
-Without any arguments, ./bind_bhash.sh defaults to ipv6 using ip address
-"2001:0db8:0:f101::1" on port 443.
+When experimentally testing this on a local server for ~24k sockets bound to
+the port, the results seen were:
 
-On my local machine, I see:
 ipv4:
 before - 0.002317 seconds
 with bhash2 - 0.000020 seconds
@@ -39,274 +35,77 @@ ipv6:
 before - 0.002431 seconds
 with bhash2 - 0.000021 seconds
 
-Signed-off-by: Joanne Koong <joannelkoong@gmail.com>
+The additions to the initial bhash2 submission [0] are:
+* Updating bhash2 in the cases where a socket's rcv saddr changes after it has
+* been bound
+* Adding locks for bhash2 hashbuckets
+
+[0] https://lore.kernel.org/netdev/20220520001834.2247810-1-kuba@kernel.org/
+
 ---
- tools/testing/selftests/net/.gitignore    |   3 +-
- tools/testing/selftests/net/Makefile      |   3 +
- tools/testing/selftests/net/bind_bhash.c  | 144 ++++++++++++++++++++++
- tools/testing/selftests/net/bind_bhash.sh |  66 ++++++++++
- 4 files changed, 215 insertions(+), 1 deletion(-)
+Changelog
+
+v3 -> v4
+v3: https://lore.kernel.org/netdev/20220722195406.1304948-2-joannelkoong@gmail.com/
+  * Address kernel test robot bad page map:
+    - only update the bhash2 table in connect() on addr 0, if the socket is bound
+
+v2 -> v3
+v2: https://lore.kernel.org/netdev/20220712235310.1935121-1-joannelkoong@gmail.com/
+  * Address Paolo's feedback
+    1/3:
+        - Move inet_bhashfn_portaddr down in inet_csk_find_open_port()
+        - Remove unused "head" in inet_bhash2_update_saddr
+    2/3:
+        - Make tests work for ipv4, make address configurable from command line
+        - Use 'nodad' option for ip addr add in script
+    3/3:
+        - Add sk_bind_sendto_listen to Makefile for it to run automatically
+
+  * Check if the icsk_bind2_hash was set before finding the prev_addr_hashbucket.
+    If the icsk_bind2_hash wasn't set, this means the prev address was never
+    added to the bhash2, so pass in NULL "prev_saddr" to inet_bhash2_update_saddr().
+    This addresses the kernel_NULL_pointer_dereference report [1].
+
+  * Add sk_connect_zero_addr test (tests that the kernel_NULL_pointer_dereference bug
+    is fixed).
+
+  [1] https://lore.kernel.org/netdev/YtLJMxChUupbAa+U@xsang-OptiPlex-9020/
+
+v1 -> v2
+v1: https://lore.kernel.org/netdev/20220623234242.2083895-2-joannelkoong@gmail.com/
+  * Drop formatting change to sk_add_bind_node()
+
+
+Joanne Koong (3):
+  net: Add a bhash2 table hashed by port + address
+  selftests/net: Add test for timing a bind request to a port with a
+    populated bhash entry
+  selftests/net: Add sk_bind_sendto_listen and sk_connect_zero_addr
+
+ include/net/inet_connection_sock.h            |   3 +
+ include/net/inet_hashtables.h                 |  80 ++++-
+ include/net/sock.h                            |  14 +
+ net/dccp/ipv4.c                               |  25 +-
+ net/dccp/ipv6.c                               |  18 ++
+ net/dccp/proto.c                              |  34 ++-
+ net/ipv4/af_inet.c                            |  26 +-
+ net/ipv4/inet_connection_sock.c               | 275 ++++++++++++++----
+ net/ipv4/inet_hashtables.c                    | 268 ++++++++++++++++-
+ net/ipv4/tcp.c                                |  11 +-
+ net/ipv4/tcp_ipv4.c                           |  23 +-
+ net/ipv6/tcp_ipv6.c                           |  17 ++
+ tools/testing/selftests/net/.gitignore        |   5 +-
+ tools/testing/selftests/net/Makefile          |   5 +
+ tools/testing/selftests/net/bind_bhash.c      | 144 +++++++++
+ tools/testing/selftests/net/bind_bhash.sh     |  66 +++++
+ .../selftests/net/sk_bind_sendto_listen.c     |  80 +++++
+ .../selftests/net/sk_connect_zero_addr.c      |  62 ++++
+ 18 files changed, 1061 insertions(+), 95 deletions(-)
  create mode 100644 tools/testing/selftests/net/bind_bhash.c
  create mode 100755 tools/testing/selftests/net/bind_bhash.sh
+ create mode 100644 tools/testing/selftests/net/sk_bind_sendto_listen.c
+ create mode 100644 tools/testing/selftests/net/sk_connect_zero_addr.c
 
-diff --git a/tools/testing/selftests/net/.gitignore b/tools/testing/selftests/net/.gitignore
-index 0e5751af6247..89e2d4aa812a 100644
---- a/tools/testing/selftests/net/.gitignore
-+++ b/tools/testing/selftests/net/.gitignore
-@@ -39,4 +39,5 @@ toeplitz
- tun
- cmsg_sender
- unix_connect
--tap
-\ No newline at end of file
-+tap
-+bind_bhash
-diff --git a/tools/testing/selftests/net/Makefile b/tools/testing/selftests/net/Makefile
-index 11a288b67e2f..b17ec78f3951 100644
---- a/tools/testing/selftests/net/Makefile
-+++ b/tools/testing/selftests/net/Makefile
-@@ -43,6 +43,7 @@ TEST_PROGS += ndisc_unsolicited_na_test.sh
- TEST_PROGS += arp_ndisc_untracked_subnets.sh
- TEST_PROGS += stress_reuseport_listen.sh
- TEST_PROGS := l2_tos_ttl_inherit.sh
-+TEST_PROGS += bind_bhash.sh
- TEST_PROGS_EXTENDED := in_netns.sh setup_loopback.sh setup_veth.sh
- TEST_PROGS_EXTENDED += toeplitz_client.sh toeplitz.sh
- TEST_GEN_FILES =  socket nettest
-@@ -64,6 +65,7 @@ TEST_GEN_FILES += cmsg_sender
- TEST_GEN_FILES += stress_reuseport_listen
- TEST_PROGS += test_vxlan_vnifiltering.sh
- TEST_GEN_FILES += io_uring_zerocopy_tx
-+TEST_GEN_FILES += bind_bhash
- 
- TEST_FILES := settings
- 
-@@ -74,3 +76,4 @@ include bpf/Makefile
- $(OUTPUT)/reuseport_bpf_numa: LDLIBS += -lnuma
- $(OUTPUT)/tcp_mmap: LDLIBS += -lpthread
- $(OUTPUT)/tcp_inq: LDLIBS += -lpthread
-+$(OUTPUT)/bind_bhash: LDLIBS += -lpthread
-diff --git a/tools/testing/selftests/net/bind_bhash.c b/tools/testing/selftests/net/bind_bhash.c
-new file mode 100644
-index 000000000000..57ff67a3751e
---- /dev/null
-+++ b/tools/testing/selftests/net/bind_bhash.c
-@@ -0,0 +1,144 @@
-+// SPDX-License-Identifier: GPL-2.0
-+/*
-+ * This times how long it takes to bind to a port when the port already
-+ * has multiple sockets in its bhash table.
-+ *
-+ * In the setup(), we populate the port's bhash table with
-+ * MAX_THREADS * MAX_CONNECTIONS number of entries.
-+ */
-+
-+#include <unistd.h>
-+#include <stdio.h>
-+#include <netdb.h>
-+#include <pthread.h>
-+#include <string.h>
-+#include <stdbool.h>
-+
-+#define MAX_THREADS 600
-+#define MAX_CONNECTIONS 40
-+
-+static const char *setup_addr_v6 = "::1";
-+static const char *setup_addr_v4 = "127.0.0.1";
-+static const char *setup_addr;
-+static const char *bind_addr;
-+static const char *port;
-+bool use_v6;
-+int ret;
-+
-+static int fd_array[MAX_THREADS][MAX_CONNECTIONS];
-+
-+static int bind_socket(int opt, const char *addr)
-+{
-+	struct addrinfo *res, hint = {};
-+	int sock_fd, reuse = 1, err;
-+	int domain = use_v6 ? AF_INET6 : AF_INET;
-+
-+	sock_fd = socket(domain, SOCK_STREAM, 0);
-+	if (sock_fd < 0) {
-+		perror("socket fd err");
-+		return sock_fd;
-+	}
-+
-+	hint.ai_family = domain;
-+	hint.ai_socktype = SOCK_STREAM;
-+
-+	err = getaddrinfo(addr, port, &hint, &res);
-+	if (err) {
-+		perror("getaddrinfo failed");
-+		goto cleanup;
-+	}
-+
-+	if (opt) {
-+		err = setsockopt(sock_fd, SOL_SOCKET, opt, &reuse, sizeof(reuse));
-+		if (err) {
-+			perror("setsockopt failed");
-+			goto cleanup;
-+		}
-+	}
-+
-+	err = bind(sock_fd, res->ai_addr, res->ai_addrlen);
-+	if (err) {
-+		perror("failed to bind to port");
-+		goto cleanup;
-+	}
-+
-+	return sock_fd;
-+
-+cleanup:
-+	close(sock_fd);
-+	return err;
-+}
-+
-+static void *setup(void *arg)
-+{
-+	int sock_fd, i;
-+	int *array = (int *)arg;
-+
-+	for (i = 0; i < MAX_CONNECTIONS; i++) {
-+		sock_fd = bind_socket(SO_REUSEADDR | SO_REUSEPORT, setup_addr);
-+		if (sock_fd < 0) {
-+			ret = sock_fd;
-+			pthread_exit(&ret);
-+		}
-+		array[i] = sock_fd;
-+	}
-+
-+	return NULL;
-+}
-+
-+int main(int argc, const char *argv[])
-+{
-+	int listener_fd, sock_fd, i, j;
-+	pthread_t tid[MAX_THREADS];
-+	clock_t begin, end;
-+
-+	if (argc != 4) {
-+		printf("Usage: listener <port> <ipv6 | ipv4> <bind-addr>\n");
-+		return -1;
-+	}
-+
-+	port = argv[1];
-+	use_v6 = strcmp(argv[2], "ipv6") == 0;
-+	bind_addr = argv[3];
-+
-+	setup_addr = use_v6 ? setup_addr_v6 : setup_addr_v4;
-+
-+	listener_fd = bind_socket(SO_REUSEADDR | SO_REUSEPORT, setup_addr);
-+	if (listen(listener_fd, 100) < 0) {
-+		perror("listen failed");
-+		return -1;
-+	}
-+
-+	/* Set up threads to populate the bhash table entry for the port */
-+	for (i = 0; i < MAX_THREADS; i++)
-+		pthread_create(&tid[i], NULL, setup, fd_array[i]);
-+
-+	for (i = 0; i < MAX_THREADS; i++)
-+		pthread_join(tid[i], NULL);
-+
-+	if (ret)
-+		goto done;
-+
-+	begin = clock();
-+
-+	/* Bind to the same port on a different address */
-+	sock_fd  = bind_socket(0, bind_addr);
-+	if (sock_fd < 0)
-+		goto done;
-+
-+	end = clock();
-+
-+	printf("time spent = %f\n", (double)(end - begin) / CLOCKS_PER_SEC);
-+
-+	/* clean up */
-+	close(sock_fd);
-+
-+done:
-+	close(listener_fd);
-+	for (i = 0; i < MAX_THREADS; i++) {
-+		for (j = 0; i < MAX_THREADS; i++)
-+			close(fd_array[i][j]);
-+	}
-+
-+	return 0;
-+}
-diff --git a/tools/testing/selftests/net/bind_bhash.sh b/tools/testing/selftests/net/bind_bhash.sh
-new file mode 100755
-index 000000000000..ca0292d4b441
---- /dev/null
-+++ b/tools/testing/selftests/net/bind_bhash.sh
-@@ -0,0 +1,66 @@
-+#!/bin/bash
-+# SPDX-License-Identifier: GPL-2.0
-+
-+NR_FILES=32768
-+SAVED_NR_FILES=$(ulimit -n)
-+
-+# default values
-+port=443
-+addr_v6="2001:0db8:0:f101::1"
-+addr_v4="10.8.8.8"
-+use_v6=true
-+addr=""
-+
-+usage() {
-+    echo "Usage: $0 [-6 | -4] [-p port] [-a address]"
-+    echo -e "\t6: use ipv6"
-+    echo -e "\t4: use ipv4"
-+    echo -e "\tport: Port number"
-+    echo -e "\taddress: ip address"
-+}
-+
-+while getopts "ha:p:64" opt; do
-+    case ${opt} in
-+	h)
-+	    usage $0
-+	    exit 0
-+	    ;;
-+	a)  addr=$OPTARG;;
-+	p)
-+	    port=$OPTARG;;
-+	6)
-+	    use_v6=true;;
-+	4)
-+	    use_v6=false;;
-+    esac
-+done
-+
-+setup() {
-+    if [[ "$use_v6" == true ]]; then
-+	ip addr add $addr_v6 nodad dev eth0
-+    else
-+	ip addr add $addr_v4 dev lo
-+    fi
-+	ulimit -n $NR_FILES
-+}
-+
-+cleanup() {
-+    if [[ "$use_v6" == true ]]; then
-+	ip addr del $addr_v6 dev eth0
-+    else
-+	ip addr del $addr_v4/32 dev lo
-+    fi
-+    ulimit -n $SAVED_NR_FILES
-+}
-+
-+if [[ "$addr" != "" ]]; then
-+    addr_v4=$addr;
-+    addr_v6=$addr;
-+fi
-+setup
-+if [[ "$use_v6" == true ]] ; then
-+    ./bind_bhash $port "ipv6" $addr_v6
-+else
-+    ./bind_bhash $port "ipv4" $addr_v4
-+fi
-+cleanup
 -- 
 2.30.2
