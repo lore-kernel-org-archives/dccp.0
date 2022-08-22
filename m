@@ -1,105 +1,110 @@
-From: Roman Gushchin <roman.gushchin@linux.dev>
-Date: Sat, 02 Jul 2022 01:03:10 +0000
-Subject: Re: [linux-next:master] BUILD REGRESSION 6cc11d2a1759275b856e464265823d94aabd5eaf
-Message-Id: <Yr+ZTnLb9lJk6fJO@castle>
+From: Joanne Koong <joannelkoong@gmail.com>
+Date: Mon, 22 Aug 2022 18:10:20 +0000
+Subject: [PATCH RESEND net-next v4 0/3] Add a second bind table hashed by port and address
+Message-Id: <20220822181023.3979645-1-joannelkoong@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-esOn Fri, Jul 01, 2022 at 07:49:42AM +0800, kbuild test robot wrote:
-> tree/branch: https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git master
-> branch HEAD: 6cc11d2a1759275b856e464265823d94aabd5eaf  Add linux-next specific files for 20220630
-> 
-> Error/Warning reports:
-> 
-> https://lore.kernel.org/linux-mm/202206301859.UodBCrva-lkp@intel.com
-> 
-> Error/Warning: (recently discovered and may have been fixed)
-> 
-> arch/powerpc/kernel/interrupt.c:542:55: error: suggest braces around empty body in an 'if' statement [-Werror=empty-body]
-> arch/powerpc/kernel/interrupt.c:542:55: warning: suggest braces around empty body in an 'if' statement [-Wempty-body]
-> drivers/pci/endpoint/functions/pci-epf-vntb.c:975:5: warning: no previous prototype for 'pci_read' [-Wmissing-prototypes]
-> drivers/pci/endpoint/functions/pci-epf-vntb.c:984:5: warning: no previous prototype for 'pci_write' [-Wmissing-prototypes]
-> mm/shrinker_debug.c:143:9: warning: function 'shrinker_debugfs_rename' might be a candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
-> mm/shrinker_debug.c:217:9: warning: function 'shrinker_debugfs_rename' might be a candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
-> mm/vmscan.c:637:9: warning: function 'prealloc_shrinker' might be a candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
-> mm/vmscan.c:642:9: warning: function 'prealloc_shrinker' might be a candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
-> mm/vmscan.c:697:9: warning: function 'register_shrinker' might be a candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
-> mm/vmscan.c:702:9: warning: function 'register_shrinker' might be a candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
+Currently, there is one bind hashtable (bhash) that hashes by port only.
+This patchset adds a second bind table (bhash2) that hashes by port and
+address.
 
-Shrinker-related warnings should be fixed by the following patch.
+The motivation for adding bhash2 is to expedite bind requests in situations
+where the port has many sockets in its bhash table entry (eg a large number
+of sockets bound to different addresses on the same port), which makes checking
+bind conflicts costly especially given that we acquire the table entry spinlock
+while doing so, which can cause softirq cpu lockups and can prevent new tcp
+connections.
 
-Thanks!
+We ran into this problem at Meta where the traffic team binds a large number
+of IPs to port 443 and the bind() call took a significant amount of time
+which led to cpu softirq lockups, which caused packet drops and other failures
+on the machine.
 
---
+When experimentally testing this on a local server for ~24k sockets bound to
+the port, the results seen were:
 
-From c399aff65c7745a209397a531c5b28fd404d83c2 Mon Sep 17 00:00:00 2001
-From: Roman Gushchin <roman.gushchin@linux.dev>
-Date: Fri, 1 Jul 2022 17:38:31 -0700
-Subject: [PATCH] mm:shrinkers: fix build warnings
+ipv4:
+before - 0.002317 seconds
+with bhash2 - 0.000020 seconds
 
-Add __printf(a, b) attributes to shrinker functions taking shrinker
-name as an argument to avoid compiler warnings like:
+ipv6:
+before - 0.002431 seconds
+with bhash2 - 0.000021 seconds
 
-mm/shrinker_debug.c:143:9: warning: function 'shrinker_debugfs_rename'
-  might be a candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
-mm/shrinker_debug.c:217:9: warning: function 'shrinker_debugfs_rename'
-  might be a candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
-mm/vmscan.c:637:9: warning: function 'prealloc_shrinker' might be a
-  candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
-mm/vmscan.c:642:9: warning: function 'prealloc_shrinker' might be a
-  candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
-mm/vmscan.c:697:9: warning: function 'register_shrinker' might be a
-  candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
-mm/vmscan.c:702:9: warning: function 'register_shrinker' might be a
-  candidate for 'gnu_printf' format attribute [-Wsuggest-attribute=format]
+The additions to the initial bhash2 submission [0] are:
+* Updating bhash2 in the cases where a socket's rcv saddr changes after it has
+* been bound
+* Adding locks for bhash2 hashbuckets
 
-Signed-off-by: Roman Gushchin <roman.gushchin@linux.dev>
+[0] https://lore.kernel.org/netdev/20220520001834.2247810-1-kuba@kernel.org/
+
 ---
- include/linux/shrinker.h | 14 ++++++++------
- 1 file changed, 8 insertions(+), 6 deletions(-)
+Changelog
 
-diff --git a/include/linux/shrinker.h b/include/linux/shrinker.h
-index 64416f3e0a1f..08e6054e061f 100644
---- a/include/linux/shrinker.h
-+++ b/include/linux/shrinker.h
-@@ -93,9 +93,11 @@ struct shrinker {
-  */
- #define SHRINKER_NONSLAB	(1 << 3)
- 
--extern int prealloc_shrinker(struct shrinker *shrinker, const char *fmt, ...);
-+extern int __printf(2, 3) prealloc_shrinker(struct shrinker *shrinker,
-+					    const char *fmt, ...);
- extern void register_shrinker_prepared(struct shrinker *shrinker);
--extern int register_shrinker(struct shrinker *shrinker, const char *fmt, ...);
-+extern int __printf(2, 3) register_shrinker(struct shrinker *shrinker,
-+					    const char *fmt, ...);
- extern void unregister_shrinker(struct shrinker *shrinker);
- extern void free_prealloced_shrinker(struct shrinker *shrinker);
- extern void synchronize_shrinkers(void);
-@@ -103,8 +105,8 @@ extern void synchronize_shrinkers(void);
- #ifdef CONFIG_SHRINKER_DEBUG
- extern int shrinker_debugfs_add(struct shrinker *shrinker);
- extern void shrinker_debugfs_remove(struct shrinker *shrinker);
--extern int shrinker_debugfs_rename(struct shrinker *shrinker,
--				   const char *fmt, ...);
-+extern int __printf(2, 3) shrinker_debugfs_rename(struct shrinker *shrinker,
-+						  const char *fmt, ...);
- #else /* CONFIG_SHRINKER_DEBUG */
- static inline int shrinker_debugfs_add(struct shrinker *shrinker)
- {
-@@ -113,8 +115,8 @@ static inline int shrinker_debugfs_add(struct shrinker *shrinker)
- static inline void shrinker_debugfs_remove(struct shrinker *shrinker)
- {
- }
--static inline int shrinker_debugfs_rename(struct shrinker *shrinker,
--					  const char *fmt, ...)
-+static inline __printf(2, 3)
-+int shrinker_debugfs_rename(struct shrinker *shrinker, const char *fmt, ...)
- {
- 	return 0;
- }
+v3 -> v4
+v3: https://lore.kernel.org/netdev/20220722195406.1304948-2-joannelkoong@gmail.com/
+  * Address kernel test robot bad page map:
+    - only update the bhash2 table in connect() on addr 0, if the socket is bound
+
+v2 -> v3
+v2: https://lore.kernel.org/netdev/20220712235310.1935121-1-joannelkoong@gmail.com/
+  * Address Paolo's feedback
+    1/3:
+        - Move inet_bhashfn_portaddr down in inet_csk_find_open_port()
+        - Remove unused "head" in inet_bhash2_update_saddr
+    2/3:
+        - Make tests work for ipv4, make address configurable from command line
+        - Use 'nodad' option for ip addr add in script
+    3/3:
+        - Add sk_bind_sendto_listen to Makefile for it to run automatically
+
+  * Check if the icsk_bind2_hash was set before finding the prev_addr_hashbucket.
+    If the icsk_bind2_hash wasn't set, this means the prev address was never
+    added to the bhash2, so pass in NULL "prev_saddr" to inet_bhash2_update_saddr().
+    This addresses the kernel_NULL_pointer_dereference report [1].
+
+  * Add sk_connect_zero_addr test (tests that the kernel_NULL_pointer_dereference bug
+    is fixed).
+
+  [1] https://lore.kernel.org/netdev/YtLJMxChUupbAa+U@xsang-OptiPlex-9020/
+
+v1 -> v2
+v1: https://lore.kernel.org/netdev/20220623234242.2083895-2-joannelkoong@gmail.com/
+  * Drop formatting change to sk_add_bind_node()
+
+Joanne Koong (3):
+  net: Add a bhash2 table hashed by port + address
+  selftests/net: Add test for timing a bind request to a port with a
+    populated bhash entry
+  selftests/net: Add sk_bind_sendto_listen and sk_connect_zero_addr
+
+ include/net/inet_connection_sock.h            |   3 +
+ include/net/inet_hashtables.h                 |  80 ++++-
+ include/net/sock.h                            |  14 +
+ net/dccp/ipv4.c                               |  25 +-
+ net/dccp/ipv6.c                               |  18 ++
+ net/dccp/proto.c                              |  34 ++-
+ net/ipv4/af_inet.c                            |  26 +-
+ net/ipv4/inet_connection_sock.c               | 275 ++++++++++++++----
+ net/ipv4/inet_hashtables.c                    | 268 ++++++++++++++++-
+ net/ipv4/tcp.c                                |  11 +-
+ net/ipv4/tcp_ipv4.c                           |  23 +-
+ net/ipv6/tcp_ipv6.c                           |  17 ++
+ tools/testing/selftests/net/.gitignore        |   5 +-
+ tools/testing/selftests/net/Makefile          |   5 +
+ tools/testing/selftests/net/bind_bhash.c      | 144 +++++++++
+ tools/testing/selftests/net/bind_bhash.sh     |  66 +++++
+ .../selftests/net/sk_bind_sendto_listen.c     |  80 +++++
+ .../selftests/net/sk_connect_zero_addr.c      |  62 ++++
+ 18 files changed, 1061 insertions(+), 95 deletions(-)
+ create mode 100644 tools/testing/selftests/net/bind_bhash.c
+ create mode 100755 tools/testing/selftests/net/bind_bhash.sh
+ create mode 100644 tools/testing/selftests/net/sk_bind_sendto_listen.c
+ create mode 100644 tools/testing/selftests/net/sk_connect_zero_addr.c
+
 -- 
-2.36.1
+2.30.2
