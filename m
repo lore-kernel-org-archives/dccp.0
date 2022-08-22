@@ -1,7 +1,7 @@
 From: Joanne Koong <joannelkoong@gmail.com>
-Date: Fri, 12 Aug 2022 20:29:05 +0000
-Subject: [PATCH net-next v4 3/3] selftests/net: Add sk_bind_sendto_listen and sk_connect_zero_addr
-Message-Id: <20220812202905.1599234-4-joannelkoong@gmail.com>
+Date: Mon, 22 Aug 2022 18:10:23 +0000
+Subject: [PATCH RESEND net-next v4 3/3] selftests/net: Add sk_bind_sendto_listen and sk_connect_zero_addr
+Message-Id: <20220822181023.3979645-4-joannelkoong@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
@@ -44,10 +44,10 @@ index 89e2d4aa812a..bec5cf96984c 100644
 +sk_bind_sendto_listen
 +sk_connect_zero_addr
 diff --git a/tools/testing/selftests/net/Makefile b/tools/testing/selftests/net/Makefile
-index a3a26d8c29df..e9f02850106f 100644
+index b17ec78f3951..e6a951ba5ba0 100644
 --- a/tools/testing/selftests/net/Makefile
 +++ b/tools/testing/selftests/net/Makefile
-@@ -65,6 +65,8 @@ TEST_GEN_FILES += stress_reuseport_listen
+@@ -66,6 +66,8 @@ TEST_GEN_FILES += stress_reuseport_listen
  TEST_PROGS += test_vxlan_vnifiltering.sh
  TEST_GEN_FILES += io_uring_zerocopy_tx
  TEST_GEN_FILES += bind_bhash
