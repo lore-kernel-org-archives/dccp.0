@@ -1,50 +1,109 @@
-From: Joanne Koong <joannelkoong@gmail.com>
-Date: Thu, 17 Nov 2022 00:07:13 +0000
-Subject: Re: [PATCH v2 net 2/4] dccp/tcp: Remove NULL check for prev_saddr in inet_bhash2_update_saddr().
-Message-Id: <CAJnrk1b-hHSp6n89uC+0dDZKm+bmVm1fRVmwP2oYqKSea9phKQ@mail.gmail.com>
+From: Kuniyuki Iwashima <kuniyu@amazon.com>
+Date: Wed, 16 Nov 2022 22:28:02 +0000
+Subject: [PATCH v2 net 1/4] dccp/tcp: Reset saddr on failure after inet6?_hash_connect().
+Message-Id: <20221116222805.64734-2-kuniyu@amazon.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20221116222805.64734-3-kuniyu@amazon.com>
-In-Reply-To: <20221116222805.64734-3-kuniyu@amazon.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, Nov 16, 2022 at 2:29 PM Kuniyuki Iwashima <kuniyu@amazon.com> wrote:
->
-> When we call inet_bhash2_update_saddr(), prev_saddr is always non-NULL.
-> Let's remove the unnecessary test.
->
-> Signed-off-by: Kuniyuki Iwashima <kuniyu@amazon.com>
+When connect() is called on a socket bound to the wildcard address,
+we change the socket's saddr to a local address.  If the socket
+fails to connect() to the destination, we have to reset the saddr.
 
-Acked-by: Joanne Koong <joannelkoong@gmail.com>
+However, when an error occurs after inet_hash6?_connect() in
+(dccp|tcp)_v[46]_conect(), we forget to reset saddr and leave
+the socket bound to the address.
 
-> ---
->  net/ipv4/inet_hashtables.c | 11 ++++-------
->  1 file changed, 4 insertions(+), 7 deletions(-)
->
-> diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
-> index 033bf3c2538f..d745f962745e 100644
-> --- a/net/ipv4/inet_hashtables.c
-> +++ b/net/ipv4/inet_hashtables.c
-> @@ -877,13 +877,10 @@ int inet_bhash2_update_saddr(struct inet_bind_hashbucket *prev_saddr, struct soc
->
->         head2 = inet_bhashfn_portaddr(hinfo, sk, net, port);
->
-> -       if (prev_saddr) {
-> -               spin_lock_bh(&prev_saddr->lock);
-> -               __sk_del_bind2_node(sk);
-> -               inet_bind2_bucket_destroy(hinfo->bind2_bucket_cachep,
-> -                                         inet_csk(sk)->icsk_bind2_hash);
-> -               spin_unlock_bh(&prev_saddr->lock);
-> -       }
-> +       spin_lock_bh(&prev_saddr->lock);
-> +       __sk_del_bind2_node(sk);
-> +       inet_bind2_bucket_destroy(hinfo->bind2_bucket_cachep, inet_csk(sk)->icsk_bind2_hash);
-> +       spin_unlock_bh(&prev_saddr->lock);
->
->         spin_lock_bh(&head2->lock);
->         tb2 = inet_bind2_bucket_find(head2, net, port, l3mdev, sk);
-> --
-> 2.30.2
->
+From the user's point of view, whether saddr is reset or not varies
+with errno.  Let's fix this inconsistent behaviour.
+
+Note that after this patch, the repro [0] will trigger the WARN_ON()
+in inet_csk_get_port() again, but this patch is not buggy and rather
+fixes a bug papering over the bhash2's bug for which we need another
+fix.
+
+For the record, the repro causes -EADDRNOTAVAIL in inet_hash6_connect()
+by this sequence:
+
+  s1 = socket()
+  s1.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+  s1.bind(('127.0.0.1', 10000))
+  s1.sendto(b'hello', MSG_FASTOPEN, (('127.0.0.1', 10000)))
+  # or s1.connect(('127.0.0.1', 10000))
+
+  s2 = socket()
+  s2.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+  s2.bind(('0.0.0.0', 10000))
+  s2.connect(('127.0.0.1', 10000))  # -EADDRNOTAVAIL
+
+  s2.listen(32)  # WARN_ON(inet_csk(sk)->icsk_bind2_hash != tb2);
+
+[0]: https://syzkaller.appspot.com/bug?extid5d756bbd1f8b5c8f09
+
+Fixes: 3df80d9320bc ("[DCCP]: Introduce DCCPv6")
+Fixes: 7c657876b63c ("[DCCP]: Initial implementation")
+Fixes: 1da177e4c3f4 ("Linux-2.6.12-rc2")
+Signed-off-by: Kuniyuki Iwashima <kuniyu@amazon.com>
+---
+ net/dccp/ipv4.c     | 2 ++
+ net/dccp/ipv6.c     | 2 ++
+ net/ipv4/tcp_ipv4.c | 2 ++
+ net/ipv6/tcp_ipv6.c | 2 ++
+ 4 files changed, 8 insertions(+)
+
+diff --git a/net/dccp/ipv4.c b/net/dccp/ipv4.c
+index 713b7b8dad7e..40640c26680e 100644
+--- a/net/dccp/ipv4.c
++++ b/net/dccp/ipv4.c
+@@ -157,6 +157,8 @@ int dccp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+ 	 * This unhashes the socket and releases the local port, if necessary.
+ 	 */
+ 	dccp_set_state(sk, DCCP_CLOSED);
++	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK))
++		inet_reset_saddr(sk);
+ 	ip_rt_put(rt);
+ 	sk->sk_route_caps = 0;
+ 	inet->inet_dport = 0;
+diff --git a/net/dccp/ipv6.c b/net/dccp/ipv6.c
+index e57b43006074..626166cb6d7e 100644
+--- a/net/dccp/ipv6.c
++++ b/net/dccp/ipv6.c
+@@ -985,6 +985,8 @@ static int dccp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
+ 
+ late_failure:
+ 	dccp_set_state(sk, DCCP_CLOSED);
++	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK))
++		inet_reset_saddr(sk);
+ 	__sk_dst_reset(sk);
+ failure:
+ 	inet->inet_dport = 0;
+diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
+index 87d440f47a70..6a3a732b584d 100644
+--- a/net/ipv4/tcp_ipv4.c
++++ b/net/ipv4/tcp_ipv4.c
+@@ -343,6 +343,8 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+ 	 * if necessary.
+ 	 */
+ 	tcp_set_state(sk, TCP_CLOSE);
++	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK))
++		inet_reset_saddr(sk);
+ 	ip_rt_put(rt);
+ 	sk->sk_route_caps = 0;
+ 	inet->inet_dport = 0;
+diff --git a/net/ipv6/tcp_ipv6.c b/net/ipv6/tcp_ipv6.c
+index 2a3f9296df1e..81b396e5cf79 100644
+--- a/net/ipv6/tcp_ipv6.c
++++ b/net/ipv6/tcp_ipv6.c
+@@ -359,6 +359,8 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
+ 
+ late_failure:
+ 	tcp_set_state(sk, TCP_CLOSE);
++	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK))
++		inet_reset_saddr(sk);
+ failure:
+ 	inet->inet_dport = 0;
+ 	sk->sk_route_caps = 0;
+-- 
+2.30.2
