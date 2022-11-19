@@ -1,7 +1,7 @@
 From: Kuniyuki Iwashima <kuniyu@amazon.com>
-Date: Fri, 18 Nov 2022 20:58:37 +0000
-Subject: [PATCH v3 net 2/4] dccp/tcp: Remove NULL check for prev_saddr in inet_bhash2_update_saddr().
-Message-Id: <20221118205839.14312-3-kuniyu@amazon.com>
+Date: Sat, 19 Nov 2022 01:49:12 +0000
+Subject: [PATCH v4 net 2/4] dccp/tcp: Remove NULL check for prev_saddr in inet_bhash2_update_saddr().
+Message-Id: <20221119014914.31792-3-kuniyu@amazon.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
