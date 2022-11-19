@@ -1,7 +1,7 @@
 From: Kuniyuki Iwashima <kuniyu@amazon.com>
-Date: Fri, 18 Nov 2022 23:57:53 +0000
+Date: Sat, 19 Nov 2022 00:49:20 +0000
 Subject: Re: [PATCH v3 net 3/4] dccp/tcp: Update saddr under bhash's lock.
-Message-Id: <20221118235753.25995-1-kuniyu@amazon.com>
+Message-Id: <20221119004920.27975-1-kuniyu@amazon.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20221118205839.14312-4-kuniyu@amazon.com>
 In-Reply-To: <20221118205839.14312-4-kuniyu@amazon.com>
@@ -220,8 +220,96 @@ Date:   Fri, 18 Nov 2022 15:20:20 -0800
 > 
 > What are your thoughts?
 
-Sounds good!
-I'll change them like above.
+Hmm..  There are other users of inet_reset_saddr().  If we hide the
+details of reset & bhash2 logic too, we need a cleanup patch below.
+
+So, I'll keep this part as is in the next spin.  If needed, I can
+post a followup for net-next.
+
+And I noticed UDP has the same problem, this will be another series.
+
+Thank you!
+
+---8<---
+diff --git a/include/net/inet_hashtables.h b/include/net/inet_hashtables.h
+index 95a18c029d5b..6ac7d5b8cbed 100644
+--- a/include/net/inet_hashtables.h
++++ b/include/net/inet_hashtables.h
+@@ -277,6 +277,7 @@ inet_bhashfn_portaddr(const struct inet_hashinfo *hinfo, const struct sock *sk,
+ struct inet_bind_hashbucket *
+ inet_bhash2_addr_any_hashbucket(const struct sock *sk, const struct net *net, int port);
+ 
++void inet_reset_saddr(struct sock *sk);
+ int inet_update_saddr(struct sock *sk, void *saddr, int family);
+ 
+ void inet_bind_hash(struct sock *sk, struct inet_bind_bucket *tb,
+diff --git a/include/net/ip.h b/include/net/ip.h
+index 144bdfbb25af..43939a235398 100644
+--- a/include/net/ip.h
++++ b/include/net/ip.h
+@@ -632,7 +632,7 @@ static inline void ip_ipgre_mc_map(__be32 naddr, const unsigned char *broadcast,
+ #include <linux/ipv6.h>
+ #endif
+ 
+-static __inline__ void inet_reset_saddr(struct sock *sk)
++static __inline__ void __inet_reset_saddr(struct sock *sk)
+ {
+ 	inet_sk(sk)->inet_rcv_saddr = inet_sk(sk)->inet_saddr = 0;
+ #if IS_ENABLED(CONFIG_IPV6)
+diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
+index b0ababa74c02..4171077b127c 100644
+--- a/net/ipv4/inet_hashtables.c
++++ b/net/ipv4/inet_hashtables.c
+@@ -941,6 +941,12 @@ int inet_update_saddr(struct sock *sk, void *saddr, int family)
+ }
+ EXPORT_SYMBOL_GPL(inet_update_saddr);
+ 
++void inet_reset_saddr(struct sock *sk)
++{
++	__inet_reset_saddr(sk);
++}
++EXPORT_SYMBOL_GPL(inet_reset_saddr);
++
+ /* RFC 6056 3.3.4.  Algorithm 4: Double-Hash Port Selection Algorithm
+  * Note that we use 32bit integers (vs RFC 'short integers')
+  * because 2^16 is not a multiple of num_ephemeral and this
+diff --git a/net/ipv4/udp.c b/net/ipv4/udp.c
+index 6a320a614e54..a3c64866207d 100644
+--- a/net/ipv4/udp.c
++++ b/net/ipv4/udp.c
+@@ -1971,7 +1971,7 @@ int __udp_disconnect(struct sock *sk, int flags)
+ 	sock_rps_reset_rxhash(sk);
+ 	sk->sk_bound_dev_if = 0;
+ 	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK)) {
+-		inet_reset_saddr(sk);
++		__inet_reset_saddr(sk);
+ 		if (sk->sk_prot->rehash &&
+ 		    (sk->sk_userlocks & SOCK_BINDPORT_LOCK))
+ 			sk->sk_prot->rehash(sk);
+diff --git a/net/ipv6/af_inet6.c b/net/ipv6/af_inet6.c
+index 024191004982..fea2de97ba54 100644
+--- a/net/ipv6/af_inet6.c
++++ b/net/ipv6/af_inet6.c
+@@ -411,7 +411,7 @@ static int __inet6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
+ 		      (flags & BIND_FORCE_ADDRESS_NO_PORT))) {
+ 		if (sk->sk_prot->get_port(sk, snum)) {
+ 			sk->sk_ipv6only = saved_ipv6only;
+-			inet_reset_saddr(sk);
++			__inet_reset_saddr(sk);
+ 			err = -EADDRINUSE;
+ 			goto out;
+ 		}
+@@ -419,7 +419,7 @@ static int __inet6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
+ 			err = BPF_CGROUP_RUN_PROG_INET6_POST_BIND(sk);
+ 			if (err) {
+ 				sk->sk_ipv6only = saved_ipv6only;
+-				inet_reset_saddr(sk);
++				__inet_reset_saddr(sk);
+ 				if (sk->sk_prot->put_port)
+ 					sk->sk_prot->put_port(sk);
+ 				goto out;
+
+---8<---
 
 
 > 
@@ -237,12 +325,8 @@ I'll change them like above.
 > I don't think we should be acquiring the bhash lock here. I think we
 > only need to acquire it right before we mutate the saddr, and we can
 > release it right after.
-
-Exactly, will move it down before "__"inet_update_saddr() :)
-
-Thank you!
-
-
+> 
+> >
 > >         /* Allocate a bind2 bucket ahead of time to avoid permanently putting
 > >          * the bhash2 table in an inconsistent state if a new tb2 bucket
 > >          * allocation fails.
