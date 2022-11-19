@@ -1,7 +1,7 @@
 From: Kuniyuki Iwashima <kuniyu@amazon.com>
-Date: Fri, 18 Nov 2022 20:58:36 +0000
-Subject: [PATCH v3 net 1/4] dccp/tcp: Reset saddr on failure after inet6?_hash_connect().
-Message-Id: <20221118205839.14312-2-kuniyu@amazon.com>
+Date: Sat, 19 Nov 2022 01:49:11 +0000
+Subject: [PATCH v4 net 1/4] dccp/tcp: Reset saddr on failure after inet6?_hash_connect().
+Message-Id: <20221119014914.31792-2-kuniyu@amazon.com>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
