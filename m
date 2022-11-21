@@ -1,7 +1,7 @@
-From: Kuniyuki Iwashima <kuniyu@amazon.com>
-Date: Sat, 19 Nov 2022 01:11:30 +0000
+From: Joanne Koong <joannelkoong@gmail.com>
+Date: Mon, 21 Nov 2022 22:52:56 +0000
 Subject: Re: [PATCH v3 net 3/4] dccp/tcp: Update saddr under bhash's lock.
-Message-Id: <20221119011130.29109-1-kuniyu@amazon.com>
+Message-Id: <CAJnrk1aWpYphczt6J8g51q3jXmYupo-JyaFKsq-zEYnsbmTyOQ@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20221118205839.14312-4-kuniyu@amazon.com>
 In-Reply-To: <20221118205839.14312-4-kuniyu@amazon.com>
@@ -10,8 +10,8 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-From:   Kuniyuki Iwashima <kuniyu@amazon.com>
-Date:   Fri, 18 Nov 2022 15:57:53 -0800
+On Fri, Nov 18, 2022 at 4:49 PM Kuniyuki Iwashima <kuniyu@amazon.com> wrote:
+>
 > From:   Joanne Koong <joannelkoong@gmail.com>
 > Date:   Fri, 18 Nov 2022 15:20:20 -0800
 > > On Fri, Nov 18, 2022 at 1:00 PM Kuniyuki Iwashima <kuniyu@amazon.com> wrote:
@@ -21,9 +21,9 @@ Date:   Fri, 18 Nov 2022 15:57:53 -0800
 > > > iterating over bhash might see a corrupted address.
 > > >
 > > > Let's update saddr under the bhash bucket's lock.
-> > 
+> >
 > > Thanks for the quick turnaround!
-> > 
+> >
 > > >
 > > > Fixes: 3df80d9320bc ("[DCCP]: Introduce DCCPv6")
 > > > Fixes: 7c657876b63c ("[DCCP]: Initial implementation")
@@ -200,12 +200,12 @@ Date:   Fri, 18 Nov 2022 15:57:53 -0800
 > > > +               inet_update_saddr(sk, saddr, family);
 > > > +               goto out;
 > > > +       }
-> > 
+> >
 > > I think it would be cleaner if this logic were outside
 > > bhash2_update_saddr(), since this mutates the sk's address when the
 > > socket hasn't been previously bound to bhash2. I think something like
 > > this would be clearer:
-> > 
+> >
 > > static int inet_update_saddr(struct sock *sk, void *saddr, int family)
 > > {
 > >     if (!inet_csk(sk)->icsk_bind2_hash) {
@@ -214,19 +214,116 @@ Date:   Fri, 18 Nov 2022 15:57:53 -0800
 > >     }
 > >     return inet_bhash2_update_saddr(sk, saddr, family);
 > > }
-> > 
+> >
 > > and then from dccp/tcp_ipv4/6_connect(), we just call
 > > inet_update_saddr(). This also "moves" the lower-level implementation
 > > details (eg underlying bind tables) to inet_hashtables.c, instead of
 > > it being mentioned in the higher dccp_tcp_ipv4/6 layers.
-> > 
+> >
 > > What are your thoughts?
-> 
-> Sounds good!
-> I'll change them like above.
-> 
-> 
-> > 
+>
+> Hmm..  There are other users of inet_reset_saddr().  If we hide the
+> details of reset & bhash2 logic too, we need a cleanup patch below.
+
+I don't think reset needs to be hidden / abstracted away, that sounds
+generic. But bhash2 sounds like an implementation detail, which is why
+it seems cleaner to me if we didn't have bhash2 mentioned in the
+dccp/tcp_ipv4/6 layers.
+
+>
+> So, I'll keep this part as is in the next spin.  If needed, I can
+> post a followup for net-next.
+>
+> And I noticed UDP has the same problem, this will be another series.
+
+Sounds good, looking forward to your UDP patchset.
+
+>
+> Thank you!
+>
+> ---8<---
+> diff --git a/include/net/inet_hashtables.h b/include/net/inet_hashtables.h
+> index 95a18c029d5b..6ac7d5b8cbed 100644
+> --- a/include/net/inet_hashtables.h
+> +++ b/include/net/inet_hashtables.h
+> @@ -277,6 +277,7 @@ inet_bhashfn_portaddr(const struct inet_hashinfo *hinfo, const struct sock *sk,
+>  struct inet_bind_hashbucket *
+>  inet_bhash2_addr_any_hashbucket(const struct sock *sk, const struct net *net, int port);
+>
+> +void inet_reset_saddr(struct sock *sk);
+>  int inet_update_saddr(struct sock *sk, void *saddr, int family);
+>
+>  void inet_bind_hash(struct sock *sk, struct inet_bind_bucket *tb,
+> diff --git a/include/net/ip.h b/include/net/ip.h
+> index 144bdfbb25af..43939a235398 100644
+> --- a/include/net/ip.h
+> +++ b/include/net/ip.h
+> @@ -632,7 +632,7 @@ static inline void ip_ipgre_mc_map(__be32 naddr, const unsigned char *broadcast,
+>  #include <linux/ipv6.h>
+>  #endif
+>
+> -static __inline__ void inet_reset_saddr(struct sock *sk)
+> +static __inline__ void __inet_reset_saddr(struct sock *sk)
+>  {
+>         inet_sk(sk)->inet_rcv_saddr = inet_sk(sk)->inet_saddr = 0;
+>  #if IS_ENABLED(CONFIG_IPV6)
+> diff --git a/net/ipv4/inet_hashtables.c b/net/ipv4/inet_hashtables.c
+> index b0ababa74c02..4171077b127c 100644
+> --- a/net/ipv4/inet_hashtables.c
+> +++ b/net/ipv4/inet_hashtables.c
+> @@ -941,6 +941,12 @@ int inet_update_saddr(struct sock *sk, void *saddr, int family)
+>  }
+>  EXPORT_SYMBOL_GPL(inet_update_saddr);
+>
+> +void inet_reset_saddr(struct sock *sk)
+> +{
+> +       __inet_reset_saddr(sk);
+> +}
+> +EXPORT_SYMBOL_GPL(inet_reset_saddr);
+> +
+>  /* RFC 6056 3.3.4.  Algorithm 4: Double-Hash Port Selection Algorithm
+>   * Note that we use 32bit integers (vs RFC 'short integers')
+>   * because 2^16 is not a multiple of num_ephemeral and this
+> diff --git a/net/ipv4/udp.c b/net/ipv4/udp.c
+> index 6a320a614e54..a3c64866207d 100644
+> --- a/net/ipv4/udp.c
+> +++ b/net/ipv4/udp.c
+> @@ -1971,7 +1971,7 @@ int __udp_disconnect(struct sock *sk, int flags)
+>         sock_rps_reset_rxhash(sk);
+>         sk->sk_bound_dev_if = 0;
+>         if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK)) {
+> -               inet_reset_saddr(sk);
+> +               __inet_reset_saddr(sk);
+>                 if (sk->sk_prot->rehash &&
+>                     (sk->sk_userlocks & SOCK_BINDPORT_LOCK))
+>                         sk->sk_prot->rehash(sk);
+> diff --git a/net/ipv6/af_inet6.c b/net/ipv6/af_inet6.c
+> index 024191004982..fea2de97ba54 100644
+> --- a/net/ipv6/af_inet6.c
+> +++ b/net/ipv6/af_inet6.c
+> @@ -411,7 +411,7 @@ static int __inet6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
+>                       (flags & BIND_FORCE_ADDRESS_NO_PORT))) {
+>                 if (sk->sk_prot->get_port(sk, snum)) {
+>                         sk->sk_ipv6only = saved_ipv6only;
+> -                       inet_reset_saddr(sk);
+> +                       __inet_reset_saddr(sk);
+>                         err = -EADDRINUSE;
+>                         goto out;
+>                 }
+> @@ -419,7 +419,7 @@ static int __inet6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
+>                         err = BPF_CGROUP_RUN_PROG_INET6_POST_BIND(sk);
+>                         if (err) {
+>                                 sk->sk_ipv6only = saved_ipv6only;
+> -                               inet_reset_saddr(sk);
+> +                               __inet_reset_saddr(sk);
+>                                 if (sk->sk_prot->put_port)
+>                                         sk->sk_prot->put_port(sk);
+>                                 goto out;
+>
+> ---8<---
+>
+>
+> >
 > > > +
 > > > +       bhash = inet_bhashfn(net, port, hinfo->bhash_size);
 > > > +       head = &hinfo->bhash[bhash];
@@ -235,26 +332,12 @@ Date:   Fri, 18 Nov 2022 15:57:53 -0800
 > > > +        * iterating over bhash might see corrupted address.
 > > > +        */
 > > > +       spin_lock_bh(&head->lock);
-> > 
+> >
 > > I don't think we should be acquiring the bhash lock here. I think we
 > > only need to acquire it right before we mutate the saddr, and we can
 > > release it right after.
-> 
-> Exactly, will move it down before "__"inet_update_saddr() :)
-
-And I'll move this down after the first inet_bhashfn_portaddr() to
-align the same lock semantics with these 3 functions which aquire
-the bhash's lock before updating a bhash2 bucket.
-
-  * inet_csk_get_port()
-  * __inet_hash_connect()
-  * inet_put_port()
-
-
-> 
-> Thank you!
-> 
-> 
+> >
+> > >
 > > >         /* Allocate a bind2 bucket ahead of time to avoid permanently putting
 > > >          * the bhash2 table in an inconsistent state if a new tb2 bucket
 > > >          * allocation fails.
