@@ -1,7 +1,7 @@
 From: kernel test robot <lkp@intel.com>
-Date: Tue, 21 Feb 2023 14:35:48 +0000
+Date: Tue, 21 Feb 2023 17:00:03 +0000
 Subject: Re: [PATCH] net: dccp: delete redundant ackvec record in dccp_insert_options()
-Message-Id: <202302212209.2xKQbnhl-lkp@intel.com>
+Message-Id: <202302220054.Y70E8KTB-lkp@intel.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20230221092206.39741-1-hbh25y@gmail.com>
 In-Reply-To: <20230221092206.39741-1-hbh25y@gmail.com>
@@ -12,10 +12,10 @@ To: dccp@vger.kernel.org
 
 Hi Hangyu,
 
-Thank you for the patch! Perhaps something to improve:
+Thank you for the patch! Yet something to improve:
 
-[auto build test WARNING on net-next/master]
-[also build test WARNING on net/master horms-ipvs/master linus/master v6.2 next-20230221]
+[auto build test ERROR on net-next/master]
+[also build test ERROR on net/master horms-ipvs/master linus/master v6.2 next-20230221]
 [If your patch is applied to the wrong git tree, kindly drop us a note.
 And when submitting patch, we suggest to use '--base' as documented in
 https://git-scm.com/docs/git-format-patch#_base_tree_information]
@@ -23,7 +23,7 @@ https://git-scm.com/docs/git-format-patch#_base_tree_information]
 url:    https://github.com/intel-lab-lkp/linux/commits/Hangyu-Hua/net-dccp-delete-redundant-ackvec-record-in-dccp_insert_options/20230221-172448
 patch link:    https://lore.kernel.org/r/20230221092206.39741-1-hbh25y%40gmail.com
 patch subject: [PATCH] net: dccp: delete redundant ackvec record in dccp_insert_options()
-config: i386-randconfig-a013-20230220 (https://download.01.org/0day-ci/archive/20230221/202302212209.2xKQbnhl-lkp@intel.com/config)
+config: i386-randconfig-a013-20230220 (https://download.01.org/0day-ci/archive/20230222/202302220054.Y70E8KTB-lkp@intel.com/config)
 compiler: clang version 14.0.6 (https://github.com/llvm/llvm-project f28c006a5895fc0e329fe15fead81e37457cb1d1)
 reproduce (this is a W=1 build):
         wget https://raw.githubusercontent.com/intel/lkp-tests/master/sbin/make.cross -O ~/bin/make.cross
@@ -35,21 +35,21 @@ reproduce (this is a W=1 build):
         # save the config file
         mkdir build_dir && cp config build_dir/.config
         COMPILER_INSTALL_PATH=$HOME/0day COMPILER=clang make.cross W=1 O=build_dir ARCH=i386 olddefconfig
-        COMPILER_INSTALL_PATH=$HOME/0day COMPILER=clang make.cross W=1 O=build_dir ARCH=i386 SHELL=/bin/bash net/dccp/
+        COMPILER_INSTALL_PATH=$HOME/0day COMPILER=clang make.cross W=1 O=build_dir ARCH=i386 SHELL=/bin/bash net/
 
 If you fix the issue, kindly add following tag where applicable
 | Reported-by: kernel test robot <lkp@intel.com>
-| Link: https://lore.kernel.org/oe-kbuild-all/202302212209.2xKQbnhl-lkp@intel.com/
+| Link: https://lore.kernel.org/oe-kbuild-all/202302220054.Y70E8KTB-lkp@intel.com/
 
-All warnings (new ones prefixed by >>):
+All errors (new ones prefixed by >>):
 
-   net/dccp/options.c:594:8: error: implicit declaration of function 'dccp_ackvec_lookup' is invalid in C99 [-Werror,-Wimplicit-function-declaration]
+>> net/dccp/options.c:594:8: error: implicit declaration of function 'dccp_ackvec_lookup' is invalid in C99 [-Werror,-Wimplicit-function-declaration]
            avr = dccp_ackvec_lookup(&av->av_records, DCCP_SKB_CB(skb)->dccpd_seq);
                  ^
->> net/dccp/options.c:594:6: warning: incompatible integer to pointer conversion assigning to 'struct dccp_ackvec_record *' from 'int' [-Wint-conversion]
+   net/dccp/options.c:594:6: warning: incompatible integer to pointer conversion assigning to 'struct dccp_ackvec_record *' from 'int' [-Wint-conversion]
            avr = dccp_ackvec_lookup(&av->av_records, DCCP_SKB_CB(skb)->dccpd_seq);
                ^ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   net/dccp/options.c:596:18: error: use of undeclared identifier 'dccp_ackvec_record_slab'; did you mean 'dccp_ackvec_clear_state'?
+>> net/dccp/options.c:596:18: error: use of undeclared identifier 'dccp_ackvec_record_slab'; did you mean 'dccp_ackvec_clear_state'?
            kmem_cache_free(dccp_ackvec_record_slab, avr);
                            ^~~~~~~~~~~~~~~~~~~~~~~
                            dccp_ackvec_clear_state
@@ -59,7 +59,7 @@ All warnings (new ones prefixed by >>):
    1 warning and 2 errors generated.
 
 
-vim +594 net/dccp/options.c
+vim +/dccp_ackvec_lookup +594 net/dccp/options.c
 
    548	
    549	int dccp_insert_options(struct sock *sk, struct sk_buff *skb)
@@ -109,7 +109,7 @@ vim +594 net/dccp/options.c
    593	delete_ackvec:
  > 594		avr = dccp_ackvec_lookup(&av->av_records, DCCP_SKB_CB(skb)->dccpd_seq);
    595		list_del(&avr->avr_node);
-   596		kmem_cache_free(dccp_ackvec_record_slab, avr);
+ > 596		kmem_cache_free(dccp_ackvec_record_slab, avr);
    597		return -1;
    598	}
    599	
