@@ -1,43 +1,46 @@
-From: David Howells <dhowells@redhat.com>
-Date: Wed, 29 Mar 2023 14:39:33 +0000
-Subject: Re: [RFC PATCH v2 48/48] sock: Remove ->sendpage*() in favour of sendmsg(MSG_SPLICE_PAGES)
-Message-Id: <518631.1680100773@warthog.procyon.org.uk>
+From: Florian Westphal <fw@strlen.de>
+Date: Thu, 02 Mar 2023 11:35:23 +0000
+Subject: Re: [PATCH] [net:netfilter]: Keep conntrack reference until IPsecv6 policy checks are done
+Message-Id: <20230302113523.GD23204@breakpoint.cc>
 List-Id: <dccp.vger.kernel.org>
-References: <20230329141354.516864-49-dhowells@redhat.com>
-In-Reply-To: <20230329141354.516864-49-dhowells@redhat.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hannes Reinecke <hare@suse.de> wrote:
+Madhu Koriginja <madhu.koriginja@nxp.com> wrote:
+> Keep the conntrack reference until policy checks have been performed for
+> IPsec V6 NAT support. The reference needs to be dropped before a packet is
+> queued to avoid having the conntrack module unloadable.
 
-> > [!] Note: This is a work in progress.  At the moment, some things won't
-> >      build if this patch is applied.  nvme, kcm, smc, tls.
+Subject Line should be:
 
-Actually, that needs updating.  nvme and smc now build.
+[PATCH net] net: netfilter: Keep conntrack reference until IPsecv6 policy checks are done
+or
+[PATCH net-next] net: netfilter: Keep ..
 
-> Weelll ... what happens to consumers of kernel_sendpage()?
-> (Let's call them nvme ...)
-> Should they be moved over, too?
+see below why net-next makes more sense to me.
 
-Patch 42 should address NVMe, I think.  I can't test it, though, as I don't
-have hardware.
+> Signed-off-by: Madhu Koriginja <madhu.koriginja@nxp.com>
+> 	V1-V2: added missing () in ip6_input.c in below condition
+> 	if (!(ipprot->flags & INET6_PROTO_NOPOLICY))
 
-There should be no callers of kernel_sendmsg() by the end of this patchset,
-and the only remaining implementors of sendpage are Chelsio-TLS, AF_TLS and
-AF_KCM, which as stated in the cover, aren't yet converted and won't build.
+This should appear before your signed-off-by, or 
+> ---
+>  net/dccp/ipv6.c      |  1 +
 
-> Or what is the general consensus here?
-> 
-> (And what do we do with TLS? It does have a ->sendpage() version, too ...)
+... here.
 
-I know.  There are three things left that I need to tackle, but I'd like to
-get opinions on some of the other bits and I might need some help with AF_TLS
-and AF_KCM.
+I think its fine to place it here because in this case
+the mini-changelog doesn't provide any additional context
+worth keeping in git.
 
-That said, should I just remove tls_sw_do_sendpage() since presumably the data
-is going to get copied(?) and encrypted and the source pages aren't going to
-be held onto?
+Paolo, Jakub, David: This is a bug, but its not a regression
+either.  I would suggest that Madhu resubmits this AFTER
+net-next re-opens.
 
-David
+Madhu, if thats the agreed-upon procedure, you may include
+
+Reviewed-by: Florian Westphal <fw@strlen.de>
+
+when you resend this patch as-is.
