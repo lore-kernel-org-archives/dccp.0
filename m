@@ -1,54 +1,49 @@
-From: Marc Kleine-Budde <mkl@pengutronix.de>
-Date: Thu, 16 Mar 2023 15:57:58 +0000
-Subject: Re: [RFC PATCH 28/28] sock: Remove ->sendpage*() in favour of sendmsg(MSG_SPLICE_PAGES)
-Message-Id: <20230316155758.5ylpybqjma7x4lbs@pengutronix.de>
-MIME-Version: 1
-Content-Type: multipart/mixed; boundary="km5oeoth2y26yqyc"
+From: Madhu Koriginja <madhu.koriginja@nxp.com>
+Date: Fri, 03 Mar 2023 09:53:20 +0000
+Subject: RE: [EXT] Re: [PATCH] [net:netfilter]: Keep conntrack reference until IPsecv6 policy checks are done
+Message-Id: <DB9PR04MB964835E3C87393525F85096FFCB39@DB9PR04MB9648.eurprd04.prod.outlook.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20230316152618.711970-29-dhowells@redhat.com>
-In-Reply-To: <20230316152618.711970-29-dhowells@redhat.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-
---km5oeoth2y26yqyc
-Content-Type: text/plain; charset=utf-8
-Content-Disposition: inline
-Content-Transfer-Encoding: quoted-printable
-
-On 16.03.2023 15:26:18, David Howells wrote:
-> [!] Note: This is a work in progress.  At the moment, some things won't
->     build if this patch is applied.  nvme, kcm, smc, tls.
->=20
-> Remove ->sendpage() and ->sendpage_locked().  sendmsg() with
-> MSG_SPLICE_PAGES should be used instead.  This allows multiple pages and
-> multipage folios to be passed through.
->=20
-> Signed-off-by: David Howells <dhowells@redhat.com>
-
-> cc: linux-can@vger.kernel.org
-
-Acked-by: Marc Kleine-Budde <mkl@pengutronix.de> # for net/can
-
-Marc
-
---=20
-Pengutronix e.K.                 | Marc Kleine-Budde           |
-Embedded Linux                   | https://www.pengutronix.de  |
-Amtsgericht Hildesheim, HRA 2686 | Fax:   +49-5121-206917-5555 |
-
---km5oeoth2y26yqyc
-Content-Type: application/pgp-signature; name="signature.asc"
-
------BEGIN PGP SIGNATURE-----
-
-iQEzBAABCgAdFiEEDs2BvajyNKlf9TJQvlAcSiqKBOgFAmQTPIMACgkQvlAcSiqK
-BOj6JAgAtfBV5yq+uNvtDfdNTDCgUnr0pkrsEqo0Ygt0A84TUlJF1K9QFkFTlvFo
-NEtegJFeDvbE8EmvRgOnpoTRcMQwDClaw5c7O7TquCr3SEAcXECesFYUVLWR7hsf
-Mk3DzSWUNIqMeSUOAEPBPfWNGGQWdjut5IQHdhuIs2/irjgsb5GZJ27rYyV9F/+l
-daE1Ac6RGnKq9zV/UszZ7AbfKA7bI9TVioWBVmIFCQZeWJprHq5rD0LTH6+QjdyQ
-5AdUTjTbZ/YRTjr4KQQkISfoq8oMC/zVENiagYZ89SGTbciIaCeqBpvdgUVKTob6
-2Uoo/o+yUY90Dy8JPw9/gLSsthDGaw==
-=IhKV
------END PGP SIGNATURE-----
-
---km5oeoth2y26yqyc--
+SGkgUGFvbG8sDQogSSB1cGRhdGVkIHRoZSBwYXRjaCB3aXRoIG5mX3Jlc2V0X2N0IGNoYW5nZSAo
+bmZfcmVzZXQoKSByZXBsYWNlZCB3aXRoIG5mX3Jlc2V0X2N0KSB0byBhbGlnbiB3aXRoIHRoZSBs
+YXRlc3Qga2VybmVsIGNvZGUuIA0KDQpIaSBBbGwsDQpJIGFsc28gd2FudCB0byBwdXNoIHRoaXMg
+Y2hhbmdlICh3aXRoIG5mX3Jlc2V0KSBpbiA0LjE5IExUUyBrZXJuZWwsIHBsZWFzZSBjYW4geW91
+IHRlbGwgbWUgaG93IGNhbiBJIHB1c2ggdG8gdGhhdCB2ZXJzaW9uPyBUaGFua3MgaW4gYWR2YW5j
+ZS4NCg0KIEhpIEZsb3JpYW4sDQpJbiBwYXRjaHYzIHVwZGF0ZWQgdGhlIHN1YmplY3QgbGluZSBh
+cyB5b3Ugc3VnZ2VzdGVkLg0KDQpUaGFua3MgJiBSZWdhcmRzLA0KTWFkaHUgSyAgDQoNCi0tLS0t
+T3JpZ2luYWwgTWVzc2FnZS0tLS0tDQpGcm9tOiBQYW9sbyBBYmVuaSA8cGFiZW5pQHJlZGhhdC5j
+b20+IA0KU2VudDogVGh1cnNkYXksIE1hcmNoIDIsIDIwMjMgNzo1OCBQTQ0KVG86IE1hZGh1IEtv
+cmlnaW5qYSA8bWFkaHUua29yaWdpbmphQG54cC5jb20+OyBnZXJyaXRAZXJnLmFiZG4uYWMudWs7
+IGRhdmVtQGRhdmVtbG9mdC5uZXQ7IGt1em5ldEBtczIuaW5yLmFjLnJ1OyB5b3NoZnVqaUBsaW51
+eC1pcHY2Lm9yZzsgZWR1bWF6ZXRAZ29vZ2xlLmNvbTsgZGNjcEB2Z2VyLmtlcm5lbC5vcmc7IG5l
+dGRldkB2Z2VyLmtlcm5lbC5vcmc7IGxpbnV4LWtlcm5lbEB2Z2VyLmtlcm5lbC5vcmcNCkNjOiBW
+YW5pIE5hbWFsYSA8dmFuaS5uYW1hbGFAbnhwLmNvbT4NClN1YmplY3Q6IFtFWFRdIFJlOiBbUEFU
+Q0hdIFtuZXQ6bmV0ZmlsdGVyXTogS2VlcCBjb25udHJhY2sgcmVmZXJlbmNlIHVudGlsIElQc2Vj
+djYgcG9saWN5IGNoZWNrcyBhcmUgZG9uZQ0KDQpDYXV0aW9uOiBFWFQgRW1haWwNCg0KT24gVGh1
+LCAyMDIzLTAzLTAyIGF0IDE2OjUzICswNTMwLCBNYWRodSBLb3JpZ2luamEgd3JvdGU6DQo+IEtl
+ZXAgdGhlIGNvbm50cmFjayByZWZlcmVuY2UgdW50aWwgcG9saWN5IGNoZWNrcyBoYXZlIGJlZW4g
+cGVyZm9ybWVkIA0KPiBmb3IgSVBzZWMgVjYgTkFUIHN1cHBvcnQuIFRoZSByZWZlcmVuY2UgbmVl
+ZHMgdG8gYmUgZHJvcHBlZCBiZWZvcmUgYSANCj4gcGFja2V0IGlzIHF1ZXVlZCB0byBhdm9pZCBo
+YXZpbmcgdGhlIGNvbm50cmFjayBtb2R1bGUgdW5sb2FkYWJsZS4NCj4NCj4gU2lnbmVkLW9mZi1i
+eTogTWFkaHUgS29yaWdpbmphIDxtYWRodS5rb3JpZ2luamFAbnhwLmNvbT4NCj4gICAgICAgVjEt
+VjI6IGFkZGVkIG1pc3NpbmcgKCkgaW4gaXA2X2lucHV0LmMgaW4gYmVsb3cgY29uZGl0aW9uDQo+
+ICAgICAgIGlmICghKGlwcHJvdC0+ZmxhZ3MgJiBJTkVUNl9QUk9UT19OT1BPTElDWSkpDQo+IC0t
+LQ0KPiAgbmV0L2RjY3AvaXB2Ni5jICAgICAgfCAgMSArDQo+ICBuZXQvaXB2Ni9pcDZfaW5wdXQu
+YyB8IDE0ICsrKysrKystLS0tLS0tDQo+ICBuZXQvaXB2Ni9yYXcuYyAgICAgICB8ICAyICstDQo+
+ICBuZXQvaXB2Ni90Y3BfaXB2Ni5jICB8ICAyICsrDQo+ICBuZXQvaXB2Ni91ZHAuYyAgICAgICB8
+ICAyICsrDQo+ICA1IGZpbGVzIGNoYW5nZWQsIDEzIGluc2VydGlvbnMoKyksIDggZGVsZXRpb25z
+KC0pDQo+DQo+IGRpZmYgLS1naXQgYS9uZXQvZGNjcC9pcHY2LmMgYi9uZXQvZGNjcC9pcHY2LmMg
+aW5kZXggDQo+IDU4YTQwMWU5Y2YwOS4uZWI1MDMwOTZkYjZjIDEwMDY0NA0KPiAtLS0gYS9uZXQv
+ZGNjcC9pcHY2LmMNCj4gKysrIGIvbmV0L2RjY3AvaXB2Ni5jDQo+IEBAIC03NzEsNiArNzcxLDcg
+QEAgc3RhdGljIGludCBkY2NwX3Y2X3JjdihzdHJ1Y3Qgc2tfYnVmZiAqc2tiKQ0KPg0KPiAgICAg
+ICBpZiAoIXhmcm02X3BvbGljeV9jaGVjayhzaywgWEZSTV9QT0xJQ1lfSU4sIHNrYikpDQo+ICAg
+ICAgICAgICAgICAgZ290byBkaXNjYXJkX2FuZF9yZWxzZTsNCj4gKyAgICAgbmZfcmVzZXQoc2ti
+KTsNCg0KbmZfcmVzZXQoKSBpcyBnb25lIHNpbmNlIGNvbW1pdCA4OTViNWM5ZjIwNmUgKCJuZXRm
+aWx0ZXI6IGRyb3AgYnJpZGdlIG5mIHJlc2V0IGZyb20gbmZfcmVzZXQiKSwgeW91IHNob3VsZCB1
+c2UgaW5zdGVhZCBuZl9yZXNldF9jdCgpOiBpbiB0aGUgY3VycmVudCBmb3JtIHRoZSBwYXRjaCBk
+b2VzIG5vdCBhcHBseSBjbGVhbmx5IChub3IgYnVpbGQgYWZ0ZXIgbWFudWFsIGVkaXQpLg0KDQoN
+CkNoZWVycywNCg0KUGFvbG8NCg0K
