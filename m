@@ -1,62 +1,102 @@
-From: Breno Leitao <leitao@debian.org>
-Date: Thu, 06 Apr 2023 16:58:40 +0000
+From: Willem de Bruijn <willemb@google.com>
+Date: Thu, 06 Apr 2023 18:16:24 +0000
 Subject: Re: [PATCH 0/5] add initial io_uring_cmd support for sockets
-Message-Id: <ZC76QH97yFsx9e7y@gmail.com>
+Message-Id: <CA+FuTSf9LEhzjBey_Nm_-vN0ZjvtBSQkcDWS+5uBnLmr8Qh5uA@mail.gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20230406144330.1932798-1-leitao@debian.org>
 In-Reply-To: <20230406144330.1932798-1-leitao@debian.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
 To: dccp@vger.kernel.org
 
-Hello Keith,
+On Thu, Apr 6, 2023 at 11:59 AM Breno Leitao <leitao@debian.org> wrote:
+>
+> On Thu, Apr 06, 2023 at 11:34:28AM -0400, Willem de Bruijn wrote:
+> > On Thu, Apr 6, 2023 at 10:45 AM Breno Leitao <leitao@debian.org> wrote:
+> > >
+> > > From: Breno Leitao <leit@fb.com>
+> > >
+> > > This patchset creates the initial plumbing for a io_uring command for
+> > > sockets.
+> > >
+> > > For now, create two uring commands for sockets, SOCKET_URING_OP_SIOCOUTQ
+> > > and SOCKET_URING_OP_SIOCINQ. They are similar to ioctl operations
+> > > SIOCOUTQ and SIOCINQ. In fact, the code on the protocol side itself is
+> > > heavily based on the ioctl operations.
+> >
+> > This duplicates all the existing ioctl logic of each protocol.
+> >
+> > Can this just call the existing proto_ops.ioctl internally and translate from/to
+> > io_uring format as needed?
+>
+> This is doable, and we have two options in this case:
+>
+> 1) Create a ioctl core function that does not call `put_user()`, and
+> call it from both the `udp_ioctl` and `udp_uring_cmd`, doing the proper
+> translations. Something as:
+>
+>         int udp_ioctl_core(struct sock *sk, int cmd, unsigned long arg)
+>         {
+>                 int amount;
+>                 switch (cmd) {
+>                 case SIOCOUTQ: {
+>                         amount = sk_wmem_alloc_get(sk);
+>                         break;
+>                 }
+>                 case SIOCINQ: {
+>                         amount = max_t(int, 0, first_packet_length(sk));
+>                         break;
+>                 }
+>                 default:
+>                         return -ENOIOCTLCMD;
+>                 }
+>                 return amount;
+>         }
+>
+>         int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
+>         {
+>                 int amount = udp_ioctl_core(sk, cmd, arg);
+>
+>                 return put_user(amount, (int __user *)arg);
+>         }
+>         EXPORT_SYMBOL(udp_ioctl);
+>
+>
+> 2) Create a function for each "case entry". This seems a bit silly for
+> UDP, but it makes more sense for other protocols. The code will look
+> something like:
+>
+>          int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
+>          {
+>                 switch (cmd) {
+>                 case SIOCOUTQ:
+>                 {
+>                         int amount = udp_ioctl_siocoutq();
+>                         return put_user(amount, (int __user *)arg);
+>                 }
+>                 ...
+>           }
+>
+> What is the best approach?
 
-On Thu, Apr 06, 2023 at 10:41:52AM -0600, Keith Busch wrote:
-> On Thu, Apr 06, 2023 at 07:43:26AM -0700, Breno Leitao wrote:
-> > This patchset creates the initial plumbing for a io_uring command for
-> > sockets.
-> > 
-> > For now, create two uring commands for sockets, SOCKET_URING_OP_SIOCOUTQ
-> > and SOCKET_URING_OP_SIOCINQ. They are similar to ioctl operations
-> > SIOCOUTQ and SIOCINQ. In fact, the code on the protocol side itself is
-> > heavily based on the ioctl operations.
-> 
-> Do you have asynchronous operations in mind for a future patch? The io_uring
-> command infrastructure makes more sense for operations that return EIOCBQUEUED,
-> otherwise it doesn't have much benefit over ioctl.
+A, the issue is that sock->ops->ioctl directly call put_user.
 
-I think this brings value even for synchronos operations, such as, you
-can just keep using io_uring operations on network operations, other
-than, using some io_uring operations and then doing a regular ioctl(2).
-So, it improves the user experience.
+I was thinking just having sock_uring_cmd call sock->ops->ioctl, like
+sock_do_ioctl.
 
-The other benefit is calling several operations at a single io_uring
-submit. It means you can save several syscalls and getting the same work
-done.
+But that would require those callbacks to return a negative error or
+positive integer, rather than calling put_user. And then move the
+put_user to sock_do_ioctl. Such a change is at least as much code
+change as your series. Though without the ending up with code
+duplication. It also works only if all ioctls only put_user of integer
+size. That's true for TCP, UDP and RAW, but not sure if true more
+broadly.
 
->  
-> > In order to test this code, I created a liburing test, which is
-> > currently located at [1], and I will create a pull request once we are
-> > good with this patch.
-> > 
-> > I've also run test/io_uring_passthrough to make sure the first patch
-> > didn't regressed the NVME passthrough path.
-> > 
-> > This patchset is a RFC for two different reasons:
-> >   * It changes slighlty on how IO uring command operates. I.e, we are
-> >     now passing the whole SQE to the io_uring_cmd callback (instead of
-> >     an opaque buffer). This seems to be more palatable instead of
-> >     creating some custom structure just to fit small parameters, as in
-> >     SOCKET_URING_OP_SIOC{IN,OUT}Q. Is this OK?
-> 
-> I think I'm missing something from this series. Where is the io_uring_cmd
-> change to point to the sqe?
+Another approach may be to pass another argument to the ioctl
+callbacks, whether to call put_user or return the integer and let the
+caller take care of the output to user. This could possibly be
+embedded in the a high-order bit of the cmd, so that it fails on ioctl
+callbacks that do not support this mode.
 
-My bad, the patch was not part of the patchset. I've just submitted it
-under the same RFC cover letter now.
-
-Here is the link, if it helps:
-
-https://lkml.org/lkml/2023/4/6/990
-
+Of the two approaches you suggest, I find the first preferable.
