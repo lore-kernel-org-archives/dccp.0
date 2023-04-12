@@ -1,7 +1,7 @@
-From: David Laight <David.Laight@ACULAB.COM>
-Date: Wed, 12 Apr 2023 07:39:26 +0000
-Subject: RE: [PATCH 0/5] add initial io_uring_cmd support for sockets
-Message-Id: <d25962b44b2d4204a7251d97c331fcf8@AcuMS.aculab.com>
+From: Breno Leitao <leitao@debian.org>
+Date: Wed, 12 Apr 2023 13:53:30 +0000
+Subject: Re: [PATCH 0/5] add initial io_uring_cmd support for sockets
+Message-Id: <ZDa32u9RNI4NQ7Ko@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20230406144330.1932798-1-leitao@debian.org>
 In-Reply-To: <20230406144330.1932798-1-leitao@debian.org>
@@ -10,29 +10,61 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-RnJvbTogRGF2aWQgQWhlcm4NCj4gU2VudDogMTEgQXByaWwgMjAyMyAxNjoyOA0KLi4uLg0KPiBD
-aHJpc3RvcGgncyBwYXRjaCBzZXQgYSBmZXcgeWVhcnMgYmFjayB0aGF0IHJlbW92ZWQgc2V0X2Zz
-IGJyb2tlIHRoZQ0KPiBhYmlsaXR5IHRvIGRvIGluLWtlcm5lbCBpb2N0bCBhbmQge3MsZ31zZXRz
-b2Nrb3B0IGNhbGxzLiBJIGRpZCBub3QNCj4gZm9sbG93IHRoYXQgY2hhbmdlOyB3YXMgaXQgYSBk
-ZWxpYmVyYXRlIGludGVudCB0byBub3QgYWxsb3cgdGhlc2UNCj4gaW4ta2VybmVsIGNhbGxzIHZz
-IHdhbnRpbmcgdG8gcmVtb3ZlIHRoZSBzZXRfZnM/IGUuZy4sIGNhbiB3ZSBhZGQgYQ0KPiBraW9j
-dGwgdmFyaWFudCBmb3IgaW4ta2VybmVsIHVzZSBvZiB0aGUgQVBJcz8NCg0KSSB0aGluayB0aGF0
-IHdhcyBhIHNpZGUgZWZmZWN0LCBhbmQgd2l0aCBubyBpbi10cmVlIGluLWtlcm5lbA0KdXNlcnMg
-KGFwYXJ0IGZyb20gbGltaXRlZCBjYWxscyBpbiBicGYpIGl0IHdhcyBkZWVtZWQgYWNjZXB0YWJs
-ZS4NCihJdCBpcyBhIFBJVEEgZm9yIGFueSBjb2RlIHRyeWluZyB0byB1c2UgU0NUUCBpbiBrZXJu
-ZWwuKQ0KDQpPbmUgcHJvYmxlbSBpcyB0aGF0IG5vdCBhbGwgc29ja29wdCBjYWxscyBwYXNzIHRo
-ZSBjb3JyZWN0IGxlbmd0aC4NCkFuZCBzb21lIG9mIHRoZW0gY2FuIGhhdmUgdmVyeSBsb25nIGJ1
-ZmZlcnMuDQpOb3QgdG8gbWVudGlvbiB0aGUgb25lcyB0aGF0IGFyZSByZWFkLW1vZGlmeS13cml0
-ZS4NCg0KQSBwbGF1c2libGUgc29sdXRpb24gaXMgdG8gcGFzcyBhICdmYXQgcG9pbnRlcicgdGhh
-dCBjb250YWlucw0Kc29tZSwgb3IgYWxsLCBvZjoNCgktIEEgdXNlcnNwYWNlIGJ1ZmZlciBwb2lu
-dGVyLg0KCS0gQSBrZXJuZWwgYnVmZmVyIHBvaW50ZXIuDQoJLSBUaGUgbGVuZ3RoIHN1cHBsaWVk
-IGJ5IHRoZSB1c2VyLg0KCS0gVGhlIGxlbmd0aCBvZiB0aGUga2VybmVsIGJ1ZmZlci4NCgk9IFRo
-ZSBudW1iZXIgb2YgYnl0ZXMgdG8gY29weSBvbiBjb21wbGV0aW9uLg0KRm9yIHNpbXBsZSB1c2Vy
-IHJlcXVlc3RzIHRoZSBzeXNjYWxsIGVudHJ5L2V4aXQgY29kZQ0Kd291bGQgY29weSB0aGUgZGF0
-YSB0byBhIHNob3J0IG9uLXN0YWNrIGJ1ZmZlci4NCktlcm5lbCB1c2VycyBqdXN0IHBhc3MgdGhl
-IGtlcm5lbCBhZGRyZXNzLg0KT2RkIHJlcXVlc3RzIGNhbiBqdXN0IHVzZSB0aGUgdXNlciBwb2lu
-dGVyLg0KDQpQcm9iYWJseSBuZWVkcyBhY2Nlc3NvcnMgdGhhdCBhZGQgaW4gYW4gb2Zmc2V0Lg0K
-DQpJdCBtaWdodCBhbHNvIGJlIHRoYXQgc29tZSBvZiB0aGUgcHJvYmxlbWF0aWMgc29ja29wdA0K
-d2VyZSBpbiBkZWNuZXQgLSBub3cgcmVtb3ZlZC4NCg0KCURhdmlkDQoNCi0NClJlZ2lzdGVyZWQg
-QWRkcmVzcyBMYWtlc2lkZSwgQnJhbWxleSBSb2FkLCBNb3VudCBGYXJtLCBNaWx0b24gS2V5bmVz
-LCBNSzEgMVBULCBVSw0KUmVnaXN0cmF0aW9uIE5vOiAxMzk3Mzg2IChXYWxlcykNCg=
+On Tue, Apr 11, 2023 at 09:28:29AM -0600, Jens Axboe wrote:
+> On 4/11/23 9:24?AM, Willem de Bruijn wrote:
+> > Jens Axboe wrote:
+> >> On 4/11/23 9:00?AM, Willem de Bruijn wrote:
+> >> But that doesn't work, because sock->ops->ioctl() assumes the arg is
+> >> memory in userspace. Or do you mean change all of the sock->ops->ioctl()
+> >> to pass in on-stack memory (or similar) and have it work with a kernel
+> >> address?
+> > 
+> > That was what I suggested indeed.
+> > 
+> > It's about as much code change as this patch series. But it avoids
+> > the code duplication.
+> 
+> Breno, want to tackle that as a prep patch first? Should make the
+> functional changes afterwards much more straightforward, and will allow
+> support for anything really.
+
+Absolutely. I just want to make sure that I got the proper approach that
+we agreed here.
+
+Let me explain what I understood taking TCP as an example:
+
+1) Rename tcp_ioctl() to something as _tcp_ioctl() where the 'arg'
+argument is now just a kernel memory (located in the stack frame from the
+callee).
+
+2) Recreate "tcp_ioctl()" that will basically allocate a 'arg' in the
+stack and call _tcp_ioctl() passing that 'arg' argument. At the bottom of
+this (tcp_ioctl() function) function, call `put_user(in_kernel_arg, userspace_arg)
+
+3) Repeat it for the 20 protocols that implement ioctl:
+
+	ag  "struct proto .* = {" -A 20 net/ | grep \.ioctl
+	net/dccp/ipv6.c 	.ioctl	= dccp_ioctl,
+	net/dccp/ipv4.c		.ioctl	= dccp_ioctl,
+	net/ieee802154/socket.c .ioctl	= dgram_ioctl,
+	net/ipv4/udplite.c	.ioctl	= udp_ioctl,
+	net/ipv4/raw.c 		.ioctl	= raw_ioctl,
+	net/ipv4/udp.c		.ioctl	= udp_ioctl,
+	net/ipv4/tcp_ipv4.c 	.ioctl	= tcp_ioctl,
+	net/ipv6/raw.c		.ioctl	= rawv6_ioctl,
+	net/ipv6/tcp_ipv6.c	.ioctl	= tcp_ioctl,
+	net/ipv6/udp.c	 	.ioctl	= udp_ioctl,
+	net/ipv6/udplite.c	.ioctl	= udp_ioctl,
+	net/l2tp/l2tp_ip6.c	.ioctl	= l2tp_ioctl,
+	net/l2tp/l2tp_ip.c	.ioctl	= l2tp_ioctl,
+	net/phonet/datagram.:	.ioctl	= pn_ioctl,
+	net/phonet/pep.c	.ioctl	= pep_ioctl,
+	net/rds/af_rds.c	.ioctl	=	rds_ioctl,
+	net/sctp/socket.c	.ioctl  =	sctp_ioctl,
+	net/sctp/socket.c	.ioctl	= sctp_ioctl,
+	net/xdp/xsk.c		.ioctl	= sock_no_ioctl,
+	net/mptcp/protocol.c	.ioctl	= mptcp_ioctl,
+
+Am I missing something?
+
+Thanks!
