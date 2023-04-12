@@ -1,7 +1,7 @@
-From: Jens Axboe <axboe@kernel.dk>
-Date: Tue, 11 Apr 2023 15:29:15 +0000
-Subject: Re: [PATCH 0/5] add initial io_uring_cmd support for sockets
-Message-Id: <78abce6b-709b-7309-2ee1-5370d05748b6@kernel.dk>
+From: David Laight <David.Laight@ACULAB.COM>
+Date: Wed, 12 Apr 2023 07:39:26 +0000
+Subject: RE: [PATCH 0/5] add initial io_uring_cmd support for sockets
+Message-Id: <d25962b44b2d4204a7251d97c331fcf8@AcuMS.aculab.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20230406144330.1932798-1-leitao@debian.org>
 In-Reply-To: <20230406144330.1932798-1-leitao@debian.org>
@@ -10,76 +10,29 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 4/11/23 9:27?AM, David Ahern wrote:
-> On 4/11/23 9:17 AM, Jens Axboe wrote:
->> On 4/11/23 9:10?AM, David Ahern wrote:
->>> On 4/11/23 8:41 AM, Jens Axboe wrote:
->>>> On 4/11/23 8:36?AM, David Ahern wrote:
->>>>> On 4/11/23 6:00 AM, Breno Leitao wrote:
->>>>>> I am not sure if avoiding io_uring details in network code is possible.
->>>>>>
->>>>>> The "struct proto"->uring_cmd callback implementation (tcp_uring_cmd()
->>>>>> in the TCP case) could be somewhere else, such as in the io_uring/
->>>>>> directory, but, I think it might be cleaner if these implementations are
->>>>>> closer to function assignment (in the network subsystem).
->>>>>>
->>>>>> And this function (tcp_uring_cmd() for instance) is the one that I am
->>>>>> planning to map io_uring CMDs to ioctls. Such as SOCKET_URING_OP_SIOCINQ
->>>>>> -> SIOCINQ.
->>>>>>
->>>>>> Please let me know if you have any other idea in mind.
->>>>>
->>>>> I am not convinced that this io_uring_cmd is needed. This is one
->>>>> in-kernel subsystem calling into another, and there are APIs for that.
->>>>> All of this set is ioctl based and as Willem noted a little refactoring
->>>>> separates the get_user/put_user out so that in-kernel can call can be
->>>>> made with existing ops.
->>>>
->>>> How do you want to wire it up then? We can't use fops->unlocked_ioctl()
->>>> obviously, and we already have ->uring_cmd() for this purpose.
->>>>
->>>> I do think the right thing to do is have a common helper that returns
->>>> whatever value you want (or sets it), and split the ioctl parts into a
->>>> wrapper around that that simply copies in/out as needed. Then
->>>> ->uring_cmd() could call that, or you could some exported function that
->>>> does supports that.
->>>>
->>>> This works for the basic cases, though I do suspect we'll want to go
->>>> down the ->uring_cmd() at some point for more advanced cases or cases
->>>> that cannot sanely be done in an ioctl fashion.
->>>>
->>>
->>> My meta point is that there are uapis today to return this information
->>> to applications (and I suspect this is just the start of more networking
->>> changes - both data retrieval and adjusting settings). io_uring is
->>> wanting to do this on behalf of the application without a syscall. That
->>> makes io_uring yet another subsystem / component managing a socket. Any
->>> change to the networking stack required by io_uring should be usable by
->>> all other in-kernel socket owners or managers. ie., there is no reason
->>> for io_uring specific code here.
->>
->> I think we are in violent agreement here, what I'm describing is exactly
->> that - it'd make ioctl/{set,get}sockopt call into the same helpers that
->> ->uring_cmd() would, with the only difference being that the former
->> would need copy in/out and the latter would not.
->>
->> But let me just stress that for direct descriptors, we cannot currently
->> call ioctl or set/getsockopt. This means we have to instantiate a
->> regular descriptor first, do those things, then register it to never use
->> the regular file descriptor again. That's wasteful, and this is what we
->> want to enable (direct use of ioctl set/getsockopt WITHOUT a normal file
->> descriptor). It's not just for "oh it'd be handy to also do this from
->> io_uring" even if that would be a worthwhile goal in itself.
->>
-> 
-> Christoph's patch set a few years back that removed set_fs broke the
-> ability to do in-kernel ioctl and {s,g}setsockopt calls. I did not
-> follow that change; was it a deliberate intent to not allow these
-> in-kernel calls vs wanting to remove the set_fs? e.g., can we add a
-> kioctl variant for in-kernel use of the APIs?
-
-I think it'd be much better to cleanly split it out rather than try and
-hack around it.
-
--- 
-Jens Axboe
+RnJvbTogRGF2aWQgQWhlcm4NCj4gU2VudDogMTEgQXByaWwgMjAyMyAxNjoyOA0KLi4uLg0KPiBD
+aHJpc3RvcGgncyBwYXRjaCBzZXQgYSBmZXcgeWVhcnMgYmFjayB0aGF0IHJlbW92ZWQgc2V0X2Zz
+IGJyb2tlIHRoZQ0KPiBhYmlsaXR5IHRvIGRvIGluLWtlcm5lbCBpb2N0bCBhbmQge3MsZ31zZXRz
+b2Nrb3B0IGNhbGxzLiBJIGRpZCBub3QNCj4gZm9sbG93IHRoYXQgY2hhbmdlOyB3YXMgaXQgYSBk
+ZWxpYmVyYXRlIGludGVudCB0byBub3QgYWxsb3cgdGhlc2UNCj4gaW4ta2VybmVsIGNhbGxzIHZz
+IHdhbnRpbmcgdG8gcmVtb3ZlIHRoZSBzZXRfZnM/IGUuZy4sIGNhbiB3ZSBhZGQgYQ0KPiBraW9j
+dGwgdmFyaWFudCBmb3IgaW4ta2VybmVsIHVzZSBvZiB0aGUgQVBJcz8NCg0KSSB0aGluayB0aGF0
+IHdhcyBhIHNpZGUgZWZmZWN0LCBhbmQgd2l0aCBubyBpbi10cmVlIGluLWtlcm5lbA0KdXNlcnMg
+KGFwYXJ0IGZyb20gbGltaXRlZCBjYWxscyBpbiBicGYpIGl0IHdhcyBkZWVtZWQgYWNjZXB0YWJs
+ZS4NCihJdCBpcyBhIFBJVEEgZm9yIGFueSBjb2RlIHRyeWluZyB0byB1c2UgU0NUUCBpbiBrZXJu
+ZWwuKQ0KDQpPbmUgcHJvYmxlbSBpcyB0aGF0IG5vdCBhbGwgc29ja29wdCBjYWxscyBwYXNzIHRo
+ZSBjb3JyZWN0IGxlbmd0aC4NCkFuZCBzb21lIG9mIHRoZW0gY2FuIGhhdmUgdmVyeSBsb25nIGJ1
+ZmZlcnMuDQpOb3QgdG8gbWVudGlvbiB0aGUgb25lcyB0aGF0IGFyZSByZWFkLW1vZGlmeS13cml0
+ZS4NCg0KQSBwbGF1c2libGUgc29sdXRpb24gaXMgdG8gcGFzcyBhICdmYXQgcG9pbnRlcicgdGhh
+dCBjb250YWlucw0Kc29tZSwgb3IgYWxsLCBvZjoNCgktIEEgdXNlcnNwYWNlIGJ1ZmZlciBwb2lu
+dGVyLg0KCS0gQSBrZXJuZWwgYnVmZmVyIHBvaW50ZXIuDQoJLSBUaGUgbGVuZ3RoIHN1cHBsaWVk
+IGJ5IHRoZSB1c2VyLg0KCS0gVGhlIGxlbmd0aCBvZiB0aGUga2VybmVsIGJ1ZmZlci4NCgk9IFRo
+ZSBudW1iZXIgb2YgYnl0ZXMgdG8gY29weSBvbiBjb21wbGV0aW9uLg0KRm9yIHNpbXBsZSB1c2Vy
+IHJlcXVlc3RzIHRoZSBzeXNjYWxsIGVudHJ5L2V4aXQgY29kZQ0Kd291bGQgY29weSB0aGUgZGF0
+YSB0byBhIHNob3J0IG9uLXN0YWNrIGJ1ZmZlci4NCktlcm5lbCB1c2VycyBqdXN0IHBhc3MgdGhl
+IGtlcm5lbCBhZGRyZXNzLg0KT2RkIHJlcXVlc3RzIGNhbiBqdXN0IHVzZSB0aGUgdXNlciBwb2lu
+dGVyLg0KDQpQcm9iYWJseSBuZWVkcyBhY2Nlc3NvcnMgdGhhdCBhZGQgaW4gYW4gb2Zmc2V0Lg0K
+DQpJdCBtaWdodCBhbHNvIGJlIHRoYXQgc29tZSBvZiB0aGUgcHJvYmxlbWF0aWMgc29ja29wdA0K
+d2VyZSBpbiBkZWNuZXQgLSBub3cgcmVtb3ZlZC4NCg0KCURhdmlkDQoNCi0NClJlZ2lzdGVyZWQg
+QWRkcmVzcyBMYWtlc2lkZSwgQnJhbWxleSBSb2FkLCBNb3VudCBGYXJtLCBNaWx0b24gS2V5bmVz
+LCBNSzEgMVBULCBVSw0KUmVnaXN0cmF0aW9uIE5vOiAxMzk3Mzg2IChXYWxlcykNCg=
