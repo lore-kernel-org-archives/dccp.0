@@ -1,7 +1,7 @@
-From: Jakub Kicinski <kuba@kernel.org>
-Date: Thu, 13 Apr 2023 14:45:14 +0000
-Subject: Re: [PATCH 0/5] add initial io_uring_cmd support for sockets
-Message-Id: <20230413074514.79cc036e@kernel.org>
+From: David Laight <David.Laight@ACULAB.COM>
+Date: Thu, 13 Apr 2023 14:57:15 +0000
+Subject: RE: [PATCH 0/5] add initial io_uring_cmd support for sockets
+Message-Id: <ccd3418b232c4d06b1729e84c2762dc4@AcuMS.aculab.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20230406144330.1932798-1-leitao@debian.org>
 In-Reply-To: <20230406144330.1932798-1-leitao@debian.org>
@@ -10,14 +10,22 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Thu, 13 Apr 2023 10:24:31 -0400 Willem de Bruijn wrote:
-> Probably also relevant is whether/how the approach can be extended
-> to [gs]etsockopt, as that was another example given, with the same
-> challenge.
-
-I had the same thought, given BPF filtering/integration with *etsockopt
-is repeatedly giving us grief.
-The only lesson from that I can think of is that we should perhaps
-suffer thru the one-by-one conversions for a while. Pulling the cases
-we inspected out into common code, rather than hope we can cover
-everything in one fell swoop.
+RnJvbTogV2lsbGVtIGRlIEJydWlqbg0KPiBTZW50OiAxMyBBcHJpbCAyMDIzIDE1OjI1DQouLi4N
+Cj4gPiBGb3IgaW5zdGFuY2UgdGhlIHJhd19pb2N0bCgpL3Jhd3Y2X2lvY3RsKCkgY2FzZS4gVGhl
+ICJhcmciIGFyZ3VtZW50IGlzDQo+ID4gdXNlZCBpbiBkaWZmZXJlbnQgd2F5cyAob25lIGZvciBp
+bnB1dCBhbmQgb25lIGZvciBvdXRwdXQpOg0KPiA+DQo+ID4gICAxKSBJZiBjbWQgPT0gU0lPQ09V
+VFEgb3IgU0lPQ0lOUSwgdGhlbiB0aGUgcmV0dXJuIHZhbHVlIHdpbGwgYmUNCj4gPiAgIHJldHVy
+bmVkIHRvIHVzZXJzcGFjZToNCj4gPiAgIAlwdXRfdXNlcihhbW91bnQsIChpbnQgX191c2VyICop
+YXJnKQ0KDQpUaGVyZSBpcyBhbHdheXMgdGhlIG9wdGlvbiBvZiBkZWZpbmluZyBhbHRlcm5hdGUg
+aW9jdGwNCidjbWQnIGNvZGVzIHRoYXQgdXNlciBJT1IoKSBhbmQgSU9XKCkgYW5kIHJlcXVpcmlu
+ZyB0aGF0DQppb191cmluZyBhcHBsaWNhdGlvbnMgdXNlIHRoZSBhbHRlcm5hdGUgZm9ybXMuDQoN
+ClRoZW4gaGF2ZSB0d28gJ2lvY3RsJyBmdW5jdGlvbnMgd2l0aCBhIG5ldyBvbmUgZm9yIElPUigp
+DQp0eXBlIGNvbW1hbmRzIGFuZCB0aGUgZXhpc3Rpbmcgb25lIGZvciBjb21wYXRpYmlsaXR5DQp0
+aGF0IG1pZ2h0IGp1c3QgZG8gYSB0cmFuc2xhdGlvbiAob3IgcmV0dXJuIGEgdHJhbnNsYXRlZA0K
+Y29tbWFuZCB0byBhdm9pZCBleHRyYSBzdGFjayB1c2UpLg0KDQpZb3UgbWF5IHN0aWxsIHdhbnQg
+dG8gcGFzcyB0aHJvdWdoIGJvdGggdGhlIGtlcm5lbCBhbmQNCnVzZXIgKGlmIGEgdXNlciByZXF1
+ZXN0KSBidWZmZXIgYWRkcmVzc2VzIHRvIGFsbG93IGZvcg0KdGhvc2UgYnJva2VuIHJlcXVlc3Rz
+IHdoZXJlIHRoZSBidWZmZXIgZGlyZWN0aW9uIGJpdHMNCmFyZSB3cm9uZy4NCg0KCURhdmlkDQoN
+Ci0NClJlZ2lzdGVyZWQgQWRkcmVzcyBMYWtlc2lkZSwgQnJhbWxleSBSb2FkLCBNb3VudCBGYXJt
+LCBNaWx0b24gS2V5bmVzLCBNSzEgMVBULCBVSw0KUmVnaXN0cmF0aW9uIE5vOiAxMzk3Mzg2IChX
+YWxlcykNCg=
