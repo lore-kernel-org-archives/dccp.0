@@ -1,7 +1,7 @@
-From: David Laight <David.Laight@ACULAB.COM>
-Date: Thu, 13 Apr 2023 14:57:15 +0000
-Subject: RE: [PATCH 0/5] add initial io_uring_cmd support for sockets
-Message-Id: <ccd3418b232c4d06b1729e84c2762dc4@AcuMS.aculab.com>
+From: Breno Leitao <leitao@debian.org>
+Date: Tue, 18 Apr 2023 13:23:15 +0000
+Subject: Re: [PATCH 0/5] add initial io_uring_cmd support for sockets
+Message-Id: <ZD6Zw1GAZR28++3v@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20230406144330.1932798-1-leitao@debian.org>
 In-Reply-To: <20230406144330.1932798-1-leitao@debian.org>
@@ -10,22 +10,55 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-RnJvbTogV2lsbGVtIGRlIEJydWlqbg0KPiBTZW50OiAxMyBBcHJpbCAyMDIzIDE1OjI1DQouLi4N
-Cj4gPiBGb3IgaW5zdGFuY2UgdGhlIHJhd19pb2N0bCgpL3Jhd3Y2X2lvY3RsKCkgY2FzZS4gVGhl
-ICJhcmciIGFyZ3VtZW50IGlzDQo+ID4gdXNlZCBpbiBkaWZmZXJlbnQgd2F5cyAob25lIGZvciBp
-bnB1dCBhbmQgb25lIGZvciBvdXRwdXQpOg0KPiA+DQo+ID4gICAxKSBJZiBjbWQgPT0gU0lPQ09V
-VFEgb3IgU0lPQ0lOUSwgdGhlbiB0aGUgcmV0dXJuIHZhbHVlIHdpbGwgYmUNCj4gPiAgIHJldHVy
-bmVkIHRvIHVzZXJzcGFjZToNCj4gPiAgIAlwdXRfdXNlcihhbW91bnQsIChpbnQgX191c2VyICop
-YXJnKQ0KDQpUaGVyZSBpcyBhbHdheXMgdGhlIG9wdGlvbiBvZiBkZWZpbmluZyBhbHRlcm5hdGUg
-aW9jdGwNCidjbWQnIGNvZGVzIHRoYXQgdXNlciBJT1IoKSBhbmQgSU9XKCkgYW5kIHJlcXVpcmlu
-ZyB0aGF0DQppb191cmluZyBhcHBsaWNhdGlvbnMgdXNlIHRoZSBhbHRlcm5hdGUgZm9ybXMuDQoN
-ClRoZW4gaGF2ZSB0d28gJ2lvY3RsJyBmdW5jdGlvbnMgd2l0aCBhIG5ldyBvbmUgZm9yIElPUigp
-DQp0eXBlIGNvbW1hbmRzIGFuZCB0aGUgZXhpc3Rpbmcgb25lIGZvciBjb21wYXRpYmlsaXR5DQp0
-aGF0IG1pZ2h0IGp1c3QgZG8gYSB0cmFuc2xhdGlvbiAob3IgcmV0dXJuIGEgdHJhbnNsYXRlZA0K
-Y29tbWFuZCB0byBhdm9pZCBleHRyYSBzdGFjayB1c2UpLg0KDQpZb3UgbWF5IHN0aWxsIHdhbnQg
-dG8gcGFzcyB0aHJvdWdoIGJvdGggdGhlIGtlcm5lbCBhbmQNCnVzZXIgKGlmIGEgdXNlciByZXF1
-ZXN0KSBidWZmZXIgYWRkcmVzc2VzIHRvIGFsbG93IGZvcg0KdGhvc2UgYnJva2VuIHJlcXVlc3Rz
-IHdoZXJlIHRoZSBidWZmZXIgZGlyZWN0aW9uIGJpdHMNCmFyZSB3cm9uZy4NCg0KCURhdmlkDQoN
-Ci0NClJlZ2lzdGVyZWQgQWRkcmVzcyBMYWtlc2lkZSwgQnJhbWxleSBSb2FkLCBNb3VudCBGYXJt
-LCBNaWx0b24gS2V5bmVzLCBNSzEgMVBULCBVSw0KUmVnaXN0cmF0aW9uIE5vOiAxMzk3Mzg2IChX
-YWxlcykNCg=
+On Thu, Apr 13, 2023 at 10:24:31AM -0400, Willem de Bruijn wrote:
+> > How to handle these contradictory behaviour ahead of time (at callee
+> > time, where the buffers will be prepared)?
+> 
+> Ah you found a counter-example to the simple pattern of put_user.
+> 
+> The answer perhaps depends on how many such counter-examples you
+> encounter in the list you gave. If this is the only one, exceptions
+> in the wrapper are reasonable. Not if there are many.
+
+
+Hello Williem,
+
+I spend sometime dealing with it, and the best way for me to figure out
+how much work this is, was implementing a PoC. You can find a basic PoC
+in the link below. It is not 100% complete (still need to convert 4
+simple ioctls), but, it deals with the most complicated cases. The
+missing parts are straighforward if we are OK with this approach.
+
+	https://github.com/leitao/linux/commits/ioctl_refactor
+
+Details
+===
+1)  Change the ioctl callback to use kernel memory arguments. This
+changes a lot of files but most of them are trivial. This is the new
+ioctl callback:
+
+struct proto {
+
+        int                     (*ioctl)(struct sock *sk, int cmd,
+-                                        unsigned long arg);
++                                        int *karg);
+
+	You can see the full changeset in the following commit (which is
+	the last in the tree above)
+	https://github.com/leitao/linux/commit/ad78da14601b078c4b6a9f63a86032467ab59bf7
+
+2) Create a wrapper (sock_skprot_ioctl()) that should be called instead
+of sk->sk_prot->ioctl(). For every exception, calls a specific function
+for the exception (basically ipmr_ioctl and ipmr_ioctl) (see more on 3)
+
+	This is the commit https://github.com/leitao/linux/commit/511592e549c39ef0de19efa2eb4382cac5786227
+
+3) There are two exceptions, they are ip{6}mr_ioctl() and pn_ioctl().
+ip{6}mr is the hardest one, and I implemented the exception flow for it.
+
+	You could find ipmr changes here:
+	https://github.com/leitao/linux/commit/659a76dc0547ab2170023f31e20115520ebe33d9
+
+Is this what you had in mind?
+
+Thank you!
