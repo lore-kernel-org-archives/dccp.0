@@ -1,7 +1,7 @@
-From: David Ahern <dsahern@kernel.org>
-Date: Sat, 20 May 2023 03:50:34 +0000
-Subject: Re: [PATCH 1/1] net: ioctl: Use kernel memory on protocol ioctl callbacks
-Message-Id: <e5a3b404-b958-c833-1032-70c78e159940@kernel.org>
+From: David Laight <David.Laight@ACULAB.COM>
+Date: Sat, 20 May 2023 12:48:21 +0000
+Subject: RE: [PATCH 1/1] net: ioctl: Use kernel memory on protocol ioctl callbacks
+Message-Id: <00e1ca50c7824750b24039c16a9d8bc9@AcuMS.aculab.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20230519135821.922326-2-leitao@debian.org>
 In-Reply-To: <20230519135821.922326-2-leitao@debian.org>
@@ -10,122 +10,32 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 5/19/23 7:58 AM, Breno Leitao wrote:
-> diff --git a/net/core/sock.c b/net/core/sock.c
-> index 5440e67bcfe3..47567909baf2 100644
-> --- a/net/core/sock.c
-> +++ b/net/core/sock.c
-> @@ -4106,3 +4109,107 @@ int sock_bind_add(struct sock *sk, struct sockaddr *addr, int addr_len)
->  	return sk->sk_prot->bind_add(sk, addr, addr_len);
->  }
->  EXPORT_SYMBOL(sock_bind_add);
-> +
-> +/* Copy 'size' bytes from userspace and do not copy anything back */
-> +int sock_skproto_ioctl_in(struct sock *sk, unsigned int cmd,
-> +			  void __user *arg)
-
-Unless I missed a reference, this one, the _inout, and the _out below
-can be marked static - they are not need outside of sock.c.
-
-
-> +{
-> +	int karg;
-> +
-> +	if (get_user(karg, (u32 __user *)arg))
-> +		return -EFAULT;
-> +
-> +	return sk->sk_prot->ioctl(sk, cmd, &karg);
-> +}
-> +
-> +/* Copy 'size' bytes from userspace and return `size` back to userspace */
-> +int sock_skproto_ioctl_inout(struct sock *sk, unsigned int cmd,
-> +			     void __user *arg, size_t size)
-> +{
-> +	void *ptr;
-> +	int ret;
-> +
-> +	ptr = kmalloc(size, GFP_KERNEL);
-> +	if (!ptr)
-> +		return -ENOMEM;
-> +
-> +	if (copy_from_user(ptr, arg, size)) {
-> +		ret = -EFAULT;
-> +		goto out;
-> +	}
-> +
-> +	ret = sk->sk_prot->ioctl(sk, cmd, ptr);
-> +	if (ret)
-> +		goto out;
-> +
-> +	if (copy_to_user(arg, ptr, size))
-> +		ret = -EFAULT;
-> +
-> +out:
-> +	kfree(ptr);
-> +	return ret;
-> +}
-> +
-> +/* This is the most common ioctl prep function, where the result (4 bytes) is
-> + * copied back to userspace if the ioctl() returns successfully. No input is
-> + * copied from userspace as input argument.
-> + */
-> +int sock_skproto_ioctl_out(struct sock *sk, unsigned int cmd,
-> +			   void __user *arg)
-> +{
-> +	int ret, karg = 0;
-> +
-> +	ret = sk->sk_prot->ioctl(sk, cmd, &karg);
-> +	if (ret)
-> +		return ret;
-> +
-> +	return put_user(karg, (int __user *)arg);
-> +}
-> +
-> +/* A wrapper around sock ioctls, which copies the data from userspace
-> + * (depending on the protocol/ioctl), and copies back the result to userspace.
-> + * The main motivation for this function is to pass kernel memory to the
-> + * protocol ioctl callsback, instead of userspace memory.
-> + */
-> +int sock_skprot_ioctl(struct sock *sk, unsigned int cmd,
-> +		      void __user *arg)
-> +{
-> +#ifdef CONFIG_IP_MROUTE
-> +	if (!strcmp(sk->sk_prot->name, "RAW")) {
-> +		switch (cmd) {
-> +		/* These userspace buffers will be consumed by ipmr_ioctl() */
-> +		case SIOCGETVIFCNT:
-> +			return sock_skproto_ioctl_inout(sk, cmd,
-> +				arg, sizeof(struct sioc_vif_req));
-> +		case SIOCGETSGCNT:
-> +			return sock_skproto_ioctl_inout(sk, cmd,
-> +				arg, sizeof(struct sioc_sg_req));
-> +		}
-> +	}
-> +#endif
-> +#ifdef CONFIG_IPV6_MROUTE
-> +	if (!strcmp(sk->sk_prot->name, "RAW6")) {
-> +		switch (cmd) {
-> +		/* These userspace buffers will be consumed by ip6mr_ioctl() */
-> +		case SIOCGETMIFCNT_IN6:
-> +			return sock_skproto_ioctl_inout(sk, cmd,
-> +				arg, sizeof(struct sioc_mif_req6));
-> +		case SIOCGETSGCNT_IN6:
-> +			return sock_skproto_ioctl_inout(sk, cmd,
-> +				arg, sizeof(struct sioc_sg_req6));
-> +		}
-> +	}
-> +#endif
-> +#ifdef CONFIG_PHONET
-> +	if (!strcmp(sk->sk_prot->name, "PHONET")) {
-> +		/* This userspace buffers will be consumed by pn_ioctl() */
-> +		switch (cmd) {
-> +		case SIOCPNADDRESOURCE:
-> +		case SIOCPNDELRESOURCE:
-> +			return sock_skproto_ioctl_in(sk, cmd, arg);
-> +		}
-> +	}
-> +#endif
-> +
-> +	return sock_skproto_ioctl_out(sk, cmd, arg);
-> +}
-
+RnJvbTogV2lsbGVtIGRlIEJydWlqbg0KPiBTZW50OiAxOSBNYXkgMjAyMyAxODowNQ0KLi4uDQo+
+ID4gU2hvdWxkIEkgc3RhY2sgYWxsb2NhdGUgYWxsIHRoZSA0IHN0cnVjdHVyZXMgc29ja19za3By
+b3RfaW9jdGwgYW5kIHBhc3MNCj4gPiB0aGVtIHRvIHNvY2tfc2twcm90b19pb2N0bF9pbm91dCgp
+IHRvZ2V0aGVyIHdpdGggdGhlIHNpemU/ICh1c2luZyB0aGUNCj4gPiBvcmlnaW5hbCBuYW1lIHRv
+IGF2b2lkIGNvbmZ1c2lvbiAtIHdpbGwgcmVuYW1lIGluIFYyKQ0KPiA+DQo+ID4gSSBtZWFuLCB3
+cml0aW5nIHNvbWV0aGluZyBhczoNCj4gPg0KPiA+IGludCBzb2NrX3NrcHJvdF9pb2N0bChzdHJ1
+Y3Qgc29jayAqc2ssIHVuc2lnbmVkIGludCBjbWQNCj4gPiAgICAgICAgICAgICAgICAgICAgICB2
+b2lkIF9fdXNlciAqYXJnYA0KPiA+IHsNCj4gPiAgICAgICAgIHN0cnVjdCBzaW9jX3ZpZl9yZXEg
+c2lvY192aWZfcmVxX2FyZzsNCj4gPiAgICAgICAgIHN0cnVjdCBzaW9jX3NnX3JlcSBzaW9jX3Nn
+X3JlcV9hcmc7DQo+ID4gICAgICAgICBzdHJ1Y3Qgc2lvY19taWZfcmVxNiBzaW9jX21pZl9yZXE2
+X2FyZzsNCj4gPiAgICAgICAgIHN0cnVjdCBzaW9jX3NnX3JlcTYgc2lvY19zZ19yZXE2X2FyZzsN
+Cj4gPg0KPiA+ICAgICAgICAgLi4NCj4gPg0KPiA+ICAgICAgICAgaWYgKCFzdHJjbXAoc2stPnNr
+X3Byb3QtPm5hbWUsICJSQVc2IikpIHsNCj4gPiAgICAgICAgIHN3aXRjaCAoY21kKSB7DQo+ID4g
+ICAgICAgICAgICAgICAgY2FzZSBTSU9DR0VUTUlGQ05UX0lONjoNCj4gPiAgICAgICAgICAgICAg
+ICAgICAgICAgIHJldHVybiBzb2NrX3NrcHJvdG9faW9jdGxfaW5vdXQoc2ssIGNtZCwNCj4gPiAg
+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgYXJnLCAmc2lvY19taWZfcmVxNl9hcmcsIHNp
+emVvZihzaW9jX21pZl9yZXE2X2FyZyk7DQo+ID4gICAgICAgICAgICAgICAgY2FzZSBTSU9DR0VU
+U0dDTlRfSU42Og0KPiA+ICAgICAgICAgICAgICAgICAgICAgICAgcmV0dXJuIHNvY2tfc2twcm90
+b19pb2N0bF9pbm91dChzaywgY21kLA0KPiA+ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+ICBhcmcsICZzaW9jX3NnX3JlcTZfYXJnLCBzaXplb2Yoc2lvY19zZ19yZXE2X2FyZykpOw0KPiA+
+ICAgICAgICAgICAgICAgIH0NCj4gPiAgICAgICAgfQ0KPiA+ICAgICAgICAuLi4NCj4gPiB9DQo+
+IA0KPiBTbGlnaHQgcHJlZmVyZW5jZSBmb3IgdXNpbmcgYnJhY2VzIGluIHRoZSBpbmRpdmlkdWFs
+IGNhc2Ugc3RhdGVtZW50cw0KPiBhbmQgZGVmaW5pbmcgdGhlIHZhcmlhYmxlcyBpbiB0aGF0IGJs
+b2NrIHNjb3BlLiBTZWUgZm9yIGluc3RhbmNlDQo+IGRvX3RjcF9zZXRzb2Nrb3B0Lg0KDQpCZXdh
+cmUgb2Ygc3RhY2sgYmxvYXQgZXNwZWNpYWxseSB1bmRlciBLQVNBTiAoZXRjKS4NCkl0IG1pZ2h0
+IGJlIGJldHRlciB0byB1c2UgYSB1bmlvbi4NClRoZW4gdGhlIHN3aXRjaCBzdGF0ZW1lbnQgb25s
+eSBuZWVkIGRldGVybWluZSB0aGUgcmVxdWlyZWQgbGVuZ3RoLg0KDQoJRGF2aWQNCg0KLQ0KUmVn
+aXN0ZXJlZCBBZGRyZXNzIExha2VzaWRlLCBCcmFtbGV5IFJvYWQsIE1vdW50IEZhcm0sIE1pbHRv
+biBLZXluZXMsIE1LMSAxUFQsIFVLDQpSZWdpc3RyYXRpb24gTm86IDEzOTczODYgKFdhbGVzKQ0K
