@@ -1,7 +1,7 @@
-From: Willem de Bruijn <willemdebruijn.kernel@gmail.com>
-Date: Thu, 25 May 2023 16:06:00 +0000
+From: Breno Leitao <leitao@debian.org>
+Date: Fri, 26 May 2023 08:49:10 +0000
 Subject: Re: [PATCH net-next v3] net: ioctl: Use kernel memory on protocol ioctl callbacks
-Message-Id: <CAF=yD-LXcufhJBpkEcUuphFpR1TA4=QwUXw4sKFsSiEL_mwG4Q@mail.gmail.com>
+Message-Id: <ZHByhjt2xYf5xKAu@gmail.com>
 List-Id: <dccp.vger.kernel.org>
 References: <20230525125503.400797-1-leitao@debian.org>
 In-Reply-To: <20230525125503.400797-1-leitao@debian.org>
@@ -10,47 +10,39 @@ Content-Type: text/plain; charset="windows-1252"
 Content-Transfer-Encoding: quoted-printable
 To: dccp@vger.kernel.org
 
-On Thu, May 25, 2023 at 11:34=E2=80=AFAM David Ahern <dsahern@kernel.org> w=
-rote:
->
-> On 5/25/23 9:05 AM, Willem de Bruijn wrote:
-> >> +/* A wrapper around sock ioctls, which copies the data from userspace
-> >> + * (depending on the protocol/ioctl), and copies back the result to u=
-serspace.
-> >> + * The main motivation for this function is to pass kernel memory to =
-the
-> >> + * protocol ioctl callbacks, instead of userspace memory.
-> >> + */
-> >> +int sk_ioctl(struct sock *sk, unsigned int cmd, void __user *arg)
-> >> +{
-> >> +       int rc =3D 1;
-> >> +
-> >> +       if (ipmr_is_sk(sk))
-> >> +               rc =3D ipmr_sk_ioctl(sk, cmd, arg);
-> >> +       else if (ip6mr_is_sk(sk))
-> >> +               rc =3D ip6mr_sk_ioctl(sk, cmd, arg);
-> >> +       else if (phonet_is_sk(sk))
-> >> +               rc =3D phonet_sk_ioctl(sk, cmd, arg);
+On Thu, May 25, 2023 at 11:05:40AM -0400, Willem de Bruijn wrote:
+> On Thu, May 25, 2023 at 8:55=E2=80=AFAM Breno Leitao <leitao@debian.org> =
+wrote:
+> > @@ -1547,6 +1547,28 @@ int ip_mroute_setsockopt(struct sock *sk, int op=
+tname, sockptr_t optval,
+> >         return ret;
+> >  }
 > >
-> > I don't understand what this buys us vs testing the sk_family,
-> > sk_protocol and cmd here.
->
-> To keep protocol specific code out of core files is the reason I
-> suggested it.
+> > +/* Execute if this ioctl is a special mroute ioctl */
+> > +int ipmr_sk_ioctl(struct sock *sk, unsigned int cmd, void __user *arg)
+> > +{
+> > +       switch (cmd) {
+> > +       /* These userspace buffers will be consumed by ipmr_ioctl() */
+> > +       case SIOCGETVIFCNT: {
+> > +               struct sioc_vif_req buffer;
+> > +
+> > +               return sock_ioctl_inout(sk, cmd, arg, &buffer,
+> > +                                     sizeof(buffer));
+> > +               }
+>=20
+> More importantly, if we go down the path of demultiplexing in protocol
+> independent code to call protocol specific handlers, then there there
+> is no need to have them call protocol independent helpers like
+> sock_ioct_inout again. Just call the protocol-specific ioctl handlers
+> directly?
 
-I guess you object to demultiplexing based on per-family
-protocol and ioctl cmd constants directly in this file?
+That is what I was expecting, but, the code is exactly the same and I
+kept it in the generic section. This is what this code needs to do:
 
-That only requires including the smaller uapi headers.
+ * Copy X byte from userspace
+ * sk->sk_prot->ioctl()
+ * Copy X bytes back to userspace
 
-But now net/core/sock.h now still has to add includes
-linux/mroute.h, linux/mroute6.h and net/phonet/phonet.h.
-
-Aside on phonet_is_sk, if we're keeping this: this should be
-sk_is_phonet? Analogous to sk_is_tcp and such. And, it should suffice
-to  demultiplex based on the protocol family, without testing the
-type or protocol. The family is defined in protocol-independent header
-linux/socket.h. The differences between
-PN_PROTO_PHONET and PN_PROTO_PIPE should be handled inside the family
-code. So I think it is cleaner just to open-coded as `if
-(sk->sk_family =3D=3D PF_PHONET)`
+I tried to keep the code generic enough that it could be reused.
+I can definitely push the same code to two different protocols, if you
+prefer, no strong opinion.=20
