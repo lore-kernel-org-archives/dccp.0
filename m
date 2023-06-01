@@ -1,24 +1,49 @@
-From: David Ahern <dsahern@kernel.org>
-Date: Fri, 23 Jun 2023 15:20:25 +0000
-Subject: Re: [RFC PATCH v2 1/4] net: wire up support for file_operations->uring_cmd()
-Message-Id: <5c6dc00b-9e25-501f-1497-ce7f67694a0e@kernel.org>
+From: kernel test robot <lkp@intel.com>
+Date: Thu, 01 Jun 2023 03:27:43 +0000
+Subject: Re: [PATCH net-next v4] net: ioctl: Use kernel memory on protocol ioctl callbacks
+Message-Id: <202306011128.2sM3vsBl-lkp@intel.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20230614110757.3689731-2-leitao@debian.org>
-In-Reply-To: <20230614110757.3689731-2-leitao@debian.org>
+References: <20230530175403.2434218-1-leitao@debian.org>
+In-Reply-To: <20230530175403.2434218-1-leitao@debian.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On 6/23/23 3:17 AM, Stefan Metzmacher wrote:
-> 
-> I'd like to keep it passed to socket layer, so that sockets could
-> implement some extra features in an async fashion.
-> 
-> What about having the function you posted below (and in v3)
-> as a default implementation if proto_ops->uring_cmd is NULL?
-> 
+Hi Breno,
 
-Nothing about this set needs uring_cmd added to proto ops. It adds uring
-commands which are wrappers to networking APIs. Let's keep proper APIs
-between subsystems.
+kernel test robot noticed the following build errors:
+
+[auto build test ERROR on net-next/main]
+
+url:    https://github.com/intel-lab-lkp/linux/commits/Breno-Leitao/net-ioctl-Use-kernel-memory-on-protocol-ioctl-callbacks/20230531-015554
+base:   net-next/main
+patch link:    https://lore.kernel.org/r/20230530175403.2434218-1-leitao%40debian.org
+patch subject: [PATCH net-next v4] net: ioctl: Use kernel memory on protocol ioctl callbacks
+config: mips-allmodconfig (https://download.01.org/0day-ci/archive/20230601/202306011128.2sM3vsBl-lkp@intel.com/config)
+compiler: mips-linux-gcc (GCC) 12.3.0
+reproduce (this is a W=1 build):
+        mkdir -p ~/bin
+        wget https://raw.githubusercontent.com/intel/lkp-tests/master/sbin/make.cross -O ~/bin/make.cross
+        chmod +x ~/bin/make.cross
+        # https://github.com/intel-lab-lkp/linux/commit/f97a3206f5ae59ecb0c7105225c5230b343c6c54
+        git remote add linux-review https://github.com/intel-lab-lkp/linux
+        git fetch --no-tags linux-review Breno-Leitao/net-ioctl-Use-kernel-memory-on-protocol-ioctl-callbacks/20230531-015554
+        git checkout f97a3206f5ae59ecb0c7105225c5230b343c6c54
+        # save the config file
+        mkdir build_dir && cp config build_dir/.config
+        COMPILER_INSTALL_PATH=$HOME/0day COMPILER=gcc-12.3.0 ~/bin/make.cross W=1 O=build_dir ARCH=mips olddefconfig
+        COMPILER_INSTALL_PATH=$HOME/0day COMPILER=gcc-12.3.0 ~/bin/make.cross W=1 O=build_dir ARCH=mips SHELL=/bin/bash
+
+If you fix the issue, kindly add following tag where applicable
+| Reported-by: kernel test robot <lkp@intel.com>
+| Closes: https://lore.kernel.org/oe-kbuild-all/202306011128.2sM3vsBl-lkp@intel.com/
+
+All errors (new ones prefixed by >>):
+
+   mips-linux-ld: net/core/sock.o: in function `sk_ioctl':
+>> sock.c:(.text.sk_ioctl+0x12c): undefined reference to `ip6mr_sk_ioctl'
+
+-- 
+0-DAY CI Kernel Test Service
+https://github.com/intel/lkp-tests/wiki
