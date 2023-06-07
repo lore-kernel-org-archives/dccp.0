@@ -1,7 +1,7 @@
-From: Willem de Bruijn <willemdebruijn.kernel@gmail.com>
-Date: Wed, 07 Jun 2023 12:15:28 +0000
-Subject: RE: [PATCH net-next v6] net: ioctl: Use kernel memory on protocol ioctl callbacks
-Message-Id: <648074e0e52d9_143118294e0@willemb.c.googlers.com.notmuch>
+From: David Ahern <dsahern@kernel.org>
+Date: Wed, 07 Jun 2023 14:45:49 +0000
+Subject: Re: [PATCH net-next v6] net: ioctl: Use kernel memory on protocol ioctl callbacks
+Message-Id: <ef90361e-15b2-7ce8-fcec-21fccebe727e@kernel.org>
 List-Id: <dccp.vger.kernel.org>
 References: <20230606180045.827659-1-leitao@debian.org>
 In-Reply-To: <20230606180045.827659-1-leitao@debian.org>
@@ -10,7 +10,7 @@ Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Breno Leitao wrote:
+On 6/6/23 12:00 PM, Breno Leitao wrote:
 > Most of the ioctls to net protocols operates directly on userspace
 > argument (arg). Usually doing get_user()/put_user() directly in the
 > ioctl callback.  This is not flexible, because it is hard to reuse these
@@ -75,5 +75,12 @@ Breno Leitao wrote:
 > calls sk_ioctl(), which will handle all cases.
 > 
 > Signed-off-by: Breno Leitao <leitao@debian.org>
+> --
 
-Reviewed-by: Willem de Bruijn <willemb@google.com>
+It looks good to me, so:
+Reviewed-by: David Ahern <dsahern@kernel.org>
+
+What kind of testing was done with the patch? Would be good to run
+through a NOS style of test suites to make sure the ipmr and ip6mr
+changes are correct. (cc'ed Ido since the mlxsw crew has a really good
+test up)
