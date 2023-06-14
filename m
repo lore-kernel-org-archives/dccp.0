@@ -1,63 +1,85 @@
 From: Breno Leitao <leitao@debian.org>
-Date: Wed, 14 Jun 2023 11:07:53 +0000
-Subject: [RFC PATCH v2 0/4] add initial io_uring_cmd support for sockets
-Message-Id: <20230614110757.3689731-1-leitao@debian.org>
+Date: Wed, 14 Jun 2023 11:07:57 +0000
+Subject: [RFC PATCH v2 4/4] net: add uring_cmd callback to raw "protocol"
+Message-Id: <20230614110757.3689731-5-leitao@debian.org>
 List-Id: <dccp.vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-This patchset creates the initial plumbing for a io_uring command for
-sockets.
+This is the implementation of uring_cmd for the raw "protocol". It
+basically encompasses SOCKET_URING_OP_SIOCOUTQ and
+SOCKET_URING_OP_SIOCINQ, which call raw_ioctl with SIOCOUTQ and SIOCINQ.
 
-For now, create two uring commands for sockets, SOCKET_URING_OP_SIOCOUTQ
-and SOCKET_URING_OP_SIOCINQ, which are available in TCP, UDP and RAW
-sockets.
+These two commands (SIOCOUTQ and SIOCINQ), are the only two commands
+that are handled by raw_ioctl().
 
-In order to test this code, I created a liburing test, which is
-currently located at [1], and I will create a pull request once we are
-good with this patchset.
+Signed-off-by: Breno Leitao <leitao@debian.org>
+---
+ include/net/raw.h |  3 +++
+ net/ipv4/raw.c    | 23 +++++++++++++++++++++++
+ 2 files changed, 26 insertions(+)
 
-V1 submission was sent a while ago[2], but it required more plumbing
-that were done in different patch submissions[3][4].
-
-PS: This patchset depends on a commit[4] that is not committed to the
-tree yet (but close too, IMO).
-
-[1] Link: https://github.com/leitao/liburing/blob/master/test/socket-io-cmd.c
-[2] Link: https://lore.kernel.org/lkml/20230406144330.1932798-1-leitao@debian.org/
-[3] Link: https://lore.kernel.org/lkml/0a50fae3-1cf4-475e-48ae-25f41967842f@kernel.dk/
-[4] Link: https://lore.kernel.org/lkml/20230609152800.830401-1-leitao@debian.org/
-
-V1->V2:
-	* Rely on a generic socket->ioctl infrastructure instead of
-	  reimplementing it
-
-Breno Leitao (4):
-  net: wire up support for file_operations->uring_cmd()
-  net: add uring_cmd callback to UDP
-  net: add uring_cmd callback to TCP
-  net: add uring_cmd callback to raw "protocol"
-
- include/linux/net.h      |  2 ++
- include/net/raw.h        |  3 +++
- include/net/sock.h       |  6 ++++++
- include/net/tcp.h        |  2 ++
- include/net/udp.h        |  2 ++
- include/uapi/linux/net.h |  5 +++++
- net/core/sock.c          | 17 +++++++++++++++--
- net/dccp/ipv4.c          |  1 +
- net/ipv4/af_inet.c       |  3 +++
- net/ipv4/raw.c           | 23 +++++++++++++++++++++++
- net/ipv4/tcp.c           | 21 +++++++++++++++++++++
- net/ipv4/tcp_ipv4.c      |  1 +
- net/ipv4/udp.c           | 22 ++++++++++++++++++++++
- net/l2tp/l2tp_ip.c       |  1 +
- net/mptcp/protocol.c     |  1 +
- net/sctp/protocol.c      |  1 +
- net/socket.c             | 13 +++++++++++++
- 17 files changed, 122 insertions(+), 2 deletions(-)
-
+diff --git a/include/net/raw.h b/include/net/raw.h
+index 32a61481a253..5d5ec63274a8 100644
+--- a/include/net/raw.h
++++ b/include/net/raw.h
+@@ -96,4 +96,7 @@ static inline bool raw_sk_bound_dev_eq(struct net *net, int bound_dev_if,
+ #endif
+ }
+ 
++int raw_uring_cmd(struct sock *sk, struct io_uring_cmd *cmd,
++		  unsigned int issue_flags);
++
+ #endif	/* _RAW_H */
+diff --git a/net/ipv4/raw.c b/net/ipv4/raw.c
+index 7782ff5e6539..31c3f9c41354 100644
+--- a/net/ipv4/raw.c
++++ b/net/ipv4/raw.c
+@@ -75,6 +75,7 @@
+ #include <linux/netfilter_ipv4.h>
+ #include <linux/compat.h>
+ #include <linux/uio.h>
++#include <linux/io_uring.h>
+ 
+ struct raw_frag_vec {
+ 	struct msghdr *msg;
+@@ -885,6 +886,27 @@ static int raw_ioctl(struct sock *sk, int cmd, int *karg)
+ 	}
+ }
+ 
++int raw_uring_cmd(struct sock *sk, struct io_uring_cmd *cmd,
++		  unsigned int issue_flags)
++{
++	int ret;
++
++	switch (cmd->sqe->cmd_op) {
++	case SOCKET_URING_OP_SIOCINQ: {
++		if (raw_ioctl(sk, SIOCINQ, &ret))
++			return -EFAULT;
++		return ret;
++	}
++	case SOCKET_URING_OP_SIOCOUTQ:
++		if (raw_ioctl(sk, SIOCOUTQ, &ret))
++			return -EFAULT;
++		return ret;
++	default:
++		return -ENOIOCTLCMD;
++	}
++}
++EXPORT_SYMBOL_GPL(raw_uring_cmd);
++
+ #ifdef CONFIG_COMPAT
+ static int compat_raw_ioctl(struct sock *sk, unsigned int cmd, unsigned long arg)
+ {
+@@ -924,6 +946,7 @@ struct proto raw_prot = {
+ 	.connect	   = ip4_datagram_connect,
+ 	.disconnect	   = __udp_disconnect,
+ 	.ioctl		   = raw_ioctl,
++	.uring_cmd	   = raw_uring_cmd,
+ 	.init		   = raw_sk_init,
+ 	.setsockopt	   = raw_setsockopt,
+ 	.getsockopt	   = raw_getsockopt,
 -- 
 2.34.1
