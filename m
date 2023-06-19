@@ -1,150 +1,96 @@
-From: Breno Leitao <leitao@debian.org>
-Date: Mon, 19 Jun 2023 11:20:35 +0000
+From: Kanchan Joshi <joshi.k@samsung.com>
+Date: Mon, 19 Jun 2023 14:18:35 +0000
 Subject: Re: [RFC PATCH v2 1/4] net: wire up support for file_operations->uring_cmd()
-Message-Id: <ZJA6AwbRWtSiJ5pL@gmail.com>
+Message-Id: <20230619140635.GA4046@green245>
+MIME-Version: 1
+Content-Type: multipart/mixed; boundary="----PcSJ1RlEyPKfjXIiTsweH-7MCPtMf9v3nlMrb72LWO-fIHxy=_7a99d_"
 List-Id: <dccp.vger.kernel.org>
 References: <20230614110757.3689731-2-leitao@debian.org>
 In-Reply-To: <20230614110757.3689731-2-leitao@debian.org>
-MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Wed, Jun 14, 2023 at 08:15:10AM -0700, David Ahern wrote:
-> On 6/14/23 5:07 AM, Breno Leitao wrote:
-> io_uring is just another in-kernel user of sockets. There is no reason
-> for io_uring references to be in core net code. It should be using
-> exposed in-kernel APIs and doing any translation of its op codes in
-> io_uring/  code.
+------PcSJ1RlEyPKfjXIiTsweH-7MCPtMf9v3nlMrb72LWO-fIHxy=_7a99d_
+Content-Type: text/plain; charset="utf-8"; format="flowed"
+Content-Disposition: inline
 
-Thanks for the feedback. If we want to keep the network subsystem
-untouched, then I we can do it using an approach similar to the
-following. Is this a better approach moving forward?
+On Mon, Jun 19, 2023 at 10:28:30AM +0100, Pavel Begunkov wrote:
+>On 6/14/23 16:15, David Ahern wrote:
+>>On 6/14/23 5:07 AM, Breno Leitao wrote:
+>>>diff --git a/include/linux/net.h b/include/linux/net.h
+>>>index 8defc8f1d82e..58dea87077af 100644
+>>>--- a/include/linux/net.h
+>>>+++ b/include/linux/net.h
+>>>@@ -182,6 +182,8 @@ struct proto_ops {
+>>>  	int	 	(*compat_ioctl) (struct socket *sock, unsigned int cmd,
+>>>  				      unsigned long arg);
+>>>  #endif
+>>>+	int		(*uring_cmd)(struct socket *sock, struct io_uring_cmd *cmd,
+>>>+				     unsigned int issue_flags);
+>>>  	int		(*gettstamp) (struct socket *sock, void __user *userstamp,
+>>>  				      bool timeval, bool time32);
+>>>  	int		(*listen)    (struct socket *sock, int len);
+>>>diff --git a/include/net/sock.h b/include/net/sock.h
+>>>index 62a1b99da349..a49b8b19292b 100644
+>>>--- a/include/net/sock.h
+>>>+++ b/include/net/sock.h
+>>>@@ -111,6 +111,7 @@ typedef struct {
+>>>  struct sock;
+>>>  struct proto;
+>>>  struct net;
+>>>+struct io_uring_cmd;
+>>>  typedef __u32 __bitwise __portpair;
+>>>  typedef __u64 __bitwise __addrpair;
+>>>@@ -1259,6 +1260,9 @@ struct proto {
+>>>  	int			(*ioctl)(struct sock *sk, int cmd,
+>>>  					 int *karg);
+>>>+	int			(*uring_cmd)(struct sock *sk,
+>>>+					     struct io_uring_cmd *cmd,
+>>>+					     unsigned int issue_flags);
+>>>  	int			(*init)(struct sock *sk);
+>>>  	void			(*destroy)(struct sock *sk);
+>>>  	void			(*shutdown)(struct sock *sk, int how);
+>>>@@ -1934,6 +1938,8 @@ int sock_common_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
+>>>  			int flags);
+>>>  int sock_common_setsockopt(struct socket *sock, int level, int optname,
+>>>  			   sockptr_t optval, unsigned int optlen);
+>>>+int sock_common_uring_cmd(struct socket *sock, struct io_uring_cmd *cmd,
+>>>+			  unsigned int issue_flags);
+>>>  void sk_common_release(struct sock *sk);
+>>>diff --git a/net/core/sock.c b/net/core/sock.c
+>>>index 1df7e432fec5..339fa74db60f 100644
+>>>--- a/net/core/sock.c
+>>>+++ b/net/core/sock.c
+>>>@@ -3668,6 +3668,18 @@ int sock_common_setsockopt(struct socket *sock, int level, int optname,
+>>>  }
+>>>  EXPORT_SYMBOL(sock_common_setsockopt);
+>>>+int sock_common_uring_cmd(struct socket *sock, struct io_uring_cmd *cmd,
+>>>+			  unsigned int issue_flags)
+>>>+{
+>>>+	struct sock *sk = sock->sk;
+>>>+
+>>>+	if (!sk->sk_prot || !sk->sk_prot->uring_cmd)
+>>>+		return -EOPNOTSUPP;
+>>>+
+>>>+	return sk->sk_prot->uring_cmd(sk, cmd, issue_flags);
+>>>+}
+>>>+EXPORT_SYMBOL(sock_common_uring_cmd);
+>>>+
+>>
+>>
+>>io_uring is just another in-kernel user of sockets. There is no reason
+>>for io_uring references to be in core net code. It should be using
+>>exposed in-kernel APIs and doing any translation of its op codes in
+>>io_uring/  code.
+>
+>That callback is all about file dependent operations, just like ioctl.
+>And as the patch in question is doing socket specific stuff, I think
+>architecturally it fits well. 
 
---
+I also feel that it fits well.
+Other users of uring-cmd (nvme, ublk) follow the same model.
 
-From: Breno Leitao <leitao@debian.org>
-Date: Mon, 19 Jun 2023 03:37:40 -0700
-Subject: [RFC PATCH v2] io_uring: add initial io_uring_cmd support for sockets
+------PcSJ1RlEyPKfjXIiTsweH-7MCPtMf9v3nlMrb72LWO-fIHxy=_7a99d_
+Content-Type: text/plain; charset="utf-8"
 
-Enable io_uring command operations on sockets. Create two
-SOCKET_URING_OP commands that will operate on sockets.
 
-For that, use the file_operations->uring_cmd callback, and map it to a
-uring socket callback, which handles the SOCKET_URING_OP accordingly.
-
-Signed-off-by: Breno Leitao <leitao@debian.org>
----
- include/linux/io_uring.h      |  6 ++++++
- include/uapi/linux/io_uring.h |  8 ++++++++
- io_uring/uring_cmd.c          | 27 +++++++++++++++++++++++++++
- net/socket.c                  |  2 ++
- 4 files changed, 43 insertions(+)
-
-diff --git a/include/linux/io_uring.h b/include/linux/io_uring.h
-index 7fe31b2cd02f..d1b20e2a9fb0 100644
---- a/include/linux/io_uring.h
-+++ b/include/linux/io_uring.h
-@@ -71,6 +71,7 @@ static inline void io_uring_free(struct task_struct *tsk)
- 	if (tsk->io_uring)
- 		__io_uring_free(tsk);
- }
-+int uring_sock_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags);
- #else
- static inline int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
- 			      struct iov_iter *iter, void *ioucmd)
-@@ -102,6 +103,11 @@ static inline const char *io_uring_get_opcode(u8 opcode)
- {
- 	return "";
- }
-+static inline int uring_sock_cmd(struct io_uring_cmd *cmd,
-+				 unsigned int issue_flags)
-+{
-+	return -EOPNOTSUPP;
-+}
- #endif
- 
- #endif
-diff --git a/include/uapi/linux/io_uring.h b/include/uapi/linux/io_uring.h
-index 0716cb17e436..d93a5ee7d984 100644
---- a/include/uapi/linux/io_uring.h
-+++ b/include/uapi/linux/io_uring.h
-@@ -703,6 +703,14 @@ struct io_uring_recvmsg_out {
- 	__u32 flags;
- };
- 
-+/*
-+ * Argument for IORING_OP_URING_CMD when file is a socket
-+ */
-+enum {
-+	SOCKET_URING_OP_SIOCINQ         = 0,
-+	SOCKET_URING_OP_SIOCOUTQ,
-+};
-+
- #ifdef __cplusplus
- }
- #endif
-diff --git a/io_uring/uring_cmd.c b/io_uring/uring_cmd.c
-index 5e32db48696d..dcbe6493b03f 100644
---- a/io_uring/uring_cmd.c
-+++ b/io_uring/uring_cmd.c
-@@ -7,6 +7,7 @@
- #include <linux/nospec.h>
- 
- #include <uapi/linux/io_uring.h>
-+#include <uapi/asm-generic/ioctls.h>
- 
- #include "io_uring.h"
- #include "rsrc.h"
-@@ -156,3 +157,29 @@ int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
- 	return io_import_fixed(rw, iter, req->imu, ubuf, len);
- }
- EXPORT_SYMBOL_GPL(io_uring_cmd_import_fixed);
-+
-+int uring_sock_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
-+{
-+	struct socket *sock = cmd->file->private_data;
-+	struct sock *sk = sock->sk;
-+	int ret, arg = 0;
-+
-+	if (!sk->sk_prot || !sk->sk_prot->ioctl)
-+		return -EOPNOTSUPP;
-+
-+	switch (cmd->sqe->cmd_op) {
-+	case SOCKET_URING_OP_SIOCINQ:
-+		ret = sk->sk_prot->ioctl(sk, SIOCINQ, &arg);
-+		if (ret)
-+			return ret;
-+		return arg;
-+	case SOCKET_URING_OP_SIOCOUTQ:
-+		ret = sk->sk_prot->ioctl(sk, SIOCOUTQ, &arg);
-+		if (ret)
-+			return ret;
-+		return arg;
-+	default:
-+		return -EOPNOTSUPP;
-+	}
-+}
-+EXPORT_SYMBOL_GPL(uring_sock_cmd);
-diff --git a/net/socket.c b/net/socket.c
-index b778fc03c6e0..db11e94d2259 100644
---- a/net/socket.c
-+++ b/net/socket.c
-@@ -88,6 +88,7 @@
- #include <linux/xattr.h>
- #include <linux/nospec.h>
- #include <linux/indirect_call_wrapper.h>
-+#include <linux/io_uring.h>
- 
- #include <linux/uaccess.h>
- #include <asm/unistd.h>
-@@ -159,6 +160,7 @@ static const struct file_operations socket_file_ops = {
- #ifdef CONFIG_COMPAT
- 	.compat_ioctl = compat_sock_ioctl,
- #endif
-+	.uring_cmd =    uring_sock_cmd,
- 	.mmap =		sock_mmap,
- 	.release =	sock_close,
- 	.fasync =	sock_fasync,
--- 
-2.34.1
+------PcSJ1RlEyPKfjXIiTsweH-7MCPtMf9v3nlMrb72LWO-fIHxy=_7a99d_--
