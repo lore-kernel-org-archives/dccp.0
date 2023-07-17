@@ -1,34 +1,30 @@
-From: patchwork-bot+netdevbpf@kernel.org
-Date: Fri, 28 Jul 2023 00:20:20 +0000
-Subject: Re: [PATCH net-next] dccp: Remove unused declaration dccp_feat_initialise_sysctls()
-Message-Id: <169050362096.24970.7000722732893710320.git-patchwork-notify@kernel.org>
+From: Guillaume Nault <gnault@redhat.com>
+Date: Mon, 17 Jul 2023 13:53:24 +0000
+Subject: [PATCH net-next 0/3] net: Remove more RTO_ONLINK users.
+Message-Id: <cover.1689600901.git.gnault@redhat.com>
 List-Id: <dccp.vger.kernel.org>
-References: <20230726143239.9904-1-yuehaibing@huawei.com>
-In-Reply-To: <20230726143239.9904-1-yuehaibing@huawei.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hello:
+Code that initialise a flowi4 structure manually before doing a fib
+lookup can easily avoid overloading ->flowi4_tos with the RTO_ONLINK
+bit. They can just set ->flowi4_scope correctly instead.
 
-This patch was applied to netdev/net-next.git (main)
-by Jakub Kicinski <kuba@kernel.org>:
+Properly separating the routing scope from ->flowi4_tos will allow to
+eventually convert this field to dscp_t (to ensure proper separation
+between DSCP and ECN).
 
-On Wed, 26 Jul 2023 22:32:39 +0800 you wrote:
-> This is never used, so can remove it.
-> 
-> Signed-off-by: YueHaibing <yuehaibing@huawei.com>
-> ---
->  net/dccp/feat.h | 1 -
->  1 file changed, 1 deletion(-)
+Guillaume Nault (3):
+  gtp: Set TOS and routing scope independently for fib lookups.
+  dccp: Set TOS and routing scope independently for fib lookups.
+  sctp: Set TOS and routing scope independently for fib lookups.
 
-Here is the summary with links:
-  - [net-next] dccp: Remove unused declaration dccp_feat_initialise_sysctls()
-    https://git.kernel.org/netdev/net-next/c/d4a80cc69aea
+ drivers/net/gtp.c   | 3 ++-
+ net/dccp/ipv4.c     | 3 ++-
+ net/sctp/protocol.c | 3 ++-
+ 3 files changed, 6 insertions(+), 3 deletions(-)
 
-You are awesome, thank you!
 -- 
-Deet-doot-dot, I am a bot.
-https://korg.docs.kernel.org/patchwork/pwbot.html
-
+2.39.2
