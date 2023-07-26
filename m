@@ -1,41 +1,36 @@
-From: patchwork-bot+netdevbpf@kernel.org
-Date: Wed, 19 Jul 2023 11:40:20 +0000
-Subject: Re: [PATCH net-next 0/3] net: Remove more RTO_ONLINK users.
-Message-Id: <168976682016.23748.15879521041642434800.git-patchwork-notify@kernel.org>
+From: Dan Carpenter <dan.carpenter@linaro.org>
+Date: Wed, 26 Jul 2023 10:47:02 +0000
+Subject: [PATCH net] dccp: Allocate enough data in ccid_get_builtin_ccids()
+Message-Id: <35ed2523-49ee-4e2b-b50d-38508f74f93f@moroto.mountain>
 List-Id: <dccp.vger.kernel.org>
-References: <cover.1689600901.git.gnault@redhat.com>
-In-Reply-To: <cover.1689600901.git.gnault@redhat.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-Hello:
+This is allocating the ARRAY_SIZE() instead of the number of bytes.  The
+array size is 1 or 2 depending on the .config and it should allocate
+8 or 16 bytes instead.
 
-This series was applied to netdev/net-next.git (main)
-by David S. Miller <davem@davemloft.net>:
+Fixes: ddebc973c56b ("dccp: Lockless integration of CCID congestion-control plugins")
+Signed-off-by: Dan Carpenter <dan.carpenter@linaro.org>
+---
+ net/dccp/ccid.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
 
-On Mon, 17 Jul 2023 15:53:24 +0200 you wrote:
-> Code that initialise a flowi4 structure manually before doing a fib
-> lookup can easily avoid overloading ->flowi4_tos with the RTO_ONLINK
-> bit. They can just set ->flowi4_scope correctly instead.
-> 
-> Properly separating the routing scope from ->flowi4_tos will allow to
-> eventually convert this field to dscp_t (to ensure proper separation
-> between DSCP and ECN).
-> 
-> [...]
-
-Here is the summary with links:
-  - [net-next,1/3] gtp: Set TOS and routing scope independently for fib lookups.
-    https://git.kernel.org/netdev/net-next/c/b16b50476714
-  - [net-next,2/3] dccp: Set TOS and routing scope independently for fib lookups.
-    https://git.kernel.org/netdev/net-next/c/2d6c85ca3eb8
-  - [net-next,3/3] sctp: Set TOS and routing scope independently for fib lookups.
-    https://git.kernel.org/netdev/net-next/c/ba80e20d7f3f
-
-You are awesome, thank you!
+diff --git a/net/dccp/ccid.c b/net/dccp/ccid.c
+index 6beac5d348e2..9067958d3857 100644
+--- a/net/dccp/ccid.c
++++ b/net/dccp/ccid.c
+@@ -48,7 +48,8 @@ bool ccid_support_check(u8 const *ccid_array, u8 array_len)
+  */
+ int ccid_get_builtin_ccids(u8 **ccid_array, u8 *array_len)
+ {
+-	*ccid_array = kmalloc(ARRAY_SIZE(ccids), gfp_any());
++	*ccid_array = kmalloc_array(ARRAY_SIZE(ccids), sizeof(*ccid_array),
++				    gfp_any());
+ 	if (*ccid_array = NULL)
+ 		return -ENOBUFS;
+ 
 -- 
-Deet-doot-dot, I am a bot.
-https://korg.docs.kernel.org/patchwork/pwbot.html
-
+2.39.2
