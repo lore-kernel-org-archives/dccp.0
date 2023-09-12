@@ -1,35 +1,25 @@
-From: Andrei Vagin <avagin@gmail.com>
-Date: Mon, 11 Sep 2023 23:36:55 +0000
+From: "Iwashima, Kuniyuki" <kuniyu@amazon.co.jp>
+Date: Tue, 12 Sep 2023 00:06:32 +0000
 Subject: Re: [PATCH RESEND net-next v4 1/3] net: Add a bhash2 table hashed by port and address
-Message-Id: <ZP+kl4/UuTaQTGPT@google.com>
+Message-Id: <F4C44A92-4802-4165-97E9-C89E2E7BBFC9@amazon.co.jp>
 List-Id: <dccp.vger.kernel.org>
+References: <ZP+kl4/UuTaQTGPT@google.com>
+In-Reply-To: <ZP+kl4/UuTaQTGPT@google.com>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="us-ascii"
 Content-Transfer-Encoding: 7bit
 To: dccp@vger.kernel.org
 
-On Mon, Aug 22, 2022 at 11:10:21AM -0700, Joanne Koong wrote:
->  
-> +static bool inet_use_bhash2_on_bind(const struct sock *sk)
-> +{
-> +#if IS_ENABLED(CONFIG_IPV6)
-> +	if (sk->sk_family = AF_INET6) {
-> +		int addr_type = ipv6_addr_type(&sk->sk_v6_rcv_saddr);
-> +
-> +		return addr_type != IPV6_ADDR_ANY &&
-> +			addr_type != IPV6_ADDR_MAPPED;
->
-
-Why do we return false to all mapped addresses? Should it be
-
-(addr_type != IPV6_ADDR_MAPPED || sk->sk_rcv_saddr != htonl(INADDR_ANY))
-
->
-> +	}
-> +#endif
-> +	return sk->sk_rcv_saddr != htonl(INADDR_ANY);
-> +}
-> +
->
-Thanks,
-Andrei
+RnJvbTogQW5kcmVpIFZhZ2luIDxhdmFnaW5AZ21haWwuY29tPg0KRGF0ZTogTW9uLCAxMSBTZXAg
+MjAyMyAxNjozNjo1NSAtMDcwMA0KPiBPbiBNb24sIEF1ZyAyMiwgMjAyMiBhdCAxMToxMDoyMUFN
+IC0wNzAwLCBKb2FubmUgS29vbmcgd3JvdGU6DQo+ID4NCj4gPiArc3RhdGljIGJvb2wgaW5ldF91
+c2VfYmhhc2gyX29uX2JpbmQoY29uc3Qgc3RydWN0IHNvY2sgKnNrKQ0KPiA+ICt7DQo+ID4gKyNp
+ZiBJU19FTkFCTEVEKENPTkZJR19JUFY2KQ0KPiA+ICsgICAgIGlmIChzay0+c2tfZmFtaWx5ID09
+IEFGX0lORVQ2KSB7DQo+ID4gKyAgICAgICAgICAgICBpbnQgYWRkcl90eXBlID0gaXB2Nl9hZGRy
+X3R5cGUoJnNrLT5za192Nl9yY3Zfc2FkZHIpOw0KPiA+ICsNCj4gPiArICAgICAgICAgICAgIHJl
+dHVybiBhZGRyX3R5cGUgIT0gSVBWNl9BRERSX0FOWSAmJg0KPiA+ICsgICAgICAgICAgICAgICAg
+ICAgICBhZGRyX3R5cGUgIT0gSVBWNl9BRERSX01BUFBFRDsNCj4gPg0KPiANCj4gV2h5IGRvIHdl
+IHJldHVybiBmYWxzZSB0byBhbGwgbWFwcGVkIGFkZHJlc3Nlcz8gU2hvdWxkIGl0IGJlDQo+IA0K
+PiAoYWRkcl90eXBlICE9IElQVjZfQUREUl9NQVBQRUQgfHwgc2stPnNrX3Jjdl9zYWRkciAhPSBo
+dG9ubChJTkFERFJfQU5ZKSkNCj4gDQoNClllcywgdGhhdCBjb3VsZCBiZSBkb25lIGFzIG9wdGlt
+aXNhdGlvbi4NCg0KDQo
