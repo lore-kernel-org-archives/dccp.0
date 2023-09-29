@@ -1,25 +1,80 @@
-From: "Iwashima, Kuniyuki" <kuniyu@amazon.co.jp>
-Date: Tue, 12 Sep 2023 00:06:32 +0000
-Subject: Re: [PATCH RESEND net-next v4 1/3] net: Add a bhash2 table hashed by port and address
-Message-Id: <F4C44A92-4802-4165-97E9-C89E2E7BBFC9@amazon.co.jp>
-List-Id: <dccp.vger.kernel.org>
-References: <ZP+kl4/UuTaQTGPT@google.com>
-In-Reply-To: <ZP+kl4/UuTaQTGPT@google.com>
+Return-Path: <dccp-owner@vger.kernel.org>
+X-Spam-Checker-Version: SpamAssassin 3.4.0 (2014-02-07) on
+	aws-us-west-2-korg-lkml-1.web.codeaurora.org
+Received: from vger.kernel.org (vger.kernel.org [23.128.96.18])
+	by smtp.lore.kernel.org (Postfix) with ESMTP id C5488E743FE
+	for <dccp@archiver.kernel.org>; Fri, 29 Sep 2023 09:08:40 +0000 (UTC)
+Received: (majordomo@vger.kernel.org) by vger.kernel.org via listexpand
+        id S231774AbjI2JIk (ORCPT <rfc822;dccp@archiver.kernel.org>);
+        Fri, 29 Sep 2023 05:08:40 -0400
+Received: from lindbergh.monkeyblade.net ([23.128.96.19]:57722 "EHLO
+        lindbergh.monkeyblade.net" rhost-flags-OK-OK-OK-OK) by vger.kernel.org
+        with ESMTP id S232713AbjI2JIj (ORCPT <rfc822;dccp@vger.kernel.org>);
+        Fri, 29 Sep 2023 05:08:39 -0400
+Received: from mail-oo1-f70.google.com (mail-oo1-f70.google.com [209.85.161.70])
+        by lindbergh.monkeyblade.net (Postfix) with ESMTPS id 99A271B1
+        for <dccp@vger.kernel.org>; Fri, 29 Sep 2023 02:08:35 -0700 (PDT)
+Received: by mail-oo1-f70.google.com with SMTP id 006d021491bc7-57b63ce34acso23901647eaf.2
+        for <dccp@vger.kernel.org>; Fri, 29 Sep 2023 02:08:35 -0700 (PDT)
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1695978515; x=1696583315;
+        h=to:from:subject:message-id:date:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=vNRH8WIfdTbVrWFPVazVnTDdpUDIwS2HaLsGOKKePxo=;
+        b=uwCqR4eypbcIxG6cCdZtr9qOIG5In3tNR1hYzeLAOvojfrpRW8lR3W8NDCNc26OKc5
+         0d72Yo6hJ4tF8UX+2/oydsYzTMReT1pB5ihmBKWryaFBaqlGKcc57XD+5RpE16szJ9Sm
+         zHM9HFjMpRDCZLfWebgzrAhet3jDDvvzdItmlaVudZZB5ySJ8TQRhRNThdWjP8TVDHkQ
+         mxgL2ofho/BMF0KDprwJObh04PQF5UHdUOEzhZkPC9+ghFjkiOLIyJbeRt8SVwWoGs29
+         PGsgBRb7sUpUOHbWHcYCFJd8H0of9quHLKxStLwWUfJHzWfWt70BuVyhLN1c/LakGP+c
+         XJ+Q==
+X-Gm-Message-State: AOJu0YyN5n/sJD09w/qd8c5XtdG9IEKY206AYSVLqV661I7y3YPJtqn2
+        iVOAGpAq699EyEVNhtuc/IJY8gH2pF82oU58t7Ap0REsFRpJDG4=
+X-Google-Smtp-Source: AGHT+IEyRGjMq5hM9bqfNe3TwgTrfo4G96HAtW7a3smQwOKFjVWdbnbjYTqz30GPp3on0O8h89zdGlid+yrsA3IFrtvu28gXkdq/
 MIME-Version: 1.0
-Content-Type: text/plain; charset="us-ascii"
-Content-Transfer-Encoding: 7bit
-To: dccp@vger.kernel.org
+X-Received: by 2002:a4a:5817:0:b0:57b:e125:36a9 with SMTP id
+ f23-20020a4a5817000000b0057be12536a9mr1241851oob.1.1695978514927; Fri, 29 Sep
+ 2023 02:08:34 -0700 (PDT)
+Date:   Fri, 29 Sep 2023 02:08:34 -0700
+X-Google-Appengine-App-Id: s~syzkaller
+X-Google-Appengine-App-Id-Alias: syzkaller
+Message-ID: <000000000000edd89506067bc438@google.com>
+Subject: [syzbot] Monthly dccp report (Sep 2023)
+From:   syzbot <syzbot+listbf2fd281dcbd524a5041@syzkaller.appspotmail.com>
+To:     dccp@vger.kernel.org, linux-kernel@vger.kernel.org,
+        netdev@vger.kernel.org, syzkaller-bugs@googlegroups.com
+Content-Type: text/plain; charset="UTF-8"
+Precedence: bulk
+List-ID: <dccp.vger.kernel.org>
+X-Mailing-List: dccp@vger.kernel.org
 
-RnJvbTogQW5kcmVpIFZhZ2luIDxhdmFnaW5AZ21haWwuY29tPg0KRGF0ZTogTW9uLCAxMSBTZXAg
-MjAyMyAxNjozNjo1NSAtMDcwMA0KPiBPbiBNb24sIEF1ZyAyMiwgMjAyMiBhdCAxMToxMDoyMUFN
-IC0wNzAwLCBKb2FubmUgS29vbmcgd3JvdGU6DQo+ID4NCj4gPiArc3RhdGljIGJvb2wgaW5ldF91
-c2VfYmhhc2gyX29uX2JpbmQoY29uc3Qgc3RydWN0IHNvY2sgKnNrKQ0KPiA+ICt7DQo+ID4gKyNp
-ZiBJU19FTkFCTEVEKENPTkZJR19JUFY2KQ0KPiA+ICsgICAgIGlmIChzay0+c2tfZmFtaWx5ID09
-IEFGX0lORVQ2KSB7DQo+ID4gKyAgICAgICAgICAgICBpbnQgYWRkcl90eXBlID0gaXB2Nl9hZGRy
-X3R5cGUoJnNrLT5za192Nl9yY3Zfc2FkZHIpOw0KPiA+ICsNCj4gPiArICAgICAgICAgICAgIHJl
-dHVybiBhZGRyX3R5cGUgIT0gSVBWNl9BRERSX0FOWSAmJg0KPiA+ICsgICAgICAgICAgICAgICAg
-ICAgICBhZGRyX3R5cGUgIT0gSVBWNl9BRERSX01BUFBFRDsNCj4gPg0KPiANCj4gV2h5IGRvIHdl
-IHJldHVybiBmYWxzZSB0byBhbGwgbWFwcGVkIGFkZHJlc3Nlcz8gU2hvdWxkIGl0IGJlDQo+IA0K
-PiAoYWRkcl90eXBlICE9IElQVjZfQUREUl9NQVBQRUQgfHwgc2stPnNrX3Jjdl9zYWRkciAhPSBo
-dG9ubChJTkFERFJfQU5ZKSkNCj4gDQoNClllcywgdGhhdCBjb3VsZCBiZSBkb25lIGFzIG9wdGlt
-aXNhdGlvbi4NCg0KDQo
+Hello dccp maintainers/developers,
+
+This is a 31-day syzbot report for the dccp subsystem.
+All related reports/information can be found at:
+https://syzkaller.appspot.com/upstream/s/dccp
+
+During the period, 0 new issues were detected and 1 were fixed.
+In total, 4 issues are still open and 6 have been fixed so far.
+
+Some of the still happening issues:
+
+Ref Crashes Repro Title
+<1> 102     Yes   KASAN: use-after-free Read in ccid2_hc_tx_packet_recv
+                  https://syzkaller.appspot.com/bug?extid=554ccde221001ab5479a
+<2> 50      Yes   BUG: "hc->tx_t_ipi == NUM" holds (exception!) at net/dccp/ccids/ccid3.c:LINE/ccid3_update_send_interval()
+                  https://syzkaller.appspot.com/bug?extid=94641ba6c1d768b1e35e
+<3> 13      Yes   BUG: stored value of X_recv is zero at net/dccp/ccids/ccid3.c:LINE/ccid3_first_li() (3)
+                  https://syzkaller.appspot.com/bug?extid=2ad8ef335371014d4dc7
+
+---
+This report is generated by a bot. It may contain errors.
+See https://goo.gl/tpsmEJ for more information about syzbot.
+syzbot engineers can be reached at syzkaller@googlegroups.com.
+
+To disable reminders for individual bugs, reply with the following command:
+#syz set <Ref> no-reminders
+
+To change bug's subsystems, reply with:
+#syz set <Ref> subsystems: new-subsystem
+
+You may send multiple commands in a single email message.
