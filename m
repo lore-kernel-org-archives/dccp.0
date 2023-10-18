@@ -2,58 +2,61 @@ Return-Path: <dccp-owner@vger.kernel.org>
 X-Spam-Checker-Version: SpamAssassin 3.4.0 (2014-02-07) on
 	aws-us-west-2-korg-lkml-1.web.codeaurora.org
 Received: from vger.kernel.org (vger.kernel.org [23.128.96.18])
-	by smtp.lore.kernel.org (Postfix) with ESMTP id 8D865CDB465
-	for <dccp@archiver.kernel.org>; Mon, 16 Oct 2023 15:40:23 +0000 (UTC)
+	by smtp.lore.kernel.org (Postfix) with ESMTP id 61996CDB47E
+	for <dccp@archiver.kernel.org>; Wed, 18 Oct 2023 14:58:34 +0000 (UTC)
 Received: (majordomo@vger.kernel.org) by vger.kernel.org via listexpand
-        id S233750AbjJPPkX (ORCPT <rfc822;dccp@archiver.kernel.org>);
-        Mon, 16 Oct 2023 11:40:23 -0400
-Received: from lindbergh.monkeyblade.net ([23.128.96.19]:56918 "EHLO
+        id S1345087AbjJRO6d (ORCPT <rfc822;dccp@archiver.kernel.org>);
+        Wed, 18 Oct 2023 10:58:33 -0400
+Received: from lindbergh.monkeyblade.net ([23.128.96.19]:60982 "EHLO
         lindbergh.monkeyblade.net" rhost-flags-OK-OK-OK-OK) by vger.kernel.org
-        with ESMTP id S233581AbjJPPkW (ORCPT <rfc822;dccp@vger.kernel.org>);
-        Mon, 16 Oct 2023 11:40:22 -0400
-Received: from mail-ed1-x52e.google.com (mail-ed1-x52e.google.com [IPv6:2a00:1450:4864:20::52e])
-        by lindbergh.monkeyblade.net (Postfix) with ESMTPS id CE3DFF0
-        for <dccp@vger.kernel.org>; Mon, 16 Oct 2023 08:40:19 -0700 (PDT)
-Received: by mail-ed1-x52e.google.com with SMTP id 4fb4d7f45d1cf-51e24210395so15253a12.0
-        for <dccp@vger.kernel.org>; Mon, 16 Oct 2023 08:40:19 -0700 (PDT)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=google.com; s=20230601; t=1697470818; x=1698075618; darn=vger.kernel.org;
-        h=content-transfer-encoding:cc:to:subject:message-id:date:from
-         :in-reply-to:references:mime-version:from:to:cc:subject:date
-         :message-id:reply-to;
-        bh=ea6BXTL4g5xvVBXKvzhfzkGwCYvmtfqSddcw/YIlLoM=;
-        b=SYBfDWTTCAlNRcOn/GEQxiDAENFT1hOhNWjHetgYM7oOBztNEtVnrHmPvkIG698+ty
-         9YHezOM/kCu/E6vGDFQxpSdCoe4J1SsOHFeji5DnoLfmyHaSVwo2KIlIKZd01BlDoLRe
-         RavSCtI4eiHksK2Ua4eFMWXwQXbccv95IC7rVBNhtRb8og9HVqfNJsfIeMx4SViqz8Nr
-         yqO/0eVc7ZcjvQPXQe0+O1/uHtwGmf/qqtLkkc37A0R0JqdNz+gu15ZSfCrGkEp6yOgG
-         jUV0MVKUzgaxuzqMP5GtDTHbFE4IlAZs04kfXXupVUpnXZL+gUjujlP3h99JAb0AvE6s
-         qRJw==
+        with ESMTP id S1345109AbjJRO6c (ORCPT <rfc822;dccp@vger.kernel.org>);
+        Wed, 18 Oct 2023 10:58:32 -0400
+Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.129.124])
+        by lindbergh.monkeyblade.net (Postfix) with ESMTPS id BB86BBA
+        for <dccp@vger.kernel.org>; Wed, 18 Oct 2023 07:57:45 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
+        s=mimecast20190719; t=1697641064;
+        h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
+         to:to:cc:cc:mime-version:mime-version:content-type:content-type:
+         content-transfer-encoding:content-transfer-encoding:
+         in-reply-to:in-reply-to:references:references;
+        bh=929sHe0GqloPiKWV58z9G1yiEL0iCqJOnGu3b5vkn9k=;
+        b=A4bb7bUhGrgHuTJ2c72Guo7cEBbg6E4we7jeScY8XKmfu43w20QbOfxjI6+Xe/FYPm/Q52
+        LmFwlhjlGRLbyh9+MHJhaMMij2CNgvoK/0yCbWKo59wH8LT6JLEDq2ZFk0oHwQKzl3Ai/1
+        5f6yEz/NFTcxtRSf0MhV+dPVcAt5jKA=
+Received: from mail-oi1-f199.google.com (mail-oi1-f199.google.com
+ [209.85.167.199]) by relay.mimecast.com with ESMTP with STARTTLS
+ (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
+ us-mta-433-rjh_LBabPcGtC1M5lIk2bg-1; Wed, 18 Oct 2023 10:57:43 -0400
+X-MC-Unique: rjh_LBabPcGtC1M5lIk2bg-1
+Received: by mail-oi1-f199.google.com with SMTP id 5614622812f47-3ae65e9d394so9590372b6e.2
+        for <dccp@vger.kernel.org>; Wed, 18 Oct 2023 07:57:43 -0700 (PDT)
 X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1697470818; x=1698075618;
-        h=content-transfer-encoding:cc:to:subject:message-id:date:from
-         :in-reply-to:references:mime-version:x-gm-message-state:from:to:cc
+        d=1e100.net; s=20230601; t=1697641062; x=1698245862;
+        h=content-transfer-encoding:mime-version:message-id:date:references
+         :in-reply-to:subject:cc:to:from:x-gm-message-state:from:to:cc
          :subject:date:message-id:reply-to;
-        bh=ea6BXTL4g5xvVBXKvzhfzkGwCYvmtfqSddcw/YIlLoM=;
-        b=CI3+iCG1WGC+thrL8DLFTS8jKUXNN3IIfAgl8ZYkSJg98nzDjulPfltyLfPqsoeQhP
-         TCQnKoN4Sg36QhPWlV51bgu/Fo+FiTwXC1TI9hSFuTnPcS+UgkyaOG0Vrsfj7GAfN034
-         el2ZH7BPyqPhD8OMiOmPDRbiiLORf7pJoyWjCKAYF7rPqbo80izzSUeo6rZ0kaH+d9mR
-         5KKxm4XG6c3kHCOd1TVnKJcumU9cG6E2QaAfoSLr6pfnpnCa1ThQ5MD/W2OaPpLTpLTB
-         IQddyAcEJEWPrFr1W4zSnnG3p0UAVxEnb4nqJTqy2XQtz6h1DvojkFhkeUITnPlwzFy1
-         Dj0Q==
-X-Gm-Message-State: AOJu0YzKO4rYP8F2O9DLHhRwU82NPqKpAXqrSSAgIkuMkmxXnISIIDUo
-        avgEf9Giychx2Y9Lsj2dm7tefaAohVuB+8LBreTJYQ==
-X-Google-Smtp-Source: AGHT+IFNKq3yTk1wylHelFdQm7j+wkpOk6Od+3a7/A/jHAvIXGfaaXWeujRWLmEXROVIwkX+iRk3kvf2P/yiMWzqGfw=
-X-Received: by 2002:aa7:d619:0:b0:53e:91c6:b6f5 with SMTP id
- c25-20020aa7d619000000b0053e91c6b6f5mr142498edr.4.1697470817959; Mon, 16 Oct
- 2023 08:40:17 -0700 (PDT)
-MIME-Version: 1.0
-References: <20231016125934.1970789-1-vschneid@redhat.com>
-In-Reply-To: <20231016125934.1970789-1-vschneid@redhat.com>
-From:   Eric Dumazet <edumazet@google.com>
-Date:   Mon, 16 Oct 2023 17:40:04 +0200
-Message-ID: <CANn89i+pQ3j+rb2SjFWjCU7BEges3TADDes5+csEr1JJamtzPQ@mail.gmail.com>
-Subject: Re: [RFC PATCH] tcp/dcpp: Un-pin tw_timer
-To:     Valentin Schneider <vschneid@redhat.com>
+        bh=929sHe0GqloPiKWV58z9G1yiEL0iCqJOnGu3b5vkn9k=;
+        b=VSkubwNR0cAbmzpQQVCZT2cSEKXap8nISXC2Pj4++2pfVE8H1FPb/2nbMM6w7mM7aM
+         raxS+NYla6U79wUwX8i+Cy7F9Qw8RDg9f8cIJ3XKrRiX8XflweHpY9NjBTbsYlGYSXuv
+         Bk1Mlf6OyKwVu4wsanrbLIkYsnDkHKQ5kWoGjOgHQgG1Y4f7iCsaxJqFcxLVX0bX68wI
+         o1sh1loNNoUWW2tpRAJaDJ2UJvjTP0oiahBwxmXySuBITH98ewtKozGo9/holLAkeWg6
+         WWsD/DA/izEtNTFIhPnQL5MShXQpHTLYXwK8JT3VbRU3k/OYqP70KAg775h3QbCdZm9w
+         8K5g==
+X-Gm-Message-State: AOJu0YwPP4aq7yfbLd3zuFHqPQ6zP50xM+PLZAO+F5vLTd6NaI8KOG6N
+        /1uJp327Rc1H29utWNcaqNXUE4Fh+jO5jGsil4rr6w/Rq1iaenZlChhCHIrx7C81Ymg5T66MoRs
+        PwJ5zISaPx58ixA==
+X-Received: by 2002:a05:6808:685:b0:3a9:e8e2:57a7 with SMTP id k5-20020a056808068500b003a9e8e257a7mr5130533oig.53.1697641062544;
+        Wed, 18 Oct 2023 07:57:42 -0700 (PDT)
+X-Google-Smtp-Source: AGHT+IFlTaAuCZ+WGM/yTbr4Akp0ylPrazS8xDJ9YmXz8Jrm+XLu5qIkNdbRCxoExwzI82bjSJAq2g==
+X-Received: by 2002:a05:6808:685:b0:3a9:e8e2:57a7 with SMTP id k5-20020a056808068500b003a9e8e257a7mr5130514oig.53.1697641062140;
+        Wed, 18 Oct 2023 07:57:42 -0700 (PDT)
+Received: from vschneid.remote.csb (213-44-141-166.abo.bbox.fr. [213.44.141.166])
+        by smtp.gmail.com with ESMTPSA id bl31-20020a05620a1a9f00b00767d4a3f4d9sm15800qkb.29.2023.10.18.07.57.40
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Wed, 18 Oct 2023 07:57:41 -0700 (PDT)
+From:   Valentin Schneider <vschneid@redhat.com>
+To:     Eric Dumazet <edumazet@google.com>
 Cc:     dccp@vger.kernel.org, netdev@vger.kernel.org,
         linux-kernel@vger.kernel.org,
         "David S. Miller" <davem@davemloft.net>,
@@ -62,235 +65,93 @@ Cc:     dccp@vger.kernel.org, netdev@vger.kernel.org,
         David Ahern <dsahern@kernel.org>,
         Juri Lelli <juri.lelli@redhat.com>,
         Tomas Glozar <tglozar@redhat.com>
-Content-Type: text/plain; charset="UTF-8"
+Subject: Re: [RFC PATCH] tcp/dcpp: Un-pin tw_timer
+In-Reply-To: <CANn89i+pQ3j+rb2SjFWjCU7BEges3TADDes5+csEr1JJamtzPQ@mail.gmail.com>
+References: <20231016125934.1970789-1-vschneid@redhat.com>
+ <CANn89i+pQ3j+rb2SjFWjCU7BEges3TADDes5+csEr1JJamtzPQ@mail.gmail.com>
+Date:   Wed, 18 Oct 2023 16:57:39 +0200
+Message-ID: <xhsmhil74m10c.mognet@vschneid.remote.csb>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
 Content-Transfer-Encoding: quoted-printable
 Precedence: bulk
 List-ID: <dccp.vger.kernel.org>
 X-Mailing-List: dccp@vger.kernel.org
 
-On Mon, Oct 16, 2023 at 3:00=E2=80=AFPM Valentin Schneider <vschneid@redhat=
-.com> wrote:
+On 16/10/23 17:40, Eric Dumazet wrote:
+> On Mon, Oct 16, 2023 at 3:00=E2=80=AFPM Valentin Schneider <vschneid@redh=
+at.com> wrote:
+>>
+>> The TCP timewait timer is proving to be problematic for setups where sch=
+eduler
+>> CPU isolation is achieved at runtime via cpusets (as opposed to statical=
+ly via
+>> isolcpus=3Ddomains).
+>>
+>> What happens there is a CPU goes through tcp_time_wait(), arming the tim=
+e_wait
+>> timer, then gets isolated. TCP_TIMEWAIT_LEN later, the timer fires, caus=
+ing
+>> interference for the now-isolated CPU. This is conceptually similar to t=
+he issue
+>> described in
+>>   e02b93124855 ("workqueue: Unbind kworkers before sending them to exit(=
+)")
+>>
+>> Making the timer un-pinned would resolve this, as it would be queued onto
+>> HK_FLAG_TIMER CPUs. It would Unfortunately go against
+>>   ed2e92394589 ("tcp/dccp: fix timewait races in timer handling")
+>> as we'd need to arm the timer after the *hashdance() to not have it fire=
+ before
+>> we've finished setting up the timewait_socket.
+>>
+>> However, looking into this, I cannot grok what race is fixed by having t=
+he timer
+>> *armed* before the hashdance.
 >
-> The TCP timewait timer is proving to be problematic for setups where sche=
-duler
-> CPU isolation is achieved at runtime via cpusets (as opposed to staticall=
-y via
-> isolcpus=3Ddomains).
+> That was because :
 >
-> What happens there is a CPU goes through tcp_time_wait(), arming the time=
-_wait
-> timer, then gets isolated. TCP_TIMEWAIT_LEN later, the timer fires, causi=
-ng
-> interference for the now-isolated CPU. This is conceptually similar to th=
-e issue
-> described in
->   e02b93124855 ("workqueue: Unbind kworkers before sending them to exit()=
-")
+> 1) the timer could expire before we had a chance to set refcnt to
+> a non zero value. I guess this is fine if we use an extra atomic decremen=
+t.
 >
-> Making the timer un-pinned would resolve this, as it would be queued onto
-> HK_FLAG_TIMER CPUs. It would Unfortunately go against
->   ed2e92394589 ("tcp/dccp: fix timewait races in timer handling")
-> as we'd need to arm the timer after the *hashdance() to not have it fire =
-before
-> we've finished setting up the timewait_socket.
+> OR
 >
-> However, looking into this, I cannot grok what race is fixed by having th=
-e timer
-> *armed* before the hashdance.
+> 2) another cpu could find the TW and delete it (trying to cancel the
+> tw_timer) before
+>    we could arm the timer.  ( inet_twsk_deschedule_put() is using
+> del_timer_sync() followed by inet_twsk_kill())
+>
+> Thus the tw timer would be armed for 60 seconds, then we would have to
+> wait for the timer to really
+> get rid of the tw structure.
+>
+> I think you also need to change inet_twsk_deschedule_put() logic ?
+>
 
-That was because :
+Gotcha, thank you for pointing it out.
 
-1) the timer could expire before we had a chance to set refcnt to
-a non zero value. I guess this is fine if we use an extra atomic decrement.
-
-OR
-
-2) another cpu could find the TW and delete it (trying to cancel the
-tw_timer) before
-   we could arm the timer.  ( inet_twsk_deschedule_put() is using
-del_timer_sync() followed by inet_twsk_kill())
-
-Thus the tw timer would be armed for 60 seconds, then we would have to
-wait for the timer to really
-get rid of the tw structure.
-
-I think you also need to change inet_twsk_deschedule_put() logic ?
-
+>> Keep softirqs disabled, but make the timer un-pinned and arm it after the
+>> hashdance. Remote CPUs may start using the timewait socket before the ti=
+mer is
+>> armed, but their execution of __inet_lookup_established() won't prevent =
+the
+>> arming of the timer.
 >
-> [this next segment is brought to you by Cunningham's Law]
+> OK, I guess we can live with the following race :
+>
+> CPU0
+>
+>    allocates a tw, insert it in hash table
+>
+> CPU1:                               finds the TW and removes it (timer
+> cancel does nothing)
+>
+> CPU0
+>    arms a TW timer, lasting
 >
 
-I guess this is not really relevant to the potential issue.
+Looks reasonable to me, I'll go write v2.
 
-> Using [1] as an example, inet_twsk_schedule() only arms the timer and inc=
-rements
-> the deathrow refcount, which by itself does not affect
-> __inet_lookup_established(). AFAICT it only comes in handy if:
-> 1) A CPU ends up livelocking in __inet_lookup_established() (cf. [1], tho=
-ugh per
->    inet_twsk_alloc() I don't see how a timewait socket can hit the
->    forever-looping conditions with how the sk_hash and addr/port pairs ar=
-e copied)
-> 2) the initialization context can be interrupted by NET_RX (it can, cf.
->    cfac7f836a71 ("tcp/dccp: block bh before arming time_wait timer"))
->
-> In this scenario, we need the timer to fire to go through
->   inet_twsk_kill()
->     sk_nulls_del_node_init_rcu()
-> and break out of the loop.
->
-> Keep softirqs disabled, but make the timer un-pinned and arm it after the
-> hashdance. Remote CPUs may start using the timewait socket before the tim=
-er is
-> armed, but their execution of __inet_lookup_established() won't prevent t=
-he
-> arming of the timer.
+Thanks for the help!
 
-OK, I guess we can live with the following race :
-
-CPU0
-
-   allocates a tw, insert it in hash table
-
-CPU1:                               finds the TW and removes it (timer
-cancel does nothing)
-
-CPU0
-   arms a TW timer, lasting
-
->
-> This partially reverts
->   ed2e92394589 ("tcp/dccp: fix timewait races in timer handling")
-> and
->   ec94c2696f0b ("tcp/dccp: avoid one atomic operation for timewait hashda=
-nce")
->
-> Link: [1] https://lore.kernel.org/lkml/56941035.9040000@fastly.com/
-> Link: https://lore.kernel.org/all/ZPhpfMjSiHVjQkTk@localhost.localdomain/
-> Signed-off-by: Valentin Schneider <vschneid@redhat.com>
-> ---
->  net/dccp/minisocks.c          | 18 ++++++++++--------
->  net/ipv4/inet_timewait_sock.c |  9 ++++-----
->  net/ipv4/tcp_minisocks.c      | 18 ++++++++++--------
->  3 files changed, 24 insertions(+), 21 deletions(-)
->
-> diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
-> index 64d805b27adde..188a29a1aef49 100644
-> --- a/net/dccp/minisocks.c
-> +++ b/net/dccp/minisocks.c
-> @@ -53,16 +53,18 @@ void dccp_time_wait(struct sock *sk, int state, int t=
-imeo)
->                 if (state =3D=3D DCCP_TIME_WAIT)
->                         timeo =3D DCCP_TIMEWAIT_LEN;
->
-> -               /* tw_timer is pinned, so we need to make sure BH are dis=
-abled
-> -                * in following section, otherwise timer handler could ru=
-n before
-> -                * we complete the initialization.
-> -                */
-> -               local_bh_disable();
-> -               inet_twsk_schedule(tw, timeo);
-> -               /* Linkage updates.
-> -                * Note that access to tw after this point is illegal.
-> +               /* tw_timer is armed after the hashdance and recount upda=
-te, so
-> +                * we need to make sure BH are disabled in following sect=
-ion to
-> +                * ensure the timer is armed before we handle any further=
- skb's.
->                  */
-> +              local_bh_disable();
-> +
-> +               // Linkage updates
->                 inet_twsk_hashdance(tw, sk, &dccp_hashinfo);
-> +               inet_twsk_schedule(tw, timeo);
-> +               // Access to tw after this point is illegal.
-> +               inet_twsk_put(tw);
-> +
->                 local_bh_enable();
->         } else {
->                 /* Sorry, if we're out of memory, just CLOSE this
-> diff --git a/net/ipv4/inet_timewait_sock.c b/net/ipv4/inet_timewait_sock.=
-c
-> index dd37a5bf68811..ba59c2c6ef4a2 100644
-> --- a/net/ipv4/inet_timewait_sock.c
-> +++ b/net/ipv4/inet_timewait_sock.c
-> @@ -152,16 +152,15 @@ void inet_twsk_hashdance(struct inet_timewait_sock =
-*tw, struct sock *sk,
->
->         spin_unlock(lock);
->
-> -       /* tw_refcnt is set to 3 because we have :
-> +       /* tw_refcnt is set to 4 because we have :
->          * - one reference for bhash chain.
->          * - one reference for ehash chain.
->          * - one reference for timer.
-> +        * - One reference for ourself (our caller will release it).
->          * We can use atomic_set() because prior spin_lock()/spin_unlock(=
-)
->          * committed into memory all tw fields.
-> -        * Also note that after this point, we lost our implicit referenc=
-e
-> -        * so we are not allowed to use tw anymore.
->          */
-> -       refcount_set(&tw->tw_refcnt, 3);
-> +       refcount_set(&tw->tw_refcnt, 4);
->  }
->  EXPORT_SYMBOL_GPL(inet_twsk_hashdance);
->
-> @@ -207,7 +206,7 @@ struct inet_timewait_sock *inet_twsk_alloc(const stru=
-ct sock *sk,
->                 tw->tw_prot         =3D sk->sk_prot_creator;
->                 atomic64_set(&tw->tw_cookie, atomic64_read(&sk->sk_cookie=
-));
->                 twsk_net_set(tw, sock_net(sk));
-> -               timer_setup(&tw->tw_timer, tw_timer_handler, TIMER_PINNED=
-);
-> +               timer_setup(&tw->tw_timer, tw_timer_handler, 0);
->                 /*
->                  * Because we use RCU lookups, we should not set tw_refcn=
-t
->                  * to a non null value before everything is setup for thi=
-s
-> diff --git a/net/ipv4/tcp_minisocks.c b/net/ipv4/tcp_minisocks.c
-> index b98d476f1594b..269d4aa14a49e 100644
-> --- a/net/ipv4/tcp_minisocks.c
-> +++ b/net/ipv4/tcp_minisocks.c
-> @@ -324,16 +324,18 @@ void tcp_time_wait(struct sock *sk, int state, int =
-timeo)
->                 if (state =3D=3D TCP_TIME_WAIT)
->                         timeo =3D TCP_TIMEWAIT_LEN;
->
-> -               /* tw_timer is pinned, so we need to make sure BH are dis=
-abled
-> -                * in following section, otherwise timer handler could ru=
-n before
-> -                * we complete the initialization.
-> -                */
-> -               local_bh_disable();
-> -               inet_twsk_schedule(tw, timeo);
-> -               /* Linkage updates.
-> -                * Note that access to tw after this point is illegal.
-> +               /* tw_timer is armed after the hashdance and recount upda=
-te, so
-> +                * we need to make sure BH are disabled in following sect=
-ion to
-> +                * ensure the timer is armed before we handle any further=
- skb's.
->                  */
-> +              local_bh_disable();
-> +
-> +               // Linkage updates.
->                 inet_twsk_hashdance(tw, sk, net->ipv4.tcp_death_row.hashi=
-nfo);
-> +               inet_twsk_schedule(tw, timeo);
-> +               // Access to tw after this point is illegal.
-> +               inet_twsk_put(tw);
-> +
->                 local_bh_enable();
->         } else {
->                 /* Sorry, if we're out of memory, just CLOSE this
-> --
-> 2.39.3
->
