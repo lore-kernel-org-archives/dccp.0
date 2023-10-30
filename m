@@ -1,152 +1,81 @@
 Received: from lindbergh.monkeyblade.net (lindbergh.monkeyblade.net [23.128.96.19])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 050A418E03
-	for <dccp@vger.kernel.org>; Mon, 30 Oct 2023 16:24:38 +0000 (UTC)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 31CAA13AC4;
+	Mon, 30 Oct 2023 20:11:05 +0000 (UTC)
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=google.com header.i=@google.com header.b="bkiLgJkO"
-Received: from mail-ed1-x536.google.com (mail-ed1-x536.google.com [IPv6:2a00:1450:4864:20::536])
-	by lindbergh.monkeyblade.net (Postfix) with ESMTPS id 88C51D3
-	for <dccp@vger.kernel.org>; Mon, 30 Oct 2023 09:24:37 -0700 (PDT)
-Received: by mail-ed1-x536.google.com with SMTP id 4fb4d7f45d1cf-53eeb28e8e5so16012a12.1
-        for <dccp@vger.kernel.org>; Mon, 30 Oct 2023 09:24:37 -0700 (PDT)
+	dkim=pass (1024-bit key) header.d=amazon.com header.i=@amazon.com header.b="EP0xRikK"
+Received: from smtp-fw-52005.amazon.com (smtp-fw-52005.amazon.com [52.119.213.156])
+	by lindbergh.monkeyblade.net (Postfix) with ESMTPS id 5E155D3;
+	Mon, 30 Oct 2023 13:11:03 -0700 (PDT)
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=google.com; s=20230601; t=1698683076; x=1699287876; darn=vger.kernel.org;
-        h=content-transfer-encoding:cc:to:subject:message-id:date:from
-         :in-reply-to:references:mime-version:from:to:cc:subject:date
-         :message-id:reply-to;
-        bh=47sn375hVOLfjdPqjUMe7dOzcxEppJhVtYv+fY0NC7c=;
-        b=bkiLgJkOD+ZUPH7WnoNKa0E2I2xae9kJdkoFcAaHxexMLs1186J6/GUQiqXIx03T1C
-         cDdPXlRSOSl1Et6Isuk1xSlTunoaRYIBOHZ4LlO48V7bSb8o/9moFfPGJ3+RIG55+BUj
-         F3Vz13z6hFtNg72ZOj+emCKLp+Q9V1zzi3OBvN6/SviUphFrAFugwL0NPv9MuuV1vtyq
-         epFxqodC+x0hr88+fr/iIcwoIAfkZ4OJkU1v5F9GaAfLQefWH5qZ88Hgjan7d6pLfIlx
-         q1xwNonYgroJlS77CDGY0L7dncqE1jK54Msf475brZbrAN51qFdQi8a4n7JN0vuNR+MG
-         Dcxg==
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1698683076; x=1699287876;
-        h=content-transfer-encoding:cc:to:subject:message-id:date:from
-         :in-reply-to:references:mime-version:x-gm-message-state:from:to:cc
-         :subject:date:message-id:reply-to;
-        bh=47sn375hVOLfjdPqjUMe7dOzcxEppJhVtYv+fY0NC7c=;
-        b=IW7rsnt7qc2qL3uI4keQvY21QkNcz6Qk4dhRRyFYLSY2tbuq6oYzK0uo0lOyFt8ozL
-         CnkNk2T4EcX7PfWlUjFB+ZZvbhKCHN32bbZz+LyCq9/PBzfqWCN/cr8oTxDHz1Og69bn
-         OGgBQThF0SxUioevRZdcpURz2bD6gglGEi+vTjSgotAKzHTLJNikWlgrp7vNQsHjzrB2
-         zpc/ehs7rAxo9Usv2pb2qM5FPMt/Ck5NMVAeFLrQqkycJuJUxKv09MWcc1I83rjpG0Jn
-         eWSlf361EbVYA+rkWNB0FOetnXeLXsWfLZX6Z3E22DkPqY3gndqc6wJ1eeK3I1z99HS9
-         qGdw==
-X-Gm-Message-State: AOJu0YyNY4c3mi8lIpkBgNSbcghgh2zNuBkCBqvVxlrIjdqHL5ll2czu
-	xwnPADoFZrFb7lTVqtYgBd34hztxviBHD6ecKySi7Q==
-X-Google-Smtp-Source: AGHT+IGrXKMdli+cacqoxiuLEK7gZy+RUNBAXh2mBrV+tlY/AV/o7JUnKAU442dPQkj/qLo5ypyyQDdH1m4qBLAxRTo=
-X-Received: by 2002:a50:9552:0:b0:540:9dbd:4b8 with SMTP id
- v18-20020a509552000000b005409dbd04b8mr141388eda.2.1698683075628; Mon, 30 Oct
- 2023 09:24:35 -0700 (PDT)
+  d=amazon.com; i=@amazon.com; q=dns/txt; s=amazon201209;
+  t=1698696664; x=1730232664;
+  h=from:to:cc:subject:date:message-id:mime-version:
+   content-transfer-encoding;
+  bh=D3Jh+SR1ZYTwMpsUDhRRd92Ci4zuiw6RJYP/0IeoWi0=;
+  b=EP0xRikKSlt1dgYm5B48g0NuGJmBcK64/Jutv7Cjt0OvOkBUA+1o6vMI
+   THKxaaowFVMQA00eQz/1AV/PwgruzKnBwn1sKdo+QkIvPRlLaXbH//ufX
+   Co395oZtmijNU3/JjcVHvfQrVPvuuo4dOsEbtkelir0d7OjqPqpyXS4Ou
+   s=;
+X-IronPort-AV: E=Sophos;i="6.03,264,1694736000"; 
+   d="scan'208";a="613161745"
+Received: from iad12-co-svc-p1-lb1-vlan3.amazon.com (HELO email-inbound-relay-pdx-2a-m6i4x-d47337e0.us-west-2.amazon.com) ([10.43.8.6])
+  by smtp-border-fw-52005.iad7.amazon.com with ESMTP/TLS/ECDHE-RSA-AES256-GCM-SHA384; 30 Oct 2023 20:11:02 +0000
+Received: from smtpout.prod.us-west-2.prod.farcaster.email.amazon.dev (pdx2-ws-svc-p26-lb5-vlan3.pdx.amazon.com [10.39.38.70])
+	by email-inbound-relay-pdx-2a-m6i4x-d47337e0.us-west-2.amazon.com (Postfix) with ESMTPS id 06A7160E0F;
+	Mon, 30 Oct 2023 20:10:59 +0000 (UTC)
+Received: from EX19MTAUWC002.ant.amazon.com [10.0.38.20:33100]
+ by smtpin.naws.us-west-2.prod.farcaster.email.amazon.dev [10.0.52.67:2525] with esmtp (Farcaster)
+ id a3f79a5b-e1bf-4e8f-b991-1d7d5ea79bb5; Mon, 30 Oct 2023 20:10:59 +0000 (UTC)
+X-Farcaster-Flow-ID: a3f79a5b-e1bf-4e8f-b991-1d7d5ea79bb5
+Received: from EX19D004ANA001.ant.amazon.com (10.37.240.138) by
+ EX19MTAUWC002.ant.amazon.com (10.250.64.143) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.2.1118.39; Mon, 30 Oct 2023 20:10:59 +0000
+Received: from 88665a182662.ant.amazon.com (10.187.171.32) by
+ EX19D004ANA001.ant.amazon.com (10.37.240.138) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA) id 15.2.1118.39;
+ Mon, 30 Oct 2023 20:10:56 +0000
+From: Kuniyuki Iwashima <kuniyu@amazon.com>
+To: "David S. Miller" <davem@davemloft.net>, Eric Dumazet
+	<edumazet@google.com>, Jakub Kicinski <kuba@kernel.org>, Paolo Abeni
+	<pabeni@redhat.com>, David Ahern <dsahern@kernel.org>
+CC: Kuniyuki Iwashima <kuniyu@amazon.com>, Kuniyuki Iwashima
+	<kuni1840@gmail.com>, <netdev@vger.kernel.org>, <dccp@vger.kernel.org>
+Subject: [PATCH v1 net 0/2] dccp/tcp: Relocate security_inet_conn_request().
+Date: Mon, 30 Oct 2023 13:10:40 -0700
+Message-ID: <20231030201042.32885-1-kuniyu@amazon.com>
+X-Mailer: git-send-email 2.30.2
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-References: <20231028144136.3462-1-bragathemanick0908@gmail.com>
- <CANn89iJyLWy6WEa_1p+jKpGBfq=h=TX=_7p_-_i4j6mHcMXbgA@mail.gmail.com>
- <e38353e7-ea99-434b-9700-151ab2de6f85@gmail.com> <CANn89iKPTdE+oAB30gp4koC7ddnga20R8H6V3qismvvEP80aqg@mail.gmail.com>
- <4fffeb15-52b1-4f2c-93bb-c3988ddfbf43@gmail.com>
-In-Reply-To: <4fffeb15-52b1-4f2c-93bb-c3988ddfbf43@gmail.com>
-From: Eric Dumazet <edumazet@google.com>
-Date: Mon, 30 Oct 2023 17:24:22 +0100
-Message-ID: <CANn89iKsYu0_zWwsR97zyC7uuAKqEdJYC33-4eezBFVb3pj8Qw@mail.gmail.com>
-Subject: Re: [PATCH net] dccp: check for ccid in ccid_hc_tx_send_packet
-To: Bragatheswaran Manickavel <bragathemanick0908@gmail.com>
-Cc: davem@davemloft.net, kuba@kernel.org, pabeni@redhat.com, 
-	dccp@vger.kernel.org, netdev@vger.kernel.org, linux-kernel@vger.kernel.org, 
-	syzbot+c71bc336c5061153b502@syzkaller.appspotmail.com
-Content-Type: text/plain; charset="UTF-8"
-Content-Transfer-Encoding: quoted-printable
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-Originating-IP: [10.187.171.32]
+X-ClientProxiedBy: EX19D045UWC002.ant.amazon.com (10.13.139.230) To
+ EX19D004ANA001.ant.amazon.com (10.37.240.138)
+Precedence: Bulk
 
-On Mon, Oct 30, 2023 at 5:22=E2=80=AFPM Bragatheswaran Manickavel
-<bragathemanick0908@gmail.com> wrote:
->
->
-> On 30/10/23 21:19, Eric Dumazet wrote:
->
-> On Mon, Oct 30, 2023 at 4:40=E2=80=AFPM Bragatheswaran Manickavel
-> <bragathemanick0908@gmail.com> wrote:
->
-> On 30/10/23 14:29, Eric Dumazet wrote:
->
-> On Sat, Oct 28, 2023 at 4:41=E2=80=AFPM Bragatheswaran Manickavel
-> <bragathemanick0908@gmail.com> wrote:
->
-> ccid_hc_tx_send_packet might be called with a NULL ccid pointer
-> leading to a NULL pointer dereference
->
-> Below mentioned commit has similarly changes
-> commit 276bdb82dedb ("dccp: check ccid before dereferencing")
->
-> Reported-by: syzbot+c71bc336c5061153b502@syzkaller.appspotmail.com
-> Closes: https://syzkaller.appspot.com/bug?extid=3Dc71bc336c5061153b502
-> Signed-off-by: Bragatheswaran Manickavel <bragathemanick0908@gmail.com>
-> ---
->   net/dccp/ccid.h | 2 +-
->   1 file changed, 1 insertion(+), 1 deletion(-)
->
-> diff --git a/net/dccp/ccid.h b/net/dccp/ccid.h
-> index 105f3734dadb..1015dc2b9392 100644
-> --- a/net/dccp/ccid.h
-> +++ b/net/dccp/ccid.h
-> @@ -163,7 +163,7 @@ static inline int ccid_packet_dequeue_eval(const int =
-return_code)
->   static inline int ccid_hc_tx_send_packet(struct ccid *ccid, struct sock=
- *sk,
->                                           struct sk_buff *skb)
->   {
-> -       if (ccid->ccid_ops->ccid_hc_tx_send_packet !=3D NULL)
-> +       if (ccid !=3D NULL && ccid->ccid_ops->ccid_hc_tx_send_packet !=3D=
- NULL)
->                  return ccid->ccid_ops->ccid_hc_tx_send_packet(sk, skb);
->          return CCID_PACKET_SEND_AT_ONCE;
->   }
-> --
-> 2.34.1
->
-> If you are willing to fix dccp, I would make sure that some of
-> lockless accesses to dccps_hc_tx_ccid
-> are also double checked and fixed.
->
-> do_dccp_getsockopt() and dccp_get_info()
->
-> Hi Eric,
->
-> In both do_dccp_getsockopt() and dccp_get_info(), dccps_hc_rx_ccid are
-> checked properly before access.
->
-> Not really, because another thread can change the value at the same time.
->
-> Adding checks is not solving races.
->
-> Understood. But when I see function similar to ccid_hc_tx_send_packet all=
- of
-> them has ccid check and few of them have addressed same issue.
->
-> dccp_get_info()
->         if (dp->dccps_hc_rx_ccid !=3D NULL)
->                 ccid_hc_rx_get_info(dp->dccps_hc_rx_ccid, sk, info);
->         if (dp->dccps_hc_tx_ccid !=3D NULL)
->                 ccid_hc_tx_get_info(dp->dccps_hc_tx_ccid, sk, info);
->
+security_inet_conn_request() reads reqsk's remote address, but it's not
+initialised in some places.
 
-All I am saying is that these changes are not correct.
+Let's make sure the address is set before security_inet_conn_request().
 
-They are simply adding some 'checks' that are unsafe.
 
-Compiler can absolutely fetch dp->dccps_hc_tx_ccid a second time,
-and a NULL could be read this second time.
+Kuniyuki Iwashima (2):
+  dccp: Call security_inet_conn_request() after setting IPv4 addresses.
+  dccp/tcp: Call security_inet_conn_request() after setting IPv6
+    addresses.
 
-> do_dccp_getsockopt()
->     ccid_hc_rx_getsockopt
->     ccid_hc_tx_getsockopt
->     ccid_get_current_rx_ccid
->     ccid_get_current_tx_ccid   =3D=3D=3D> All of them have ccid check
->
-> So, I went on with this changes.
-> If you have another suggestion of fixing this issue please let me know. I=
- will take a look.
+ net/dccp/ipv4.c       | 6 +++---
+ net/dccp/ipv6.c       | 6 +++---
+ net/ipv6/syncookies.c | 7 ++++---
+ 3 files changed, 10 insertions(+), 9 deletions(-)
+
+-- 
+2.30.2
+
