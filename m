@@ -1,68 +1,113 @@
-Received: from lindbergh.monkeyblade.net (lindbergh.monkeyblade.net [23.128.96.19])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="F0Dlmms4"
+Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.133.124])
+	by lindbergh.monkeyblade.net (Postfix) with ESMTPS id 2EFA919B4
+	for <dccp@vger.kernel.org>; Wed, 15 Nov 2023 13:05:24 -0800 (PST)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
+	s=mimecast20190719; t=1700082323;
+	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
+	 to:to:cc:cc:mime-version:mime-version:
+	 content-transfer-encoding:content-transfer-encoding:
+	 in-reply-to:in-reply-to:references:references;
+	bh=M/2ZyYZIlXaVrQ5H2NVMzh6RQkIaOQLrSYQoOoe/xlo=;
+	b=F0Dlmms4Yw+39O81YmCnDUs1Hg+jcVQgntW75uAp8L3U33GgJSt0c8qXwy1h9/g/NNsCi0
+	2v+wUf3+3xqEx6ZZEIntpfbsZFzmtPnCXYmkpWhcCwv5JHk/FpfnABm8AidRklVUJErrbD
+	Y1767LE2u55tV4zpmSm3emfD8Hry1Bc=
+Received: from mimecast-mx02.redhat.com (mimecast-mx02.redhat.com
+ [66.187.233.88]) by relay.mimecast.com with ESMTP with STARTTLS
+ (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
+ us-mta-250-JizxYATBPXy1AFjmuMswsQ-1; Wed, 15 Nov 2023 16:05:20 -0500
+X-MC-Unique: JizxYATBPXy1AFjmuMswsQ-1
+Received: from smtp.corp.redhat.com (int-mx01.intmail.prod.int.rdu2.redhat.com [10.11.54.1])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange X25519 server-signature RSA-PSS (2048 bits) server-digest SHA256)
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id AFF34D505
-	for <dccp@vger.kernel.org>; Wed,  8 Nov 2023 08:03:05 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; dkim=none
-Received: from mail-oi1-f197.google.com (mail-oi1-f197.google.com [209.85.167.197])
-	by lindbergh.monkeyblade.net (Postfix) with ESMTPS id 51DFDAF
-	for <dccp@vger.kernel.org>; Wed,  8 Nov 2023 00:03:05 -0800 (PST)
-Received: by mail-oi1-f197.google.com with SMTP id 5614622812f47-3b2e4f3defaso9032633b6e.2
-        for <dccp@vger.kernel.org>; Wed, 08 Nov 2023 00:03:05 -0800 (PST)
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1699430584; x=1700035384;
-        h=to:from:subject:message-id:in-reply-to:date:mime-version
-         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
-        bh=wLxkoJ0J2bDcVFhjdD1ByIlE66SDaLG2rCYjwFdMcfw=;
-        b=ksk3OBM4P1ftjQ/Sq2+w5f2mM8RyD3ntYGJ1n9A2b6S2UUSZifLyFJ301GsV93VOq9
-         9m3iTyLIloMpcWwkEwlkVVVMsFYZ9DLcalOlkzC+6y8Ppo35ijhefXlNOGUKE/jBsx6Y
-         OjBnfc6QN/vJS37RlkPz4h0LAFhAZpKSqItlzrRCWqqOT8ZmXWwS26Hp433i4tEXLyeE
-         Zc/y24/6dz8u6eSAWb21V3TPt4kjQLai0otT4VplEGkH1oV99sjsX1W4Akvbsethxkvi
-         K2hKoJKXfVEkoX4+tYzVezm4zEn0Ojv3FNdiwK3/T1vN2A6N2cBDIB+QUZpUmJXGshfU
-         F6YQ==
-X-Gm-Message-State: AOJu0YyGPWM/3r4Z8M5JFzBWufLayuc1qb8QF+Y7rMt/d6tyGdjRzTv4
-	yiMukkEoAJ8zCatE5l78eyqFaeYZuhtAbfkSoHHvHBne2GKN
-X-Google-Smtp-Source: AGHT+IFaX5LC4+c28UiyOy/nAi3zs6InloFZr1OolB/cB0NXkbGGJtuSl1zjrihF1453Xy0W+gcaNotbRS9cwtvEwE4TbRPga8XM
+	by mimecast-mx02.redhat.com (Postfix) with ESMTPS id AC3D585A58B;
+	Wed, 15 Nov 2023 21:05:19 +0000 (UTC)
+Received: from vschneid-thinkpadt14sgen2i.remote.csb (unknown [10.22.34.128])
+	by smtp.corp.redhat.com (Postfix) with ESMTPS id 604403D6;
+	Wed, 15 Nov 2023 21:05:19 +0000 (UTC)
+From: Valentin Schneider <vschneid@redhat.com>
+To: dccp@vger.kernel.org,
+	netdev@vger.kernel.org,
+	linux-kernel@vger.kernel.org,
+	linux-rt-users@vger.kernel.org
+Cc: "David S. Miller" <davem@davemloft.net>,
+	Eric Dumazet <edumazet@google.com>,
+	Jakub Kicinski <kuba@kernel.org>,
+	Paolo Abeni <pabeni@redhat.com>,
+	David Ahern <dsahern@kernel.org>,
+	Juri Lelli <juri.lelli@redhat.com>,
+	Tomas Glozar <tglozar@redhat.com>,
+	Sebastian Andrzej Siewior <bigeasy@linutronix.de>,
+	Thomas Gleixner <tglx@linutronix.de>
+Subject: [PATCH v2 2/2] tcp/dcpp: Don't disable bh around timewait_sock initialization
+Date: Wed, 15 Nov 2023 16:05:09 -0500
+Message-ID: <20231115210509.481514-3-vschneid@redhat.com>
+In-Reply-To: <20231115210509.481514-1-vschneid@redhat.com>
+References: <20231115210509.481514-1-vschneid@redhat.com>
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-X-Received: by 2002:a05:6808:201d:b0:3ae:61f:335e with SMTP id
- q29-20020a056808201d00b003ae061f335emr581414oiw.5.1699430584749; Wed, 08 Nov
- 2023 00:03:04 -0800 (PST)
-Date: Wed, 08 Nov 2023 00:03:04 -0800
-In-Reply-To: <0000000000009e122006088a2b8d@google.com>
-X-Google-Appengine-App-Id: s~syzkaller
-X-Google-Appengine-App-Id-Alias: syzkaller
-Message-ID: <00000000000053135d06099f84a3@google.com>
-Subject: Re: [syzbot] [dccp?] general protection fault in dccp_write_xmit (2)
-From: syzbot <syzbot+c71bc336c5061153b502@syzkaller.appspotmail.com>
-To: bragathemanick0908@gmail.com, davem@davemloft.net, dccp@vger.kernel.org, 
-	edumazet@google.com, kuba@kernel.org, linux-kernel@vger.kernel.org, 
-	netdev@vger.kernel.org, pabeni@redhat.com, syzkaller-bugs@googlegroups.com
-Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+X-Scanned-By: MIMEDefang 3.4.1 on 10.11.54.1
 
-syzbot has bisected this issue to:
+Now that the tw_timer is armed *after* the hashdance, it is the last step
+of the timewait initialization. We can thus enable softirqs without running
+the risk of the timer handler running before the initialization is done.
 
-commit 419ce133ab928ab5efd7b50b2ef36ddfd4eadbd2
-Author: Paolo Abeni <pabeni@redhat.com>
-Date:   Wed Oct 11 07:20:55 2023 +0000
+This is conceptually a revert of
+  cfac7f836a71 ("tcp/dccp: block bh before arming time_wait timer")
 
-    tcp: allow again tcp_disconnect() when threads are waiting
+Signed-off-by: Valentin Schneider <vschneid@redhat.com>
+---
+ net/dccp/minisocks.c     | 4 ----
+ net/ipv4/tcp_minisocks.c | 4 ----
+ 2 files changed, 8 deletions(-)
 
-bisection log:  https://syzkaller.appspot.com/x/bisect.txt?x=142a647b680000
-start commit:   ff269e2cd5ad Merge tag 'net-next-6.7-followup' of git://gi..
-git tree:       net-next
-final oops:     https://syzkaller.appspot.com/x/report.txt?x=162a647b680000
-console output: https://syzkaller.appspot.com/x/log.txt?x=122a647b680000
-kernel config:  https://syzkaller.appspot.com/x/.config?x=53cdcbf124ea14aa
-dashboard link: https://syzkaller.appspot.com/bug?extid=c71bc336c5061153b502
-syz repro:      https://syzkaller.appspot.com/x/repro.syz?x=142bff40e80000
-C reproducer:   https://syzkaller.appspot.com/x/repro.c?x=1559f190e80000
+diff --git a/net/dccp/minisocks.c b/net/dccp/minisocks.c
+index 2f0fad4255e36..cb990bc92a5c9 100644
+--- a/net/dccp/minisocks.c
++++ b/net/dccp/minisocks.c
+@@ -53,15 +53,11 @@ void dccp_time_wait(struct sock *sk, int state, int timeo)
+ 		if (state == DCCP_TIME_WAIT)
+ 			timeo = DCCP_TIMEWAIT_LEN;
+ 
+-	       local_bh_disable();
+-
+ 		// Linkage updates
+ 		inet_twsk_hashdance(tw, sk, &dccp_hashinfo);
+ 		inet_twsk_schedule(tw, timeo);
+ 		// Access to tw after this point is illegal.
+ 		inet_twsk_put(tw);
+-
+-		local_bh_enable();
+ 	} else {
+ 		/* Sorry, if we're out of memory, just CLOSE this
+ 		 * socket up.  We've got bigger problems than
+diff --git a/net/ipv4/tcp_minisocks.c b/net/ipv4/tcp_minisocks.c
+index 48eb0310fe837..c7d46674d55cb 100644
+--- a/net/ipv4/tcp_minisocks.c
++++ b/net/ipv4/tcp_minisocks.c
+@@ -338,15 +338,11 @@ void tcp_time_wait(struct sock *sk, int state, int timeo)
+ 		if (state == TCP_TIME_WAIT)
+ 			timeo = TCP_TIMEWAIT_LEN;
+ 
+-	       local_bh_disable();
+-
+ 		// Linkage updates.
+ 		inet_twsk_hashdance(tw, sk, net->ipv4.tcp_death_row.hashinfo);
+ 		inet_twsk_schedule(tw, timeo);
+ 		// Access to tw after this point is illegal.
+ 		inet_twsk_put(tw);
+-
+-		local_bh_enable();
+ 	} else {
+ 		/* Sorry, if we're out of memory, just CLOSE this
+ 		 * socket up.  We've got bigger problems than
+-- 
+2.41.0
 
-Reported-by: syzbot+c71bc336c5061153b502@syzkaller.appspotmail.com
-Fixes: 419ce133ab92 ("tcp: allow again tcp_disconnect() when threads are waiting")
-
-For information about bisection process see: https://goo.gl/tpsmEJ#bisection
