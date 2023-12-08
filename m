@@ -1,103 +1,52 @@
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="T0xeNeGu"
-Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.129.124])
-	by lindbergh.monkeyblade.net (Postfix) with ESMTPS id 519DD10CE
-	for <dccp@vger.kernel.org>; Thu, 23 Nov 2023 08:45:47 -0800 (PST)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
-	s=mimecast20190719; t=1700757946;
-	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
-	 to:to:cc:cc:mime-version:mime-version:content-type:content-type:
-	 content-transfer-encoding:content-transfer-encoding:
-	 in-reply-to:in-reply-to:references:references;
-	bh=lBjBl6RiMXteiisXslLo0Yh7FdmVurXCHqt4qx72G+0=;
-	b=T0xeNeGuHgM8oAlBSepRjy1ujklJTSYE94ThpaOy0gwyq4ff1HBrNVqeqphSknIdlgnWxC
-	q02i4eTgwI0DpI6kq7VbhlWso+NE3SXIge2rh30ZY6FznOD8ArJW+0HFG+uA9vmCINGRBQ
-	HTwfr8NUx0CB3D2DVvOEqRvMQc8PgAU=
-Received: from mail-ej1-f71.google.com (mail-ej1-f71.google.com
- [209.85.218.71]) by relay.mimecast.com with ESMTP with STARTTLS
- (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
- us-mta-103-xNouZ6X2Ouig2H7upiVJsg-1; Thu, 23 Nov 2023 11:45:42 -0500
-X-MC-Unique: xNouZ6X2Ouig2H7upiVJsg-1
-Received: by mail-ej1-f71.google.com with SMTP id a640c23a62f3a-a00d0011a3bso67072066b.2
-        for <dccp@vger.kernel.org>; Thu, 23 Nov 2023 08:45:42 -0800 (PST)
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1700757941; x=1701362741;
-        h=content-transfer-encoding:cc:to:subject:message-id:date:from
-         :in-reply-to:references:mime-version:x-gm-message-state:from:to:cc
-         :subject:date:message-id:reply-to;
-        bh=lBjBl6RiMXteiisXslLo0Yh7FdmVurXCHqt4qx72G+0=;
-        b=hghOoKYd7HMu5u30FvW2YTAU8w6Uk4jJCbmYI0MpZkRTHxXw6t3lVP4icGSah+jw83
-         IYr605nBq2JJ/FErb0rZc7Zu04k5hf4rJ63rWsxGUgHofEH71QrzNs/8UD8QnTdQ+N3i
-         muD3D5NMOT8iPVWeSAMeiSD26X6GN8vmIMZsFuiBQTmtXDupgZUkCiR7n1qJiuvmjNkj
-         biNUuhI76HMhN5sSiyu+kcL/eRklaSk293P0PZBU22uOfR9jJb/Mj0PJWfGXvXnPD7M1
-         kbnrMUFDxgdT9bPseXIJXWZCGs5Wgdq/MgZUdXDK6RRTVwgWVilFeJDDKmGzkKLloNgc
-         7YwA==
-X-Gm-Message-State: AOJu0YzP+qqHqr08TenefbuF0qBJKUyohxXIGv3OBD+LmSVK+GkQ0uY9
-	Td8NNHRrGFUb/ivEBqV4LmVfWTVjtkqsI1kJ5QIC4II3TnKi6dRdXMkFAdK91bcoYqGe0KpKuwK
-	IBeK08mkLKBMmOpRvYkKbHWCVcRwY1Q==
-X-Received: by 2002:a17:906:14d:b0:9e0:5d5c:aa6d with SMTP id 13-20020a170906014d00b009e05d5caa6dmr4276182ejh.20.1700757941730;
-        Thu, 23 Nov 2023 08:45:41 -0800 (PST)
-X-Google-Smtp-Source: AGHT+IFfaOoZK8ZVUHRmRcmkEFqZf7x8Mab1KDGr4SWVV+OmpRRd1SIVYmQoomns8qprSr9GXpfGYdGZr2ToP/DcJ7w=
-X-Received: by 2002:a17:906:14d:b0:9e0:5d5c:aa6d with SMTP id
- 13-20020a170906014d00b009e05d5caa6dmr4276162ejh.20.1700757941494; Thu, 23 Nov
- 2023 08:45:41 -0800 (PST)
+	dkim=pass (2048-bit key) header.d=venturelinkbiz.com header.i=@venturelinkbiz.com header.b="D31sySGy"
+Received: from mail.venturelinkbiz.com (mail.venturelinkbiz.com [51.195.119.142])
+	by lindbergh.monkeyblade.net (Postfix) with ESMTPS id 83305171C
+	for <dccp@vger.kernel.org>; Fri,  8 Dec 2023 00:41:18 -0800 (PST)
+Received: by mail.venturelinkbiz.com (Postfix, from userid 1002)
+	id 7B77A478A0; Fri,  8 Dec 2023 08:41:06 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=venturelinkbiz.com;
+	s=mail; t=1702024876;
+	bh=Mjfq+hZZ0+rPTC06HjjASvlnsTMgj1yAndWxi/OAu2M=;
+	h=Date:From:To:Subject:From;
+	b=D31sySGyO66OxtsN64HVvU4IZfUG9I8ubQt+nGUOddEv/Z+3szHxDqe5lxrU749+b
+	 AAxksGGFjlfaGmjLt4wRQCGjAxaE7RLbSo+RPKJJgwRx3fOfh4MayOlvcLDpoBhzHS
+	 weLR4pZZDZQu/H1u4jHLmGTnHVAbgnHXwuIl8+ZJf496Veffgu7XTGKO9Uc5i2p0BG
+	 agy6AZ12d2v+vJpPTKi1I6NFdNmanlfRKCHQydOEaQujxRK/oIOuMblYHFCe5vxZLl
+	 2czh8+jRpoiwrnpTqjmINbSDzu6v9SWlgfRHZ49gCe7+nGvgkfwzQxrVACKgB5Wzl/
+	 NClORJvKp2W8g==
+Received: by mail.venturelinkbiz.com for <dccp@vger.kernel.org>; Fri,  8 Dec 2023 08:40:56 GMT
+Message-ID: <20231208074500-0.1.42.c3r0.0.lci6ph34fq@venturelinkbiz.com>
+Date: Fri,  8 Dec 2023 08:40:56 GMT
+From: "Michal Rmoutil" <michal.rmoutil@venturelinkbiz.com>
+To: <dccp@vger.kernel.org>
+Subject: =?UTF-8?Q?Bezplatn=C3=A1_60denn=C3=AD_zku=C5=A1ebn=C3=AD_verze:_Vylep=C5=A1ete_sv=C3=A9_v=C3=BDrobn=C3=AD_procesy?=
+X-Mailer: mail.venturelinkbiz.com
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-References: <20231115210509.481514-1-vschneid@redhat.com> <20231115210509.481514-2-vschneid@redhat.com>
- <CANn89iJPxrXi35=_OJqLsJjeNU9b8EFb_rk+EEMVCMiAOd2=5A@mail.gmail.com>
- <CAD235PRWd+zF1xpuXWabdgMU01XNpvtvGorBJbLn9ny2G_TSuw@mail.gmail.com> <CANn89iKRSKz0e8v+Z-UsKGs4fQWDt6eTAw71VENbSmfkEicTPA@mail.gmail.com>
-In-Reply-To: <CANn89iKRSKz0e8v+Z-UsKGs4fQWDt6eTAw71VENbSmfkEicTPA@mail.gmail.com>
-From: Valentin Schneider <vschneid@redhat.com>
-Date: Thu, 23 Nov 2023 17:45:29 +0100
-Message-ID: <CAD235PTyEce0S-22vg=opQdq0MUwEovdx5henU=9Mwh3Rf8QrA@mail.gmail.com>
-Subject: Re: [PATCH v2 1/2] tcp/dcpp: Un-pin tw_timer
-To: Eric Dumazet <edumazet@google.com>
-Cc: dccp@vger.kernel.org, netdev@vger.kernel.org, linux-kernel@vger.kernel.org, 
-	linux-rt-users@vger.kernel.org, "David S. Miller" <davem@davemloft.net>, 
-	Jakub Kicinski <kuba@kernel.org>, Paolo Abeni <pabeni@redhat.com>, David Ahern <dsahern@kernel.org>, 
-	Juri Lelli <juri.lelli@redhat.com>, Tomas Glozar <tglozar@redhat.com>, 
-	Sebastian Andrzej Siewior <bigeasy@linutronix.de>, Thomas Gleixner <tglx@linutronix.de>
 Content-Type: text/plain; charset="UTF-8"
 Content-Transfer-Encoding: quoted-printable
 
-On Thu, 23 Nov 2023 at 17:32, Eric Dumazet <edumazet@google.com> wrote:
->
-> On Thu, Nov 23, 2023 at 3:34=E2=80=AFPM Valentin Schneider <vschneid@redh=
-at.com> wrote:
-> > I thought that was already the case, per inet_twsk_hashdance():
-> >
-> > /* tw_refcnt is set to 3 because we have :
-> >  * - one reference for bhash chain.
-> >  * - one reference for ehash chain.
-> >  * - one reference for timer.
-> >
-> > and
-> >
-> > tw_timer_handler()
-> > `\
-> >   inet_twsk_kill()
-> >   `\
-> >     inet_twsk_put()
-> >
-> > So AFAICT, after we go through the hashdance, there's a reference on
-> > tw_refcnt held by the tw_timer.
-> > inet_twsk_deschedule_put() can race with arming the timer, but it only
-> > calls inet_twsk_kill() if the timer
-> > was already armed & has been deleted, so there's no risk of calling it
-> > twice... If I got it right :-)
-> >
->
-> Again, I think you missed some details.
->
-> I am OOO for a few days, I do not have time to elaborate.
->
-> You will need to properly track active timer by elevating
-> tw->tw_refcnt, or I guarantee something wrong will happen.
->
+Dobr=C3=A9 r=C3=A1no
 
-Gotcha, let me dig into this then!
+Zn=C3=A1te syst=C3=A9m, kter=C3=BD nejen hl=C3=ADd=C3=A1, ale i optimaliz=
+uje v=C3=BDrobu a p=C5=99in=C3=A1=C5=A1=C3=AD st=C3=A1l=C3=BD p=C5=99=C3=AD=
+jem?
 
+D=C3=ADky nejnov=C4=9Bj=C5=A1=C3=ADm technologi=C3=ADm a anal=C3=BDze dat=
+ na=C5=A1e =C5=99e=C5=A1en=C3=AD identifikuje oblasti optimalizace, zv=C3=
+=BD=C5=A1en=C3=AD efektivity a sn=C3=AD=C5=BEen=C3=AD n=C3=A1klad=C5=AF. =
+Na=C5=A1i klienti zaznamenali n=C3=A1r=C5=AFst p=C5=99=C3=ADjm=C5=AF v pr=
+=C5=AFm=C4=9Bru o 20 % a dnes si to m=C5=AF=C5=BEete vyzkou=C5=A1et na 60=
+ dn=C3=AD zdarma.
+
+Pokud chcete dal=C5=A1=C3=AD podrobnosti, odpov=C4=9Bzte pros=C3=ADm na k=
+ontaktn=C3=AD =C4=8D=C3=ADslo.
+
+
+Pozdravy
+Michal Rmoutil
