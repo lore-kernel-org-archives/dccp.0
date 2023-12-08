@@ -1,52 +1,71 @@
-Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=venturelinkbiz.com header.i=@venturelinkbiz.com header.b="D31sySGy"
-Received: from mail.venturelinkbiz.com (mail.venturelinkbiz.com [51.195.119.142])
-	by lindbergh.monkeyblade.net (Postfix) with ESMTPS id 83305171C
-	for <dccp@vger.kernel.org>; Fri,  8 Dec 2023 00:41:18 -0800 (PST)
-Received: by mail.venturelinkbiz.com (Postfix, from userid 1002)
-	id 7B77A478A0; Fri,  8 Dec 2023 08:41:06 +0000 (UTC)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=venturelinkbiz.com;
-	s=mail; t=1702024876;
-	bh=Mjfq+hZZ0+rPTC06HjjASvlnsTMgj1yAndWxi/OAu2M=;
-	h=Date:From:To:Subject:From;
-	b=D31sySGyO66OxtsN64HVvU4IZfUG9I8ubQt+nGUOddEv/Z+3szHxDqe5lxrU749+b
-	 AAxksGGFjlfaGmjLt4wRQCGjAxaE7RLbSo+RPKJJgwRx3fOfh4MayOlvcLDpoBhzHS
-	 weLR4pZZDZQu/H1u4jHLmGTnHVAbgnHXwuIl8+ZJf496Veffgu7XTGKO9Uc5i2p0BG
-	 agy6AZ12d2v+vJpPTKi1I6NFdNmanlfRKCHQydOEaQujxRK/oIOuMblYHFCe5vxZLl
-	 2czh8+jRpoiwrnpTqjmINbSDzu6v9SWlgfRHZ49gCe7+nGvgkfwzQxrVACKgB5Wzl/
-	 NClORJvKp2W8g==
-Received: by mail.venturelinkbiz.com for <dccp@vger.kernel.org>; Fri,  8 Dec 2023 08:40:56 GMT
-Message-ID: <20231208074500-0.1.42.c3r0.0.lci6ph34fq@venturelinkbiz.com>
-Date: Fri,  8 Dec 2023 08:40:56 GMT
-From: "Michal Rmoutil" <michal.rmoutil@venturelinkbiz.com>
-To: <dccp@vger.kernel.org>
-Subject: =?UTF-8?Q?Bezplatn=C3=A1_60denn=C3=AD_zku=C5=A1ebn=C3=AD_verze:_Vylep=C5=A1ete_sv=C3=A9_v=C3=BDrobn=C3=AD_procesy?=
-X-Mailer: mail.venturelinkbiz.com
+Received: from mail-oa1-f69.google.com (mail-oa1-f69.google.com [209.85.160.69])
+	by lindbergh.monkeyblade.net (Postfix) with ESMTPS id DA03A199E
+	for <dccp@vger.kernel.org>; Fri,  8 Dec 2023 05:16:31 -0800 (PST)
+Received: by mail-oa1-f69.google.com with SMTP id 586e51a60fabf-1faf33aa091so3413053fac.2
+        for <dccp@vger.kernel.org>; Fri, 08 Dec 2023 05:16:31 -0800 (PST)
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1702041391; x=1702646191;
+        h=to:from:subject:message-id:date:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=Ad2JqdSOjClv5xhQDHopdA3/PJWoAf52L+6eH5Tqlm0=;
+        b=W5qawgNpiMXuGk1KacwEi9xG5ySW78Y1pX4MXXhNLcubEVVnuIKINbqtiuyymon6Yy
+         zcYEW/5Ls2OUFgh2c/6bMLf+LAGVLDROfWGE9fEwY5PORE6xvwGcsJgGnyvrqD7fyOsk
+         T5IhSkpHtiLQ0btIZ1d1pXG2cBxM1/CUZ7WHSf44mQZ8Bw3ls7ER/kC33U3ppbB8P5tD
+         XUr1iEAO72qMJl1Hy8zIKTNmZl6bEyek3ntn+6UYbctOZ6kwDdwA3vf34pLTJn5iY0oX
+         jdx60BQ3BBTt4zk7LZJuPCOR3kWJUGNVDjXLTd0ZCzr7WilMHiXNSTi1TO0DUJo0wy88
+         fteA==
+X-Gm-Message-State: AOJu0YyY/EH0f3RkDsFHKW/bpTLVpy2J3TBai7beKyt9bl2OkZdaCAd2
+	9atcR+poYGwEWEeQGokXeokVcZ10h1K/HkznxWE+Z/0GsugSHzM=
+X-Google-Smtp-Source: AGHT+IFpWS8JuwydY2By4SE2Rn78je67aA6WeSBzNdV00EhbPRdiY+n9xBxRrsJu/mKz8qY5Qz4rspbVB6tvI52y3jrfli5bmxdT
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
+X-Received: by 2002:a05:6870:9714:b0:1fb:1b2:fc9d with SMTP id
+ n20-20020a056870971400b001fb01b2fc9dmr25752oaq.5.1702041390325; Fri, 08 Dec
+ 2023 05:16:30 -0800 (PST)
+Date: Fri, 08 Dec 2023 05:16:30 -0800
+X-Google-Appengine-App-Id: s~syzkaller
+X-Google-Appengine-App-Id-Alias: syzkaller
+Message-ID: <00000000000076a6ea060bff64b3@google.com>
+Subject: [syzbot] Monthly dccp report (Dec 2023)
+From: syzbot <syzbot+list205929fef9983ad8ebbc@syzkaller.appspotmail.com>
+To: dccp@vger.kernel.org, linux-kernel@vger.kernel.org, netdev@vger.kernel.org, 
+	syzkaller-bugs@googlegroups.com
 Content-Type: text/plain; charset="UTF-8"
-Content-Transfer-Encoding: quoted-printable
 
-Dobr=C3=A9 r=C3=A1no
+Hello dccp maintainers/developers,
 
-Zn=C3=A1te syst=C3=A9m, kter=C3=BD nejen hl=C3=ADd=C3=A1, ale i optimaliz=
-uje v=C3=BDrobu a p=C5=99in=C3=A1=C5=A1=C3=AD st=C3=A1l=C3=BD p=C5=99=C3=AD=
-jem?
+This is a 31-day syzbot report for the dccp subsystem.
+All related reports/information can be found at:
+https://syzkaller.appspot.com/upstream/s/dccp
 
-D=C3=ADky nejnov=C4=9Bj=C5=A1=C3=ADm technologi=C3=ADm a anal=C3=BDze dat=
- na=C5=A1e =C5=99e=C5=A1en=C3=AD identifikuje oblasti optimalizace, zv=C3=
-=BD=C5=A1en=C3=AD efektivity a sn=C3=AD=C5=BEen=C3=AD n=C3=A1klad=C5=AF. =
-Na=C5=A1i klienti zaznamenali n=C3=A1r=C5=AFst p=C5=99=C3=ADjm=C5=AF v pr=
-=C5=AFm=C4=9Bru o 20 % a dnes si to m=C5=AF=C5=BEete vyzkou=C5=A1et na 60=
- dn=C3=AD zdarma.
+During the period, 0 new issues were detected and 0 were fixed.
+In total, 5 issues are still open and 6 have been fixed so far.
 
-Pokud chcete dal=C5=A1=C3=AD podrobnosti, odpov=C4=9Bzte pros=C3=ADm na k=
-ontaktn=C3=AD =C4=8D=C3=ADslo.
+Some of the still happening issues:
 
+Ref Crashes Repro Title
+<1> 102     Yes   KASAN: use-after-free Read in ccid2_hc_tx_packet_recv
+                  https://syzkaller.appspot.com/bug?extid=554ccde221001ab5479a
+<2> 51      Yes   BUG: "hc->tx_t_ipi == NUM" holds (exception!) at net/dccp/ccids/ccid3.c:LINE/ccid3_update_send_interval()
+                  https://syzkaller.appspot.com/bug?extid=94641ba6c1d768b1e35e
+<3> 23      Yes   general protection fault in dccp_write_xmit (2)
+                  https://syzkaller.appspot.com/bug?extid=c71bc336c5061153b502
+<4> 14      Yes   BUG: stored value of X_recv is zero at net/dccp/ccids/ccid3.c:LINE/ccid3_first_li() (3)
+                  https://syzkaller.appspot.com/bug?extid=2ad8ef335371014d4dc7
 
-Pozdravy
-Michal Rmoutil
+---
+This report is generated by a bot. It may contain errors.
+See https://goo.gl/tpsmEJ for more information about syzbot.
+syzbot engineers can be reached at syzkaller@googlegroups.com.
+
+To disable reminders for individual bugs, reply with the following command:
+#syz set <Ref> no-reminders
+
+To change bug's subsystems, reply with:
+#syz set <Ref> subsystems: new-subsystem
+
+You may send multiple commands in a single email message.
