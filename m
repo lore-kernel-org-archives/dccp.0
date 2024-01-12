@@ -1,508 +1,129 @@
+Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.129.124])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 4864055C2B
+	for <dccp@vger.kernel.org>; Fri, 12 Jan 2024 09:08:16 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=redhat.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="msJfa++h"
-Received: from mail-pg1-x543.google.com (mail-pg1-x543.google.com [IPv6:2607:f8b0:4864:20::543])
-	by lindbergh.monkeyblade.net (Postfix) with ESMTPS id 35AB99B;
-	Mon, 11 Dec 2023 04:09:07 -0800 (PST)
-Received: by mail-pg1-x543.google.com with SMTP id 41be03b00d2f7-5c66bbb3d77so2434203a12.0;
-        Mon, 11 Dec 2023 04:09:07 -0800 (PST)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=gmail.com; s=20230601; t=1702296546; x=1702901346; darn=vger.kernel.org;
-        h=cc:to:subject:message-id:date:from:mime-version:from:to:cc:subject
-         :date:message-id:reply-to;
-        bh=4zHuT2FQZbEckfGASHv8c3jH0DpfYUeTxRn7OXHNkBc=;
-        b=msJfa++hyXJ2NDlJBGRj8s4itcOXf2aTyHiWlx+s4BFayZI8X+t3SBP377+ntem25D
-         z97fePk2X5yVQcmNoI6WMgdjYJ2IIgcmCu6/Mral2Sk/CLGXuHEeFhRwewfIQvveaUIT
-         Nf0iC2NvQc1TYHzR/FRccYYFJYzsWqY1nygsXek7PTUzEHe2aLYvAl/zUUZybsAIuYFt
-         j31B4VWuGM/e3ADMJMitQ8xJtz7BVLFtVf2Zwu3WYBwMWUiakuK46fe55R18S2RXibXB
-         NiAnUsT5l/11p7u77y0D0kNmCaunCRUKAe78dEefFS/kmWQcdA7Q20Dd8SFHT5PjE7dD
-         D/iw==
+	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="bpAXx1jL"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
+	s=mimecast20190719; t=1705050495;
+	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
+	 to:to:cc:cc:mime-version:mime-version:content-type:content-type:
+	 content-transfer-encoding:content-transfer-encoding:
+	 in-reply-to:in-reply-to:references:references:autocrypt:autocrypt;
+	bh=0nU37kM4nLQS9a+jTPJKGaIKOCiVZSywQ1bcEx6PRdA=;
+	b=bpAXx1jLYCXfWngvhmazjye1fcTDBf5ZujTvFw/q+n9tNh0wE6EyIVcRLl3dYdtRydLzy1
+	KuahIU6DMe6q4Cpv4gEYhggEK5HVMyD+9+1GBwfed3cw2eMd73cogq+c6Kl3sG89CPxOpW
+	zVAsaHtyrSRckgB3gwGQSwtnNV13a/E=
+Received: from mail-ej1-f69.google.com (mail-ej1-f69.google.com
+ [209.85.218.69]) by relay.mimecast.com with ESMTP with STARTTLS
+ (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
+ us-mta-571-16Crp4qGOZqpDQcXLYrRaw-1; Fri, 12 Jan 2024 04:08:10 -0500
+X-MC-Unique: 16Crp4qGOZqpDQcXLYrRaw-1
+Received: by mail-ej1-f69.google.com with SMTP id a640c23a62f3a-a29de6a12adso106921966b.1
+        for <dccp@vger.kernel.org>; Fri, 12 Jan 2024 01:08:10 -0800 (PST)
 X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1702296546; x=1702901346;
-        h=cc:to:subject:message-id:date:from:mime-version:x-gm-message-state
-         :from:to:cc:subject:date:message-id:reply-to;
-        bh=4zHuT2FQZbEckfGASHv8c3jH0DpfYUeTxRn7OXHNkBc=;
-        b=bwrao+GZML40pnIdVCArGqKwRYopCToBnDr4UvWgxDfXqXD7r7HBypQtjFBb1RW9UD
-         kjFGvTIMZZgkjPR4XubK+qVPqz8xI+t99/SIKHp2iGGgvsCv7PgBBlj/LjNUYo0R2Btr
-         hqMOW8tsYCaTQSpnJv7t9XKn1b1tuLVvZL/kvtQaRlO3ERZ2mSmJECVNoJjR3CoMTp+r
-         LAnaqFJd7I7On73Cr1naKQuuo099LnZZb631dpKSuZgyHgcqAw7zGKppjiGJ4MtJvvVN
-         lMUHZd0b7uPBaTGMLs+pYwzWDJ2D6oGPgCGHlLuU68kbP11yxd7sZsqkVFf+NuZZw81q
-         uqDA==
-X-Gm-Message-State: AOJu0Ywv7GeVP1ZsIomX0tmt4oSNa5AdHRer8Dypp3c/GW1pouLEhItm
-	DXnI8tnVGxCxdXlp5E8ilvr4K6OYfSXm9vpYEWg=
-X-Google-Smtp-Source: AGHT+IELMNtTVnR3VnS50ou+1TXXOK98mK/XJTo6whNoQi/+bCNn/lnpVzOnm0MYN4h35I1MX8z/3+Ufzq9M+dwzNek=
-X-Received: by 2002:a05:6a20:430f:b0:190:c99:cfb1 with SMTP id
- h15-20020a056a20430f00b001900c99cfb1mr2027851pzk.22.1702296546430; Mon, 11
- Dec 2023 04:09:06 -0800 (PST)
+        d=1e100.net; s=20230601; t=1705050490; x=1705655290;
+        h=mime-version:user-agent:content-transfer-encoding:autocrypt
+         :references:in-reply-to:date:cc:to:from:subject:message-id
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=0nU37kM4nLQS9a+jTPJKGaIKOCiVZSywQ1bcEx6PRdA=;
+        b=Nb/aFPNugzeGGCp++z9ytkW0pU2N3USfIOPHifQCHynCShwkpXjELtuGhRX2SGBc/e
+         j0mIu1BXkePqsY/4HhKN+awk7cY+bOKdlrmbkxor4IsUE6U+6EhHad6B6mEv4CzMI1Xa
+         OEaZLuRWfRl8BHbAV58Gl/uSXeZCsVdemENi79+L/UPfQYZLMQTap/b2/cAwH8tjZaz5
+         c/koS1D+F2CqXRFttvQQH0tHNmJIwZQ/bR18p1aj5DCPZhDT3jHVt0z+icA9fPGEzvMI
+         tYDxO7Jpa3B8lAZCPu6JYE0A7HOi3J+qHsj2wDjumhUmN/S2E+8zSEfu6RPhBob4q8fC
+         vqPw==
+X-Gm-Message-State: AOJu0YxsxkmvbGmffL9PVWZ6bco+JvQb475DHNx2RD5TPPi1XxtJietL
+	D5gmE53TSRYGqVQGbvd75eT+WXpgKFMD1XafiRFZ6usWQvglS5F3B0mqzZmqR8C7W0U07UjFvfF
+	2Htr+37ipbDPcjKeWoz2CKQ==
+X-Received: by 2002:a17:906:fa92:b0:a28:ab63:db33 with SMTP id lt18-20020a170906fa9200b00a28ab63db33mr633351ejb.7.1705050489818;
+        Fri, 12 Jan 2024 01:08:09 -0800 (PST)
+X-Google-Smtp-Source: AGHT+IHI0fSC0TiL2xLcVeN1hBaSKH6whBShEE/lG/8jI6jkjQ0M54/xxght+KyT2FlZfEGE4gqV2Q==
+X-Received: by 2002:a17:906:fa92:b0:a28:ab63:db33 with SMTP id lt18-20020a170906fa9200b00a28ab63db33mr633336ejb.7.1705050489508;
+        Fri, 12 Jan 2024 01:08:09 -0800 (PST)
+Received: from gerbillo.redhat.com (146-241-242-119.dyn.eolo.it. [146.241.242.119])
+        by smtp.gmail.com with ESMTPSA id k13-20020a1709062a4d00b00a290920c78csm1565764eje.187.2024.01.12.01.08.08
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Fri, 12 Jan 2024 01:08:09 -0800 (PST)
+Message-ID: <9619119e125b0e30461e147f5654001397eb0fe6.camel@redhat.com>
+Subject: Re: [PATCH v2 1/2] tcp/dcpp: Un-pin tw_timer
+From: Paolo Abeni <pabeni@redhat.com>
+To: Eric Dumazet <edumazet@google.com>, Valentin Schneider
+ <vschneid@redhat.com>
+Cc: dccp@vger.kernel.org, netdev@vger.kernel.org,
+ linux-kernel@vger.kernel.org,  linux-rt-users@vger.kernel.org, "David S.
+ Miller" <davem@davemloft.net>,  Jakub Kicinski <kuba@kernel.org>, David
+ Ahern <dsahern@kernel.org>, Juri Lelli <juri.lelli@redhat.com>, Tomas
+ Glozar <tglozar@redhat.com>, Sebastian Andrzej Siewior
+ <bigeasy@linutronix.de>, Thomas Gleixner <tglx@linutronix.de>
+Date: Fri, 12 Jan 2024 10:08:07 +0100
+In-Reply-To: <CANn89iKRSKz0e8v+Z-UsKGs4fQWDt6eTAw71VENbSmfkEicTPA@mail.gmail.com>
+References: <20231115210509.481514-1-vschneid@redhat.com>
+	 <20231115210509.481514-2-vschneid@redhat.com>
+	 <CANn89iJPxrXi35=_OJqLsJjeNU9b8EFb_rk+EEMVCMiAOd2=5A@mail.gmail.com>
+	 <CAD235PRWd+zF1xpuXWabdgMU01XNpvtvGorBJbLn9ny2G_TSuw@mail.gmail.com>
+	 <CANn89iKRSKz0e8v+Z-UsKGs4fQWDt6eTAw71VENbSmfkEicTPA@mail.gmail.com>
+Autocrypt: addr=pabeni@redhat.com; prefer-encrypt=mutual; keydata=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
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+User-Agent: Evolution 3.50.2 (3.50.2-1.fc39) 
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-From: xingwei lee <xrivendell7@gmail.com>
-Date: Mon, 11 Dec 2023 20:08:55 +0800
-Message-ID: <CABOYnLz9ygH6mzYb0mb1eCdHOVUOmOVkkvLnNVY+CZ3fUfuPFA@mail.gmail.com>
-Subject: Re: [syzbot] [dccp?] general protection fault in dccp_write_xmit (2)
-To: syzbot+c71bc336c5061153b502@syzkaller.appspotmail.com
-Cc: Eric Dumazet <edumazet@google.com>, kuba@kernel.org, pabeni@redhat.com, 
-	kuniyu@amazon.com, leitao@debian.org, willemb@google.com, 
-	dccp@vger.kernel.org, netdev@vger.kernel.org, linux-kernel@vger.kernel.org, 
-	davem@davemloft.net
-Content-Type: text/plain; charset="UTF-8"
 
-Sorry for not checking bug lists carefully
-it maybe the same bug in syzbot
-https://syzkaller.appspot.com/bug?extid=c71bc336c5061153b502 and
-https://lore.kernel.org/all/20231028144136.3462-1-bragathemanick0908@gmail.com/T/
-Seems not fixed so far.
+Hi,
 
-On 11 Dec 2023, at 18:31, xingwei lee <xrivendell7@gmail.com> wrote:
+On Thu, 2023-11-23 at 17:32 +0100, Eric Dumazet wrote:
+> On Thu, Nov 23, 2023 at 3:34=E2=80=AFPM Valentin Schneider <vschneid@redh=
+at.com> wrote:
+> > So AFAICT, after we go through the hashdance, there's a reference on
+> > tw_refcnt held by the tw_timer.
+> > inet_twsk_deschedule_put() can race with arming the timer, but it only
+> > calls inet_twsk_kill() if the timer
+> > was already armed & has been deleted, so there's no risk of calling it
+> > twice... If I got it right :-)
+>=20
+> Again, I think you missed some details.
+>=20
+> I am OOO for a few days, I do not have time to elaborate.
+>=20
+> You will need to properly track active timer by elevating
+> tw->tw_refcnt, or I guarantee something wrong will happen.
 
-Hello I found a bug in net/dccp in the lastest upstream linux 6.7.rc5
-and lastest net tree
-titled general protection fault in dccp_write_xmit
+I'm sorry to bring this up again, but I tried to understand what is
+missing in Valentin's patch and I could not find it.
 
-If you fix this issue, please add the following tag to the commit:
-Reported-by: xingwei Lee <xrivendell7@gmail.com>
+Direct link to the patch, just in case the thread has been lost:
+https://lore.kernel.org/lkml/20231115210509.481514-2-vschneid@redhat.com/
 
-kernel: net.git c3e041425af9068e3ec9d90c536de2a2ba97ba2b
-Kernel config: https://github.com/google/syzkaller/commits/17e6d52686f8a56935991f1b066798279f76504a
+The patch raises the initial tw->tw_refcnt to 4, so it tracks (in
+advance) the reference for the tw_timer. AFAICS the patch is still
+prone to the race you mentioned on the RFC:
 
-in the lastest net tree commit, the crash like:
+CPU0:
 
-CPU: 1 PID: 8151 Comm: 096 Not tainted 6.7.0-rc4-00151-gc3e041425af9 #5
-Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS
-1.16.2-debian-1.16.2-1 04/01/2014
-RIP: 0010:ccid_hc_tx_send_packet home/dubbo/net/net/dccp/ccid.h:166 [inline]
-RIP: 0010:dccp_write_xmit+0x66/0x1d0 home/dubbo/net/net/dccp/output.c:356
-Code: 00 48 85 c0 49 89 c4 0f 84 03 01 00 00 e8 12 1d 0d f8 41 80 3e
-00 0f 85 45 01 00 00 48 8b 9d f0 08 00 00 48 89 d8 48 c1 e8 03 <42> 80
-3c 28 00 0f 85 1f 01 00 00 48 8b 1b 48 8d bb b0 00 00 00 48
-RSP: 0018:ffffc90010fcf878 EFLAGS: 00010246
-RAX: 0000000000000000 RBX: 0000000000000000 RCX: 0000000000000000
-RDX: ffff88814ea6a540 RSI: ffffffff897ab2ce RDI: ffff8881555b8b40
-RBP: ffff8881555b8b40 R08: 0000000000000001 R09: fffffbfff23317ec
-R10: ffffffff9198bf67 R11: 0000000000000001 R12: ffff88814c691700
-R13: dffffc0000000000 R14: ffffed102aab7286 R15: ffff8881555b9430
-FS:  00007f74af0706c0(0000) GS:ffff88823bc00000(0000) knlGS:0000000000000000
-CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
-CR2: 00000000200001c0 CR3: 0000000154391000 CR4: 0000000000350ef0
-DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000
-DR3: 0000000000000000 DR6: 00000000fffe0ff0 DR7: 0000000000000400
-Call Trace:
-<TASK>
-dccp_sendmsg+0x968/0xcc0 home/dubbo/net/net/dccp/proto.c:801
-inet_sendmsg+0x9d/0xe0 home/dubbo/net/net/ipv4/af_inet.c:847
-sock_sendmsg_nosec home/dubbo/net/net/socket.c:730 [inline]
-__sock_sendmsg+0xd5/0x180 home/dubbo/net/net/socket.c:745
-____sys_sendmsg+0x2b0/0x880 home/dubbo/net/net/socket.c:2584
-___sys_sendmsg+0x135/0x1d0 home/dubbo/net/net/socket.c:2638
-__sys_sendmmsg+0x1a1/0x450 home/dubbo/net/net/socket.c:2724
-__do_sys_sendmmsg home/dubbo/net/net/socket.c:2753 [inline]
-__se_sys_sendmmsg home/dubbo/net/net/socket.c:2750 [inline]
-__x64_sys_sendmmsg+0x9c/0x100 home/dubbo/net/net/socket.c:2750
-do_syscall_x64 home/dubbo/net/arch/x86/entry/common.c:52 [inline]
-do_syscall_64+0x3f/0x110 home/dubbo/net/arch/x86/entry/common.c:83
-entry_SYSCALL_64_after_hwframe+0x63/0x6b
-RIP: 0033:0x4368e9
-Code: 28 00 00 00 75 05 48 83 c4 28 c3 e8 51 18 00 00 90 48 89 f8 48
-89 f7 48 89 d6 48 89 ca 4d 89 c2 4d 89 c8 4c 8b 4c 24 08 0f 05 <48> 3d
-01 f0 ff ff 73 01 c3 48 c7 c1 b0 ff ff ff f7 d8 64 89 01 48
-RSP: 002b:00007f74af0701e8 EFLAGS: 00000213 ORIG_RAX: 0000000000000133
-RAX: ffffffffffffffda RBX: 00007f74af0706c0 RCX: 00000000004368e9
-RDX: 0000000000000001 RSI: 0000000020000200 RDI: 0000000000000006
-RBP: 00007f74af070220 R08: 0000000000000000 R09: 0000000000000000
-R10: 0000000000048000 R11: 0000000000000213 R12: ffffffffffffffb0
-R13: 0000000000000000 R14: 00007ffecb287a30 R15: 00007ffecb287b18
-</TASK>
-Modules linked in:
----[ end trace 0000000000000000 ]---
-RIP: 0010:ccid_hc_tx_send_packet home/dubbo/net/net/dccp/ccid.h:166 [inline]
-RIP: 0010:dccp_write_xmit+0x66/0x1d0 home/dubbo/net/net/dccp/output.c:356
-Code: 00 48 85 c0 49 89 c4 0f 84 03 01 00 00 e8 12 1d 0d f8 41 80 3e
-00 0f 85 45 01 00 00 48 8b 9d f0 08 00 00 48 89 d8 48 c1 e8 03 <42> 80
-3c 28 00 0f 85 1f 01 00 00 48 8b 1b 48 8d bb b0 00 00 00 48
-RSP: 0018:ffffc90010fcf878 EFLAGS: 00010246
-RAX: 0000000000000000 RBX: 0000000000000000 RCX: 0000000000000000
-RDX: ffff88814ea6a540 RSI: ffffffff897ab2ce RDI: ffff8881555b8b40
-RBP: ffff8881555b8b40 R08: 0000000000000001 R09: fffffbfff23317ec
-R10: ffffffff9198bf67 R11: 0000000000000001 R12: ffff88814c691700
-R13: dffffc0000000000 R14: ffffed102aab7286 R15: ffff8881555b9430
-FS:  00007f74af0706c0(0000) GS:ffff88823bc00000(0000) knlGS:0000000000000000
-CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
-CR2: 00000000200001c0 CR3: 0000000154391000 CR4: 0000000000350ef0
-DR0: 0000000000000000 DR1: 0000000000000000 DR2: 0000000000000000
-DR3: 0000000000000000 DR6: 00000000fffe0ff0 DR7: 0000000000000400
-Kernel panic - not syncing: Fatal exception
-Kernel Offset: disabled
-Rebooting in 86400 seconds..
-----------------
-Code disassembly (best guess):
-  0: 00 48 85              add    %cl,-0x7b(%rax)
-  3: c0 49 89 c4           rorb   $0xc4,-0x77(%rcx)
-  7: 0f 84 03 01 00 00     je     0x110
-  d: e8 12 1d 0d f8        call   0xf80d1d24
- 12: 41 80 3e 00           cmpb   $0x0,(%r14)
- 16: 0f 85 45 01 00 00     jne    0x161
- 1c: 48 8b 9d f0 08 00 00  mov    0x8f0(%rbp),%rbx
- 23: 48 89 d8              mov    %rbx,%rax
- 26: 48 c1 e8 03           shr    $0x3,%rax
-* 2a: 42 80 3c 28 00        cmpb   $0x0,(%rax,%r13,1) <-- trapping instruction
- 2f: 0f 85 1f 01 00 00     jne    0x154
- 35: 48 8b 1b              mov    (%rbx),%rbx
- 38: 48 8d bb b0 00 00 00  lea    0xb0(%rbx),%rdi
- 3f: 48                    rex.W
+   allocates a tw, insert it in hash table
 
+CPU1:
+   finds the TW and removes it (timer cancel does nothing)
 
+CPU0:
+   arms a TW timer, lasting
 
-=* repro.c =*
-#define _GNU_SOURCE
+but I understood such race is acceptable.
 
-#include <dirent.h>
-#include <endian.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <linux/futex.h>
-#include <pthread.h>
-#include <signal.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/prctl.h>
-#include <sys/stat.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <time.h>
-#include <unistd.h>
+Could you please shed some light?=20
 
-static void sleep_ms(uint64_t ms) { usleep(ms * 1000); }
+Many thanks,
 
-static uint64_t current_time_ms(void) {
- struct timespec ts;
- if (clock_gettime(CLOCK_MONOTONIC, &ts)) exit(1);
- return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
-}
+Paolo
 
-static void thread_start(void* (*fn)(void*), void* arg) {
- pthread_t th;
- pthread_attr_t attr;
- pthread_attr_init(&attr);
- pthread_attr_setstacksize(&attr, 128 << 10);
- int i = 0;
- for (; i < 100; i++) {
-   if (pthread_create(&th, &attr, fn, arg) == 0) {
-     pthread_attr_destroy(&attr);
-     return;
-   }
-   if (errno == EAGAIN) {
-     usleep(50);
-     continue;
-   }
-   break;
- }
- exit(1);
-}
-
-typedef struct {
- int state;
-} event_t;
-
-static void event_init(event_t* ev) { ev->state = 0; }
-
-static void event_reset(event_t* ev) { ev->state = 0; }
-
-static void event_set(event_t* ev) {
- if (ev->state) exit(1);
- __atomic_store_n(&ev->state, 1, __ATOMIC_RELEASE);
- syscall(SYS_futex, &ev->state, FUTEX_WAKE | FUTEX_PRIVATE_FLAG, 1000000);
-}
-
-static void event_wait(event_t* ev) {
- while (!__atomic_load_n(&ev->state, __ATOMIC_ACQUIRE))
-   syscall(SYS_futex, &ev->state, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, 0, 0);
-}
-
-static int event_isset(event_t* ev) {
- return __atomic_load_n(&ev->state, __ATOMIC_ACQUIRE);
-}
-
-static int event_timedwait(event_t* ev, uint64_t timeout) {
- uint64_t start = current_time_ms();
- uint64_t now = start;
- for (;;) {
-   uint64_t remain = timeout - (now - start);
-   struct timespec ts;
-   ts.tv_sec = remain / 1000;
-   ts.tv_nsec = (remain % 1000) * 1000 * 1000;
-   syscall(SYS_futex, &ev->state, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, 0, &ts);
-   if (__atomic_load_n(&ev->state, __ATOMIC_ACQUIRE)) return 1;
-   now = current_time_ms();
-   if (now - start > timeout) return 0;
- }
-}
-
-static bool write_file(const char* file, const char* what, ...) {
- char buf[1024];
- va_list args;
- va_start(args, what);
- vsnprintf(buf, sizeof(buf), what, args);
- va_end(args);
- buf[sizeof(buf) - 1] = 0;
- int len = strlen(buf);
- int fd = open(file, O_WRONLY | O_CLOEXEC);
- if (fd == -1) return false;
- if (write(fd, buf, len) != len) {
-   int err = errno;
-   close(fd);
-   errno = err;
-   return false;
- }
- close(fd);
- return true;
-}
-
-static void kill_and_wait(int pid, int* status) {
- kill(-pid, SIGKILL);
- kill(pid, SIGKILL);
- for (int i = 0; i < 100; i++) {
-   if (waitpid(-1, status, WNOHANG | __WALL) == pid) return;
-   usleep(1000);
- }
- DIR* dir = opendir("/sys/fs/fuse/connections");
- if (dir) {
-   for (;;) {
-     struct dirent* ent = readdir(dir);
-     if (!ent) break;
-     if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
-       continue;
-     char abort[300];
-     snprintf(abort, sizeof(abort), "/sys/fs/fuse/connections/%s/abort",
-              ent->d_name);
-     int fd = open(abort, O_WRONLY);
-     if (fd == -1) {
-       continue;
-     }
-     if (write(fd, abort, 1) < 0) {
-     }
-     close(fd);
-   }
-   closedir(dir);
- } else {
- }
- while (waitpid(-1, status, __WALL) != pid) {
- }
-}
-
-static void setup_test() {
- prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
- setpgrp();
- write_file("/proc/self/oom_score_adj", "1000");
-}
-
-struct thread_t {
- int created, call;
- event_t ready, done;
-};
-
-static struct thread_t threads[16];
-static void execute_call(int call);
-static int running;
-
-static void* thr(void* arg) {
- struct thread_t* th = (struct thread_t*)arg;
- for (;;) {
-   event_wait(&th->ready);
-   event_reset(&th->ready);
-   execute_call(th->call);
-   __atomic_fetch_sub(&running, 1, __ATOMIC_RELAXED);
-   event_set(&th->done);
- }
- return 0;
-}
-
-static void execute_one(void) {
- int i, call, thread;
- for (call = 0; call < 10; call++) {
-   for (thread = 0; thread < (int)(sizeof(threads) / sizeof(threads[0]));
-        thread++) {
-     struct thread_t* th = &threads[thread];
-     if (!th->created) {
-       th->created = 1;
-       event_init(&th->ready);
-       event_init(&th->done);
-       event_set(&th->done);
-       thread_start(thr, th);
-     }
-     if (!event_isset(&th->done)) continue;
-     event_reset(&th->done);
-     th->call = call;
-     __atomic_fetch_add(&running, 1, __ATOMIC_RELAXED);
-     event_set(&th->ready);
-     event_timedwait(&th->done, 50);
-     break;
-   }
- }
- for (i = 0; i < 100 && __atomic_load_n(&running, __ATOMIC_RELAXED); i++)
-   sleep_ms(1);
-}
-
-static void execute_one(void);
-
-#define WAIT_FLAGS __WALL
-
-static void loop(void) {
- int iter = 0;
- for (;; iter++) {
-   int pid = fork();
-   if (pid < 0) exit(1);
-   if (pid == 0) {
-     setup_test();
-     execute_one();
-     exit(0);
-   }
-   int status = 0;
-   uint64_t start = current_time_ms();
-   for (;;) {
-     if (waitpid(-1, &status, WNOHANG | WAIT_FLAGS) == pid) break;
-     sleep_ms(1);
-     if (current_time_ms() - start < 5000) continue;
-     kill_and_wait(pid, &status);
-     break;
-   }
- }
-}
-
-uint64_t r[5] = {0xffffffffffffffff, 0xffffffffffffffff, 0x0,
-                0xffffffffffffffff, 0xffffffffffffffff};
-
-void execute_call(int call) {
- intptr_t res = 0;
- switch (call) {
-   case 0:
-     res = syscall(__NR_socket, /*domain=*/0x10ul, /*type=*/0x803ul,
-                   /*proto=*/0);
-     if (res != -1) r[0] = res;
-     break;
-   case 1:
-     res = syscall(__NR_socket, /*domain=*/0xaul, /*type=*/1ul, /*proto=*/0);
-     if (res != -1) r[1] = res;
-     break;
-   case 2:
-     memcpy((void*)0x200001c0,
-            "wg1\000\000\000\000\000\000\000\000\000\000\000\000\000", 16);
-     res = syscall(__NR_ioctl, /*fd=*/r[1], /*cmd=*/0x8933,
-                   /*arg=*/0x200001c0ul);
-     if (res != -1) r[2] = *(uint32_t*)0x200001d0;
-     break;
-   case 3:
-     *(uint64_t*)0x20000340 = 0;
-     *(uint32_t*)0x20000348 = 0;
-     *(uint64_t*)0x20000350 = 0x20002840;
-     *(uint64_t*)0x20002840 = 0x20000080;
-     *(uint32_t*)0x20000080 = 0x2c;
-     *(uint16_t*)0x20000084 = 0x14;
-     *(uint16_t*)0x20000086 = 1;
-     *(uint32_t*)0x20000088 = 0;
-     *(uint32_t*)0x2000008c = 0;
-     *(uint8_t*)0x20000090 = 0xa;
-     *(uint8_t*)0x20000091 = 0;
-     *(uint8_t*)0x20000092 = 0;
-     *(uint8_t*)0x20000093 = 0;
-     *(uint32_t*)0x20000094 = r[2];
-     *(uint16_t*)0x20000098 = 0x14;
-     *(uint16_t*)0x2000009a = 2;
-     *(uint8_t*)0x2000009c = 0xfe;
-     *(uint8_t*)0x2000009d = 0x80;
-     memset((void*)0x2000009e, 0, 13);
-     *(uint8_t*)0x200000ab = 0xbb;
-     *(uint64_t*)0x20002848 = 0x2c;
-     *(uint64_t*)0x20000358 = 1;
-     *(uint64_t*)0x20000360 = 0;
-     *(uint64_t*)0x20000368 = 0;
-     *(uint32_t*)0x20000370 = 0;
-     syscall(__NR_sendmsg, /*fd=*/r[0], /*msg=*/0x20000340ul, /*f=*/0ul);
-     break;
-   case 4:
-     res = syscall(__NR_socket, /*domain=*/0xaul, /*type=*/6ul, /*proto=*/0);
-     if (res != -1) r[3] = res;
-     break;
-   case 5:
-     *(uint16_t*)0x20000000 = 0xa;
-     *(uint16_t*)0x20000002 = htobe16(0);
-     *(uint32_t*)0x20000004 = htobe32(0);
-     *(uint64_t*)0x20000008 = htobe64(0);
-     *(uint64_t*)0x20000010 = htobe64(0xa0211fffe000000);
-     *(uint32_t*)0x20000018 = 0;
-     syscall(__NR_connect, /*fd=*/r[3], /*addr=*/0x20000000ul,
-             /*addrlen=*/0x1cul);
-     break;
-   case 6:
-     res = syscall(__NR_dup, /*oldfd=*/r[3]);
-     if (res != -1) r[4] = res;
-     break;
-   case 7:
-     *(uint64_t*)0x20000200 = 0;
-     *(uint32_t*)0x20000208 = 0;
-     *(uint64_t*)0x20000210 = 0;
-     *(uint64_t*)0x20000218 = 0;
-     *(uint64_t*)0x20000220 = 0;
-     *(uint64_t*)0x20000228 = 0;
-     *(uint32_t*)0x20000230 = 0;
-     *(uint32_t*)0x20000238 = 0;
-     syscall(__NR_sendmmsg, /*fd=*/r[4], /*mmsg=*/0x20000200ul, /*vlen=*/1ul,
-             /*f=*/0x48000ul);
-     break;
-   case 8:
-     syscall(__NR_shutdown, /*fd=*/r[3], /*how=*/0ul);
-     break;
-   case 9:
-     *(uint16_t*)0x20000000 = 0xa;
-     *(uint16_t*)0x20000002 = htobe16(0);
-     *(uint32_t*)0x20000004 = htobe32(0);
-     *(uint64_t*)0x20000008 = htobe64(0);
-     *(uint64_t*)0x20000010 = htobe64(0xa0211fffe000000);
-     *(uint32_t*)0x20000018 = 0;
-     syscall(__NR_connect, /*fd=*/r[3], /*addr=*/0x20000000ul,
-             /*addrlen=*/0x1cul);
-     break;
- }
-}
-int main(void) {
- syscall(__NR_mmap, /*addr=*/0x1ffff000ul, /*len=*/0x1000ul, /*prot=*/0ul,
-         /*flags=*/0x32ul, /*fd=*/-1, /*offset=*/0ul);
- syscall(__NR_mmap, /*addr=*/0x20000000ul, /*len=*/0x1000000ul, /*prot=*/7ul,
-         /*flags=*/0x32ul, /*fd=*/-1, /*offset=*/0ul);
- syscall(__NR_mmap, /*addr=*/0x21000000ul, /*len=*/0x1000ul, /*prot=*/0ul,
-         /*flags=*/0x32ul, /*fd=*/-1, /*offset=*/0ul);
- loop();
- return 0;
-}
-
-
-
-=* repro.txt =*
-
-r0 = socket(0x10, 0x803, 0x0)
-r1 = socket$inet6(0xa, 0x1, 0x0)
-ioctl$ifreq_SIOCGIFINDEX_wireguard(r1, 0x8933,
-&(0x7f00000001c0)={'wg1\x00', <r2=>0x0})
-sendmsg$nl_route(r0, &(0x7f0000000340)={0x0, 0x0,
-&(0x7f0000002840)={&(0x7f0000000080)=@ipv6_newaddr={0x2c, 0x14, 0x1,
-0x0, 0x0, {0xa, 0x0, 0x0, 0x0, r2}, [@IFA_LOCAL={0x14, 0x2,
-@remote}]}, 0x2c}}, 0x0)
-r3 = socket$inet6(0xa, 0x6, 0x0)
-connect$inet6(r3, &(0x7f0000000000)={0xa, 0x0, 0x0, @loopback={0x0,
-0xa0211fffe000000}}, 0x1c)
-r4 = dup(r3)
-sendmmsg$inet6(r4, &(0x7f0000000200)=[{{0x0, 0x0, 0x0}}], 0x1, 0x48000)
-shutdown(r3, 0x0)
-connect$inet6(r3, &(0x7f0000000000)={0xa, 0x0, 0x0, @loopback={0x0,
-0xa0211fffe000000}}, 0x1c)
-
-
-Please see also
-https://gist.github.com/xrivendell7/93aebd97f6d43b735e45a66e8650c2ad
