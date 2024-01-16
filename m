@@ -1,129 +1,73 @@
-Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.129.124])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+Received: from mail-il1-f200.google.com (mail-il1-f200.google.com [209.85.166.200])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 4864055C2B
-	for <dccp@vger.kernel.org>; Fri, 12 Jan 2024 09:08:16 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=redhat.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
-Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="bpAXx1jL"
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
-	s=mimecast20190719; t=1705050495;
-	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
-	 to:to:cc:cc:mime-version:mime-version:content-type:content-type:
-	 content-transfer-encoding:content-transfer-encoding:
-	 in-reply-to:in-reply-to:references:references:autocrypt:autocrypt;
-	bh=0nU37kM4nLQS9a+jTPJKGaIKOCiVZSywQ1bcEx6PRdA=;
-	b=bpAXx1jLYCXfWngvhmazjye1fcTDBf5ZujTvFw/q+n9tNh0wE6EyIVcRLl3dYdtRydLzy1
-	KuahIU6DMe6q4Cpv4gEYhggEK5HVMyD+9+1GBwfed3cw2eMd73cogq+c6Kl3sG89CPxOpW
-	zVAsaHtyrSRckgB3gwGQSwtnNV13a/E=
-Received: from mail-ej1-f69.google.com (mail-ej1-f69.google.com
- [209.85.218.69]) by relay.mimecast.com with ESMTP with STARTTLS
- (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
- us-mta-571-16Crp4qGOZqpDQcXLYrRaw-1; Fri, 12 Jan 2024 04:08:10 -0500
-X-MC-Unique: 16Crp4qGOZqpDQcXLYrRaw-1
-Received: by mail-ej1-f69.google.com with SMTP id a640c23a62f3a-a29de6a12adso106921966b.1
-        for <dccp@vger.kernel.org>; Fri, 12 Jan 2024 01:08:10 -0800 (PST)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 130AE1119E
+	for <dccp@vger.kernel.org>; Tue, 16 Jan 2024 07:56:17 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com
+Received: by mail-il1-f200.google.com with SMTP id e9e14a558f8ab-35fc6976630so78909295ab.0
+        for <dccp@vger.kernel.org>; Mon, 15 Jan 2024 23:56:17 -0800 (PST)
 X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1705050490; x=1705655290;
-        h=mime-version:user-agent:content-transfer-encoding:autocrypt
-         :references:in-reply-to:date:cc:to:from:subject:message-id
-         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
-        bh=0nU37kM4nLQS9a+jTPJKGaIKOCiVZSywQ1bcEx6PRdA=;
-        b=Nb/aFPNugzeGGCp++z9ytkW0pU2N3USfIOPHifQCHynCShwkpXjELtuGhRX2SGBc/e
-         j0mIu1BXkePqsY/4HhKN+awk7cY+bOKdlrmbkxor4IsUE6U+6EhHad6B6mEv4CzMI1Xa
-         OEaZLuRWfRl8BHbAV58Gl/uSXeZCsVdemENi79+L/UPfQYZLMQTap/b2/cAwH8tjZaz5
-         c/koS1D+F2CqXRFttvQQH0tHNmJIwZQ/bR18p1aj5DCPZhDT3jHVt0z+icA9fPGEzvMI
-         tYDxO7Jpa3B8lAZCPu6JYE0A7HOi3J+qHsj2wDjumhUmN/S2E+8zSEfu6RPhBob4q8fC
-         vqPw==
-X-Gm-Message-State: AOJu0YxsxkmvbGmffL9PVWZ6bco+JvQb475DHNx2RD5TPPi1XxtJietL
-	D5gmE53TSRYGqVQGbvd75eT+WXpgKFMD1XafiRFZ6usWQvglS5F3B0mqzZmqR8C7W0U07UjFvfF
-	2Htr+37ipbDPcjKeWoz2CKQ==
-X-Received: by 2002:a17:906:fa92:b0:a28:ab63:db33 with SMTP id lt18-20020a170906fa9200b00a28ab63db33mr633351ejb.7.1705050489818;
-        Fri, 12 Jan 2024 01:08:09 -0800 (PST)
-X-Google-Smtp-Source: AGHT+IHI0fSC0TiL2xLcVeN1hBaSKH6whBShEE/lG/8jI6jkjQ0M54/xxght+KyT2FlZfEGE4gqV2Q==
-X-Received: by 2002:a17:906:fa92:b0:a28:ab63:db33 with SMTP id lt18-20020a170906fa9200b00a28ab63db33mr633336ejb.7.1705050489508;
-        Fri, 12 Jan 2024 01:08:09 -0800 (PST)
-Received: from gerbillo.redhat.com (146-241-242-119.dyn.eolo.it. [146.241.242.119])
-        by smtp.gmail.com with ESMTPSA id k13-20020a1709062a4d00b00a290920c78csm1565764eje.187.2024.01.12.01.08.08
-        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
-        Fri, 12 Jan 2024 01:08:09 -0800 (PST)
-Message-ID: <9619119e125b0e30461e147f5654001397eb0fe6.camel@redhat.com>
-Subject: Re: [PATCH v2 1/2] tcp/dcpp: Un-pin tw_timer
-From: Paolo Abeni <pabeni@redhat.com>
-To: Eric Dumazet <edumazet@google.com>, Valentin Schneider
- <vschneid@redhat.com>
-Cc: dccp@vger.kernel.org, netdev@vger.kernel.org,
- linux-kernel@vger.kernel.org,  linux-rt-users@vger.kernel.org, "David S.
- Miller" <davem@davemloft.net>,  Jakub Kicinski <kuba@kernel.org>, David
- Ahern <dsahern@kernel.org>, Juri Lelli <juri.lelli@redhat.com>, Tomas
- Glozar <tglozar@redhat.com>, Sebastian Andrzej Siewior
- <bigeasy@linutronix.de>, Thomas Gleixner <tglx@linutronix.de>
-Date: Fri, 12 Jan 2024 10:08:07 +0100
-In-Reply-To: <CANn89iKRSKz0e8v+Z-UsKGs4fQWDt6eTAw71VENbSmfkEicTPA@mail.gmail.com>
-References: <20231115210509.481514-1-vschneid@redhat.com>
-	 <20231115210509.481514-2-vschneid@redhat.com>
-	 <CANn89iJPxrXi35=_OJqLsJjeNU9b8EFb_rk+EEMVCMiAOd2=5A@mail.gmail.com>
-	 <CAD235PRWd+zF1xpuXWabdgMU01XNpvtvGorBJbLn9ny2G_TSuw@mail.gmail.com>
-	 <CANn89iKRSKz0e8v+Z-UsKGs4fQWDt6eTAw71VENbSmfkEicTPA@mail.gmail.com>
-Autocrypt: addr=pabeni@redhat.com; prefer-encrypt=mutual; keydata=mQINBGISiDUBEAC5uMdJicjm3ZlWQJG4u2EU1EhWUSx8IZLUTmEE8zmjPJFSYDcjtfGcbzLPb63BvX7FADmTOkO7gwtDgm501XnQaZgBUnCOUT8qv5MkKsFH20h1XJyqjPeGM55YFAXc+a4WD0YyO5M0+KhDeRLoildeRna1ey944VlZ6Inf67zMYw9vfE5XozBtytFIrRyGEWkQwkjaYhr1cGM8ia24QQVQid3P7SPkR78kJmrT32sGk+TdR4YnZzBvVaojX4AroZrrAQVdOLQWR+w4w1mONfJvahNdjq73tKv51nIpu4SAC1Zmnm3x4u9r22mbMDr0uWqDqwhsvkanYmn4umDKc1ZkBnDIbbumd40x9CKgG6ogVlLYeJa9WyfVMOHDF6f0wRjFjxVoPO6p/ZDkuEa67KCpJnXNYipLJ3MYhdKWBZw0xc3LKiKc+nMfQlo76T/qHMDfRMaMhk+L8gWc3ZlRQFG0/Pd1pdQEiRuvfM5DUXDo/YOZLV0NfRFU9SmtIPhbdm9cV8Hf8mUwubihiJB/9zPvVq8xfiVbdT0sPzBtxW0fXwrbFxYAOFvT0UC2MjlIsukjmXOUJtdZqBE3v3Jf7VnjNVj9P58+MOx9iYo8jl3fNd7biyQWdPDfYk9ncK8km4skfZQIoUVqrWqGDJjHO1W9CQLAxkfOeHrmG29PK9tHIwARAQABtB9QYW9sbyBBYmVuaSA8cGFiZW5pQHJlZGhhdC5jb20+iQJSBBMBCAA8FiEEg1AjqC77wbdLX2LbKSR5jcyPE6QFAmISiDUCGwMFCwkIBwIDIgIBBhUKCQgLAgQWAgMBAh4HAheAAAoJECkkeY3MjxOkJSYQAJcc6MTsuFxYdYZkeWjW//zbD3ApRHzpNlHLVSuJqHr9/aDS+tyszgS8jj9MiqALzgq4iZbg
- 7ZxN9ZsDL38qVIuFkSpgMZCiUHdxBC11J8nbBSLlpnc924UAyr5XrGA99 6Wl5I4Km3128GY6iAkH54pZpOmpoUyBjcxbJWHstzmvyiXrjA2sMzYjt3Xkqp0cJfIEekOi75wnNPofEEJg28XPcFrpkMUFFvB4Aqrdc2yyR8Y36rbw18sIX3dJdomIP3dL7LoJi9mfUKOnr86Z0xltgcLPGYoCiUZMlXyWgB2IPmmcMP2jLJrusICjZxLYJJLofEjznAJSUEwB/3rlvFrSYvkKkVmfnfro5XEr5nStVTECxfy7RTtltwih85LlZEHP8eJWMUDj3P4Q9CWNgz2pWr1t68QuPHWaA+PrXyasDlcRpRXHZCOcvsKhAaCOG8TzCrutOZ5NxdfXTe3f1jVIEab7lNgr+7HiNVS+UPRzmvBc73DAyToKQBn9kC4jh9HoWyYTepjdcxnio0crmara+/HEyRZDQeOzSexf85I4dwxcdPKXv0fmLtxrN57Ae82bHuRlfeTuDG3x3vl/Bjx4O7Lb+oN2BLTmgpYq7V1WJPUwikZg8M+nvDNcsOoWGbU417PbHHn3N7yS0lLGoCCWyrK1OY0QM4EVsL3TjOfUtCNQYW9sbyBBYmVuaSA8cGFvbG8uYWJlbmlAZ21haWwuY29tPokCUgQTAQgAPBYhBINQI6gu+8G3S19i2ykkeY3MjxOkBQJiEoitAhsDBQsJCAcCAyICAQYVCgkICwIEFgIDAQIeBwIXgAAKCRApJHmNzI8TpBzHD/45pUctaCnhee1vkQnmStAYvHmwrWwIEH1lzDMDCpJQHTUQOOJWDAZOFnE/67bxSS81Wie0OKW2jvg1ylmpBA0gPpnzIExQmfP72cQ1TBoeVColVT6Io35BINn+ymM7c0Bn8RvngSEpr3jBtqvvWXjvtnJ5/HbOVQCg62NC6ewosoKJPWpGXMJ9SKsVIOUHsmoWK60spzeiJoSmAwm3zTJQnM5kRh2q
- iWjoCy8L35zPqR5TV+f5WR5hTVCqmLHSgm1jxwKhPg9L+GfuE4d0SWd84y GeOB3sSxlhWsuTj1K6K3MO9srD9hr0puqjO9sAizd0BJP8ucf/AACfrgmzIqZXCfVS7jJ/M+0ic+j1Si3yY8wYPEi3dvbVC0zsoGj9n1R7B7L9c3g1pZ4L9ui428vnPiMnDN3jh9OsdaXeWLvSvTylYvw9q0DEXVQTv4/OkcoMrfEkfbXbtZ3PRlAiddSZA5BDEkkm6P9KA2YAuooi1OD9d4MW8LFAeEicvHG+TPO6jtKTacdXDRe611EfRwTjBs19HmabSUfFcumL6BlVyceIoSqXFe5jOfGpbBevTZtg4kTSHqymGb6ra6sKs+/9aJiONs5NXY7iacZ55qG3Ib1cpQTps9bQILnqpwL2VTaH9TPGWwMY3Nc2VEc08zsLrXnA/yZKqZ1YzSY9MGXWYLkCDQRiEog1ARAAyXMKL+x1lDvLZVQjSUIVlaWswc0nV5y2EzBdbdZZCP3ysGC+s+n7xtq0o1wOvSvaG9h5q7sYZs+AKbuUbeZPu0bPWKoO02i00yVoSgWnEqDbyNeiSW+vI+VdiXITV83lG6pS+pAoTZlRROkpb5xo0gQ5ZeYok8MrkEmJbsPjdoKUJDBFTwrRnaDOfb+Qx1D22PlAZpdKiNtwbNZWiwEQFm6mHkIVSTUe2zSemoqYX4QQRvbmuMyPIbwbdNWlItukjHsffuPivLF/XsI1gDV67S1cVnQbBgrpFDxN62USwewXkNl+ndwa+15wgJFyq4Sd+RSMTPDzDQPFovyDfA/jxN2SK1Lizam6o+LBmvhIxwZOfdYH8bdYCoSpqcKLJVG3qVcTwbhGJr3kpRcBRz39Ml6iZhJyI3pEoX3bJTlR5Pr1Kjpx13qGydSMos94CIYWAKhegI06aTdvvuiigBwjngo/Rk5S+iEGR5KmTqGyp27o6YxZy6D4NIc6PKUzhIUxfvuHNvfu
- sD2W1U7eyLdm/jCgticGDsRtweytsgCSYfbz0gdgUuL3EBYN3JLbAU+UZpy v/fyD4cHDWaizNy/KmOI6FFjvVh4LRCpGTGDVPHsQXaqvzUybaMb7HSfmBBzZqqfVbq9n5FqPjAgD2lJ0rkzb9XnVXHgr6bmMRlaTlBMAEQEAAYkCNgQYAQgAIBYhBINQI6gu+8G3S19i2ykkeY3MjxOkBQJiEog1AhsMAAoJECkkeY3MjxOkY1YQAKdGjHyIdOWSjM8DPLdGJaPgJdugHZowaoyCxffilMGXqc8axBtmYjUIoXurpl+f+a7S0tQhXjGUt09zKlNXxGcebL5TEPFqgJTHN/77ayLslMTtZVYHE2FiIxkvW48yDjZUlefmphGpfpoXe4nRBNto1mMB9Pb9vR47EjNBZCtWWbwJTIEUwHP2Z5fV9nMx9Zw2BhwrfnODnzI8xRWVqk7/5R+FJvl7s3nY4F+svKGD9QHYmxfd8Gx42PZc/qkeCjUORaOf1fsYyChTtJI4iNm6iWbD9HK5LTMzwl0n0lL7CEsBsCJ97i2swm1DQiY1ZJ95G2Nz5PjNRSiymIw9/neTvUT8VJJhzRl3Nb/EmO/qeahfiG7zTpqSn2dEl+AwbcwQrbAhTPzuHIcoLZYV0xDWzAibUnn7pSrQKja+b8kHD9WF+m7dPlRVY7soqEYXylyCOXr5516upH8vVBmqweCIxXSWqPAhQq8d3hB/Ww2A0H0PBTN1REVw8pRLNApEA7C2nX6RW0XmA53PIQvAP0EAakWsqHoKZ5WdpeOcH9iVlUQhRgemQSkhfNaP9LqR1XKujlTuUTpoyT3xwAzkmSxN1nABoutHEO/N87fpIbpbZaIdinF7b9srwUvDOKsywfs5HMiUZhLKoZzCcU/AEFjQsPTATACGsWf3JYPnWxL9
-Content-Type: text/plain; charset="UTF-8"
-Content-Transfer-Encoding: quoted-printable
-User-Agent: Evolution 3.50.2 (3.50.2-1.fc39) 
+        d=1e100.net; s=20230601; t=1705391777; x=1705996577;
+        h=to:from:subject:message-id:date:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=J7GshgTWBC/O7D9m77niat5ipmKRovvawMUZYhZfFyw=;
+        b=KzDwJqltOsi+K/1I4zzW0XwYk7GBthKuh+tpGs5jiNGjfYpJajicF9xlBoIzW4RzZW
+         Agcr+o4v0XCS+KuUlnS2Nj25EECaTLKgMKa2anoUrVADt9V6p4TcrTbjaISXwJH4Ygfp
+         5IFp0fiCJEMrJf5OM18kNQIHGCU7du/R3a8aavd/yZokq5j+UN1aSibiMTYa43480yIm
+         SOEFx+XC9pPnHwXYmCRhrryj6Ch3g3LfwuB/ZpBNzsVF/eICPwpgbHBNqJXURUPEMgMT
+         0rFcSEptCixfa6AQ00byXEihZ/AFQ+fjIEmrzaYAWTX/7A1VpJwdzNLJI0y/ku4P+T4B
+         XAnQ==
+X-Gm-Message-State: AOJu0Yx0RQnJD20s+ZIkiaSTDwGZAWeYso/IX/5ycMBlBmrLfH2NPtLH
+	mbKrXRCrCo+fppkKCi1tGmQhqnwSqwxIeWrWMuUr1okRoBESRJ0=
+X-Google-Smtp-Source: AGHT+IHTuwpsmrMCoqdqeAExs5Xq/9SU9ozk1yVMr5fWlgv/Xm/93W8TmhZPwd6QskksFQY41oDV/eHlSYYvte6yky9pgfmorjjN
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
+X-Received: by 2002:a05:6e02:20c8:b0:35f:eb20:3599 with SMTP id
+ 8-20020a056e0220c800b0035feb203599mr969906ilq.2.1705391777202; Mon, 15 Jan
+ 2024 23:56:17 -0800 (PST)
+Date: Mon, 15 Jan 2024 23:56:17 -0800
+X-Google-Appengine-App-Id: s~syzkaller
+X-Google-Appengine-App-Id-Alias: syzkaller
+Message-ID: <000000000000154990060f0b773a@google.com>
+Subject: [syzbot] Monthly dccp report (Jan 2024)
+From: syzbot <syzbot+list276a372ea6a0fdcb466b@syzkaller.appspotmail.com>
+To: dccp@vger.kernel.org, linux-kernel@vger.kernel.org, netdev@vger.kernel.org, 
+	syzkaller-bugs@googlegroups.com
+Content-Type: text/plain; charset="UTF-8"
 
-Hi,
+Hello dccp maintainers/developers,
 
-On Thu, 2023-11-23 at 17:32 +0100, Eric Dumazet wrote:
-> On Thu, Nov 23, 2023 at 3:34=E2=80=AFPM Valentin Schneider <vschneid@redh=
-at.com> wrote:
-> > So AFAICT, after we go through the hashdance, there's a reference on
-> > tw_refcnt held by the tw_timer.
-> > inet_twsk_deschedule_put() can race with arming the timer, but it only
-> > calls inet_twsk_kill() if the timer
-> > was already armed & has been deleted, so there's no risk of calling it
-> > twice... If I got it right :-)
->=20
-> Again, I think you missed some details.
->=20
-> I am OOO for a few days, I do not have time to elaborate.
->=20
-> You will need to properly track active timer by elevating
-> tw->tw_refcnt, or I guarantee something wrong will happen.
+This is a 31-day syzbot report for the dccp subsystem.
+All related reports/information can be found at:
+https://syzkaller.appspot.com/upstream/s/dccp
 
-I'm sorry to bring this up again, but I tried to understand what is
-missing in Valentin's patch and I could not find it.
+During the period, 0 new issues were detected and 0 were fixed.
+In total, 4 issues are still open and 7 have been fixed so far.
 
-Direct link to the patch, just in case the thread has been lost:
-https://lore.kernel.org/lkml/20231115210509.481514-2-vschneid@redhat.com/
+Some of the still happening issues:
 
-The patch raises the initial tw->tw_refcnt to 4, so it tracks (in
-advance) the reference for the tw_timer. AFAICS the patch is still
-prone to the race you mentioned on the RFC:
+Ref Crashes Repro Title
+<1> 102     Yes   KASAN: use-after-free Read in ccid2_hc_tx_packet_recv
+                  https://syzkaller.appspot.com/bug?extid=554ccde221001ab5479a
+<2> 51      Yes   BUG: "hc->tx_t_ipi == NUM" holds (exception!) at net/dccp/ccids/ccid3.c:LINE/ccid3_update_send_interval()
+                  https://syzkaller.appspot.com/bug?extid=94641ba6c1d768b1e35e
+<3> 17      Yes   BUG: stored value of X_recv is zero at net/dccp/ccids/ccid3.c:LINE/ccid3_first_li() (3)
+                  https://syzkaller.appspot.com/bug?extid=2ad8ef335371014d4dc7
 
-CPU0:
+---
+This report is generated by a bot. It may contain errors.
+See https://goo.gl/tpsmEJ for more information about syzbot.
+syzbot engineers can be reached at syzkaller@googlegroups.com.
 
-   allocates a tw, insert it in hash table
+To disable reminders for individual bugs, reply with the following command:
+#syz set <Ref> no-reminders
 
-CPU1:
-   finds the TW and removes it (timer cancel does nothing)
+To change bug's subsystems, reply with:
+#syz set <Ref> subsystems: new-subsystem
 
-CPU0:
-   arms a TW timer, lasting
-
-but I understood such race is acceptable.
-
-Could you please shed some light?=20
-
-Many thanks,
-
-Paolo
-
+You may send multiple commands in a single email message.
