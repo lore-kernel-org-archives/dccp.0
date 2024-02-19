@@ -1,35 +1,61 @@
-Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
+Received: from us-smtp-delivery-124.mimecast.com (us-smtp-delivery-124.mimecast.com [170.10.129.124])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 667FF14079C;
-	Fri,  2 Feb 2024 12:20:30 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 2F7E224A08
+	for <dccp@vger.kernel.org>; Mon, 19 Feb 2024 09:57:49 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=170.10.129.124
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1706876430; cv=none; b=i2HanE1zm1YPZ0VCQ9UJAiZwP3wgszqVr5pEgBtn14OON8LvrVxrvr3OLR9PR2gAN79A3HNGmmgwvrVPJ9Cn5H/7GVFotewX8QYBmRauyJrqiYbblRUMoiuiNrg0lpwkF8ySe1VFwYwKpubkHUHFeEDYZEazEa9/QOZGOBFBK80=
+	t=1708336671; cv=none; b=oQY+pBi05MQ4WFg9s7jn6mUkWLeaaJaamYcqHj3C+JUiQs7uwftGcdPgFml4gyJbtY4T4/NMYyZNdnYcHNKyZksPX8kqwhjpxrY9rsVeUQ4CQOGHXVecnAA/KTWE0i6uEPz5F0zbYBPe7JppG8PZHWbXPGTxJW/KlW7CU+KZ9Sc=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1706876430; c=relaxed/simple;
-	bh=FV0ha3qJz0mYOJpLNPsy90g8FeOobYwSB7UjsP+sQ20=;
-	h=Content-Type:MIME-Version:Subject:From:Message-Id:Date:References:
-	 In-Reply-To:To:Cc; b=hJnd5riFZug5OZg+isXV7fvm1PnhOIO/2ANL3CZhNmJszQZtymeksTHxph8gF4452o4rKXKF5x5gpF/ik0lsSXHNFqO34I/hzyhGvJTrVyzMLMz2kYPSJpsH2xGH5sdctcGmXbfyEoKNimCNJBTTxrYUozD6xT9KGczMDtL462Y=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=LBI1ElvJ; arc=none smtp.client-ip=10.30.226.201
+	s=arc-20240116; t=1708336671; c=relaxed/simple;
+	bh=yQZprAUO9Y649VqM9TcmEKXOmPL5c7uCyFbnjiNJiIU=;
+	h=From:To:Cc:Subject:Date:Message-ID:MIME-Version; b=VpNFWE9c7U0ZvfsRLRVeFbC75qWxWRwQXJx4XnUphpBrUbfFvHU68wEs1yQh09IngDjd2OuyJPf3TWTT9lcdaySqWOznZPv5ClHPqZtCNTRWkQ1rg9m1r2Q6Wsz/FpMZkTn6cLwMKGb+b/XJxFfz87Ei0D4jXnIsOYUtAeA7quI=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=redhat.com; spf=pass smtp.mailfrom=redhat.com; dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b=TJ5/3zA5; arc=none smtp.client-ip=170.10.129.124
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=redhat.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=redhat.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="LBI1ElvJ"
-Received: by smtp.kernel.org (Postfix) with ESMTPS id 0869CC43399;
-	Fri,  2 Feb 2024 12:20:30 +0000 (UTC)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
-	s=k20201202; t=1706876430;
-	bh=FV0ha3qJz0mYOJpLNPsy90g8FeOobYwSB7UjsP+sQ20=;
-	h=Subject:From:Date:References:In-Reply-To:To:Cc:From;
-	b=LBI1ElvJpI6BA+juTCP3EffNxoLiuAdevcyYndlcAIQw0cKOIh9FCZ2xH/4HE9ry7
-	 Cv20J+U57gF/kRbGmV9uSXzZi2enp2h22B5S0Bggfj0U9ULFSF9qhKZllfIJ4Wacar
-	 bAPZXsMZU4gf3RADXVUTLnvIJVqgAgpNtc5X8opTQZoL3bsVNpcQqIZkuUOmeljFUy
-	 I5MLxd1K43D5xZ24wJaEjASyU04HHr+FsLXtmlI+v1dQzv+pvzH8wcKFRte4CjSKFd
-	 CHyNM2rFuOB++WKUh3v7edmuK8c7gPWFrJHSrRqpsH9RGH+mhx45Oby236kY5bTZfA
-	 CdonEVvb+HCJw==
-Received: from aws-us-west-2-korg-oddjob-1.ci.codeaurora.org (localhost.localdomain [127.0.0.1])
-	by aws-us-west-2-korg-oddjob-1.ci.codeaurora.org (Postfix) with ESMTP id DFB3DDC99E7;
-	Fri,  2 Feb 2024 12:20:29 +0000 (UTC)
-Content-Type: text/plain; charset="utf-8"
+	dkim=pass (1024-bit key) header.d=redhat.com header.i=@redhat.com header.b="TJ5/3zA5"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=redhat.com;
+	s=mimecast20190719; t=1708336669;
+	h=from:from:reply-to:subject:subject:date:date:message-id:message-id:
+	 to:to:cc:cc:mime-version:mime-version:
+	 content-transfer-encoding:content-transfer-encoding;
+	bh=QBPYE/u6rB92zok9wzUSH3tsYUrT4F0FkyjBL0qsOhg=;
+	b=TJ5/3zA5uywwwK7kkMmkaLETQOfIRDnEIZBxaxtxPfH7j3tP20nUpROKOk7IIInhosC5u7
+	7ErPOxvhE/Ipor7ClOXq5sYFNBKWGdHDK9sXWOg2QSeWBjtyS2Vduj/RdARSIJZ0Q52Byl
+	xfbifmrRMZKuAKjURy7GrcnZXWP7yOE=
+Received: from mimecast-mx02.redhat.com (mimecast-mx02.redhat.com
+ [66.187.233.88]) by relay.mimecast.com with ESMTP with STARTTLS
+ (version=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384) id
+ us-mta-113-B5JagkbBOC6kl_y96s9-7w-1; Mon, 19 Feb 2024 04:57:47 -0500
+X-MC-Unique: B5JagkbBOC6kl_y96s9-7w-1
+Received: from smtp.corp.redhat.com (int-mx05.intmail.prod.int.rdu2.redhat.com [10.11.54.5])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange X25519 server-signature RSA-PSS (2048 bits) server-digest SHA256)
+	(No client certificate requested)
+	by mimecast-mx02.redhat.com (Postfix) with ESMTPS id 5D32B881C83;
+	Mon, 19 Feb 2024 09:57:46 +0000 (UTC)
+Received: from vschneid-thinkpadt14sgen2i.remote.csb (unknown [10.39.192.189])
+	by smtp.corp.redhat.com (Postfix) with ESMTPS id 0B3BF8CEC;
+	Mon, 19 Feb 2024 09:57:42 +0000 (UTC)
+From: Valentin Schneider <vschneid@redhat.com>
+To: dccp@vger.kernel.org,
+	netdev@vger.kernel.org,
+	linux-kernel@vger.kernel.org,
+	linux-rt-users@vger.kernel.org
+Cc: "David S. Miller" <davem@davemloft.net>,
+	Eric Dumazet <edumazet@google.com>,
+	Jakub Kicinski <kuba@kernel.org>,
+	Paolo Abeni <pabeni@redhat.com>,
+	mleitner@redhat.com,
+	David Ahern <dsahern@kernel.org>,
+	Juri Lelli <juri.lelli@redhat.com>,
+	Tomas Glozar <tglozar@redhat.com>,
+	Sebastian Andrzej Siewior <bigeasy@linutronix.de>,
+	Thomas Gleixner <tglx@linutronix.de>
+Subject: [PATCH v3 0/1] tcp/dcpp: Un-pin tw_timer
+Date: Mon, 19 Feb 2024 10:57:28 +0100
+Message-ID: <20240219095729.2339914-1-vschneid@redhat.com>
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
@@ -37,40 +63,40 @@ List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
 Content-Transfer-Encoding: 8bit
-Subject: Re: [PATCH net-next] net: dccp: Simplify the allocation of slab caches in
- dccp_ackvec_init
-From: patchwork-bot+netdevbpf@kernel.org
-Message-Id: 
- <170687642991.27809.3782875181223836265.git-patchwork-notify@kernel.org>
-Date: Fri, 02 Feb 2024 12:20:29 +0000
-References: <20240131090851.144229-1-chentao@kylinos.cn>
-In-Reply-To: <20240131090851.144229-1-chentao@kylinos.cn>
-To: Kunwu Chan <chentao@kylinos.cn>
-Cc: davem@davemloft.net, edumazet@google.com, kuba@kernel.org,
- pabeni@redhat.com, dccp@vger.kernel.org, netdev@vger.kernel.org,
- linux-kernel@vger.kernel.org
+X-Scanned-By: MIMEDefang 3.4.1 on 10.11.54.5
 
-Hello:
+Hi,
 
-This patch was applied to netdev/net-next.git (main)
-by David S. Miller <davem@davemloft.net>:
+This is v3 of the series where the tw_timer is un-pinned to get rid of interferences in
+isolated CPUs setups.
 
-On Wed, 31 Jan 2024 17:08:51 +0800 you wrote:
-> Use the new KMEM_CACHE() macro instead of direct kmem_cache_create
-> to simplify the creation of SLAB caches.
-> 
-> Signed-off-by: Kunwu Chan <chentao@kylinos.cn>
-> ---
->  net/dccp/ackvec.c | 8 ++------
->  1 file changed, 2 insertions(+), 6 deletions(-)
+Eric mentionned rsk_timer needs looking into, but I haven't had the time to do
+that. It doesn't show up in our testing, which might be due to its relatively
+low timeout (IIUC 3s).
 
-Here is the summary with links:
-  - [net-next] net: dccp: Simplify the allocation of slab caches in dccp_ackvec_init
-    https://git.kernel.org/netdev/net-next/c/20ea9327c2fd
+Revisions
+=========
 
-You are awesome, thank you!
+RFCv1 -> v2
+++++++++
+
+o Added comment in inet_twsk_deschedule_put() to highlight the race
+o Added bh_disable patch
+
+v2 -> v3
+++++++++
+
+o Dropped bh_disable patch
+o Rebased against latest Linus' tree
+
+Valentin Schneider (1):
+  tcp/dcpp: Un-pin tw_timer
+
+ net/dccp/minisocks.c          | 16 +++++++---------
+ net/ipv4/inet_timewait_sock.c | 20 +++++++++++++++-----
+ net/ipv4/tcp_minisocks.c      | 16 +++++++---------
+ 3 files changed, 29 insertions(+), 23 deletions(-)
+
 -- 
-Deet-doot-dot, I am a bot.
-https://korg.docs.kernel.org/patchwork/pwbot.html
-
+2.43.0
 
