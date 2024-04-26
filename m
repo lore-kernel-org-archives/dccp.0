@@ -1,38 +1,38 @@
 Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 35752143C4D;
-	Fri, 26 Apr 2024 10:47:10 +0000 (UTC)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 68BB3144D26;
+	Fri, 26 Apr 2024 10:47:11 +0000 (UTC)
 Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1714128431; cv=none; b=dwRN8sHXMEd5RODT3RADrC6EEcOkhE1p5Bis8lt/dwuQiSrqZHJjx0p/mo0uURorPv0aNXEKPiWzYMS0wvxp1Ukw6oZzHPPeKG99UKWhOq9TVyZDLl9zperIeyL+4JR09fDur+7cPEqpIGx+mm6MOu5hJFSrNV9UcP50/a4Raa4=
+	t=1714128431; cv=none; b=qlze/LuArT209EuyEsDafyiUGl3mG915TtyJIH5k27EALR1b/p6Y2wfcpldZv4qtsXSCY1gYHsjBpWiCW3l3JM740xGx6vyljjkMHhtf4tTlnXFDTiQik24D+KtDPmGkiIhpr+sUCcU9OLZa4l9fWYil+2fBqgiOnuXYUhug+d8=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
 	s=arc-20240116; t=1714128431; c=relaxed/simple;
-	bh=YZ6DEJBVvljVIbhNU6e6jwmBQyGXRRuf7Jp8FhA0VRU=;
+	bh=OaWenH2ecs+TvT40FvZfeCOsMkIprLb3i+uRB7TGjxw=;
 	h=From:Date:Subject:MIME-Version:Content-Type:Message-Id:References:
-	 In-Reply-To:To:Cc; b=nIamcDFcrslPr4+iW6/71K4tc4r8kxacmB/OteC/PYwZSSFOrNukXDz8FyMuJfubjlRzjhZqpmAfvXftv/CCvdonD85h8y10bdoaSHun6uBvunShICVhN0YnZzJF/aQv1bT36X7Pk995YBcHQMb7aO6eArxYXyMveL8h2TOYMFA=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=T8JiRZCa; arc=none smtp.client-ip=10.30.226.201
+	 In-Reply-To:To:Cc; b=ozx9oLacVRhFfqgJU2wLnwTGdIOxuha3tUtRstRDlZ4V2HnK/MNQlU82+DhsANF248gSduMAnP3tNaRqI+7uWaOED++HUzxXsemtdXlRTDK0cF26e3svYzhaQCxtdX3r8Rvm3Z3TIG3Axcfc33B/iTAIChDhOJb2QtjX7sP8eS8=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=L81ooAJc; arc=none smtp.client-ip=10.30.226.201
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="T8JiRZCa"
-Received: by smtp.kernel.org (Postfix) with ESMTPS id BBF10C4AF07;
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="L81ooAJc"
+Received: by smtp.kernel.org (Postfix) with ESMTPS id E519EC4AF13;
 	Fri, 26 Apr 2024 10:47:10 +0000 (UTC)
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
 	s=k20201202; t=1714128430;
-	bh=YZ6DEJBVvljVIbhNU6e6jwmBQyGXRRuf7Jp8FhA0VRU=;
+	bh=OaWenH2ecs+TvT40FvZfeCOsMkIprLb3i+uRB7TGjxw=;
 	h=From:Date:Subject:References:In-Reply-To:To:Cc:Reply-To:From;
-	b=T8JiRZCa4arq/VkQcgTiBvoe/Spc0SWBJnylxt8VtpSTnb2gJng8rRiToXnF7QSuF
-	 PbgvJO3BFs+9NxpzBtHj+k8IXw7XoBlbFeV9CsU1mdqQeimyPt3lrwumvOSaofJSaJ
-	 59rVk3/EwhPw8UFsjRI6jh5GwbphzqN6dEkkFVqmtZWQdVrr97VJSStNGf8FMuwKbP
-	 eCUegbDYk9eZpy/SCAd8MG4WSJD/S1a87f5AyeNzB6SSwY56YLxmMohjxIF9XjFZHF
-	 bvhqb2hmLgoVSCFhoJxcoh+tN/ldNVAZvZRMmNsuiYkMbzQWNf1wSV+fCAg0U1ocgY
-	 amFR/fM0AEgaA==
+	b=L81ooAJczZ6l+I9P1nO9tRSraH/Xl/LHT8jqPr1kG8Ntk4NV3vuKefx6pZVi8hpxa
+	 pGDUyEo94r5a/iSiuHrNt1fwPX37y9BKPjDx9l4Q62s36axvKzzS6kH2WEuaNt38Sm
+	 DbILGltKVRBdNaMtPYhif6Bbfj4u0mlrWmAptnyF2c8WnMKBSKseBEIpXCRB49RiuZ
+	 yuipi7ezjjPh5ITfMYNVRvH++qoVsHiwSg1hX1m1TWNN8788OBPL9ZoJ5mBGtnoKlV
+	 wBLOtI3E0kTXhisG012vUs7MXhKplbpxwZJC6yS59Pebl+9R/MMkDJCxnWRVVYyJNr
+	 7kgFZm27u2Mdg==
 Received: from aws-us-west-2-korg-lkml-1.web.codeaurora.org (localhost.localdomain [127.0.0.1])
-	by smtp.lore.kernel.org (Postfix) with ESMTP id 9DD2AC4345F;
+	by smtp.lore.kernel.org (Postfix) with ESMTP id D2365C04FFE;
 	Fri, 26 Apr 2024 10:47:10 +0000 (UTC)
 From: Joel Granados via B4 Relay <devnull+j.granados.samsung.com@kernel.org>
-Date: Fri, 26 Apr 2024 12:46:53 +0200
-Subject: [PATCH v5 1/8] net: Remove the now superfluous sentinel elements
- from ctl_table array
+Date: Fri, 26 Apr 2024 12:46:55 +0200
+Subject: [PATCH v5 3/8] net: rds: Remove the now superfluous sentinel
+ elements from ctl_table array
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
@@ -41,7 +41,7 @@ List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 7bit
-Message-Id: <20240426-jag-sysctl_remset_net-v5-1-e3b12f6111a6@samsung.com>
+Message-Id: <20240426-jag-sysctl_remset_net-v5-3-e3b12f6111a6@samsung.com>
 References: <20240426-jag-sysctl_remset_net-v5-0-e3b12f6111a6@samsung.com>
 In-Reply-To: <20240426-jag-sysctl_remset_net-v5-0-e3b12f6111a6@samsung.com>
 To: "David S. Miller" <davem@davemloft.net>, 
@@ -82,19 +82,19 @@ Cc: netdev@vger.kernel.org, linux-kernel@vger.kernel.org,
  coreteam@netfilter.org, bridge@lists.linux.dev, lvs-devel@vger.kernel.org, 
  Joel Granados <j.granados@samsung.com>
 X-Mailer: b4 0.13-dev-2d940
-X-Developer-Signature: v=1; a=openpgp-sha256; l=8013;
+X-Developer-Signature: v=1; a=openpgp-sha256; l=1604;
  i=j.granados@samsung.com; h=from:subject:message-id;
- bh=iqBR4LN8wpuw1ds7vI8wqz00riFw9zUncKTSa21CztI=;
- b=owJ4nAHtARL+kA0DAAoBupfNUreWQU8ByyZiAGYrhihA6lMt+IAZ1Mm8dT7Ou8OAph0dvGtFh
- pJex2IuQsax+IkBswQAAQoAHRYhBK5HCVcl5jElzssnkLqXzVK3lkFPBQJmK4YoAAoJELqXzVK3
- lkFP7wIMAJa8lbxTgRDJ6jIF2RLjX7z5smkai666wiltJ9MXTnHT75POTUCiiMiBsUuJfp4KJWh
- vTC7HR7qN5kfB1B/XiGzBT8VN/2YOrMZVWgGz3OAV/FNBrTxGfYoMM8/jXsizIQE+EWiYNiiZmi
- zmq+cCCls+eKCeHCO+MdYMJZtq3ZpYtoF8HlFwJJIrhtv37yunQjG/VqNiTZrGuEfVmXt+p0McG
- t6lp7g5wBKED690nQXBMcuTz9SwQyXSFY5ZujN3tkeXkWi3rxzeokVIoCBBrHwS3WAk8NYb+xAo
- zD2fzVCt9HlDTFeTC18v0ULtC96d1JXKsvlHBw+BWZ8ncvKunAKZRwXNhtZ3NesVp6jdgt7G1EH
- 0As94n/KLfgoREwqop7/pGTMupRDi5UXyHE0UsyOHcBkA3fN0eoFvXVsBMLPkisan4HOD6Zpgg+
- XEakBqHw5rWn2OKDt2R85wWwLhKFV/o255lEU7PLhSr6rFe17+MuOJUj3e/JsKg/9Mq4lI4maS5
- Yc=
+ bh=Yhw5Yxzxk2wGoyQtTfioNjf4XA/aQJR8HoqakSkFmW8=;
+ b=owJ4nAHtARL+kA0DAAoBupfNUreWQU8ByyZiAGYrhilhsDLKMciOakZ2hp+OF9Gcz8PYw79X5
+ 2enJ+JxfEEqeIkBswQAAQoAHRYhBK5HCVcl5jElzssnkLqXzVK3lkFPBQJmK4YpAAoJELqXzVK3
+ lkFPkfwL/Ai+Yo+GmKvgTo+Umr4alxLieJctsBpAOAdVaHgF75wTSgdW3xdYq69M3kxafgvUUmH
+ FwnSiNd/Aro4onzDt8NlrzX3kpInHsv3kXiDRDDNDrC4Vc+aS2Ne8vTuKy4U5o/CX9j+LAff7qH
+ H3yeRFXZikV04jEmRG8i6fo9p0gKrBEhpANzcb2DjtzXzZ3XH58k9fEYXmnBYtTFv5CLOF4QQV5
+ VMD3WmZU5ydWNVnLZmAfsfqs+gAUvJBwoTjgn9qoeP64T1FSMYOIyk93QUWIFwc79qiNNMot677
+ MANECcoUwPtZqVGLDom62wBNi+i98/TYbxKJD4mvEYzXKZ3ResSvNPoRwOp3DVB6lacwExbz/xe
+ iCj6kwdmEG04UFyW7P+J1rcJgHZ1Y0GdWJtoIZLtcnd2LIrFl781UKZaGUiQfTlfk1Q44S/iikk
+ tlYuokWms1BEMwASp/t4FBi8LJ5b/Gnq5xlD6gn5lsGjW/cRNHQm5DFU5x9jxRl48wkyqVS/WJ5
+ 4M=
 X-Developer-Key: i=j.granados@samsung.com; a=openpgp;
  fpr=F1F8E46D30F0F6C4A45FF4465895FAAC338C6E77
 X-Endpoint-Received: by B4 Relay for j.granados@samsung.com/default with
@@ -111,220 +111,50 @@ memory bloat by ~64 bytes per sentinel (further information Link :
 https://lore.kernel.org/all/ZO5Yx5JFogGi%2FcBo@bombadil.infradead.org/)
 
 * Remove sentinel element from ctl_table structs.
-* Remove the zeroing out of an array element (to make it look like a
-  sentinel) in neigh_sysctl_register and lowpan_frags_ns_sysctl_register
-  This is not longer needed and is safe after commit c899710fe7f9
-  ("networking: Update to register_net_sysctl_sz") added the array size
-  to the ctl_table registration.
-* Replace the for loop stop condition in sysctl_core_net_init that tests
-  for procname == NULL with one that depends on array size
-* Removed the "-1" in mpls_net_init that adjusted for having an extra
-  empty element when looping over ctl_table arrays
-* Use a table_size variable to keep the value of ARRAY_SIZE
 
 Signed-off-by: Joel Granados <j.granados@samsung.com>
 ---
- net/core/neighbour.c                |  5 +----
- net/core/sysctl_net_core.c          | 12 +++++-------
- net/dccp/sysctl.c                   |  2 --
- net/ieee802154/6lowpan/reassembly.c |  6 +-----
- net/mpls/af_mpls.c                  | 12 ++++++------
- net/unix/sysctl_net_unix.c          |  1 -
- 6 files changed, 13 insertions(+), 25 deletions(-)
+ net/rds/ib_sysctl.c | 1 -
+ net/rds/sysctl.c    | 1 -
+ net/rds/tcp.c       | 1 -
+ 3 files changed, 3 deletions(-)
 
-diff --git a/net/core/neighbour.c b/net/core/neighbour.c
-index 552719c3bbc3..b0327402b3e6 100644
---- a/net/core/neighbour.c
-+++ b/net/core/neighbour.c
-@@ -3728,7 +3728,7 @@ static int neigh_proc_base_reachable_time(struct ctl_table *ctl, int write,
- 
- static struct neigh_sysctl_table {
- 	struct ctl_table_header *sysctl_header;
--	struct ctl_table neigh_vars[NEIGH_VAR_MAX + 1];
-+	struct ctl_table neigh_vars[NEIGH_VAR_MAX];
- } neigh_sysctl_template __read_mostly = {
- 	.neigh_vars = {
- 		NEIGH_SYSCTL_ZERO_INTMAX_ENTRY(MCAST_PROBES, "mcast_solicit"),
-@@ -3779,7 +3779,6 @@ static struct neigh_sysctl_table {
- 			.extra2		= SYSCTL_INT_MAX,
- 			.proc_handler	= proc_dointvec_minmax,
- 		},
--		{},
- 	},
- };
- 
-@@ -3807,8 +3806,6 @@ int neigh_sysctl_register(struct net_device *dev, struct neigh_parms *p,
- 	if (dev) {
- 		dev_name_source = dev->name;
- 		/* Terminate the table early */
--		memset(&t->neigh_vars[NEIGH_VAR_GC_INTERVAL], 0,
--		       sizeof(t->neigh_vars[NEIGH_VAR_GC_INTERVAL]));
- 		neigh_vars_size = NEIGH_VAR_BASE_REACHABLE_TIME_MS + 1;
- 	} else {
- 		struct neigh_table *tbl = p->tbl;
-diff --git a/net/core/sysctl_net_core.c b/net/core/sysctl_net_core.c
-index 6973dda3abda..a84690b13bb9 100644
---- a/net/core/sysctl_net_core.c
-+++ b/net/core/sysctl_net_core.c
-@@ -660,7 +660,6 @@ static struct ctl_table net_core_table[] = {
- 		.proc_handler	= proc_dointvec_minmax,
- 		.extra1		= SYSCTL_ZERO,
- 	},
--	{ }
- };
- 
- static struct ctl_table netns_core_table[] = {
-@@ -697,7 +696,6 @@ static struct ctl_table netns_core_table[] = {
- 		.extra2		= SYSCTL_ONE,
- 		.proc_handler	= proc_dou8vec_minmax,
- 	},
--	{ }
- };
- 
- static int __init fb_tunnels_only_for_init_net_sysctl_setup(char *str)
-@@ -715,7 +713,8 @@ __setup("fb_tunnels=", fb_tunnels_only_for_init_net_sysctl_setup);
- 
- static __net_init int sysctl_core_net_init(struct net *net)
- {
--	struct ctl_table *tbl, *tmp;
-+	size_t table_size = ARRAY_SIZE(netns_core_table);
-+	struct ctl_table *tbl;
- 
- 	tbl = netns_core_table;
- 	if (!net_eq(net, &init_net)) {
-@@ -723,12 +722,11 @@ static __net_init int sysctl_core_net_init(struct net *net)
- 		if (tbl == NULL)
- 			goto err_dup;
- 
--		for (tmp = tbl; tmp->procname; tmp++)
--			tmp->data += (char *)net - (char *)&init_net;
-+		for (int i = 0; i < table_size; ++i)
-+			(tbl + i)->data += (char *)net - (char *)&init_net;
- 	}
- 
--	net->core.sysctl_hdr = register_net_sysctl_sz(net, "net/core", tbl,
--						      ARRAY_SIZE(netns_core_table));
-+	net->core.sysctl_hdr = register_net_sysctl_sz(net, "net/core", tbl, table_size);
- 	if (net->core.sysctl_hdr == NULL)
- 		goto err_reg;
- 
-diff --git a/net/dccp/sysctl.c b/net/dccp/sysctl.c
-index ee8d4f5afa72..3fc474d6e57d 100644
---- a/net/dccp/sysctl.c
-+++ b/net/dccp/sysctl.c
-@@ -90,8 +90,6 @@ static struct ctl_table dccp_default_table[] = {
+diff --git a/net/rds/ib_sysctl.c b/net/rds/ib_sysctl.c
+index e4e41b3afce7..2af678e71e3c 100644
+--- a/net/rds/ib_sysctl.c
++++ b/net/rds/ib_sysctl.c
+@@ -103,7 +103,6 @@ static struct ctl_table rds_ib_sysctl_table[] = {
  		.mode		= 0644,
- 		.proc_handler	= proc_dointvec_ms_jiffies,
- 	},
--
--	{ }
- };
- 
- static struct ctl_table_header *dccp_table_header;
-diff --git a/net/ieee802154/6lowpan/reassembly.c b/net/ieee802154/6lowpan/reassembly.c
-index 6dd960ec558c..09b18ee6df00 100644
---- a/net/ieee802154/6lowpan/reassembly.c
-+++ b/net/ieee802154/6lowpan/reassembly.c
-@@ -338,7 +338,6 @@ static struct ctl_table lowpan_frags_ns_ctl_table[] = {
- 		.mode		= 0644,
- 		.proc_handler	= proc_dointvec_jiffies,
+ 		.proc_handler	= proc_dointvec,
  	},
 -	{ }
  };
  
- /* secret interval has been deprecated */
-@@ -351,7 +350,6 @@ static struct ctl_table lowpan_frags_ctl_table[] = {
- 		.mode		= 0644,
- 		.proc_handler	= proc_dointvec_jiffies,
+ void rds_ib_sysctl_exit(void)
+diff --git a/net/rds/sysctl.c b/net/rds/sysctl.c
+index e381bbcd9cc1..025f518a4349 100644
+--- a/net/rds/sysctl.c
++++ b/net/rds/sysctl.c
+@@ -89,7 +89,6 @@ static struct ctl_table rds_sysctl_rds_table[] = {
+ 		.mode           = 0644,
+ 		.proc_handler   = proc_dointvec,
  	},
 -	{ }
  };
  
- static int __net_init lowpan_frags_ns_sysctl_register(struct net *net)
-@@ -370,10 +368,8 @@ static int __net_init lowpan_frags_ns_sysctl_register(struct net *net)
- 			goto err_alloc;
- 
- 		/* Don't export sysctls to unprivileged users */
--		if (net->user_ns != &init_user_ns) {
--			table[0].procname = NULL;
-+		if (net->user_ns != &init_user_ns)
- 			table_size = 0;
--		}
- 	}
- 
- 	table[0].data	= &ieee802154_lowpan->fqdir->high_thresh;
-diff --git a/net/mpls/af_mpls.c b/net/mpls/af_mpls.c
-index 6dab883a08dd..ecc849678e7b 100644
---- a/net/mpls/af_mpls.c
-+++ b/net/mpls/af_mpls.c
-@@ -1393,13 +1393,13 @@ static const struct ctl_table mpls_dev_table[] = {
- 		.proc_handler	= mpls_conf_proc,
- 		.data		= MPLS_PERDEV_SYSCTL_OFFSET(input_enabled),
+ void rds_sysctl_exit(void)
+diff --git a/net/rds/tcp.c b/net/rds/tcp.c
+index 2dba7505b414..d8111ac83bb6 100644
+--- a/net/rds/tcp.c
++++ b/net/rds/tcp.c
+@@ -86,7 +86,6 @@ static struct ctl_table rds_tcp_sysctl_table[] = {
+ 		.proc_handler   = rds_tcp_skbuf_handler,
+ 		.extra1		= &rds_tcp_min_rcvbuf,
  	},
 -	{ }
  };
  
- static int mpls_dev_sysctl_register(struct net_device *dev,
- 				    struct mpls_dev *mdev)
- {
- 	char path[sizeof("net/mpls/conf/") + IFNAMSIZ];
-+	size_t table_size = ARRAY_SIZE(mpls_dev_table);
- 	struct net *net = dev_net(dev);
- 	struct ctl_table *table;
- 	int i;
-@@ -1411,7 +1411,7 @@ static int mpls_dev_sysctl_register(struct net_device *dev,
- 	/* Table data contains only offsets relative to the base of
- 	 * the mdev at this point, so make them absolute.
- 	 */
--	for (i = 0; i < ARRAY_SIZE(mpls_dev_table); i++) {
-+	for (i = 0; i < table_size; i++) {
- 		table[i].data = (char *)mdev + (uintptr_t)table[i].data;
- 		table[i].extra1 = mdev;
- 		table[i].extra2 = net;
-@@ -1419,8 +1419,7 @@ static int mpls_dev_sysctl_register(struct net_device *dev,
- 
- 	snprintf(path, sizeof(path), "net/mpls/conf/%s", dev->name);
- 
--	mdev->sysctl = register_net_sysctl_sz(net, path, table,
--					      ARRAY_SIZE(mpls_dev_table));
-+	mdev->sysctl = register_net_sysctl_sz(net, path, table, table_size);
- 	if (!mdev->sysctl)
- 		goto free;
- 
-@@ -2674,6 +2673,7 @@ static const struct ctl_table mpls_table[] = {
- 
- static int mpls_net_init(struct net *net)
- {
-+	size_t table_size = ARRAY_SIZE(mpls_table);
- 	struct ctl_table *table;
- 	int i;
- 
-@@ -2689,11 +2689,11 @@ static int mpls_net_init(struct net *net)
- 	/* Table data contains only offsets relative to the base of
- 	 * the mdev at this point, so make them absolute.
- 	 */
--	for (i = 0; i < ARRAY_SIZE(mpls_table) - 1; i++)
-+	for (i = 0; i < table_size; i++)
- 		table[i].data = (char *)net + (uintptr_t)table[i].data;
- 
- 	net->mpls.ctl = register_net_sysctl_sz(net, "net/mpls", table,
--					       ARRAY_SIZE(mpls_table));
-+					       table_size);
- 	if (net->mpls.ctl == NULL) {
- 		kfree(table);
- 		return -ENOMEM;
-diff --git a/net/unix/sysctl_net_unix.c b/net/unix/sysctl_net_unix.c
-index 3e84b31c355a..ae45d4cfac39 100644
---- a/net/unix/sysctl_net_unix.c
-+++ b/net/unix/sysctl_net_unix.c
-@@ -19,7 +19,6 @@ static struct ctl_table unix_table[] = {
- 		.mode		= 0644,
- 		.proc_handler	= proc_dointvec
- 	},
--	{ }
- };
- 
- int __net_init unix_sysctl_register(struct net *net)
+ u32 rds_tcp_write_seq(struct rds_tcp_connection *tc)
 
 -- 
 2.43.0
