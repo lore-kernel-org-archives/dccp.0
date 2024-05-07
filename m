@@ -1,53 +1,60 @@
 Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 3A36916DEAC;
-	Tue,  7 May 2024 19:18:34 +0000 (UTC)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 059F073514;
+	Tue,  7 May 2024 23:20:28 +0000 (UTC)
 Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1715109515; cv=none; b=FQPY83EQLd6D44z/rIi4LPNQrlIJg5JPxSyiycWaLH6kfLVKhmWOMifHrVCgk5HExBaI16TLah8y+st8iMQEXdeD4HN1feNbmawztgy65VuaaLpkrJvky3Fnay67guc/Z3k97ujyYFMy/QMJAVwdF6f9p0OAAOzU/quyB5ZmFMI=
+	t=1715124029; cv=none; b=AMSOuqntjl8rkgi0Fajah+XSDK9CjtbzykUvqe7xLwlgkj9ZB4RfTZl/Mb2UUOtOE1JZjsD+VJW79dObKs833viQwRcfUDD4rgU7sJJS1mUdBcoDsdk/0fTUziFtZ2RWoFPzb7WdfNH2mMaH/9Ft/X3/0cq5OZ9WjG16f7r4sig=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1715109515; c=relaxed/simple;
-	bh=uUZ0wRwqvt5AN23IbqpgPVlEjLnvM1VT4sztb1JpTlI=;
-	h=Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
-	 Content-Type:Content-Disposition:In-Reply-To; b=ETYQJx/Xl0NO6tNLPCSe39j/R8D9fcQldozjiZPnh8SNBoWPcCbb4UoJEaa88F5M2W7RcCcsuJ7MgwUE9H3dMCspUhY327dAOHSeSzNCSEd5al6znF0Bv4daSbvhJV+5rVfxwTZwgTSwR2ajtK17CftllQ7HvTeHNxiJi4NxT9w=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=EdEN10G4; arc=none smtp.client-ip=10.30.226.201
+	s=arc-20240116; t=1715124029; c=relaxed/simple;
+	bh=JdarES88yp6jfonQ2dpwnyScD7nI33DnAuqFsPHcG0A=;
+	h=Content-Type:MIME-Version:Subject:From:Message-Id:Date:References:
+	 In-Reply-To:To:Cc; b=aoSzAFt9ihCq803jYUif1HSuOfre+OMjurM5Kkr3RobIw9xO1uHjj8jH5BNQuRyQjHOkp2Q7QcARbQkPeAJ79q/xMh5JBjrP65HKrpAJoimMgIKOPcVAD0jd2YYMMEm+57Gve6vjaaDG5L0mkgf/zDT0NWGXWxxf3mmN0TShN6M=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=MMlynYBI; arc=none smtp.client-ip=10.30.226.201
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="EdEN10G4"
-Received: by smtp.kernel.org (Postfix) with ESMTPSA id C4848C2BBFC;
-	Tue,  7 May 2024 19:18:32 +0000 (UTC)
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="MMlynYBI"
+Received: by smtp.kernel.org (Postfix) with ESMTPS id 7A963C2BBFC;
+	Tue,  7 May 2024 23:20:28 +0000 (UTC)
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
-	s=k20201202; t=1715109514;
-	bh=uUZ0wRwqvt5AN23IbqpgPVlEjLnvM1VT4sztb1JpTlI=;
-	h=Date:From:To:Cc:Subject:References:In-Reply-To:From;
-	b=EdEN10G4X60VAwSbDobYx6poRz4kq/eSzLRO2um3y7rzL/h+t24eZgSqM3uit0SK/
-	 SiG+czgg6+nb/RQs8KEfD/qoNMyNnBPmIlshItMhm3GZpiCRDB+z0MUNcIk9nNe7bV
-	 /P2YVhWh4+g+xCCEX/mzEd2YpWpzy+oDsNLNsQZYyEZi9V+TK3XB4YptFn/Ci79JQQ
-	 gTQfmh4dBrqutvk0HsVQ+4EKxhY1Ss/EL7/Lbumpl2Wb5dJ4/4Hhn8kfryxNu0zKq0
-	 BLC/nueAXuuyvcafDLcs7SU4q0Cpgl20cDz8wxmbhx6UnZXHx3NtoHtVjZTkQrrTXd
-	 4SSsGI8P5fFdQ==
-Date: Tue, 7 May 2024 20:17:00 +0100
-From: Simon Horman <horms@kernel.org>
-To: Jeff Johnson <quic_jjohnson@quicinc.com>
-Cc: "David S. Miller" <davem@davemloft.net>,
-	Eric Dumazet <edumazet@google.com>,
-	Jakub Kicinski <kuba@kernel.org>, Paolo Abeni <pabeni@redhat.com>,
-	dccp@vger.kernel.org, netdev@vger.kernel.org,
-	linux-kernel@vger.kernel.org
-Subject: Re: [PATCH] net: dccp: Fix ccid2_rtt_estimator() kernel-doc
-Message-ID: <20240507191700.GJ15955@kernel.org>
-References: <20240505-ccid2_rtt_estimator-kdoc-v1-1-09231fcb9145@quicinc.com>
+	s=k20201202; t=1715124028;
+	bh=JdarES88yp6jfonQ2dpwnyScD7nI33DnAuqFsPHcG0A=;
+	h=Subject:From:Date:References:In-Reply-To:To:Cc:From;
+	b=MMlynYBIY86aPPQrPEivRJIdIzvI7iCysExgeFyORoOmwxYucoIZxZDWI4SBh9ji6
+	 sBLgu8ZscBIfs9pjD9UNudXcpLBYX8+JeImhLp+8d1UPNQOOU4YqMtC8p7yebyC0RR
+	 l4DovdfNpJ3OC4KWPxZ8dv9sgzxWkbG2AAEJbErkwwLkulQSbUl+vj6Utxv6WrOuXw
+	 6o0EXg/bWt3VwfQ157V/wWYZNl++kzhHBVAZ9BfR0wPHik0Z69uvzShLhwXbPnQMtk
+	 IDQXjWIF+/6jQ9Ty7r9V0MkvAZfgwaxTTlF8OkyYLAz7NW08JuxhmJQ8aj0pPDpFib
+	 nbOH/sMiKh2eg==
+Received: from aws-us-west-2-korg-oddjob-1.ci.codeaurora.org (localhost.localdomain [127.0.0.1])
+	by aws-us-west-2-korg-oddjob-1.ci.codeaurora.org (Postfix) with ESMTP id 6F06DC43617;
+	Tue,  7 May 2024 23:20:28 +0000 (UTC)
+Content-Type: text/plain; charset="utf-8"
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset=us-ascii
-Content-Disposition: inline
+Content-Transfer-Encoding: 8bit
+Subject: Re: [PATCH] net: dccp: Fix ccid2_rtt_estimator() kernel-doc
+From: patchwork-bot+netdevbpf@kernel.org
+Message-Id: 
+ <171512402845.11379.8750245287455297553.git-patchwork-notify@kernel.org>
+Date: Tue, 07 May 2024 23:20:28 +0000
+References: <20240505-ccid2_rtt_estimator-kdoc-v1-1-09231fcb9145@quicinc.com>
 In-Reply-To: <20240505-ccid2_rtt_estimator-kdoc-v1-1-09231fcb9145@quicinc.com>
+To: Jeff Johnson <quic_jjohnson@quicinc.com>
+Cc: davem@davemloft.net, edumazet@google.com, kuba@kernel.org,
+ pabeni@redhat.com, dccp@vger.kernel.org, netdev@vger.kernel.org,
+ linux-kernel@vger.kernel.org
 
-On Sun, May 05, 2024 at 01:09:31PM -0700, Jeff Johnson wrote:
+Hello:
+
+This patch was applied to netdev/net-next.git (main)
+by Jakub Kicinski <kuba@kernel.org>:
+
+On Sun, 5 May 2024 13:09:31 -0700 you wrote:
 > make C=1 reports:
 > 
 > warning: Function parameter or struct member 'mrtt' not described in 'ccid2_rtt_estimator'
@@ -55,7 +62,16 @@ On Sun, May 05, 2024 at 01:09:31PM -0700, Jeff Johnson wrote:
 > So document the 'mrtt' parameter.
 > 
 > Signed-off-by: Jeff Johnson <quic_jjohnson@quicinc.com>
+> 
+> [...]
 
-Reviewed-by: Simon Horman <horms@kernel.org>
+Here is the summary with links:
+  - net: dccp: Fix ccid2_rtt_estimator() kernel-doc
+    https://git.kernel.org/netdev/net-next/c/feb8c2b76eb3
 
-The comment just inside tcp_rtt_estimator is a good read :)
+You are awesome, thank you!
+-- 
+Deet-doot-dot, I am a bot.
+https://korg.docs.kernel.org/patchwork/pwbot.html
+
+
