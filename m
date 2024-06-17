@@ -1,163 +1,131 @@
-Received: from mailgw.kylinos.cn (mailgw.kylinos.cn [124.126.103.232])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+Received: from mail-wm1-f42.google.com (mail-wm1-f42.google.com [209.85.128.42])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 9AF2A18628D;
-	Mon, 17 Jun 2024 08:07:55 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=124.126.103.232
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id CE5B4194AD2
+	for <dccp@vger.kernel.org>; Mon, 17 Jun 2024 11:31:17 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.128.42
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1718611682; cv=none; b=MivNoeqoV66d0HFG4yhGjjybQfNWIz/YPdIxpnr/UpXgfWNxKN+/5Q4HwSh5O/p+lXSuCoPR+33EQNu1shNJa2vV5dclLmBOK76Vvym7kksKuDiVxKAVZN2Qxq9glkah+JC1BGmca3SuoTZvOAND4DB+N0m8rLaVCfbuj6VPWhI=
+	t=1718623881; cv=none; b=ovc+W/MUwzplB902p86Cnul3qpP4FRVyOwCtQFz3WmeT0Gq3LlYCKrwFqR+ATl2s4gXXkejQrxP7BMfE9OhMPTK5q4RXQ9iDrZEt0icbSDUAE/nvxyEb/aCxmE6K1rL0ywQrt1BalQnjrAxeRuUusm8tDkCdf2xFBOQ/raaKwBQ=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1718611682; c=relaxed/simple;
-	bh=7u1il9aHHFXxYlJZ1uZuvLEv/db5bI8nohdzBZYDeuk=;
-	h=Message-ID:Date:MIME-Version:Subject:To:Cc:References:From:
-	 In-Reply-To:Content-Type; b=SL7qghakPgK5GZXZ31sGh+CDqXsfpsLaPS/dXciEZZYiak9nLG6DITLsmkM8j77wr0BHzhyLrhAOZU2MMJrKKjk0/zJpnjyHq5aLbyK5JYqnskzbKRe2Tcltf5JMuG0Oeo7waubpicBjiXFpUJ7wssWjE/swUfE2YYeFVEXVHfo=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=none (p=none dis=none) header.from=kylinos.cn; spf=pass smtp.mailfrom=kylinos.cn; arc=none smtp.client-ip=124.126.103.232
-Authentication-Results: smtp.subspace.kernel.org; dmarc=none (p=none dis=none) header.from=kylinos.cn
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=kylinos.cn
-X-UUID: b1406d942c8011ef9305a59a3cc225df-20240617
-X-CID-P-RULE: Release_Ham
-X-CID-O-INFO: VERSION:1.1.38,REQID:7730c8e0-bc28-498e-a478-9a61b35a5c8b,IP:10,
-	URL:0,TC:0,Content:0,EDM:0,RT:0,SF:-15,FILE:0,BULK:28,RULE:Release_Ham,ACT
-	ION:release,TS:23
-X-CID-INFO: VERSION:1.1.38,REQID:7730c8e0-bc28-498e-a478-9a61b35a5c8b,IP:10,UR
-	L:0,TC:0,Content:0,EDM:0,RT:0,SF:-15,FILE:0,BULK:28,RULE:Release_Ham,ACTIO
-	N:release,TS:23
-X-CID-META: VersionHash:82c5f88,CLOUDID:504ddc7c59fe1f0bab54ca3c0e6ab65d,BulkI
-	D:240614185458SXRYECY3,BulkQuantity:7,Recheck:0,SF:17|19|44|64|66|38|24|10
-	2,TC:nil,Content:0,EDM:-3,IP:-2,URL:0,File:nil,RT:nil,Bulk:40|20,QS:nil,BE
-	C:nil,COL:0,OSI:0,OSA:0,AV:0,LES:1,SPR:NO,DKR:0,DKP:0,BRR:0,BRE:0
-X-CID-BVR: 0,NGT
-X-CID-BAS: 0,NGT,0,_
-X-CID-FACTOR: TF_CID_SPAM_SNR,TF_CID_SPAM_FAS,TF_CID_SPAM_FSD,TF_CID_SPAM_FSI,
-	TF_CID_SPAM_FCD
-X-UUID: b1406d942c8011ef9305a59a3cc225df-20240617
-Received: from node2.com.cn [(39.156.73.10)] by mailgw.kylinos.cn
-	(envelope-from <luoxuanqiang@kylinos.cn>)
-	(Generic MTA)
-	with ESMTP id 1967790496; Mon, 17 Jun 2024 16:07:51 +0800
-Received: from node2.com.cn (localhost [127.0.0.1])
-	by node2.com.cn (NSMail) with SMTP id E8965B80758A;
-	Mon, 17 Jun 2024 16:07:50 +0800 (CST)
-X-ns-mid: postfix-666FEED6-75382868
-Received: from [10.42.12.252] (unknown [10.42.12.252])
-	by node2.com.cn (NSMail) with ESMTPA id 1FB71B80758A;
-	Mon, 17 Jun 2024 08:07:50 +0000 (UTC)
-Message-ID: <22779d46-8e8b-4ea5-07d6-bebb17a04051@kylinos.cn>
-Date: Mon, 17 Jun 2024 16:07:49 +0800
+	s=arc-20240116; t=1718623881; c=relaxed/simple;
+	bh=cCoXQV3kYF7W4zbN+zvGdFQuynk8VUtSE0YxweJekic=;
+	h=Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
+	 Content-Type:Content-Disposition:In-Reply-To; b=J9Zf5uU/RBlwD8lCOc6S7iQEExm4dq5aIQ+512ojD0+p1Hwr2F12m0cRpmvonS5F6fEOjK+kko8dfjQmZyHuowhSQBeeJVvTbdxBUZKeMuJ0h/nj1h1i2VadY7aLAeL8pmEX84f7vJByHZn4mL8F7Q03iPVZL+67wc/lEFsORL4=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=none (p=none dis=none) header.from=resnulli.us; spf=none smtp.mailfrom=resnulli.us; dkim=pass (2048-bit key) header.d=resnulli-us.20230601.gappssmtp.com header.i=@resnulli-us.20230601.gappssmtp.com header.b=xk9Nq4I4; arc=none smtp.client-ip=209.85.128.42
+Authentication-Results: smtp.subspace.kernel.org; dmarc=none (p=none dis=none) header.from=resnulli.us
+Authentication-Results: smtp.subspace.kernel.org; spf=none smtp.mailfrom=resnulli.us
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key) header.d=resnulli-us.20230601.gappssmtp.com header.i=@resnulli-us.20230601.gappssmtp.com header.b="xk9Nq4I4"
+Received: by mail-wm1-f42.google.com with SMTP id 5b1f17b1804b1-421eab59723so30820315e9.3
+        for <dccp@vger.kernel.org>; Mon, 17 Jun 2024 04:31:17 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=resnulli-us.20230601.gappssmtp.com; s=20230601; t=1718623876; x=1719228676; darn=vger.kernel.org;
+        h=in-reply-to:content-disposition:mime-version:references:message-id
+         :subject:cc:to:from:date:from:to:cc:subject:date:message-id:reply-to;
+        bh=TgVC6xwTMFPOUKFAMsWw+F8yDLHqZOwZjG2EMVIlrFk=;
+        b=xk9Nq4I4Pmhxl05WUMPKxHg09v1+PVElruoTgX+hyaAPFW4E2PrbOfF/zsf30lGy/Z
+         g3KNTg+umlONiMtgXaeghp6ZRMNSSyc3uZoUqrGaLC2TowpeSo4FeBOYiOIj+8sRfKO7
+         fohT3pmvg+vwgwObQZ78ADhN9I+atIRiVcRRfvi3cfUa7VNLBoFRszq4KP0aiEMN8p/G
+         2LFoCknTELepfWWwqQejcOZdjikD1RKxvCFwp4pNBkWrrsuOZ1kRuMWb2DKZhOqAfrUq
+         abH7c+6+Cc6P2cCL1zKMjSKSTo4rYkh47f1yC3u9k8n8xvWCtKFYpXRgdaiPtutR5lpT
+         0zQQ==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1718623876; x=1719228676;
+        h=in-reply-to:content-disposition:mime-version:references:message-id
+         :subject:cc:to:from:date:x-gm-message-state:from:to:cc:subject:date
+         :message-id:reply-to;
+        bh=TgVC6xwTMFPOUKFAMsWw+F8yDLHqZOwZjG2EMVIlrFk=;
+        b=irFwyBMygcPQk4GJ72KkO7D6Yr7L7vWgB/nAY7inVQEF+LIkfAuWEmslWBGlOyHVq8
+         sLyr3sXYkQp/vgPXTH8s954EnQKfZPi/SuiT1kcn+1mz/Qksx4o6lnNXXko5SjfCJSee
+         daJf0hdz6aWBAhkgDNOhwo8OC/pqMeRHVUBb1kGvkqcPf/ax8pDnLVNZedswWRgbKs1B
+         BLT47EWiqLk7uYlLp7tjKWL9l8aauAuJhye3eRWOiklP5O9lQhKbffd/glovNBSocVLc
+         pApcLWUt+n+zKBZqr95goGe1fxIzjO/hKGw2EMvZlGEoXg7bSsafiK1oH7K5oYyF4ci6
+         OYOw==
+X-Forwarded-Encrypted: i=1; AJvYcCWCGqc4wmGJaqtGieludJT3oep6hbcBFWfkR5WVnD1CrfsUzD4/Fu9MvINhBzrBZleJveugLY2YfF1Z9xY8PzONt1msyQ==
+X-Gm-Message-State: AOJu0YzOVJ6kYZfqKuNLoOUeQdvE98qSGccguJjMJFYFtxNzr1kdrBaa
+	6rjDArYJZjqrtG1hg952WwXg8/R6YJo8kWtjinHAQyrUNe/CUedn2Pq7DtDnb6M=
+X-Google-Smtp-Source: AGHT+IFQdNTBFMjluYuYDNiSDw0jBvXyuET+DmpHPyKJrukjPXm7sadAvuTx8wiCI2gh9SgZquoIXA==
+X-Received: by 2002:a05:600c:1d07:b0:421:7435:88d7 with SMTP id 5b1f17b1804b1-42304844106mr87253345e9.26.1718623876032;
+        Mon, 17 Jun 2024 04:31:16 -0700 (PDT)
+Received: from localhost ([193.47.165.251])
+        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-42286eefa63sm193971445e9.1.2024.06.17.04.31.14
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Mon, 17 Jun 2024 04:31:15 -0700 (PDT)
+Date: Mon, 17 Jun 2024 13:31:11 +0200
+From: Jiri Pirko <jiri@resnulli.us>
+To: luoxuanqiang <luoxuanqiang@kylinos.cn>
+Cc: edumazet@google.com, kuniyu@amazon.com, davem@davemloft.net,
+	dccp@vger.kernel.org, dsahern@kernel.org, fw@strlen.de,
+	kuba@kernel.org, linux-kernel@vger.kernel.org,
+	netdev@vger.kernel.org, pabeni@redhat.com,
+	alexandre.ferrieux@orange.com
+Subject: Re: [PATCH net v3] Fix race for duplicate reqsk on identical SYN
+Message-ID: <ZnAef_DSlzfNP0wh@nanopsycho.orion>
+References: <20240617075640.207570-1-luoxuanqiang@kylinos.cn>
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:102.0) Gecko/20100101
- Thunderbird/102.11.0
-Subject: Re: [PATCH net v2] Fix race for duplicate reqsk on identical SYN
-Content-Language: en-US
-To: Eric Dumazet <edumazet@google.com>, Kuniyuki Iwashima <kuniyu@amazon.com>
-Cc: davem@davemloft.net, dccp@vger.kernel.org, dsahern@kernel.org,
- fw@strlen.de, kuba@kernel.org, linux-kernel@vger.kernel.org,
- netdev@vger.kernel.org, pabeni@redhat.com
-References: <7075bb26-ede9-0dc7-fe93-e18703e5ddaa@kylinos.cn>
- <20240614222433.19580-1-kuniyu@amazon.com>
- <CANn89i+RP1K+mOd5V7LOKMFtMhy0rZrpFDCDQ-RbQ31GkYbc9g@mail.gmail.com>
-From: luoxuanqiang <luoxuanqiang@kylinos.cn>
-In-Reply-To: <CANn89i+RP1K+mOd5V7LOKMFtMhy0rZrpFDCDQ-RbQ31GkYbc9g@mail.gmail.com>
-Content-Type: text/plain; charset=UTF-8; format=flowed
-Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
+In-Reply-To: <20240617075640.207570-1-luoxuanqiang@kylinos.cn>
 
-
-=E5=9C=A8 2024/6/15 14:40, Eric Dumazet =E5=86=99=E9=81=93:
-> On Sat, Jun 15, 2024 at 12:24=E2=80=AFAM Kuniyuki Iwashima <kuniyu@amaz=
-on.com> wrote:
-> =E4=BD=A0=E5=A5=BD Eric=E5=92=8CKuniyuk,
->> From: luoxuanqiang <luoxuanqiang@kylinos.cn>
->> Date: Fri, 14 Jun 2024 20:42:07 +0800
->>> =E5=9C=A8 2024/6/14 18:54, Florian Westphal =E5=86=99=E9=81=93:
->>>> luoxuanqiang <luoxuanqiang@kylinos.cn> wrote:
->>>>>    include/net/inet_connection_sock.h |  2 +-
->>>>>    net/dccp/ipv4.c                    |  2 +-
->>>>>    net/dccp/ipv6.c                    |  2 +-
->>>>>    net/ipv4/inet_connection_sock.c    | 15 +++++++++++----
->>>>>    net/ipv4/tcp_input.c               | 11 ++++++++++-
->>>>>    5 files changed, 24 insertions(+), 8 deletions(-)
->>>>>
->>>>> diff --git a/include/net/inet_connection_sock.h b/include/net/inet_=
-connection_sock.h
->>>>> index 7d6b1254c92d..8773d161d184 100644
->>>>> --- a/include/net/inet_connection_sock.h
->>>>> +++ b/include/net/inet_connection_sock.h
->>>>> @@ -264,7 +264,7 @@ struct sock *inet_csk_reqsk_queue_add(struct so=
-ck *sk,
->>>>>                                   struct request_sock *req,
->>>>>                                   struct sock *child);
->>>>>    void inet_csk_reqsk_queue_hash_add(struct sock *sk, struct reque=
-st_sock *req,
->>>>> -                             unsigned long timeout);
->>>>> +                             unsigned long timeout, bool *found_du=
-p_sk);
->>>> Nit:
->>>>
->>>> I think it would be preferrable to change retval to bool rather than
->>>> bool *found_dup_sk extra arg, so one can do
->> +1
->>
->>
->>>> bool inet_csk_reqsk_queue_hash_add(struct sock *sk, struct request_s=
-ock *req,
->>>>                                 unsigned long timeout)
->>>> {
->>>>      if (!reqsk_queue_hash_req(req, timeout))
->>>>              return false;
->>>>
->>>> i.e. let retval indicate wheter reqsk was inserted or not.
->>>>
->>>> Patch looks good to me otherwise.
->>> Thank you for your confirmation!
->>>
->>> Regarding your suggestion, I had considered it before,
->>> but besides tcp_conn_request() calling inet_csk_reqsk_queue_hash_add(=
-),
->>> dccp_v4(v6)_conn_request() also calls it. However, there is no
->>> consideration for a failed insertion within that function, so it's
->>> reasonable to let the caller decide whether to check for duplicate
->>> reqsk.
->> I guess you followed 01770a1661657 where found_dup_sk was introduced,
->> but note that the commit is specific to TCP SYN Cookie and TCP Fast Op=
-en
->> and DCCP is not related.
->>
->> Then, own_req is common to TCP and DCCP, so found_dup_sk was added as =
-an
->> additional argument.
->>
->> However, another similar commit 5e0724d027f05 actually added own_req c=
-heck
->> in DCCP path.
->>
->> I personally would'nt care if DCCP was not changed to handle such a
->> failure because DCCP will be removed next year, but I still prefer
->> Florian's suggestion.
->>
-> Other things to consider :
+Mon, Jun 17, 2024 at 09:56:40AM CEST, luoxuanqiang@kylinos.cn wrote:
+>When bonding is configured in BOND_MODE_BROADCAST mode, if two identical
+>SYN packets are received at the same time and processed on different CPUs,
+>it can potentially create the same sk (sock) but two different reqsk
+>(request_sock) in tcp_conn_request().
 >
-> - I presume this patch targets net tree, and luoxuanqiang needs the
-> fix to reach stable trees.
+>These two different reqsk will respond with two SYNACK packets, and since
+>the generation of the seq (ISN) incorporates a timestamp, the final two
+>SYNACK packets will have different seq values.
 >
-> - This means a Fixes: tag is needed
+>The consequence is that when the Client receives and replies with an ACK
+>to the earlier SYNACK packet, we will reset(RST) it.
 >
-> - This also means that we should favor a patch with no or trivial
-> conflicts for stable backports.
+>========================================================================
 >
-> Should the patch target the net-next tree, then the requirements can
-> be different.
+>This behavior is consistently reproducible in my local setup,
+>which comprises:
+>
+>                  | NETA1 ------ NETB1 |
+>PC_A --- bond --- |                    | --- bond --- PC_B
+>                  | NETA2 ------ NETB2 |
+>
+>- PC_A is the Server and has two network cards, NETA1 and NETA2. I have
+>  bonded these two cards using BOND_MODE_BROADCAST mode and configured
+>  them to be handled by different CPU.
+>
+>- PC_B is the Client, also equipped with two network cards, NETB1 and
+>  NETB2, which are also bonded and configured in BOND_MODE_BROADCAST mode.
+>
+>If the client attempts a TCP connection to the server, it might encounter
+>a failure. Capturing packets from the server side reveals:
+>
+>10.10.10.10.45182 > localhost: Flags [S], seq 320236027,
+>10.10.10.10.45182 > localhost: Flags [S], seq 320236027,
+>localhost > 10.10.10.10.45182: Flags [S.], seq 2967855116,
+>localhost > 10.10.10.10.45182: Flags [S.], seq 2967855123, <==
+>10.10.10.10.45182 > localhost: Flags [.], ack 4294967290,
+>10.10.10.10.45182 > localhost: Flags [.], ack 4294967290,
+>localhost > 10.10.10.10.45182: Flags [R], seq 2967855117, <==
+>localhost > 10.10.10.10.45182: Flags [R], seq 2967855117,
+>
+>Two SYNACKs with different seq numbers are sent by localhost,
+>resulting in an anomaly.
+>
+>========================================================================
+>
+>The attempted solution is as follows:
+>In the tcp_conn_request(), while inserting reqsk into the ehash table,
+>it also checks if an entry already exists. If found, it avoids
+>reinsertion and releases it.
+>
+>Simultaneously, In the reqsk_queue_hash_req(), the start of the
+>req->rsk_timer is adjusted to be after successful insertion.
+>
+>Signed-off-by: luoxuanqiang <luoxuanqiang@kylinos.cn>
 
-Hi Kuniyuk and Florian,
-
-I've created version 3 based on your suggestions, but I've kept the use
-of 'found_dup_sk' since we need to pass NULL in DCCP to maintain its
-logic unchanged. Could you please review this update and let me know if
-it's okay? Thank you!
-
-BRs!
-
+You are missing "Fixes" tag.
