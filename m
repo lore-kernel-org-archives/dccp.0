@@ -1,133 +1,94 @@
-Received: from smtp-fw-52005.amazon.com (smtp-fw-52005.amazon.com [52.119.213.156])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+Received: from mail-ed1-f48.google.com (mail-ed1-f48.google.com [209.85.208.48])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 5B9CE15D1;
-	Fri, 21 Jun 2024 22:48:25 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=52.119.213.156
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 949F21422D1
+	for <dccp@vger.kernel.org>; Mon, 24 Jun 2024 13:57:10 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.208.48
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1719010107; cv=none; b=KTafNaG+2Gy3sSMn7+qSu/SwpWBXfUCud3lCVIli6fShUhCU+rEqoVmgS69eq937Akf60N0If6y/uAHdlSBvTQlWD0g8k7LxbRK4Gy3aMOZzNNYMt95VPjsMsVbCboxGXx6ykfP41bldaDPaTrhuYZ5LcZyRWAg22bro5A7K7nU=
+	t=1719237432; cv=none; b=RsTPJ8fvTpTWVjHwYDL/fUxwA6IBXLqL9WBq/dpzYHpwNiAFG4jF95mftCVXOiTbpgPYBHNGwyoZbqZ/sEzMd4Q/cxCWrJslZfhBUg9oBytLMP9MlK+WsWhtnzB2cprJQmTcSodepEqKEmBRpowvQ6ubcjwEt0xJ+OpsEzEpco8=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1719010107; c=relaxed/simple;
-	bh=+ixQElxwwpzXsjGVjQW/At/HLoIvmODruZlbcS93qGw=;
-	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
-	 MIME-Version:Content-Type; b=LjbPqKoQEhLvn/2p6a8I5tg4pNX2O4PHJH/lHi2YMdwhvSpfCdE/WeVxajKSes4EafxBU2i2wV4ZgNB1kPwFNrkTEpQtgtfS4tIBePJOuTPawJgqgzNyhcB9BV8kXS2WvoWAhYzEZAPEOKx00rwBm/0F6Wkd62rNvznXpMCe1Tw=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=amazon.com; spf=pass smtp.mailfrom=amazon.co.jp; dkim=pass (1024-bit key) header.d=amazon.com header.i=@amazon.com header.b=Xsj/n/MO; arc=none smtp.client-ip=52.119.213.156
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=amazon.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=amazon.co.jp
+	s=arc-20240116; t=1719237432; c=relaxed/simple;
+	bh=JcmBNUGTwoexd4d4Kt7dKugDN2tASyAOaxDUgR2FYt8=;
+	h=MIME-Version:References:In-Reply-To:From:Date:Message-ID:Subject:
+	 To:Cc:Content-Type; b=eyTXXWgMqtYrcKF3Du+uSrO1bCtN+ZesReCbynOZiQ3Fisrz2SSD02w2EEX2NTVGu/KfoK5g9tPZFQ9vT3t2NmngDu7zFE/TCv9K3yul61dR6gPjzmmAVpyh8K7gCEK42zgQoj8vOYOiFk6mjhRCApJqVBSCzLPWWkEOwQGp9zU=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=reject dis=none) header.from=google.com; spf=pass smtp.mailfrom=google.com; dkim=pass (2048-bit key) header.d=google.com header.i=@google.com header.b=zKSqq3tb; arc=none smtp.client-ip=209.85.208.48
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=reject dis=none) header.from=google.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=google.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (1024-bit key) header.d=amazon.com header.i=@amazon.com header.b="Xsj/n/MO"
+	dkim=pass (2048-bit key) header.d=google.com header.i=@google.com header.b="zKSqq3tb"
+Received: by mail-ed1-f48.google.com with SMTP id 4fb4d7f45d1cf-57d119fddd9so23437a12.1
+        for <dccp@vger.kernel.org>; Mon, 24 Jun 2024 06:57:10 -0700 (PDT)
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-  d=amazon.com; i=@amazon.com; q=dns/txt; s=amazon201209;
-  t=1719010106; x=1750546106;
-  h=from:to:cc:subject:date:message-id:in-reply-to:
-   references:mime-version:content-transfer-encoding;
-  bh=xkj6QHoS5bB9dt0+gxdhy2HS7dkn7KEGOuZp/Sviik8=;
-  b=Xsj/n/MOTmGv6x/5v4uCh/5+dT8iM6y30e8zK2h7xtwMsQ4rUJalvp0U
-   Ru6H6liT4G29OVhvqXmN8EmeUm+OwS4jEmY/dI0VVNte7UZs9e3fDcKRQ
-   VSKrW57Fn+dsXs6xhY5egU2hMPlpZQ6H94cdF5YTd7fct/nDtHNLG2j1O
-   w=;
-X-IronPort-AV: E=Sophos;i="6.08,256,1712620800"; 
-   d="scan'208";a="662229041"
-Received: from iad12-co-svc-p1-lb1-vlan3.amazon.com (HELO smtpout.prod.us-west-2.prod.farcaster.email.amazon.dev) ([10.43.8.6])
-  by smtp-border-fw-52005.iad7.amazon.com with ESMTP/TLS/ECDHE-RSA-AES256-GCM-SHA384; 21 Jun 2024 22:48:22 +0000
-Received: from EX19MTAUWC002.ant.amazon.com [10.0.38.20:21821]
- by smtpin.naws.us-west-2.prod.farcaster.email.amazon.dev [10.0.52.145:2525] with esmtp (Farcaster)
- id 35a9dbf0-b590-4b1f-94b4-18f8a44e83fa; Fri, 21 Jun 2024 22:48:20 +0000 (UTC)
-X-Farcaster-Flow-ID: 35a9dbf0-b590-4b1f-94b4-18f8a44e83fa
-Received: from EX19D004ANA001.ant.amazon.com (10.37.240.138) by
- EX19MTAUWC002.ant.amazon.com (10.250.64.143) with Microsoft SMTP Server
- (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA) id 15.2.1258.34;
- Fri, 21 Jun 2024 22:48:20 +0000
-Received: from 88665a182662.ant.amazon.com (10.142.201.95) by
- EX19D004ANA001.ant.amazon.com (10.37.240.138) with Microsoft SMTP Server
- (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
- 15.2.1258.34; Fri, 21 Jun 2024 22:48:17 +0000
-From: Kuniyuki Iwashima <kuniyu@amazon.com>
-To: <luoxuanqiang@kylinos.cn>
-CC: <alexandre.ferrieux@orange.com>, <davem@davemloft.net>,
-	<dccp@vger.kernel.org>, <dsahern@kernel.org>, <edumazet@google.com>,
-	<fw@strlen.de>, <kuba@kernel.org>, <kuniyu@amazon.com>,
-	<linux-kernel@vger.kernel.org>, <netdev@vger.kernel.org>, <pabeni@redhat.com>
-Subject: Re: [PATCH net v4] Fix race for duplicate reqsk on identical SYN
-Date: Fri, 21 Jun 2024 15:48:07 -0700
-Message-ID: <20240621224807.8962-1-kuniyu@amazon.com>
-X-Mailer: git-send-email 2.30.2
-In-Reply-To: <20240621013929.1386815-1-luoxuanqiang@kylinos.cn>
-References: <20240621013929.1386815-1-luoxuanqiang@kylinos.cn>
+        d=google.com; s=20230601; t=1719237429; x=1719842229; darn=vger.kernel.org;
+        h=content-transfer-encoding:cc:to:subject:message-id:date:from
+         :in-reply-to:references:mime-version:from:to:cc:subject:date
+         :message-id:reply-to;
+        bh=JcmBNUGTwoexd4d4Kt7dKugDN2tASyAOaxDUgR2FYt8=;
+        b=zKSqq3tbKQHF6xoKyLxyN0BCC7BIOE8OriqJqlAx+ak1rHc818BjLW0eLEeL4/vXtQ
+         cUDdaoHBVk1s2RDDYorX7g64gvuhTHt008wBpmdujimn48GIepFPScIWgXKH1u2tjRHR
+         UbMNjp6VZe53F0O77pn1mK/88RfK1tsQnDR0bRTV3SNwIOBCF8eVjsn6nvFyX7tq54ue
+         jxRxbr8hjQPLb7SaCsbxu0TLsiNGqVvIYV1pxveVAsrIImXPQU3m2f0p5lYP3ddvH1n9
+         EBdnD+3izPVskyvaeOv0oQEo+nvTggR0xb+yb8egj5dd+QAccqciTRZ0Uj03jDAFzqNO
+         p19w==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1719237429; x=1719842229;
+        h=content-transfer-encoding:cc:to:subject:message-id:date:from
+         :in-reply-to:references:mime-version:x-gm-message-state:from:to:cc
+         :subject:date:message-id:reply-to;
+        bh=JcmBNUGTwoexd4d4Kt7dKugDN2tASyAOaxDUgR2FYt8=;
+        b=HGQqw41wS4RLkkXC6M+Fv5gikZOJdNNcMWRMLc0CUB9czDle+in9hKKr3QbR6AhT/X
+         IHB5lJ4jWvwS69jZKXdqc+htxRj969bIcQaAMcr36yeYqUUXWkFWwIm01ZybmEgYFWub
+         0n+mp2kW2J2imumg0vhNY5SG2ZYJgmrMxWFTcIhroajc/XEpgaZBaALUFCPJE4az9iMo
+         tZUTbJwu6UitFpnHhwZoWbO7jG1zIN0doeenDlpCa/XMX4+gq63pcnDO61v0CWUnRdaP
+         A55vRe65FMq8NAEP15BdlNzYaLvh+uVgtZijF/gmiFPkjbrt9gytoZQ3bPXcs5XP5Ixj
+         CkmQ==
+X-Forwarded-Encrypted: i=1; AJvYcCWYa8pImAHwjA+FhXP1DTN+8cBSDrqsMtGekXMRrd8Mx76Uzc5vgoRVwxPY+jXRrEH4SSEuKd1h9P4Totx30x4o4/v5aQ==
+X-Gm-Message-State: AOJu0YxkeyR1oYllX4QUFSY189TrF+641wm8fJGPiDx7INlnpWZ663wn
+	UfVCIwKo/2nf9Q5DYFX8qRSsW1ybpezeGbVO4d26MWYl/NO6n7QITA76FAxDZH5GvJma0CRkyb9
+	vrCGg3KGexVoE13mCVTgwHo7v/uSPZ64+JYBp
+X-Google-Smtp-Source: AGHT+IHbiy1mlgv62NpSfQr4qTZMGNLyyk2z/JSEgEj2oQ6KuAX1jpFmQzh/as79B6TsYRiexfxYk9JCRIbRT718SCg=
+X-Received: by 2002:a05:6402:3549:b0:57c:c5e2:2c37 with SMTP id
+ 4fb4d7f45d1cf-57d419e2fdbmr270398a12.3.1719237428649; Mon, 24 Jun 2024
+ 06:57:08 -0700 (PDT)
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-Content-Transfer-Encoding: 8bit
-Content-Type: text/plain
-X-ClientProxiedBy: EX19D032UWA003.ant.amazon.com (10.13.139.37) To
- EX19D004ANA001.ant.amazon.com (10.37.240.138)
+References: <20240621013929.1386815-1-luoxuanqiang@kylinos.cn>
+In-Reply-To: <20240621013929.1386815-1-luoxuanqiang@kylinos.cn>
+From: Eric Dumazet <edumazet@google.com>
+Date: Mon, 24 Jun 2024 15:56:57 +0200
+Message-ID: <CANn89i+mrA0CpNLvOCpNi4XS1XsftgAQu71jWb4Ahh++VUzkGA@mail.gmail.com>
+Subject: Re: [PATCH net v4] Fix race for duplicate reqsk on identical SYN
+To: luoxuanqiang <luoxuanqiang@kylinos.cn>
+Cc: kuniyu@amazon.com, kuba@kernel.org, davem@davemloft.net, pabeni@redhat.com, 
+	dccp@vger.kernel.org, dsahern@kernel.org, fw@strlen.de, 
+	linux-kernel@vger.kernel.org, netdev@vger.kernel.org, 
+	alexandre.ferrieux@orange.com
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
 
-From: luoxuanqiang <luoxuanqiang@kylinos.cn>
-Date: Fri, 21 Jun 2024 09:39:29 +0800
+On Fri, Jun 21, 2024 at 3:39=E2=80=AFAM luoxuanqiang <luoxuanqiang@kylinos.=
+cn> wrote:
+>
 > When bonding is configured in BOND_MODE_BROADCAST mode, if two identical
-> SYN packets are received at the same time and processed on different CPUs,
+> SYN packets are received at the same time and processed on different CPUs=
+,
 > it can potentially create the same sk (sock) but two different reqsk
 > (request_sock) in tcp_conn_request().
-> 
+>
 > These two different reqsk will respond with two SYNACK packets, and since
 > the generation of the seq (ISN) incorporates a timestamp, the final two
 > SYNACK packets will have different seq values.
-> 
+>
 > The consequence is that when the Client receives and replies with an ACK
 > to the earlier SYNACK packet, we will reset(RST) it.
-> 
-> ========================================================================
-> 
-> This behavior is consistently reproducible in my local setup,
-> which comprises:
-> 
->                   | NETA1 ------ NETB1 |
-> PC_A --- bond --- |                    | --- bond --- PC_B
->                   | NETA2 ------ NETB2 |
-> 
-> - PC_A is the Server and has two network cards, NETA1 and NETA2. I have
->   bonded these two cards using BOND_MODE_BROADCAST mode and configured
->   them to be handled by different CPU.
-> 
-> - PC_B is the Client, also equipped with two network cards, NETB1 and
->   NETB2, which are also bonded and configured in BOND_MODE_BROADCAST mode.
-> 
-> If the client attempts a TCP connection to the server, it might encounter
-> a failure. Capturing packets from the server side reveals:
-> 
-> 10.10.10.10.45182 > localhost: Flags [S], seq 320236027,
-> 10.10.10.10.45182 > localhost: Flags [S], seq 320236027,
-> localhost > 10.10.10.10.45182: Flags [S.], seq 2967855116,
-> localhost > 10.10.10.10.45182: Flags [S.], seq 2967855123, <==
-> 10.10.10.10.45182 > localhost: Flags [.], ack 4294967290,
-> 10.10.10.10.45182 > localhost: Flags [.], ack 4294967290,
-> localhost > 10.10.10.10.45182: Flags [R], seq 2967855117, <==
-> localhost > 10.10.10.10.45182: Flags [R], seq 2967855117,
-> 
-> Two SYNACKs with different seq numbers are sent by localhost,
-> resulting in an anomaly.
-> 
-> ========================================================================
-> 
-> The attempted solution is as follows:
-> Add a return value to inet_csk_reqsk_queue_hash_add() to confirm if the
-> ehash insertion is successful (Up to now, the reason for unsuccessful
-> insertion is that a reqsk for the same connection has already been
-> inserted). If the insertion fails, release the reqsk.
-> 
-> Due to the refcnt, Kuniyuki suggests also adding a return value check
-> for the DCCP module; if ehash insertion fails, indicating a successful
-> insertion of the same connection, simply release the reqsk as well.
-> 
-> Simultaneously, In the reqsk_queue_hash_req(), the start of the
-> req->rsk_timer is adjusted to be after successful insertion.
-> 
-> Fixes: 1da177e4c3f4 ("Linux-2.6.12-rc2")
-> Signed-off-by: luoxuanqiang <luoxuanqiang@kylinos.cn>
+>
+> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
+=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D
+>
 
-Reviewed-by: Kuniyuki Iwashima <kuniyu@amazon.com>
-
-Thanks!
+Reviewed-by: Eric Dumazet <edumazet@google.com>
