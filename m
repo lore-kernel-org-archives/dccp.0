@@ -1,187 +1,82 @@
-Received: from mailgw.kylinos.cn (mailgw.kylinos.cn [124.126.103.232])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+Received: from mail-io1-f71.google.com (mail-io1-f71.google.com [209.85.166.71])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id C34E315A856;
-	Wed, 26 Jun 2024 07:12:32 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=124.126.103.232
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 748AE18A950
+	for <dccp@vger.kernel.org>; Mon, 15 Jul 2024 11:52:25 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.166.71
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1719385957; cv=none; b=mGUAXQGfS0/W7ujA1JpGhkhC24h9savn3sRb+qLQYWQC70kAcWj8hOIkilR5+e9QDKb4Jshefl+IMrYzeu6pt5akxY+1qaLcqRb8wgvOccY8b0t2cqg3N/og5ZC/A4Dcl8pche7bXRUzNeTG30BRRn0zD65U6ldQqJRvHsrsdHc=
+	t=1721044347; cv=none; b=LUpWcep2ppJiKbGitFfliqg9ci6QZitK/YOjjfkEG5+ISnU92ck6LctcW51C44kf+U4Capy/O0Vp+wwF4L4YgXEZfEmoknz1HKfdS9gFd/FY0KPiz7Y3Wm8oXKONe+MGzoEE/WzOo5q3FEsCnokNrd+1rcu44g/Cz1IBuVbCuNc=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1719385957; c=relaxed/simple;
-	bh=uvQNgV2jDCJ4VhyQQpkSfjrjwPjFCbXoN3isuczthlo=;
-	h=Message-ID:Date:MIME-Version:Subject:To:Cc:References:From:
-	 In-Reply-To:Content-Type; b=D3D3f4dqO0GB3c1gHvFIVqgkYSxI3qe9QR/V9zOnFqEGLN9xIeJuByHDkLQUzmCsmgPmyB/OUlk8NRcAYFHyM97z/mt+ewK2rpm4dV4VTdG12NoLwQmneHN9gfTZEtuJAsZxcixFS/MYZUFL3Rym6tk6oXTkqnv/C/CgGUP4SuQ=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=none (p=none dis=none) header.from=kylinos.cn; spf=pass smtp.mailfrom=kylinos.cn; arc=none smtp.client-ip=124.126.103.232
-Authentication-Results: smtp.subspace.kernel.org; dmarc=none (p=none dis=none) header.from=kylinos.cn
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=kylinos.cn
-X-UUID: 6d3e4924338b11ef9305a59a3cc225df-20240626
-X-CID-P-RULE: Release_Ham
-X-CID-O-INFO: VERSION:1.1.38,REQID:1a41f925-4285-44e4-bd3e-c457bedf79f9,IP:10,
-	URL:0,TC:0,Content:0,EDM:0,RT:0,SF:-15,FILE:0,BULK:28,RULE:Release_Ham,ACT
-	ION:release,TS:23
-X-CID-INFO: VERSION:1.1.38,REQID:1a41f925-4285-44e4-bd3e-c457bedf79f9,IP:10,UR
-	L:0,TC:0,Content:0,EDM:0,RT:0,SF:-15,FILE:0,BULK:28,RULE:Release_Ham,ACTIO
-	N:release,TS:23
-X-CID-META: VersionHash:82c5f88,CLOUDID:2b20dc882b6524ccfac790fa7b5a81d3,BulkI
-	D:240622064849KEF3CG9W,BulkQuantity:4,Recheck:0,SF:64|66|38|24|17|19|44|10
-	2,TC:nil,Content:0,EDM:-3,IP:-2,URL:0,File:nil,RT:nil,Bulk:40|20,QS:nil,BE
-	C:nil,COL:0,OSI:0,OSA:0,AV:0,LES:1,SPR:NO,DKR:0,DKP:0,BRR:0,BRE:0
-X-CID-BVR: 1,FCT|NGT
-X-CID-BAS: 1,FCT|NGT,0,_
-X-CID-FACTOR: TF_CID_SPAM_FSD,TF_CID_SPAM_FSI,TF_CID_SPAM_FCD,TF_CID_SPAM_SNR,
-	TF_CID_SPAM_FAS
-X-UUID: 6d3e4924338b11ef9305a59a3cc225df-20240626
-Received: from node2.com.cn [(39.156.73.10)] by mailgw.kylinos.cn
-	(envelope-from <luoxuanqiang@kylinos.cn>)
-	(Generic MTA)
-	with ESMTP id 432502532; Wed, 26 Jun 2024 15:12:19 +0800
-Received: from node2.com.cn (localhost [127.0.0.1])
-	by node2.com.cn (NSMail) with SMTP id 62A36B8075B2;
-	Wed, 26 Jun 2024 15:12:19 +0800 (CST)
-X-ns-mid: postfix-667BBF53-321303144
-Received: from [10.42.12.252] (unknown [10.42.12.252])
-	by node2.com.cn (NSMail) with ESMTPA id 0CB4EB8075B2;
-	Wed, 26 Jun 2024 07:12:15 +0000 (UTC)
-Message-ID: <dda6580f-636a-69da-60ef-cbdf0353d967@kylinos.cn>
-Date: Wed, 26 Jun 2024 15:12:15 +0800
+	s=arc-20240116; t=1721044347; c=relaxed/simple;
+	bh=t4pDWDgmRHlWKFeqXPZa/lEDpSFjluOZxYF9jV+3PgY=;
+	h=MIME-Version:Date:Message-ID:Subject:From:To:Content-Type; b=EZ4nb+kKHpjzr0lkQucP2SilreMUpyiDFWHtRXlcYlh9/JBey5xn8LNutG5sGFzpfg+OuhgPyZLUSUAM/qvS9UeZMvvYSMQGeGaFaf3kKCwKv/8+OMh7NMraY//51SiwozzH9PlyONiy0kQOTeIdgB+KI7FOkAOu8EjaUoJ6msY=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com; arc=none smtp.client-ip=209.85.166.71
+Authentication-Results: smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com
+Received: by mail-io1-f71.google.com with SMTP id ca18e2360f4ac-81257dec573so133994039f.0
+        for <dccp@vger.kernel.org>; Mon, 15 Jul 2024 04:52:25 -0700 (PDT)
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1721044344; x=1721649144;
+        h=to:from:subject:message-id:date:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=lllYPE4GPyNqsW1MAxUY+CN0ZVo9aIg8GROzQIAinyo=;
+        b=Xlc1b+CCm6rUYf1FR2lzdN6P3fduZvtgehZ65vOJ0vgq+QPyx3fNEHO/TZiAkl7zZv
+         WlDJqhgQ/8IYbJZu0K2jKh8cusOYO77m08enbfAB/2b8aI9dPaStfOwMvKlFoGJmyjxu
+         8U1ZNqRMt6XRObCjCTRWWllRKvh06A7N5aL0w/gBVbwTWedHb51vu2sl4uyruynL0JEx
+         K010Ywaf8+GIhHQjw9GYqT6UvtXj3lJg5Fsg4iVmOO/upistKSFRjFyv4U/dUawvxz+x
+         52FXcIL0lxMsG27H8+AGqJF77As5i7Rq4avVsUU2wuVS8jCT0RsE8rjnzPL9jdhvPVq5
+         OTPw==
+X-Gm-Message-State: AOJu0YwFCzS7/jnECLKgZ2LzkCdDZUyqp5lQF3Xli2n/L2FtSd0nMRVp
+	EKh4KDnYOe3LmROdvaIKzFaYHlDhyKzMAuFOhELhOodg/gAueqZAGnTlgC7IN/yokmf+PE7KHMk
+	Za6hRzq+477F0GzdC7mx97yqd59cBIT/O7XhSNt84iI5bn6jcqUwTNIo=
+X-Google-Smtp-Source: AGHT+IEEnMX0NPtpIhNWzE9s+ZJMHHn7EnH/1HgY+OJdlyiUh10GvxgRFUmJbKaSturjGICO8+RHPXegNh9XF7g7naGO35FhIhV1
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:102.0) Gecko/20100101
- Thunderbird/102.11.0
-Subject: Re: [PATCH net v4] Fix race for duplicate reqsk on identical SYN
-Content-Language: en-US
-To: Paolo Abeni <pabeni@redhat.com>, kuniyu@amazon.com, edumazet@google.com,
- kuba@kernel.org, davem@davemloft.net
-Cc: dccp@vger.kernel.org, dsahern@kernel.org, fw@strlen.de,
- linux-kernel@vger.kernel.org, netdev@vger.kernel.org,
- alexandre.ferrieux@orange.com
-References: <20240621013929.1386815-1-luoxuanqiang@kylinos.cn>
- <35f497afd90fe16ba1408f25ea1ff62af6a73a90.camel@redhat.com>
-From: luoxuanqiang <luoxuanqiang@kylinos.cn>
-In-Reply-To: <35f497afd90fe16ba1408f25ea1ff62af6a73a90.camel@redhat.com>
-Content-Type: text/plain; charset=UTF-8; format=flowed
-Content-Transfer-Encoding: quoted-printable
+X-Received: by 2002:a05:6602:6c09:b0:7f6:2d58:8d5a with SMTP id
+ ca18e2360f4ac-8000621696bmr128825539f.3.1721044344703; Mon, 15 Jul 2024
+ 04:52:24 -0700 (PDT)
+Date: Mon, 15 Jul 2024 04:52:24 -0700
+X-Google-Appengine-App-Id: s~syzkaller
+X-Google-Appengine-App-Id-Alias: syzkaller
+Message-ID: <000000000000cf1914061d47dc7a@google.com>
+Subject: [syzbot] Monthly dccp report (Jul 2024)
+From: syzbot <syzbot+listd096a34372f703f89669@syzkaller.appspotmail.com>
+To: dccp@vger.kernel.org, linux-kernel@vger.kernel.org, netdev@vger.kernel.org, 
+	syzkaller-bugs@googlegroups.com
+Content-Type: text/plain; charset="UTF-8"
 
+Hello dccp maintainers/developers,
 
-=E5=9C=A8 2024/6/25 17:49, Paolo Abeni =E5=86=99=E9=81=93:
-> On Fri, 2024-06-21 at 09:39 +0800, luoxuanqiang wrote:
->> When bonding is configured in BOND_MODE_BROADCAST mode, if two identic=
-al
->> SYN packets are received at the same time and processed on different C=
-PUs,
->> it can potentially create the same sk (sock) but two different reqsk
->> (request_sock) in tcp_conn_request().
->>
->> These two different reqsk will respond with two SYNACK packets, and si=
-nce
->> the generation of the seq (ISN) incorporates a timestamp, the final tw=
-o
->> SYNACK packets will have different seq values.
->>
->> The consequence is that when the Client receives and replies with an A=
-CK
->> to the earlier SYNACK packet, we will reset(RST) it.
->>
->> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
-=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
-=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D
->>
->> This behavior is consistently reproducible in my local setup,
->> which comprises:
->>
->>                    | NETA1 ------ NETB1 |
->> PC_A --- bond --- |                    | --- bond --- PC_B
->>                    | NETA2 ------ NETB2 |
->>
->> - PC_A is the Server and has two network cards, NETA1 and NETA2. I hav=
-e
->>    bonded these two cards using BOND_MODE_BROADCAST mode and configure=
-d
->>    them to be handled by different CPU.
->>
->> - PC_B is the Client, also equipped with two network cards, NETB1 and
->>    NETB2, which are also bonded and configured in BOND_MODE_BROADCAST =
-mode.
->>
->> If the client attempts a TCP connection to the server, it might encoun=
-ter
->> a failure. Capturing packets from the server side reveals:
->>
->> 10.10.10.10.45182 > localhost: Flags [S], seq 320236027,
->> 10.10.10.10.45182 > localhost: Flags [S], seq 320236027,
->> localhost > 10.10.10.10.45182: Flags [S.], seq 2967855116,
->> localhost > 10.10.10.10.45182: Flags [S.], seq 2967855123, <=3D=3D
->> 10.10.10.10.45182 > localhost: Flags [.], ack 4294967290,
->> 10.10.10.10.45182 > localhost: Flags [.], ack 4294967290,
->> localhost > 10.10.10.10.45182: Flags [R], seq 2967855117, <=3D=3D
->> localhost > 10.10.10.10.45182: Flags [R], seq 2967855117,
->>
->> Two SYNACKs with different seq numbers are sent by localhost,
->> resulting in an anomaly.
->>
->> =3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
-=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=
-=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D
->>
->> The attempted solution is as follows:
->> Add a return value to inet_csk_reqsk_queue_hash_add() to confirm if th=
-e
->> ehash insertion is successful (Up to now, the reason for unsuccessful
->> insertion is that a reqsk for the same connection has already been
->> inserted). If the insertion fails, release the reqsk.
->>
->> Due to the refcnt, Kuniyuki suggests also adding a return value check
->> for the DCCP module; if ehash insertion fails, indicating a successful
->> insertion of the same connection, simply release the reqsk as well.
->>
->> Simultaneously, In the reqsk_queue_hash_req(), the start of the
->> req->rsk_timer is adjusted to be after successful insertion.
->>
->> Fixes: 1da177e4c3f4 ("Linux-2.6.12-rc2")
-> Just after applying the patch I wondered if the issue addressed here
-> should be observable only after commit e994b2f0fb92 ("tcp: do not lock
-> listener to process SYN packets")?
->
-> In practice it should not matter as the latter commit it's older than
-> the currently older LST, but I'm wondering if I read the things
-> correctly?
->
-> Thanks!
->
-> Paolo
->
-Hi, Paolo, I conducted some experiments on your concern by reverting e994=
-b2f0fb92 on version 4.19 to observe how TCP handles this race condition.
+This is a 31-day syzbot report for the dccp subsystem.
+All related reports/information can be found at:
+https://syzkaller.appspot.com/upstream/s/dccp
 
-Here are the observations:
-where SYN-A is processed on CPUA and SYN-B is processed on CPUB
+During the period, 0 new issues were detected and 0 were fixed.
+In total, 4 issues are still open and 7 have been fixed so far.
 
-CPUA & CPUB
+Some of the still happening issues:
 
-In tcp_v4_rcv(), both SYN-A and SYN-B obtained the same sk from __inet_lo=
-okup_listener(), with the sk state being TCP_LISTEN.
+Ref Crashes Repro Title
+<1> 105     Yes   KASAN: use-after-free Read in ccid2_hc_tx_packet_recv
+                  https://syzkaller.appspot.com/bug?extid=554ccde221001ab5479a
+<2> 57      Yes   BUG: "hc->tx_t_ipi == NUM" holds (exception!) at net/dccp/ccids/ccid3.c:LINE/ccid3_update_send_interval()
+                  https://syzkaller.appspot.com/bug?extid=94641ba6c1d768b1e35e
+<3> 17      Yes   BUG: stored value of X_recv is zero at net/dccp/ccids/ccid3.c:LINE/ccid3_first_li() (3)
+                  https://syzkaller.appspot.com/bug?extid=2ad8ef335371014d4dc7
 
- =C2=A0=C2=A0 =C2=A0CPUA
+---
+This report is generated by a bot. It may contain errors.
+See https://goo.gl/tpsmEJ for more information about syzbot.
+syzbot engineers can be reached at syzkaller@googlegroups.com.
 
- =C2=A0=C2=A0=C2=A0 SYN-A acquired sk_lock and was processed in tcp_v4_do=
-_rcv(), where it created reqsk-A while in TCP_LISTEN state and sent a SYN=
-ACK packet.
+To disable reminders for individual bugs, reply with the following command:
+#syz set <Ref> no-reminders
 
-    =20
+To change bug's subsystems, reply with:
+#syz set <Ref> subsystems: new-subsystem
 
- =C2=A0=C2=A0 =C2=A0=C2=A0=C2=A0=C2=A0 =C2=A0=C2=A0=C2=A0 =C2=A0=C2=A0=C2=
-=A0 CPUB
-
- =C2=A0=C2=A0 =C2=A0=C2=A0=C2=A0=C2=A0 =C2=A0=C2=A0=C2=A0 =C2=A0=C2=A0=C2=
-=A0 After SYN-A was processed and sk_lock was released, SYN-B was process=
-ed. Since it was the same sk still in TCP_LISTEN state, it created reqsk-=
-B and sent a SYNACK packet with a different seq number.
-
-The issue remains reproducible.
-
-BRs!
-
+You may send multiple commands in a single email message.
