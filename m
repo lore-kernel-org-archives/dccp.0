@@ -1,50 +1,50 @@
-Received: from mail-io1-f71.google.com (mail-io1-f71.google.com [209.85.166.71])
+Received: from mail-io1-f72.google.com (mail-io1-f72.google.com [209.85.166.72])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 748AE18A950
-	for <dccp@vger.kernel.org>; Mon, 15 Jul 2024 11:52:25 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.166.71
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 3AF1F1AC884
+	for <dccp@vger.kernel.org>; Thu, 15 Aug 2024 10:40:26 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.166.72
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1721044347; cv=none; b=LUpWcep2ppJiKbGitFfliqg9ci6QZitK/YOjjfkEG5+ISnU92ck6LctcW51C44kf+U4Capy/O0Vp+wwF4L4YgXEZfEmoknz1HKfdS9gFd/FY0KPiz7Y3Wm8oXKONe+MGzoEE/WzOo5q3FEsCnokNrd+1rcu44g/Cz1IBuVbCuNc=
+	t=1723718427; cv=none; b=aFb7RNwWomnsuwDK6EixIN0TXoAL3+CsO5lWeTizVy85z5SB5PUxPbHS9eBvXbg+xzM/9bc8xAcOR7jm9SQ/al5hGNhm5tFLX88L7SF2yA5c71+bOBp/aSUwtff/KHRPA8MZKIvzAXV6fW2ToDHfhTsFY4OPshw4uRU9+wlaksc=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1721044347; c=relaxed/simple;
-	bh=t4pDWDgmRHlWKFeqXPZa/lEDpSFjluOZxYF9jV+3PgY=;
-	h=MIME-Version:Date:Message-ID:Subject:From:To:Content-Type; b=EZ4nb+kKHpjzr0lkQucP2SilreMUpyiDFWHtRXlcYlh9/JBey5xn8LNutG5sGFzpfg+OuhgPyZLUSUAM/qvS9UeZMvvYSMQGeGaFaf3kKCwKv/8+OMh7NMraY//51SiwozzH9PlyONiy0kQOTeIdgB+KI7FOkAOu8EjaUoJ6msY=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com; arc=none smtp.client-ip=209.85.166.71
+	s=arc-20240116; t=1723718427; c=relaxed/simple;
+	bh=BCmmieNUI4lmEO0U6tUUzo6gPeh57OR7A4GuRgAbXMk=;
+	h=MIME-Version:Date:Message-ID:Subject:From:To:Content-Type; b=DfkwfI6GeZDqxSPqpO960Odj3MDZjVC52KdllSm2CSPaTdtSB+TUjXe1wwRisB1kjRYxnmfe9bTJrO9PEZjqegXP/mTBtdMGUEBwBNUogas+1BmC0X4OXWlBEzcFIMVEC6tRsUBGtEO5oF8m0W/unLcgpgTA4v8Slw2dSB1Z4xA=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com; arc=none smtp.client-ip=209.85.166.72
 Authentication-Results: smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com
 Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com
-Received: by mail-io1-f71.google.com with SMTP id ca18e2360f4ac-81257dec573so133994039f.0
-        for <dccp@vger.kernel.org>; Mon, 15 Jul 2024 04:52:25 -0700 (PDT)
+Received: by mail-io1-f72.google.com with SMTP id ca18e2360f4ac-81f8293cdb1so87295239f.2
+        for <dccp@vger.kernel.org>; Thu, 15 Aug 2024 03:40:26 -0700 (PDT)
 X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1721044344; x=1721649144;
+        d=1e100.net; s=20230601; t=1723718425; x=1724323225;
         h=to:from:subject:message-id:date:mime-version:x-gm-message-state
          :from:to:cc:subject:date:message-id:reply-to;
-        bh=lllYPE4GPyNqsW1MAxUY+CN0ZVo9aIg8GROzQIAinyo=;
-        b=Xlc1b+CCm6rUYf1FR2lzdN6P3fduZvtgehZ65vOJ0vgq+QPyx3fNEHO/TZiAkl7zZv
-         WlDJqhgQ/8IYbJZu0K2jKh8cusOYO77m08enbfAB/2b8aI9dPaStfOwMvKlFoGJmyjxu
-         8U1ZNqRMt6XRObCjCTRWWllRKvh06A7N5aL0w/gBVbwTWedHb51vu2sl4uyruynL0JEx
-         K010Ywaf8+GIhHQjw9GYqT6UvtXj3lJg5Fsg4iVmOO/upistKSFRjFyv4U/dUawvxz+x
-         52FXcIL0lxMsG27H8+AGqJF77As5i7Rq4avVsUU2wuVS8jCT0RsE8rjnzPL9jdhvPVq5
-         OTPw==
-X-Gm-Message-State: AOJu0YwFCzS7/jnECLKgZ2LzkCdDZUyqp5lQF3Xli2n/L2FtSd0nMRVp
-	EKh4KDnYOe3LmROdvaIKzFaYHlDhyKzMAuFOhELhOodg/gAueqZAGnTlgC7IN/yokmf+PE7KHMk
-	Za6hRzq+477F0GzdC7mx97yqd59cBIT/O7XhSNt84iI5bn6jcqUwTNIo=
-X-Google-Smtp-Source: AGHT+IEEnMX0NPtpIhNWzE9s+ZJMHHn7EnH/1HgY+OJdlyiUh10GvxgRFUmJbKaSturjGICO8+RHPXegNh9XF7g7naGO35FhIhV1
+        bh=7Yu9jYSVcnvbxIatxBmYFvoSLSb1OU99YNJNpjw3ik4=;
+        b=vQBItsydGWQHCCTKMt2MYB8nvZ6rdLiQ1IMN+4TkAsk10tPJ2C3P2krC5/uP6mVYqU
+         zkXrLNv0mdkGMH059xhkIO3f+uFCrrhhGJ6VoL0GJMSkqgvbSdeMq2qpWWYGqeHcISuO
+         vrmKaGNwkn+UhkU6e6P6CshyY2HZXHyvw2N/yuTpaLrjnAGC+3rnAhTxDxVZ3MLjnf4T
+         7q7e6FEkkQ648cek+2UoL7eiUDypnk84gQZvSaLVfdv93e4dOMXK9zeWc1ciw/FHTKh5
+         vAL7NDh3glh6QEZ+IrJmRlPe55PoId70bF4++IvTgbkVJvGnv5fqj6JLBJf9Sc1w+eK/
+         y4gw==
+X-Gm-Message-State: AOJu0YyN84RWrwwEwHYTk5pVS4lkM30g1rk8gsqSZS8nheZmVKdwrIYq
+	l8MvryJm9pWuC0dk7/bVdHBvPVjGopldzGLBVk83+0I7WHE9ZcVmzGuIQqf3XVs0wa2xnAoFJWD
+	Aj+vYI8U88vDK5ekvIs352jRkTMgpE9AUw7sHp9vJn2fMS3PIM1YGbwE=
+X-Google-Smtp-Source: AGHT+IH3nDNZkdMLYskbOXMf/HRcQdTHbUXHqKTI0sYkHX84dShX8bUE0h8qfkQlgTbsvnTWT+x/goGGP9OIYUhv2rhQvB5QFE1Y
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-X-Received: by 2002:a05:6602:6c09:b0:7f6:2d58:8d5a with SMTP id
- ca18e2360f4ac-8000621696bmr128825539f.3.1721044344703; Mon, 15 Jul 2024
- 04:52:24 -0700 (PDT)
-Date: Mon, 15 Jul 2024 04:52:24 -0700
+X-Received: by 2002:a05:6638:22c3:b0:4bd:4861:d7f8 with SMTP id
+ 8926c6da1cb9f-4cab0a036efmr244210173.4.1723718425345; Thu, 15 Aug 2024
+ 03:40:25 -0700 (PDT)
+Date: Thu, 15 Aug 2024 03:40:25 -0700
 X-Google-Appengine-App-Id: s~syzkaller
 X-Google-Appengine-App-Id-Alias: syzkaller
-Message-ID: <000000000000cf1914061d47dc7a@google.com>
-Subject: [syzbot] Monthly dccp report (Jul 2024)
-From: syzbot <syzbot+listd096a34372f703f89669@syzkaller.appspotmail.com>
+Message-ID: <0000000000006f9129061fb67866@google.com>
+Subject: [syzbot] Monthly dccp report (Aug 2024)
+From: syzbot <syzbot+listd5bb09218cb571c8dc9d@syzkaller.appspotmail.com>
 To: dccp@vger.kernel.org, linux-kernel@vger.kernel.org, netdev@vger.kernel.org, 
 	syzkaller-bugs@googlegroups.com
 Content-Type: text/plain; charset="UTF-8"
@@ -61,7 +61,7 @@ In total, 4 issues are still open and 7 have been fixed so far.
 Some of the still happening issues:
 
 Ref Crashes Repro Title
-<1> 105     Yes   KASAN: use-after-free Read in ccid2_hc_tx_packet_recv
+<1> 106     Yes   KASAN: use-after-free Read in ccid2_hc_tx_packet_recv
                   https://syzkaller.appspot.com/bug?extid=554ccde221001ab5479a
 <2> 57      Yes   BUG: "hc->tx_t_ipi == NUM" holds (exception!) at net/dccp/ccids/ccid3.c:LINE/ccid3_update_send_interval()
                   https://syzkaller.appspot.com/bug?extid=94641ba6c1d768b1e35e
