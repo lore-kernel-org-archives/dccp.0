@@ -1,82 +1,76 @@
-Received: from mail-io1-f72.google.com (mail-io1-f72.google.com [209.85.166.72])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
+Received: from szxga01-in.huawei.com (szxga01-in.huawei.com [45.249.212.187])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 3AF1F1AC884
-	for <dccp@vger.kernel.org>; Thu, 15 Aug 2024 10:40:26 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.166.72
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id D20DA746E;
+	Sat, 24 Aug 2024 07:33:16 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=45.249.212.187
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1723718427; cv=none; b=aFb7RNwWomnsuwDK6EixIN0TXoAL3+CsO5lWeTizVy85z5SB5PUxPbHS9eBvXbg+xzM/9bc8xAcOR7jm9SQ/al5hGNhm5tFLX88L7SF2yA5c71+bOBp/aSUwtff/KHRPA8MZKIvzAXV6fW2ToDHfhTsFY4OPshw4uRU9+wlaksc=
+	t=1724484800; cv=none; b=HzESADeKFTX63Jz3GPAiEs5fLKFoeewEPbPogVCAZ4nF9uSmRsqxJZL08a20TKo3T1Y4tSnRFcB/oNfteB8m8Y7FHUQUxrQCrPAkO5+7qezzp0GY8KoqNdwe19Tle9OsYAxVmYmzQ2midnqQhtV2u+Onp/f3G4AkNmTlolicuXA=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1723718427; c=relaxed/simple;
-	bh=BCmmieNUI4lmEO0U6tUUzo6gPeh57OR7A4GuRgAbXMk=;
-	h=MIME-Version:Date:Message-ID:Subject:From:To:Content-Type; b=DfkwfI6GeZDqxSPqpO960Odj3MDZjVC52KdllSm2CSPaTdtSB+TUjXe1wwRisB1kjRYxnmfe9bTJrO9PEZjqegXP/mTBtdMGUEBwBNUogas+1BmC0X4OXWlBEzcFIMVEC6tRsUBGtEO5oF8m0W/unLcgpgTA4v8Slw2dSB1Z4xA=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com; arc=none smtp.client-ip=209.85.166.72
-Authentication-Results: smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com
-Received: by mail-io1-f72.google.com with SMTP id ca18e2360f4ac-81f8293cdb1so87295239f.2
-        for <dccp@vger.kernel.org>; Thu, 15 Aug 2024 03:40:26 -0700 (PDT)
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1723718425; x=1724323225;
-        h=to:from:subject:message-id:date:mime-version:x-gm-message-state
-         :from:to:cc:subject:date:message-id:reply-to;
-        bh=7Yu9jYSVcnvbxIatxBmYFvoSLSb1OU99YNJNpjw3ik4=;
-        b=vQBItsydGWQHCCTKMt2MYB8nvZ6rdLiQ1IMN+4TkAsk10tPJ2C3P2krC5/uP6mVYqU
-         zkXrLNv0mdkGMH059xhkIO3f+uFCrrhhGJ6VoL0GJMSkqgvbSdeMq2qpWWYGqeHcISuO
-         vrmKaGNwkn+UhkU6e6P6CshyY2HZXHyvw2N/yuTpaLrjnAGC+3rnAhTxDxVZ3MLjnf4T
-         7q7e6FEkkQ648cek+2UoL7eiUDypnk84gQZvSaLVfdv93e4dOMXK9zeWc1ciw/FHTKh5
-         vAL7NDh3glh6QEZ+IrJmRlPe55PoId70bF4++IvTgbkVJvGnv5fqj6JLBJf9Sc1w+eK/
-         y4gw==
-X-Gm-Message-State: AOJu0YyN84RWrwwEwHYTk5pVS4lkM30g1rk8gsqSZS8nheZmVKdwrIYq
-	l8MvryJm9pWuC0dk7/bVdHBvPVjGopldzGLBVk83+0I7WHE9ZcVmzGuIQqf3XVs0wa2xnAoFJWD
-	Aj+vYI8U88vDK5ekvIs352jRkTMgpE9AUw7sHp9vJn2fMS3PIM1YGbwE=
-X-Google-Smtp-Source: AGHT+IH3nDNZkdMLYskbOXMf/HRcQdTHbUXHqKTI0sYkHX84dShX8bUE0h8qfkQlgTbsvnTWT+x/goGGP9OIYUhv2rhQvB5QFE1Y
+	s=arc-20240116; t=1724484800; c=relaxed/simple;
+	bh=48Em0RcKvHK8LCBYl3gaXRieC5bB2sJ6QpJq+jnDrAk=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=Vn3fBVBpPEKWUT8EOeJqph7n4DgUAQsB3zowmOAc3CFhsKGM6YAKs13LAaVAxZUh9f3ho/4U3y8IMJ5hohccMFJvLkU3PJc0K7ud6A3f89eku2k7F0y3gZj9d+f9lubrxZbnuBYg9IpcHUY621p3I9zHHUgFGx8aFwIifFIDT0I=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=45.249.212.187
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
+Received: from mail.maildlp.com (unknown [172.19.163.252])
+	by szxga01-in.huawei.com (SkyGuard) with ESMTP id 4WrTDc2YLszyR2M;
+	Sat, 24 Aug 2024 15:32:48 +0800 (CST)
+Received: from dggpeml500022.china.huawei.com (unknown [7.185.36.66])
+	by mail.maildlp.com (Postfix) with ESMTPS id 25D0B1800A5;
+	Sat, 24 Aug 2024 15:33:14 +0800 (CST)
+Received: from huawei.com (10.90.53.73) by dggpeml500022.china.huawei.com
+ (7.185.36.66) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.1.2507.39; Sat, 24 Aug
+ 2024 15:33:13 +0800
+From: Hongbo Li <lihongbo22@huawei.com>
+To: <johannes@sipsolutions.net>, <davem@davemloft.net>, <edumazet@google.com>,
+	<kuba@kernel.org>, <pabeni@redhat.com>, <allison.henderson@oracle.com>,
+	<dsahern@kernel.org>, <pshelar@ovn.org>
+CC: <linux-wireless@vger.kernel.org>, <netdev@vger.kernel.org>,
+	<rds-devel@oss.oracle.com>, <dccp@vger.kernel.org>, <dev@openvswitch.org>,
+	<linux-afs@lists.infradead.org>, <lihongbo22@huawei.com>
+Subject: [PATCH net-next 2/8] net/rds: Use max() to simplify the code
+Date: Sat, 24 Aug 2024 15:40:27 +0800
+Message-ID: <20240824074033.2134514-3-lihongbo22@huawei.com>
+X-Mailer: git-send-email 2.34.1
+In-Reply-To: <20240824074033.2134514-1-lihongbo22@huawei.com>
+References: <20240824074033.2134514-1-lihongbo22@huawei.com>
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-X-Received: by 2002:a05:6638:22c3:b0:4bd:4861:d7f8 with SMTP id
- 8926c6da1cb9f-4cab0a036efmr244210173.4.1723718425345; Thu, 15 Aug 2024
- 03:40:25 -0700 (PDT)
-Date: Thu, 15 Aug 2024 03:40:25 -0700
-X-Google-Appengine-App-Id: s~syzkaller
-X-Google-Appengine-App-Id-Alias: syzkaller
-Message-ID: <0000000000006f9129061fb67866@google.com>
-Subject: [syzbot] Monthly dccp report (Aug 2024)
-From: syzbot <syzbot+listd5bb09218cb571c8dc9d@syzkaller.appspotmail.com>
-To: dccp@vger.kernel.org, linux-kernel@vger.kernel.org, netdev@vger.kernel.org, 
-	syzkaller-bugs@googlegroups.com
-Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain
+X-ClientProxiedBy: dggems703-chm.china.huawei.com (10.3.19.180) To
+ dggpeml500022.china.huawei.com (7.185.36.66)
 
-Hello dccp maintainers/developers,
+The target if-else can be replaced with max().
 
-This is a 31-day syzbot report for the dccp subsystem.
-All related reports/information can be found at:
-https://syzkaller.appspot.com/upstream/s/dccp
-
-During the period, 0 new issues were detected and 0 were fixed.
-In total, 4 issues are still open and 7 have been fixed so far.
-
-Some of the still happening issues:
-
-Ref Crashes Repro Title
-<1> 106     Yes   KASAN: use-after-free Read in ccid2_hc_tx_packet_recv
-                  https://syzkaller.appspot.com/bug?extid=554ccde221001ab5479a
-<2> 57      Yes   BUG: "hc->tx_t_ipi == NUM" holds (exception!) at net/dccp/ccids/ccid3.c:LINE/ccid3_update_send_interval()
-                  https://syzkaller.appspot.com/bug?extid=94641ba6c1d768b1e35e
-<3> 17      Yes   BUG: stored value of X_recv is zero at net/dccp/ccids/ccid3.c:LINE/ccid3_first_li() (3)
-                  https://syzkaller.appspot.com/bug?extid=2ad8ef335371014d4dc7
-
+Signed-off-by: Hongbo Li <lihongbo22@huawei.com>
 ---
-This report is generated by a bot. It may contain errors.
-See https://goo.gl/tpsmEJ for more information about syzbot.
-syzbot engineers can be reached at syzkaller@googlegroups.com.
+ net/rds/info.c | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
 
-To disable reminders for individual bugs, reply with the following command:
-#syz set <Ref> no-reminders
+diff --git a/net/rds/info.c b/net/rds/info.c
+index b6b46a8214a0..8558b0a466b4 100644
+--- a/net/rds/info.c
++++ b/net/rds/info.c
+@@ -194,10 +194,7 @@ int rds_info_getsockopt(struct socket *sock, int optname, char __user *optval,
+ 	}
+ 	ret = pin_user_pages_fast(start, nr_pages, FOLL_WRITE, pages);
+ 	if (ret != nr_pages) {
+-		if (ret > 0)
+-			nr_pages = ret;
+-		else
+-			nr_pages = 0;
++		nr_pages = max(ret, 0);
+ 		ret = -EAGAIN; /* XXX ? */
+ 		goto out;
+ 	}
+-- 
+2.34.1
 
-To change bug's subsystems, reply with:
-#syz set <Ref> subsystems: new-subsystem
-
-You may send multiple commands in a single email message.
