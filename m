@@ -1,25 +1,25 @@
-Received: from szxga05-in.huawei.com (szxga05-in.huawei.com [45.249.212.191])
+Received: from szxga02-in.huawei.com (szxga02-in.huawei.com [45.249.212.188])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id E10D72D7B8;
-	Sat, 24 Aug 2024 07:33:21 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=45.249.212.191
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 63536155735;
+	Sat, 24 Aug 2024 07:33:22 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=45.249.212.188
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1724484804; cv=none; b=CaWJqQCKf4lJ5IwAp9uQA4w1hwPj7yAwR4bNQm2Ief5E+PtIGw7KylrxxNzOgVcDbX6K0HkDDwwqhbvWNMyfUlAYRYCjrPkPc1mRbpp+iel8CparizxcUMtIk7uVYM2edjxxYwQx7pS2ojrRe87lMGrRUjbn3Q25WjE/jbcAvfc=
+	t=1724484804; cv=none; b=Vld7CF4EJcKvCP2fx/xUpxR2KWfC7wOdY/I8qQOU/Jx44Pm5QQl8CQmZoLQ4GjuWdUKalemAhMPL8fDA/IwUkDWHYPuCFtTbbr/LvK5tCDoX+en7GsvULhsSnn36sJIL9kN39eW5Lz3qeOsNUv/hFxR8Zp902droJsgzh7vjmvk=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
 	s=arc-20240116; t=1724484804; c=relaxed/simple;
-	bh=2Lhf//eOuftp5GWtCDU5XsiHeG7f1DhzdYzQ7ZKsezQ=;
+	bh=Zl6JU4raRf1DfkAjrXYsxw8FZaF/pAfSri/sLIxlhdw=;
 	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
-	 MIME-Version:Content-Type; b=uzeCb03ndp21GlWNsUUrDkNr2PVVuIfWnSIA8RGX63d+kPYEuIj91sM8HkM9mlq5BWTM/i7Sn4u2I9iTXFDO9YHRNyMcXr6rZKN+N84IATmfQIhaK+Qx/FTxgD57/rdaI8b8YXmE966sfs7I5rlQLGaPvhOnr3BWJ0qGVgdzvKI=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=45.249.212.191
+	 MIME-Version:Content-Type; b=VjHePwygHFfPudRlIvcLxHibQNmYuTOHryXSaPEAPX5h+iRovi/Tug4lpBOadYp0GY8KhMbtBfgsQPYO5ZqJMaM/QmHjm2XeNfYDIVFreVHbq5CfUzQz6Tw/4ckv5+mITdYV7r3RJnjm8HuTVal3IQ57Vlvl1eTnmzfObttuXsA=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=45.249.212.188
 Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
 Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
-Received: from mail.maildlp.com (unknown [172.19.88.214])
-	by szxga05-in.huawei.com (SkyGuard) with ESMTP id 4WrT9M0qtHz1HGkR;
-	Sat, 24 Aug 2024 15:29:59 +0800 (CST)
+Received: from mail.maildlp.com (unknown [172.19.88.105])
+	by szxga02-in.huawei.com (SkyGuard) with ESMTP id 4WrTBn0ntCzhXgK;
+	Sat, 24 Aug 2024 15:31:13 +0800 (CST)
 Received: from dggpeml500022.china.huawei.com (unknown [7.185.36.66])
-	by mail.maildlp.com (Postfix) with ESMTPS id 540731A016C;
-	Sat, 24 Aug 2024 15:33:14 +0800 (CST)
+	by mail.maildlp.com (Postfix) with ESMTPS id 0CEFD140137;
+	Sat, 24 Aug 2024 15:33:15 +0800 (CST)
 Received: from huawei.com (10.90.53.73) by dggpeml500022.china.huawei.com
  (7.185.36.66) with Microsoft SMTP Server (version=TLS1_2,
  cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.1.2507.39; Sat, 24 Aug
@@ -31,9 +31,9 @@ To: <johannes@sipsolutions.net>, <davem@davemloft.net>, <edumazet@google.com>,
 CC: <linux-wireless@vger.kernel.org>, <netdev@vger.kernel.org>,
 	<rds-devel@oss.oracle.com>, <dccp@vger.kernel.org>, <dev@openvswitch.org>,
 	<linux-afs@lists.infradead.org>, <lihongbo22@huawei.com>
-Subject: [PATCH net-next 3/8] net/ipv4: Use min() to simplify the code
-Date: Sat, 24 Aug 2024 15:40:28 +0800
-Message-ID: <20240824074033.2134514-4-lihongbo22@huawei.com>
+Subject: [PATCH net-next 7/8] net/rxrpc: Use min() to simplify the code
+Date: Sat, 24 Aug 2024 15:40:32 +0800
+Message-ID: <20240824074033.2134514-8-lihongbo22@huawei.com>
 X-Mailer: git-send-email 2.34.1
 In-Reply-To: <20240824074033.2134514-1-lihongbo22@huawei.com>
 References: <20240824074033.2134514-1-lihongbo22@huawei.com>
@@ -48,29 +48,28 @@ Content-Type: text/plain
 X-ClientProxiedBy: dggems703-chm.china.huawei.com (10.3.19.180) To
  dggpeml500022.china.huawei.com (7.185.36.66)
 
-The following Coccinelle/coccicheck warning reported by
-minmax.cocci:
-    WARNING opportunity for min()
-Let's use min() to simplify the code and fix the warning.
+Let's use min() to simplify the code and fix the
+Coccinelle/coccicheck warning reported by minmax.cocci.
 
 Signed-off-by: Hongbo Li <lihongbo22@huawei.com>
 ---
- net/ipv4/ip_sockglue.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ net/rxrpc/input.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
 
-diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
-index cf377377b52d..f35aba4c3b0e 100644
---- a/net/ipv4/ip_sockglue.c
-+++ b/net/ipv4/ip_sockglue.c
-@@ -282,7 +282,7 @@ int ip_cmsg_send(struct sock *sk, struct msghdr *msg, struct ipcm_cookie *ipc,
- 			/* Our caller is responsible for freeing ipc->opt */
- 			err = ip_options_get(net, &ipc->opt,
- 					     KERNEL_SOCKPTR(CMSG_DATA(cmsg)),
--					     err < 40 ? err : 40);
-+					     min(40, err));
- 			if (err)
- 				return err;
- 			break;
+diff --git a/net/rxrpc/input.c b/net/rxrpc/input.c
+index 16d49a861dbb..455aa0189b28 100644
+--- a/net/rxrpc/input.c
++++ b/net/rxrpc/input.c
+@@ -868,8 +868,7 @@ static void rxrpc_input_ack(struct rxrpc_call *call, struct sk_buff *skb)
+ 	prev_pkt	= sp->ack.prev_ack;
+ 	nr_acks		= sp->ack.nr_acks;
+ 	hard_ack	= first_soft_ack - 1;
+-	summary.ack_reason = (sp->ack.reason < RXRPC_ACK__INVALID ?
+-			      sp->ack.reason : RXRPC_ACK__INVALID);
++	summary.ack_reason = min(sp->ack.reason, RXRPC_ACK__INVALID);
+ 
+ 	trace_rxrpc_rx_ack(call, ack_serial, acked_serial,
+ 			   first_soft_ack, prev_pkt,
 -- 
 2.34.1
 
