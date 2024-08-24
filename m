@@ -1,28 +1,29 @@
-Received: from szxga04-in.huawei.com (szxga04-in.huawei.com [45.249.212.190])
+Received: from szxga05-in.huawei.com (szxga05-in.huawei.com [45.249.212.191])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id E2C5E14A097;
-	Sat, 24 Aug 2024 07:33:19 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=45.249.212.190
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id E10D72D7B8;
+	Sat, 24 Aug 2024 07:33:21 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=45.249.212.191
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1724484801; cv=none; b=eUFT2QVw3ewRKp2iqPSPSsDsKdy56B5s5WSf9gLqTYB46cxzQiss3XgjMGQeOSqyMqP9OWRJlz4gtbCBt/9Y3+oaZ45UA+rHcTS0wdFMK5ASRFuSXZH8Zlo1hgm5z8xC4/mNavxMUrl3Nyg1ipgE31p2PzCjpKT2jbgTKZ37ZMM=
+	t=1724484804; cv=none; b=CaWJqQCKf4lJ5IwAp9uQA4w1hwPj7yAwR4bNQm2Ief5E+PtIGw7KylrxxNzOgVcDbX6K0HkDDwwqhbvWNMyfUlAYRYCjrPkPc1mRbpp+iel8CparizxcUMtIk7uVYM2edjxxYwQx7pS2ojrRe87lMGrRUjbn3Q25WjE/jbcAvfc=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1724484801; c=relaxed/simple;
-	bh=Hg9xoc/VMJOfZVi9w3hSPZJTv1xSTk3qVJsXRjNMXc8=;
-	h=From:To:CC:Subject:Date:Message-ID:MIME-Version:Content-Type; b=u/JGuwZFc1hEfrf88+IJg0lvfDf5awNTsTmRnIS3UDPrV1w8kjg2ZRrjI0lpwVjfSCH4Wej1fksDyPGNYHb00ZxJsldu7vxJCffV6N8iO2+jsw6keefpo2nHLe5PtmWAx+ESpRtIGDQDjURTHjhwNA4mgKCHpIu+DBpEVSdAd14=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=45.249.212.190
+	s=arc-20240116; t=1724484804; c=relaxed/simple;
+	bh=2Lhf//eOuftp5GWtCDU5XsiHeG7f1DhzdYzQ7ZKsezQ=;
+	h=From:To:CC:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=uzeCb03ndp21GlWNsUUrDkNr2PVVuIfWnSIA8RGX63d+kPYEuIj91sM8HkM9mlq5BWTM/i7Sn4u2I9iTXFDO9YHRNyMcXr6rZKN+N84IATmfQIhaK+Qx/FTxgD57/rdaI8b8YXmE966sfs7I5rlQLGaPvhOnr3BWJ0qGVgdzvKI=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com; spf=pass smtp.mailfrom=huawei.com; arc=none smtp.client-ip=45.249.212.191
 Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=huawei.com
 Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=huawei.com
-Received: from mail.maildlp.com (unknown [172.19.162.112])
-	by szxga04-in.huawei.com (SkyGuard) with ESMTP id 4WrT7Y2gHqz20mPt;
-	Sat, 24 Aug 2024 15:28:25 +0800 (CST)
+Received: from mail.maildlp.com (unknown [172.19.88.214])
+	by szxga05-in.huawei.com (SkyGuard) with ESMTP id 4WrT9M0qtHz1HGkR;
+	Sat, 24 Aug 2024 15:29:59 +0800 (CST)
 Received: from dggpeml500022.china.huawei.com (unknown [7.185.36.66])
-	by mail.maildlp.com (Postfix) with ESMTPS id 3097814013B;
-	Sat, 24 Aug 2024 15:33:10 +0800 (CST)
+	by mail.maildlp.com (Postfix) with ESMTPS id 540731A016C;
+	Sat, 24 Aug 2024 15:33:14 +0800 (CST)
 Received: from huawei.com (10.90.53.73) by dggpeml500022.china.huawei.com
  (7.185.36.66) with Microsoft SMTP Server (version=TLS1_2,
  cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.1.2507.39; Sat, 24 Aug
- 2024 15:33:09 +0800
+ 2024 15:33:14 +0800
 From: Hongbo Li <lihongbo22@huawei.com>
 To: <johannes@sipsolutions.net>, <davem@davemloft.net>, <edumazet@google.com>,
 	<kuba@kernel.org>, <pabeni@redhat.com>, <allison.henderson@oracle.com>,
@@ -30,10 +31,12 @@ To: <johannes@sipsolutions.net>, <davem@davemloft.net>, <edumazet@google.com>,
 CC: <linux-wireless@vger.kernel.org>, <netdev@vger.kernel.org>,
 	<rds-devel@oss.oracle.com>, <dccp@vger.kernel.org>, <dev@openvswitch.org>,
 	<linux-afs@lists.infradead.org>, <lihongbo22@huawei.com>
-Subject: [PATCH net-next 0/8] Use max/min to simplify the code
-Date: Sat, 24 Aug 2024 15:40:25 +0800
-Message-ID: <20240824074033.2134514-1-lihongbo22@huawei.com>
+Subject: [PATCH net-next 3/8] net/ipv4: Use min() to simplify the code
+Date: Sat, 24 Aug 2024 15:40:28 +0800
+Message-ID: <20240824074033.2134514-4-lihongbo22@huawei.com>
 X-Mailer: git-send-email 2.34.1
+In-Reply-To: <20240824074033.2134514-1-lihongbo22@huawei.com>
+References: <20240824074033.2134514-1-lihongbo22@huawei.com>
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
@@ -45,39 +48,29 @@ Content-Type: text/plain
 X-ClientProxiedBy: dggems703-chm.china.huawei.com (10.3.19.180) To
  dggpeml500022.china.huawei.com (7.185.36.66)
 
-Many Coccinelle/coccicheck warning reported by minmax.cocci
-in net module, such as:
-        WARNING opportunity for max()
-        WARNING opportunity for min()
+The following Coccinelle/coccicheck warning reported by
+minmax.cocci:
+    WARNING opportunity for min()
+Let's use min() to simplify the code and fix the warning.
 
-Let's use max/min to simplify the code and fix these warnings.
-These patch have passed compilation test.
+Signed-off-by: Hongbo Li <lihongbo22@huawei.com>
+---
+ net/ipv4/ip_sockglue.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-Hongbo Li (8):
-  net/mac80211: use max to simplify the code
-  net/rds: Use max() to simplify the code
-  net/ipv4: Use min() to simplify the code
-  net/core: Use min()/max() to simplify the code
-  net/dccp: Use min()/max() to simplify the code
-  net/openvswitch: Use max() to simplify the code
-  net/rxrpc: Use min() to simplify the code
-  net/ceph: Use min() to simplify the code
-
- net/ceph/osd_client.c     | 2 +-
- net/core/pktgen.c         | 6 ++----
- net/core/sock.c           | 2 +-
- net/dccp/ackvec.c         | 2 +-
- net/dccp/dccp.h           | 2 +-
- net/ipv4/ip_sockglue.c    | 2 +-
- net/mac80211/driver-ops.h | 2 +-
- net/mac80211/mlme.c       | 2 +-
- net/mac80211/scan.c       | 6 ++----
- net/mac80211/tdls.c       | 2 +-
- net/openvswitch/vport.c   | 2 +-
- net/rds/info.c            | 5 +----
- net/rxrpc/input.c         | 3 +--
- 13 files changed, 15 insertions(+), 23 deletions(-)
-
+diff --git a/net/ipv4/ip_sockglue.c b/net/ipv4/ip_sockglue.c
+index cf377377b52d..f35aba4c3b0e 100644
+--- a/net/ipv4/ip_sockglue.c
++++ b/net/ipv4/ip_sockglue.c
+@@ -282,7 +282,7 @@ int ip_cmsg_send(struct sock *sk, struct msghdr *msg, struct ipcm_cookie *ipc,
+ 			/* Our caller is responsible for freeing ipc->opt */
+ 			err = ip_options_get(net, &ipc->opt,
+ 					     KERNEL_SOCKPTR(CMSG_DATA(cmsg)),
+-					     err < 40 ? err : 40);
++					     min(40, err));
+ 			if (err)
+ 				return err;
+ 			break;
 -- 
 2.34.1
 
