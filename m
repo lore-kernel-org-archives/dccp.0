@@ -1,75 +1,60 @@
 Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id F236E84039;
-	Mon, 26 Aug 2024 19:02:39 +0000 (UTC)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 4718B13C9A9;
+	Mon, 26 Aug 2024 21:44:05 +0000 (UTC)
 Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1724698960; cv=none; b=Dqp2+xRJUFA9AeHGmLPAjZT/4mbWiy80NfcK6rgXFZ2fjeZOLD5/pSx4cazKswHFGMhg76fcE1T61gHNgptLTv8ILhLfDZQLGK8CC6ZwtYBK9l/8rD1KOXJMyizwKhb6BYDib4wMv4xABMlbGKXnOWf7nu4pTJh7xWGBK4b0ObA=
+	t=1724708646; cv=none; b=a0LBddsh4edgWSRoFGVLDkAfirhwRPiwynWXKIb5Fko7WbmWGna4SrI8TVrnT5wbHG5R5U10ksVCpac8uscv+rjW1D90nFOTZwCcWin+g5S8jBFGAs11f7DgoKjtB6y8FA3DBxyo5CVH3nYGjgYZjh123gKaaVO7rhEMJvgsE0Q=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1724698960; c=relaxed/simple;
-	bh=OcWpWVRrtsMaT3oP17nElc01GySh5DS/TzMiuqAWNAk=;
-	h=From:To:Cc:Subject:References:Date:In-Reply-To:Message-ID:
-	 MIME-Version:Content-Type; b=FNwTStS51+1z8+Tz/Oo96WbdUCzJ35HawMXqRKZVvHLUJJHIPqR+dF2eD4WHD41M5jRF7w3aKDuDx49fx+3bcg2mw7pA1988ZNfXBK/Q+ULCa1jbov4VeeUipbxfQh2cgIOuSX+5hqaHSPX4ApvJhhbJSwswkQTYXOhnhMPPVcs=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=lZ2p09a4; arc=none smtp.client-ip=10.30.226.201
+	s=arc-20240116; t=1724708646; c=relaxed/simple;
+	bh=lvSnHqOQR3Na/gepx7JGPz+s2JJfy4XjDTN+5qhOtDs=;
+	h=Date:From:To:Cc:Subject:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=E8jqb79gwImPVBoY1Afnu4CyIC5TOOuwVCUviEH9Lwnh53meq3SAsSx7NThoCIZSpyQ13HLkub5epF9WwxVT8JJoXylds52ICS+PhK0yAF0jJTxrpmHomkzHbbHXpT5DPkwC7DDjMQA/JglHDKTmKiLG/LO/9VE14OWoOSt4934=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=Hx5unrv2; arc=none smtp.client-ip=10.30.226.201
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="lZ2p09a4"
-Received: by smtp.kernel.org (Postfix) with ESMTPSA id AFB77C8B7A6;
-	Mon, 26 Aug 2024 19:02:36 +0000 (UTC)
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="Hx5unrv2"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 50FA6C4DE1A;
+	Mon, 26 Aug 2024 21:44:05 +0000 (UTC)
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
-	s=k20201202; t=1724698959;
-	bh=OcWpWVRrtsMaT3oP17nElc01GySh5DS/TzMiuqAWNAk=;
-	h=From:To:Cc:Subject:References:Date:In-Reply-To:From;
-	b=lZ2p09a4uZJtNbRm7ysmlmQzuqDflfabntixL4VjUYJ1VDPAnaIdBG7dZsWLWwE96
-	 MFSuDGMW3d8n9lFgqPTXnVqKq0FSCieWjHfaqt4nf+va9USJYoMF+IyO8ws46/XG0O
-	 4yQQRGrEb7oDF3V+kLzae7pB82axM1eCqyV4SXnxrZ5AyVOAfl5pI6mxM14POKCULy
-	 ulcdLW8rUrjFrmcNdozcDAZsYW+f5cKqUBdAe3h+4IggfMUltZWX/Sza+tSneca4hx
-	 H2HXP3GPlNQzIO0s1ocmApLHqDt3CnGxENwxumhq7tIpLyP2DqrTgFdtZPSMKyw0ED
-	 oGA32AF4zdI8A==
-From: Kalle Valo <kvalo@kernel.org>
+	s=k20201202; t=1724708645;
+	bh=lvSnHqOQR3Na/gepx7JGPz+s2JJfy4XjDTN+5qhOtDs=;
+	h=Date:From:To:Cc:Subject:In-Reply-To:References:From;
+	b=Hx5unrv2zBVCo0jIq7yYg2HVT0e8ybrwCJ3JmWDMV4i8cQPiS6ssOXSZOrPNCjcmW
+	 XL03cV3uqPEjNx1jlhEXYYYyisja5nVMWzzAiMUxrxyvzeQYyuzTZY0jVSJfqJJKWf
+	 sRMleZC1lTp6rPEa31brv/6XaqJPCPCWYvsmKrVoNaKIgR7tL8BpVcgqlX3jRHK8RP
+	 UrC7Yls6Vs1FAOZVszwANjrqSrCFBzrShqGEXa7wxOb7Rh6jRb2P8K79I7qA4E6W3L
+	 OUQobniq02IFwAuyX1kuAh1zLjGdAYokqtLPkYPUEEk+gzpW1E/CTEjDybtKN7CYPF
+	 6HlXJkBDK0BBQ==
+Date: Mon, 26 Aug 2024 14:44:04 -0700
+From: Jakub Kicinski <kuba@kernel.org>
 To: Hongbo Li <lihongbo22@huawei.com>
-Cc: <johannes@sipsolutions.net>,  <davem@davemloft.net>,
-  <edumazet@google.com>,  <kuba@kernel.org>,  <pabeni@redhat.com>,
-  <allison.henderson@oracle.com>,  <dsahern@kernel.org>,
-  <pshelar@ovn.org>,  <linux-wireless@vger.kernel.org>,
-  <netdev@vger.kernel.org>,  <rds-devel@oss.oracle.com>,
-  <dccp@vger.kernel.org>,  <dev@openvswitch.org>,
-  <linux-afs@lists.infradead.org>
-Subject: Re: [PATCH net-next 1/8] net/mac80211: use max to simplify the code
+Cc: <johannes@sipsolutions.net>, <davem@davemloft.net>,
+ <edumazet@google.com>, <pabeni@redhat.com>, <allison.henderson@oracle.com>,
+ <dsahern@kernel.org>, <pshelar@ovn.org>, <linux-wireless@vger.kernel.org>,
+ <netdev@vger.kernel.org>, <rds-devel@oss.oracle.com>,
+ <dccp@vger.kernel.org>, <dev@openvswitch.org>,
+ <linux-afs@lists.infradead.org>
+Subject: Re: [PATCH net-next 0/8] Use max/min to simplify the code
+Message-ID: <20240826144404.03fce39c@kernel.org>
+In-Reply-To: <20240824074033.2134514-1-lihongbo22@huawei.com>
 References: <20240824074033.2134514-1-lihongbo22@huawei.com>
-	<20240824074033.2134514-2-lihongbo22@huawei.com>
-Date: Mon, 26 Aug 2024 22:02:34 +0300
-In-Reply-To: <20240824074033.2134514-2-lihongbo22@huawei.com> (Hongbo Li's
-	message of "Sat, 24 Aug 2024 15:40:26 +0800")
-Message-ID: <87h6b7f6ph.fsf@kernel.org>
-User-Agent: Gnus/5.13 (Gnus v5.13) Emacs/28.2 (gnu/linux)
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain
+Content-Type: text/plain; charset=US-ASCII
+Content-Transfer-Encoding: 7bit
 
-Hongbo Li <lihongbo22@huawei.com> writes:
+On Sat, 24 Aug 2024 15:40:25 +0800 Hongbo Li wrote:
+> Many Coccinelle/coccicheck warning reported by minmax.cocci
+> in net module, such as:
+>         WARNING opportunity for max()
+>         WARNING opportunity for min()
+> 
+> Let's use max/min to simplify the code and fix these warnings.
+> These patch have passed compilation test.
 
-> The following Coccinelle/coccicheck warning reported by
-> minmax.cocci:
->     WARNING opportunity for max()
-> Let's use max() to simplify the code and fix the warning.
->
-> Signed-off-by: Hongbo Li <lihongbo22@huawei.com>
-> ---
->  net/mac80211/driver-ops.h | 2 +-
->  net/mac80211/mlme.c       | 2 +-
->  net/mac80211/scan.c       | 6 ++----
->  net/mac80211/tdls.c       | 2 +-
->  4 files changed, 5 insertions(+), 7 deletions(-)
-
-mac80211 patches go to wireless-next, please submit this separately. And
-the title should begin with 'wifi: mac80211:'.
-
--- 
-https://patchwork.kernel.org/project/linux-wireless/list/
-
-https://wireless.wiki.kernel.org/en/developers/documentation/submittingpatches
+This set does not build.
