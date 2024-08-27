@@ -1,76 +1,74 @@
 Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 9DC781A08A3;
-	Tue, 27 Aug 2024 14:31:42 +0000 (UTC)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 8CE821CEAAF;
+	Tue, 27 Aug 2024 17:58:08 +0000 (UTC)
 Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1724769102; cv=none; b=gotq42/p2NtE3fEa96vbou3GzMt35nzUfRHdqcWBX+ZcGTERO09MUrYE6jJ0Y868Qroj2Coppehxcc4NVFvB88VNaTd+qtZfXDWNDGD1sY9YkMH4OkwkaDBgaU4nC9HD4vwsVAhLY0KsvnaQETqHgmv7RBbWqo2sFH1ZyWP6HQA=
+	t=1724781488; cv=none; b=Ha+gcA+6bxfzUM/2Ovfr5hinmW71MmaHsy55vQZVkdb7DNSx3Y3BCgjcnCi/5K6rhj1uHmCe+qfn6cnMZxqyjHHVBCtu7fz/UJ+KQrNM55L87iNrN1zfmbysBBL1XFzv65byeNQiaROVDapL6Qzm3i1JNO8xJ7N//9QWjJhyG4Y=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1724769102; c=relaxed/simple;
-	bh=jPW5CeXWol8SdzTNVQSXpa6WgMRABIvFBwXD85nKydg=;
-	h=From:To:Cc:Subject:References:Date:In-Reply-To:Message-ID:
-	 MIME-Version:Content-Type; b=LbQnSIObUHasqwrxMU6AFCHdh09TCkYtUuYCyT8dzla04D+Run4d/gCBfnCLzxgMG/FhRe18CJF0qQMVdTQSBId8ROXYoC6SsNc+I97zh3WlEmMIMFZP1fh9U9sYrN75oXXgQ0Mo6ThP5WvyEXyNmsR9TKSejDKZjljG1bt/wd4=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=CR51SEQW; arc=none smtp.client-ip=10.30.226.201
+	s=arc-20240116; t=1724781488; c=relaxed/simple;
+	bh=3H21zN/Q4sFN7iNNsYkynj6132zekBozN8LU2+Zndjw=;
+	h=Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
+	 Content-Type:Content-Disposition:In-Reply-To; b=TheGOvkzA2T3kXa/mK1c6CvSGOie/7w3Z1y2vgftalCk2zI0Ed4VourVB2rAGToEjwFUmD2u+fusqdtQWnVFTTCt5vhGhlQyF/QvwwFJXJgKGSr9P1iY2usxyxVoS11xA26d31Dyo9/qhnNyNi6dNZc3aEWCjVC+VfCTpKC9/lQ=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=ohod8/mJ; arc=none smtp.client-ip=10.30.226.201
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="CR51SEQW"
-Received: by smtp.kernel.org (Postfix) with ESMTPSA id 00F5CC4AF52;
-	Tue, 27 Aug 2024 14:31:38 +0000 (UTC)
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="ohod8/mJ"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 0C998C4AF0F;
+	Tue, 27 Aug 2024 17:58:04 +0000 (UTC)
 DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
-	s=k20201202; t=1724769102;
-	bh=jPW5CeXWol8SdzTNVQSXpa6WgMRABIvFBwXD85nKydg=;
-	h=From:To:Cc:Subject:References:Date:In-Reply-To:From;
-	b=CR51SEQWCzFdwGlPxDcKz4Gl7UMMKEEG6+xV2kZ/5VauRsdfO+JTGHDUHETVbfW+v
-	 i7L5nPZ+DUfQqhSNvi9vzmGZk70RBURcEZy+ITaXI/ZF8fBnzpuUXEQKJg5Vk3JgDb
-	 ehz4JBvE/vSkz/jdrDyVG5PoEui1xGj8QeywqRwn1cHcEhmfdfYvnVWPEO4lBkmH/a
-	 j0A1ML67VcwUcpyw3JPUVbJL0/kgVFaXOFi8O0ZdAag2pr5IXzAfxQidwM+UlT/Uw2
-	 /s2MST3G9tntcOySE8nfddON9s9TxQlvCD5VV3Q4gUWX5AMs7SjCVIC7jmFFREq8VY
-	 Hu3Zm4NvCDhsw==
-From: Kalle Valo <kvalo@kernel.org>
-To: Jakub Kicinski <kuba@kernel.org>
-Cc: Hongbo Li <lihongbo22@huawei.com>,  <johannes@sipsolutions.net>,
-  <davem@davemloft.net>,  <edumazet@google.com>,  <pabeni@redhat.com>,
-  <allison.henderson@oracle.com>,  <dsahern@kernel.org>,
-  <pshelar@ovn.org>,  <linux-wireless@vger.kernel.org>,
-  <netdev@vger.kernel.org>,  <rds-devel@oss.oracle.com>,
-  <dccp@vger.kernel.org>,  <dev@openvswitch.org>,
-  <linux-afs@lists.infradead.org>
-Subject: Re: [PATCH net-next 0/8] Use max/min to simplify the code
-References: <20240824074033.2134514-1-lihongbo22@huawei.com>
-	<20240826144404.03fce39c@kernel.org>
-	<4a92bb68-7fe7-4bf2-885f-e07b06ea82aa@huawei.com>
-	<878qwifub5.fsf@kernel.org> <20240827070347.4bf3a284@kernel.org>
-Date: Tue, 27 Aug 2024 17:31:36 +0300
-In-Reply-To: <20240827070347.4bf3a284@kernel.org> (Jakub Kicinski's message of
-	"Tue, 27 Aug 2024 07:03:47 -0700")
-Message-ID: <877cc2ujef.fsf@kernel.org>
-User-Agent: Gnus/5.13 (Gnus v5.13) Emacs/28.2 (gnu/linux)
+	s=k20201202; t=1724781488;
+	bh=3H21zN/Q4sFN7iNNsYkynj6132zekBozN8LU2+Zndjw=;
+	h=Date:From:To:Cc:Subject:References:In-Reply-To:From;
+	b=ohod8/mJQyjOHtafuyrQZbERzJcYP5TvQB8GZxqGsHDgCjF8CeFYfgGC6Gt6DBnVw
+	 bXNNvcsrm2EQ94dfAFnsZxbRubZIq4izrVb7pclKAgh5EB4MTM2ZyB91npAZOqC8/s
+	 z8B/udm6v7HdRhuf7vc5jPeFQZzhAxr0NYynEDMkxkUnnPxjWVduNoR+rvsl3K/O6d
+	 RMJ9+jlFHASJymbVPLx5aO5sD/VmksCPD/IWPdI5fBuLLj2Qun37SKufSW0NYGTYge
+	 fn9mClBKEptmjxq7x6W9rPss03QKeRw8ZCXPyRUfZ60IPmwsDNCEdT5TmTqhnTrllV
+	 DLQI3xoUSAqOA==
+Date: Tue, 27 Aug 2024 18:58:02 +0100
+From: Simon Horman <horms@kernel.org>
+To: Hongbo Li <lihongbo22@huawei.com>
+Cc: David Howells <dhowells@redhat.com>, johannes@sipsolutions.net,
+	davem@davemloft.net, edumazet@google.com, kuba@kernel.org,
+	pabeni@redhat.com, allison.henderson@oracle.com, dsahern@kernel.org,
+	pshelar@ovn.org, linux-wireless@vger.kernel.org,
+	netdev@vger.kernel.org, rds-devel@oss.oracle.com,
+	dccp@vger.kernel.org, dev@openvswitch.org,
+	linux-afs@lists.infradead.org
+Subject: Re: [PATCH net-next 7/8] net/rxrpc: Use min() to simplify the code
+Message-ID: <20240827175802.GA1903074@kernel.org>
+References: <20240824074033.2134514-8-lihongbo22@huawei.com>
+ <20240824074033.2134514-1-lihongbo22@huawei.com>
+ <563923.1724501215@warthog.procyon.org.uk>
+ <1b1ee6e6-ff2e-45d6-bfe2-1f8efaba7b38@huawei.com>
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
+In-Reply-To: <1b1ee6e6-ff2e-45d6-bfe2-1f8efaba7b38@huawei.com>
 
-Jakub Kicinski <kuba@kernel.org> writes:
+On Mon, Aug 26, 2024 at 10:50:03AM +0800, Hongbo Li wrote:
+> 
+> 
+> On 2024/8/24 20:06, David Howells wrote:
+> > Hongbo Li <lihongbo22@huawei.com> wrote:
+> > 
+> > > -	summary.ack_reason = (sp->ack.reason < RXRPC_ACK__INVALID ?
+> > > -			      sp->ack.reason : RXRPC_ACK__INVALID);
+> > > +	summary.ack_reason = min(sp->ack.reason, RXRPC_ACK__INVALID);
+> > 
+> > Can you use umin() rather than min(), please?
+> > 
+> 
+> I see reason is u8, so may I use min_t(u8, sp->ack.reason,
+> RXRPC_ACK__INVALID)?
 
-> On Tue, 27 Aug 2024 07:45:02 +0300 Kalle Valo wrote:
->> > Do you mean some patches will go to other branches (such as mac80211)?  
->> 
->> Jakub means that your patchset had compilation errors, see the red on
->> patchwork:
->> 
->> https://patchwork.kernel.org/project/netdevbpf/list/?series=882901&state=*&order=date
->
-> FWIW I prefer not to point noobs to the patchwork checks, lest they
-> think it's a public CI and they can fling broken code at the list :(
+I believe that umin was added precisely to avoid such constructions.
 
-Good point, that's definitely what we do not want. I'll keep this in
-mind.
-
--- 
-https://patchwork.kernel.org/project/linux-wireless/list/
-
-https://wireless.wiki.kernel.org/en/developers/documentation/submittingpatches
-https://docs.kernel.org/process/submitting-patches.html
+See: 80fcac55385c ("minmax: add umin(a, b) and umax(a, b)")
+     https://git.kernel.org/torvalds/c/80fcac55385c
