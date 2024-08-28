@@ -1,66 +1,44 @@
-Received: from mgamail.intel.com (mgamail.intel.com [198.175.65.15])
+Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 87506156C76;
-	Wed, 28 Aug 2024 08:18:52 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=198.175.65.15
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 98BFB186E4C;
+	Wed, 28 Aug 2024 13:53:46 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1724833135; cv=none; b=rvGClujkgby0DilW2SAzwcVbGlwwV0jirRryvcyMGVz/KecTeE/Q3zEByvEF8sRwAiXIABmxqFAQJcDArII1OgtiBvwqST2TzDhuVErlnfwzi+b6r9Ui4ijz6M/DpUqnHVwrDBCAyNOjnVYd67FMTW6aFjhZHbOXMwcgTx5A50c=
+	t=1724853226; cv=none; b=CQcX+eP0xtqPbsiMldkaYTDwYzbDtRUqMLMFWgzP4GEbX2G7FJX0tt8LkZLXf0EuCHfvWK4dn422UshQj48koK6z6wFkWR3dtZ0iYxJ8LSLldDNaBNZbWtib8NrXN7hDwUDzvHdP8w+ci7x+gPXfh8gVUOuKUn/LK1N+J+1WHcY=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1724833135; c=relaxed/simple;
-	bh=67B6v/6kWDCPcgu7Pcf8hglMBU4sht72HbJJzGDX+hM=;
+	s=arc-20240116; t=1724853226; c=relaxed/simple;
+	bh=uQhv+PNgrmTou4nKOaSWCbDq0tsirKSailGjmpqVubs=;
 	h=Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
-	 Content-Type:Content-Disposition:In-Reply-To; b=h0JJzD6Dl1IZGwANrX+IbfBwCCn5bD806xnem8fd11s+m1PTCkYD1kNb8+tMgG9b8ucj7RxRs66so9YPROgQumm8wlnfAxq9pq6Md+YitPf9clltM+B45ClEV13jYwblFJF8d3rBwd9kjgCmkf1pKsodm092V8dHK3M1ON//p5o=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=intel.com; spf=pass smtp.mailfrom=intel.com; dkim=pass (2048-bit key) header.d=intel.com header.i=@intel.com header.b=LGrHmquO; arc=none smtp.client-ip=198.175.65.15
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=intel.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=intel.com
+	 Content-Type:Content-Disposition:In-Reply-To; b=lykRLRJX/lEpdk9lulaaZXNlsJ3OV5pK7Kj5Sh062RGeAYiup1x1og7Dhr4jjk0BlZ/2BzTjE9YLB5dB/Ny2A7uZwY6Dz54Y3uZvpJ3tJkPv0ZexcGGJDHMqZiWdbJpDZxIY1zJVg5Ff4rSunuliER38M4kgRzPcC3IYqqqwEGg=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=YkcmiH+s; arc=none smtp.client-ip=10.30.226.201
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=intel.com header.i=@intel.com header.b="LGrHmquO"
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple;
-  d=intel.com; i=@intel.com; q=dns/txt; s=Intel;
-  t=1724833132; x=1756369132;
-  h=date:from:to:cc:subject:message-id:references:
-   mime-version:in-reply-to;
-  bh=67B6v/6kWDCPcgu7Pcf8hglMBU4sht72HbJJzGDX+hM=;
-  b=LGrHmquOn5zT9TVFHIU4sxfg1UM5XkQb4kaNytYQL7UsN0xpED2iBDLY
-   RYJ6DjZqGAFczZdm3+0k17z1+V7yvO1/crpnEgon2A4C8Nb1roZa7Mbbo
-   GIbF4EuWD4PkVYqzDinEZGyRRsfs0aO2LL7Zmo6Hr0mr0ld2UKr+T6CuB
-   lvP5Df0qozQXmQeE2yidEWKix2JkXjBywkt9T2OZAPcqgOqqW0GiRDBkp
-   ROfbDKvNUlmgxE2XZHj8MlnZnUMm+oLhxqNKyO7eHXhk7ib6U/M99ZMEW
-   YPBqfHFpvkR6KJLEeEDZVVpYiz+HxUtTqndGOGNwwEJVRKnXdGZ8HHxSt
-   g==;
-X-CSE-ConnectionGUID: aYzC4WEDRtqg929oIcwbHw==
-X-CSE-MsgGUID: MF6627CcTSmr7Pqid5IbtA==
-X-IronPort-AV: E=McAfee;i="6700,10204,11177"; a="27116297"
-X-IronPort-AV: E=Sophos;i="6.10,182,1719903600"; 
-   d="scan'208";a="27116297"
-Received: from fmviesa008.fm.intel.com ([10.60.135.148])
-  by orvoesa107.jf.intel.com with ESMTP/TLS/ECDHE-RSA-AES256-GCM-SHA384; 28 Aug 2024 01:18:49 -0700
-X-CSE-ConnectionGUID: /m5d2NY2SqGMdEIBjX52gw==
-X-CSE-MsgGUID: EXNrMRjESJuptaz/EpjDPQ==
-X-ExtLoop1: 1
-X-IronPort-AV: E=Sophos;i="6.10,182,1719903600"; 
-   d="scan'208";a="63141243"
-Received: from lkp-server01.sh.intel.com (HELO 9a732dc145d3) ([10.239.97.150])
-  by fmviesa008.fm.intel.com with ESMTP; 28 Aug 2024 01:18:46 -0700
-Received: from kbuild by 9a732dc145d3 with local (Exim 4.96)
-	(envelope-from <lkp@intel.com>)
-	id 1sjDt5-000KeU-2Q;
-	Wed, 28 Aug 2024 08:18:43 +0000
-Date: Wed, 28 Aug 2024 16:17:50 +0800
-From: kernel test robot <lkp@intel.com>
-To: Hongbo Li <lihongbo22@huawei.com>, johannes@sipsolutions.net,
-	davem@davemloft.net, edumazet@google.com, kuba@kernel.org,
-	pabeni@redhat.com, allison.henderson@oracle.com, dsahern@kernel.org,
-	pshelar@ovn.org
-Cc: oe-kbuild-all@lists.linux.dev, linux-wireless@vger.kernel.org,
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="YkcmiH+s"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 3CB4AC98EC6;
+	Wed, 28 Aug 2024 13:53:43 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
+	s=k20201202; t=1724853226;
+	bh=uQhv+PNgrmTou4nKOaSWCbDq0tsirKSailGjmpqVubs=;
+	h=Date:From:To:Cc:Subject:References:In-Reply-To:From;
+	b=YkcmiH+s+5n6OLE88+mS/D8TkaO30rjgPh/nmp2a4eTWOuzJDU2fVQtVg3mqr1HLt
+	 Nsf7VLke3eyLCBGwWx5aBBz/MBH0M9MTuWCdpgqNP1BeSPsTpfTmFj1YJ4NIOVWsBy
+	 40+72UHjf8O6p7oNiWjYeeGMVQMJ/RzENhSWLZ1W9R8gA/tYnx+XhUFAc0nH8g1NgL
+	 8WFpH1hAGfn0INm3IXclniCGAwYE5grdlS+uGsYRMwnTDOGwkSmfhWoXbn4piQDvId
+	 HG1LOcNDxkv2g7tOc/SFpFxb9F0N7VruG9JSd7QPvkQ++JpohU5/toea4NEJQ/o7/U
+	 3HjOiaf/Ndk5g==
+Date: Wed, 28 Aug 2024 14:53:10 +0100
+From: Simon Horman <horms@kernel.org>
+To: Hongbo Li <lihongbo22@huawei.com>
+Cc: johannes@sipsolutions.net, davem@davemloft.net, edumazet@google.com,
+	kuba@kernel.org, pabeni@redhat.com, allison.henderson@oracle.com,
+	dsahern@kernel.org, pshelar@ovn.org, linux-wireless@vger.kernel.org,
 	netdev@vger.kernel.org, rds-devel@oss.oracle.com,
 	dccp@vger.kernel.org, dev@openvswitch.org,
-	linux-afs@lists.infradead.org, lihongbo22@huawei.com
-Subject: Re: [PATCH net-next 4/8] net/core: Use min()/max() to simplify the
- code
-Message-ID: <202408281628.FtNGguag-lkp@intel.com>
-References: <20240824074033.2134514-5-lihongbo22@huawei.com>
+	linux-afs@lists.infradead.org
+Subject: Re: [PATCH net-next 2/8] net/rds: Use max() to simplify the code
+Message-ID: <20240828135310.GC1368797@kernel.org>
+References: <20240824074033.2134514-1-lihongbo22@huawei.com>
+ <20240824074033.2134514-3-lihongbo22@huawei.com>
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
@@ -69,76 +47,51 @@ List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset=us-ascii
 Content-Disposition: inline
-In-Reply-To: <20240824074033.2134514-5-lihongbo22@huawei.com>
+In-Reply-To: <20240824074033.2134514-3-lihongbo22@huawei.com>
 
-Hi Hongbo,
+On Sat, Aug 24, 2024 at 03:40:27PM +0800, Hongbo Li wrote:
+> The target if-else can be replaced with max().
+> 
+> Signed-off-by: Hongbo Li <lihongbo22@huawei.com>
+> ---
+>  net/rds/info.c | 5 +----
+>  1 file changed, 1 insertion(+), 4 deletions(-)
+> 
+> diff --git a/net/rds/info.c b/net/rds/info.c
+> index b6b46a8214a0..8558b0a466b4 100644
+> --- a/net/rds/info.c
+> +++ b/net/rds/info.c
+> @@ -194,10 +194,7 @@ int rds_info_getsockopt(struct socket *sock, int optname, char __user *optval,
+>  	}
+>  	ret = pin_user_pages_fast(start, nr_pages, FOLL_WRITE, pages);
+>  	if (ret != nr_pages) {
+> -		if (ret > 0)
+> -			nr_pages = ret;
+> -		else
+> -			nr_pages = 0;
+> +		nr_pages = max(ret, 0);
 
-kernel test robot noticed the following build errors:
+Along the same lines as Johannes Berg's comment on a different patch [1]
+I think that there is a subtle but important difference, semantically,
+between max() and that the existing code does, for which the best
+description I can think of is setting a floor on the value.
 
-[auto build test ERROR on net-next/main]
+Other than Johannes's comment, and now mine here, I think you will find
+that, if you search the netdev ML, you will find this point being made
+consistently, at least over the past year.
 
-url:    https://github.com/intel-lab-lkp/linux/commits/Hongbo-Li/net-mac80211-use-max-to-simplify-the-code/20240826-154029
-base:   net-next/main
-patch link:    https://lore.kernel.org/r/20240824074033.2134514-5-lihongbo22%40huawei.com
-patch subject: [PATCH net-next 4/8] net/core: Use min()/max() to simplify the code
-config: powerpc-allmodconfig (https://download.01.org/0day-ci/archive/20240828/202408281628.FtNGguag-lkp@intel.com/config)
-compiler: powerpc64-linux-gcc (GCC) 14.1.0
-reproduce (this is a W=1 build): (https://download.01.org/0day-ci/archive/20240828/202408281628.FtNGguag-lkp@intel.com/reproduce)
+And yes, we understand that mathematically max() is doing the right thing.
+But that is not the point that is being made here.
 
-If you fix the issue in a separate patch/commit (i.e. not just a new version of
-the same patch/commit), kindly add following tags
-| Reported-by: kernel test robot <lkp@intel.com>
-| Closes: https://lore.kernel.org/oe-kbuild-all/202408281628.FtNGguag-lkp@intel.com/
+I suggest dropping this patch.
+And any others like it.
 
-All errors (new ones prefixed by >>):
+[1] https://lore.kernel.org/all/d5f495b67fe6bf128e7a51b9fcfe11f70c9b66ae.camel@sipsolutions.net/
 
-   In file included from <command-line>:
-   net/core/pktgen.c: In function 'pktgen_finalize_skb':
->> include/linux/compiler_types.h:510:45: error: call to '__compiletime_assert_991' declared with attribute error: min(datalen/frags, (1UL << 16)) signedness error
-     510 |         _compiletime_assert(condition, msg, __compiletime_assert_, __COUNTER__)
-         |                                             ^
-   include/linux/compiler_types.h:491:25: note: in definition of macro '__compiletime_assert'
-     491 |                         prefix ## suffix();                             \
-         |                         ^~~~~~
-   include/linux/compiler_types.h:510:9: note: in expansion of macro '_compiletime_assert'
-     510 |         _compiletime_assert(condition, msg, __compiletime_assert_, __COUNTER__)
-         |         ^~~~~~~~~~~~~~~~~~~
-   include/linux/build_bug.h:39:37: note: in expansion of macro 'compiletime_assert'
-      39 | #define BUILD_BUG_ON_MSG(cond, msg) compiletime_assert(!(cond), msg)
-         |                                     ^~~~~~~~~~~~~~~~~~
-   include/linux/minmax.h:100:9: note: in expansion of macro 'BUILD_BUG_ON_MSG'
-     100 |         BUILD_BUG_ON_MSG(!__types_ok(x,y,ux,uy),        \
-         |         ^~~~~~~~~~~~~~~~
-   include/linux/minmax.h:105:9: note: in expansion of macro '__careful_cmp_once'
-     105 |         __careful_cmp_once(op, x, y, __UNIQUE_ID(x_), __UNIQUE_ID(y_))
-         |         ^~~~~~~~~~~~~~~~~~
-   include/linux/minmax.h:129:25: note: in expansion of macro '__careful_cmp'
-     129 | #define min(x, y)       __careful_cmp(min, x, y)
-         |                         ^~~~~~~~~~~~~
-   net/core/pktgen.c:2796:28: note: in expansion of macro 'min'
-    2796 |                 frag_len = min(datalen/frags, PAGE_SIZE);
-         |                            ^~~
-
-
-vim +/__compiletime_assert_991 +510 include/linux/compiler_types.h
-
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  496  
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  497  #define _compiletime_assert(condition, msg, prefix, suffix) \
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  498  	__compiletime_assert(condition, msg, prefix, suffix)
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  499  
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  500  /**
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  501   * compiletime_assert - break build and emit msg if condition is false
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  502   * @condition: a compile-time constant condition to check
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  503   * @msg:       a message to emit if condition is false
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  504   *
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  505   * In tradition of POSIX assert, this macro will break the build if the
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  506   * supplied condition is *false*, emitting the supplied error message if the
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  507   * compiler has support to do so.
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  508   */
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  509  #define compiletime_assert(condition, msg) \
-eb5c2d4b45e3d2 Will Deacon 2020-07-21 @510  	_compiletime_assert(condition, msg, __compiletime_assert_, __COUNTER__)
-eb5c2d4b45e3d2 Will Deacon 2020-07-21  511  
-
--- 
-0-DAY CI Kernel Test Service
-https://github.com/intel/lkp-tests/wiki
+>  		ret = -EAGAIN; /* XXX ? */
+>  		goto out;
+>  	}
+> -- 
+> 2.34.1
+> 
+> 
