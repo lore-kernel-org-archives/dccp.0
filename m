@@ -1,77 +1,99 @@
-Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
+Received: from eu-smtp-delivery-151.mimecast.com (eu-smtp-delivery-151.mimecast.com [185.58.85.151])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id CFB2A168489;
-	Wed, 28 Aug 2024 14:11:49 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 69E841B1405
+	for <dccp@vger.kernel.org>; Thu, 29 Aug 2024 16:54:02 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.58.85.151
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1724854309; cv=none; b=DauZpVdoY/nJdCvZFPLpVY5gMVikh2px7AQo7wzLceAB/qAhTzjgsh42t3w0LnWzQ03Cka0hxidQUOtEANfIeQWTRBOQF6Us6kloXr3Un8Aabzsp1UyMHyBAOdX73W1uJRr26ARL6qpNZ5Uez79gw5L/oGoF6pWaSB37QLyrcA8=
+	t=1724950444; cv=none; b=BfkuMhfc2J81SNXb5q79LSICI0pbnOZcETbbsS9h4MdbW6kjLeqlArwRYxiu/4pgBeMgU78MvCp2pBDv59vd+IQ/rUr9Cjc+eH8N1Q3sQJsEDoWqgrfQ96bm/IzZdGbWyLchU9wvdpeAxhSKpbgxVzAgRsP0jdKLjPmY4oXP478=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1724854309; c=relaxed/simple;
-	bh=/sGcY4F+aAJo3L951yH4iJQ++Orj4o/OLAtDeLIwZgg=;
-	h=Date:From:To:Cc:Subject:Message-ID:References:MIME-Version:
-	 Content-Type:Content-Disposition:In-Reply-To; b=UhPv5looch7VPd6LfPZJNeohB5ShwGG7s2jtcni5tP7WoCJb0a41vaDBh3sN066+rFsDHOo1Kg3/M6woba8WRpgTrI07vE4Y4rx+dfJhQzUTrsij6gUuB1zNyDpHQ8NFJCvwo9/+0acSw+R9dKZRUPfT1k2Z2vbgCqQbwV9D5g8=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=PqCUZIzO; arc=none smtp.client-ip=10.30.226.201
-Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="PqCUZIzO"
-Received: by smtp.kernel.org (Postfix) with ESMTPSA id 9A610C581B0;
-	Wed, 28 Aug 2024 14:11:46 +0000 (UTC)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
-	s=k20201202; t=1724854309;
-	bh=/sGcY4F+aAJo3L951yH4iJQ++Orj4o/OLAtDeLIwZgg=;
-	h=Date:From:To:Cc:Subject:References:In-Reply-To:From;
-	b=PqCUZIzOCoL3SQcVu19GpLLId3HHsOoowhIBCWnG8h2D06eGnbb0zZ8dgs+bzfZZz
-	 W30DNowL0l06EYFMPTO6e78G9469jVGi+zfnAynqQAiXKD87HYJz1KDF+JaAJChZLO
-	 N4AOssCQT83JWgPde7nZVvVq5EssKWWmuvcnUyC4iKJb/rlDs3PbzLbLj95RGS1Ddw
-	 XDguQOcDB1eeprOPpw7kj5zh5gOu35GpCPsPjP1bZm/7541BoQZQgirZscwPiPeHD8
-	 QsOcOVLYaBvBODlT7BLxJAkpdszxkqOLCpACrPv7EUx3k3RnAoybMKV0nGzdQo3QNy
-	 yo17f21Lwtc2w==
-Date: Wed, 28 Aug 2024 15:11:44 +0100
-From: Simon Horman <horms@kernel.org>
-To: Hongbo Li <lihongbo22@huawei.com>
-Cc: johannes@sipsolutions.net, davem@davemloft.net, edumazet@google.com,
-	kuba@kernel.org, pabeni@redhat.com, allison.henderson@oracle.com,
-	dsahern@kernel.org, pshelar@ovn.org, linux-wireless@vger.kernel.org,
-	netdev@vger.kernel.org, rds-devel@oss.oracle.com,
-	dccp@vger.kernel.org, dev@openvswitch.org,
-	linux-afs@lists.infradead.org
-Subject: Re: [PATCH net-next 8/8] net/ceph: Use min() to simplify the code
-Message-ID: <20240828141144.GG1368797@kernel.org>
-References: <20240824074033.2134514-1-lihongbo22@huawei.com>
- <20240824074033.2134514-9-lihongbo22@huawei.com>
+	s=arc-20240116; t=1724950444; c=relaxed/simple;
+	bh=UoLoOB2Y8L0wIdsTjatE6Mokw5WON2Nes+vsOhNrNI8=;
+	h=From:To:CC:Subject:Date:Message-ID:References:In-Reply-To:
+	 MIME-Version:Content-Type; b=cGC17jl8sJV5bMaen+ZZr18CtMA3Uaj+o4e5ngydsE4+qCEG9N5FRKy/s7cjcnqFV7ruGKW5fBjk2TuH1M6o1k10oI/+4lZHgTRJOd+wjOMxePhdHxajcv/zO1ipLGwd/bc+vEnajrsSno1rljmLcxyo0Icu9IpLgvvF8tEm1m4=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=ACULAB.COM; spf=pass smtp.mailfrom=aculab.com; arc=none smtp.client-ip=185.58.85.151
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=ACULAB.COM
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=aculab.com
+Received: from AcuMS.aculab.com (156.67.243.121 [156.67.243.121]) by
+ relay.mimecast.com with ESMTP with both STARTTLS and AUTH (version=TLSv1.2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384) id
+ uk-mta-61-FBG4t32LNkyHw8q_JE8r3A-1; Thu, 29 Aug 2024 17:47:25 +0100
+X-MC-Unique: FBG4t32LNkyHw8q_JE8r3A-1
+Received: from AcuMS.Aculab.com (10.202.163.6) by AcuMS.aculab.com
+ (10.202.163.6) with Microsoft SMTP Server (TLS) id 15.0.1497.48; Thu, 29 Aug
+ 2024 17:46:40 +0100
+Received: from AcuMS.Aculab.com ([::1]) by AcuMS.aculab.com ([::1]) with mapi
+ id 15.00.1497.048; Thu, 29 Aug 2024 17:46:40 +0100
+From: David Laight <David.Laight@ACULAB.COM>
+To: 'David Howells' <dhowells@redhat.com>, Hongbo Li <lihongbo22@huawei.com>
+CC: "johannes@sipsolutions.net" <johannes@sipsolutions.net>,
+	"davem@davemloft.net" <davem@davemloft.net>, "edumazet@google.com"
+	<edumazet@google.com>, "kuba@kernel.org" <kuba@kernel.org>,
+	"pabeni@redhat.com" <pabeni@redhat.com>, "allison.henderson@oracle.com"
+	<allison.henderson@oracle.com>, "dsahern@kernel.org" <dsahern@kernel.org>,
+	"pshelar@ovn.org" <pshelar@ovn.org>, "linux-wireless@vger.kernel.org"
+	<linux-wireless@vger.kernel.org>, "netdev@vger.kernel.org"
+	<netdev@vger.kernel.org>, "rds-devel@oss.oracle.com"
+	<rds-devel@oss.oracle.com>, "dccp@vger.kernel.org" <dccp@vger.kernel.org>,
+	"dev@openvswitch.org" <dev@openvswitch.org>, "linux-afs@lists.infradead.org"
+	<linux-afs@lists.infradead.org>
+Subject: RE: [PATCH net-next 7/8] net/rxrpc: Use min() to simplify the code
+Thread-Topic: [PATCH net-next 7/8] net/rxrpc: Use min() to simplify the code
+Thread-Index: AQHa+SLFq2P4KoingEmrGUtsMJSbQLI+cc1Q
+Date: Thu, 29 Aug 2024 16:46:40 +0000
+Message-ID: <bc839f1e4e3241bf8c0f3eb81f6c5b3f@AcuMS.aculab.com>
+References: <1b1ee6e6-ff2e-45d6-bfe2-1f8efaba7b38@huawei.com>
+ <20240824074033.2134514-8-lihongbo22@huawei.com>
+ <20240824074033.2134514-1-lihongbo22@huawei.com>
+ <563923.1724501215@warthog.procyon.org.uk>
+ <948381.1724833077@warthog.procyon.org.uk>
+In-Reply-To: <948381.1724833077@warthog.procyon.org.uk>
+Accept-Language: en-GB, en-US
+X-MS-Has-Attach: 
+X-MS-TNEF-Correlator: 
+x-ms-exchange-transport-fromentityheader: Hosted
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset=us-ascii
-Content-Disposition: inline
-In-Reply-To: <20240824074033.2134514-9-lihongbo22@huawei.com>
+X-Mimecast-Spam-Score: 0
+X-Mimecast-Originator: aculab.com
+Content-Language: en-US
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
 
-On Sat, Aug 24, 2024 at 03:40:33PM +0800, Hongbo Li wrote:
-> Let's use min() to simplify the code and fix the
-> Coccinelle/coccicheck warning reported by minmax.cocci.
-> 
-> Signed-off-by: Hongbo Li <lihongbo22@huawei.com>
-> ---
->  net/ceph/osd_client.c | 2 +-
->  1 file changed, 1 insertion(+), 1 deletion(-)
-> 
-> diff --git a/net/ceph/osd_client.c b/net/ceph/osd_client.c
-> index 9d078b37fe0b..450eb3be48b0 100644
-> --- a/net/ceph/osd_client.c
-> +++ b/net/ceph/osd_client.c
-> @@ -3058,7 +3058,7 @@ static void linger_reg_commit_complete(struct ceph_osd_linger_request *lreq,
->  				       int result)
->  {
->  	if (!completion_done(&lreq->reg_commit_wait)) {
-> -		lreq->reg_commit_error = (result <= 0 ? result : 0);
-> +		lreq->reg_commit_error = min(result, 0);
->  		complete_all(&lreq->reg_commit_wait);
->  	}
->  }
+From: David Howells <dhowells@redhat.com>
+> Sent: 28 August 2024 09:18
+>=20
+> Hongbo Li <lihongbo22@huawei.com> wrote:
+>=20
+> > I see reason is u8, so may I use min_t(u8, sp->ack.reason,
+> > RXRPC_ACK__INVALID)?
+>=20
+> No, please don't use min_t(<unsigned type>, ...) if umin() will do.  IIRC=
+,
+> some arches can't do byte-level arithmetic.
 
-As per my comment on 2/8 [*], I think it would be best to drop this patch.
+Not to mention all the places where the wrong type has been used and
+significant bits masked off before the comparison.
 
-[*] https://lore.kernel.org/all/20240828135310.GC1368797@kernel.org/
+Is there even a problem with min() here?
+It should be fine unless sp->ack.reason is a signed type.
+In which case things are probably horribly wrong if it is negative.
+
+Looking at the code I'm not even sure that min() is right.
+It really ought to be used for counters/sizes.
+This is a bit like the (broken) suggestion of replacing:
+=09return rval < 0 ? rval : 0;
+with
+=09return min(rval, 0);
+
+=09David
+
+-
+Registered Address Lakeside, Bramley Road, Mount Farm, Milton Keynes, MK1 1=
+PT, UK
+Registration No: 1397386 (Wales)
+
