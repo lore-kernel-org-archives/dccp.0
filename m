@@ -1,35 +1,35 @@
-Received: from eu-smtp-delivery-151.mimecast.com (eu-smtp-delivery-151.mimecast.com [185.58.85.151])
+Received: from eu-smtp-delivery-151.mimecast.com (eu-smtp-delivery-151.mimecast.com [185.58.86.151])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 69E841B1405
-	for <dccp@vger.kernel.org>; Thu, 29 Aug 2024 16:54:02 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.58.85.151
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 6B5A41662EF
+	for <dccp@vger.kernel.org>; Fri, 30 Aug 2024 08:41:05 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.58.86.151
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1724950444; cv=none; b=BfkuMhfc2J81SNXb5q79LSICI0pbnOZcETbbsS9h4MdbW6kjLeqlArwRYxiu/4pgBeMgU78MvCp2pBDv59vd+IQ/rUr9Cjc+eH8N1Q3sQJsEDoWqgrfQ96bm/IzZdGbWyLchU9wvdpeAxhSKpbgxVzAgRsP0jdKLjPmY4oXP478=
+	t=1725007269; cv=none; b=Q2Fp+obD5EYZHQPgTBO4hkfI+H34eJd0m85qsCQYzfpfzu7SN9LcdMtPi+gGl8pqyOHaKO6Kx5pIHMEPxYQUYCtiRuv/J81pKr6YEfnw4gqQ24ynxc6ZFzP52Zth/oazLm2GJWXq8k41IY2wBGSqgaFZ9mhhL0t0S1xf1IVAzVY=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1724950444; c=relaxed/simple;
-	bh=UoLoOB2Y8L0wIdsTjatE6Mokw5WON2Nes+vsOhNrNI8=;
+	s=arc-20240116; t=1725007269; c=relaxed/simple;
+	bh=HTOPegl0EeIquq29FJ7vT80LYTabFugNAxkzP+x/yLY=;
 	h=From:To:CC:Subject:Date:Message-ID:References:In-Reply-To:
-	 MIME-Version:Content-Type; b=cGC17jl8sJV5bMaen+ZZr18CtMA3Uaj+o4e5ngydsE4+qCEG9N5FRKy/s7cjcnqFV7ruGKW5fBjk2TuH1M6o1k10oI/+4lZHgTRJOd+wjOMxePhdHxajcv/zO1ipLGwd/bc+vEnajrsSno1rljmLcxyo0Icu9IpLgvvF8tEm1m4=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=ACULAB.COM; spf=pass smtp.mailfrom=aculab.com; arc=none smtp.client-ip=185.58.85.151
+	 MIME-Version:Content-Type; b=qwRYs722P8U1dwgYJefYjiuwcBb3geQBaoG1bSaL7yZLbjlE/t1NNZ046aujJI/WoH7Jw64SvJ1lfrcuVvvv+WnzWuyZo8rOFhZ3XqKVeG0bAazNwvAdvUBbLh5lv0w2fDf0Av1rKVReNlpiZ/K7/yGXIeRjGrUxasCkusPcISI=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=ACULAB.COM; spf=pass smtp.mailfrom=aculab.com; arc=none smtp.client-ip=185.58.86.151
 Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=ACULAB.COM
 Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=aculab.com
 Received: from AcuMS.aculab.com (156.67.243.121 [156.67.243.121]) by
  relay.mimecast.com with ESMTP with both STARTTLS and AUTH (version=TLSv1.2,
  cipher=TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384) id
- uk-mta-61-FBG4t32LNkyHw8q_JE8r3A-1; Thu, 29 Aug 2024 17:47:25 +0100
-X-MC-Unique: FBG4t32LNkyHw8q_JE8r3A-1
+ uk-mta-41-mtZATFM0MOGVZZXXHVDNWw-1; Fri, 30 Aug 2024 09:41:02 +0100
+X-MC-Unique: mtZATFM0MOGVZZXXHVDNWw-1
 Received: from AcuMS.Aculab.com (10.202.163.6) by AcuMS.aculab.com
- (10.202.163.6) with Microsoft SMTP Server (TLS) id 15.0.1497.48; Thu, 29 Aug
- 2024 17:46:40 +0100
+ (10.202.163.6) with Microsoft SMTP Server (TLS) id 15.0.1497.48; Fri, 30 Aug
+ 2024 09:40:18 +0100
 Received: from AcuMS.Aculab.com ([::1]) by AcuMS.aculab.com ([::1]) with mapi
- id 15.00.1497.048; Thu, 29 Aug 2024 17:46:40 +0100
+ id 15.00.1497.048; Fri, 30 Aug 2024 09:40:18 +0100
 From: David Laight <David.Laight@ACULAB.COM>
-To: 'David Howells' <dhowells@redhat.com>, Hongbo Li <lihongbo22@huawei.com>
-CC: "johannes@sipsolutions.net" <johannes@sipsolutions.net>,
-	"davem@davemloft.net" <davem@davemloft.net>, "edumazet@google.com"
-	<edumazet@google.com>, "kuba@kernel.org" <kuba@kernel.org>,
-	"pabeni@redhat.com" <pabeni@redhat.com>, "allison.henderson@oracle.com"
+To: 'Jakub Kicinski' <kuba@kernel.org>, Kalle Valo <kvalo@kernel.org>
+CC: Hongbo Li <lihongbo22@huawei.com>, "johannes@sipsolutions.net"
+	<johannes@sipsolutions.net>, "davem@davemloft.net" <davem@davemloft.net>,
+	"edumazet@google.com" <edumazet@google.com>, "pabeni@redhat.com"
+	<pabeni@redhat.com>, "allison.henderson@oracle.com"
 	<allison.henderson@oracle.com>, "dsahern@kernel.org" <dsahern@kernel.org>,
 	"pshelar@ovn.org" <pshelar@ovn.org>, "linux-wireless@vger.kernel.org"
 	<linux-wireless@vger.kernel.org>, "netdev@vger.kernel.org"
@@ -37,17 +37,16 @@ CC: "johannes@sipsolutions.net" <johannes@sipsolutions.net>,
 	<rds-devel@oss.oracle.com>, "dccp@vger.kernel.org" <dccp@vger.kernel.org>,
 	"dev@openvswitch.org" <dev@openvswitch.org>, "linux-afs@lists.infradead.org"
 	<linux-afs@lists.infradead.org>
-Subject: RE: [PATCH net-next 7/8] net/rxrpc: Use min() to simplify the code
-Thread-Topic: [PATCH net-next 7/8] net/rxrpc: Use min() to simplify the code
-Thread-Index: AQHa+SLFq2P4KoingEmrGUtsMJSbQLI+cc1Q
-Date: Thu, 29 Aug 2024 16:46:40 +0000
-Message-ID: <bc839f1e4e3241bf8c0f3eb81f6c5b3f@AcuMS.aculab.com>
-References: <1b1ee6e6-ff2e-45d6-bfe2-1f8efaba7b38@huawei.com>
- <20240824074033.2134514-8-lihongbo22@huawei.com>
- <20240824074033.2134514-1-lihongbo22@huawei.com>
- <563923.1724501215@warthog.procyon.org.uk>
- <948381.1724833077@warthog.procyon.org.uk>
-In-Reply-To: <948381.1724833077@warthog.procyon.org.uk>
+Subject: RE: [PATCH net-next 0/8] Use max/min to simplify the code
+Thread-Topic: [PATCH net-next 0/8] Use max/min to simplify the code
+Thread-Index: AQHa+Ine9Uj88qKbsUSQ6aPvxEhV6bI/frIw
+Date: Fri, 30 Aug 2024 08:40:18 +0000
+Message-ID: <bfb315c60376419ea2ea90df7e7ae2dc@AcuMS.aculab.com>
+References: <20240824074033.2134514-1-lihongbo22@huawei.com>
+	<20240826144404.03fce39c@kernel.org>
+	<4a92bb68-7fe7-4bf2-885f-e07b06ea82aa@huawei.com>	<878qwifub5.fsf@kernel.org>
+ <20240827070347.4bf3a284@kernel.org>
+In-Reply-To: <20240827070347.4bf3a284@kernel.org>
 Accept-Language: en-GB, en-US
 X-MS-Has-Attach: 
 X-MS-TNEF-Correlator: 
@@ -62,38 +61,31 @@ X-Mimecast-Spam-Score: 0
 X-Mimecast-Originator: aculab.com
 Content-Language: en-US
 Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: quoted-printable
+Content-Transfer-Encoding: base64
 
-From: David Howells <dhowells@redhat.com>
-> Sent: 28 August 2024 09:18
->=20
-> Hongbo Li <lihongbo22@huawei.com> wrote:
->=20
-> > I see reason is u8, so may I use min_t(u8, sp->ack.reason,
-> > RXRPC_ACK__INVALID)?
->=20
-> No, please don't use min_t(<unsigned type>, ...) if umin() will do.  IIRC=
-,
-> some arches can't do byte-level arithmetic.
-
-Not to mention all the places where the wrong type has been used and
-significant bits masked off before the comparison.
-
-Is there even a problem with min() here?
-It should be fine unless sp->ack.reason is a signed type.
-In which case things are probably horribly wrong if it is negative.
-
-Looking at the code I'm not even sure that min() is right.
-It really ought to be used for counters/sizes.
-This is a bit like the (broken) suggestion of replacing:
-=09return rval < 0 ? rval : 0;
-with
-=09return min(rval, 0);
-
-=09David
-
--
-Registered Address Lakeside, Bramley Road, Mount Farm, Milton Keynes, MK1 1=
-PT, UK
-Registration No: 1397386 (Wales)
+RnJvbTogSmFrdWIgS2ljaW5za2kNCj4gU2VudDogMjcgQXVndXN0IDIwMjQgMTU6MDQNCj4gDQo+
+IE9uIFR1ZSwgMjcgQXVnIDIwMjQgMDc6NDU6MDIgKzAzMDAgS2FsbGUgVmFsbyB3cm90ZToNCj4g
+PiA+IERvIHlvdSBtZWFuIHNvbWUgcGF0Y2hlcyB3aWxsIGdvIHRvIG90aGVyIGJyYW5jaGVzIChz
+dWNoIGFzIG1hYzgwMjExKT8NCj4gPg0KPiA+IEpha3ViIG1lYW5zIHRoYXQgeW91ciBwYXRjaHNl
+dCBoYWQgY29tcGlsYXRpb24gZXJyb3JzLCBzZWUgdGhlIHJlZCBvbg0KPiA+IHBhdGNod29yazoN
+Cj4gPg0KPiA+IGh0dHBzOi8vcGF0Y2h3b3JrLmtlcm5lbC5vcmcvcHJvamVjdC9uZXRkZXZicGYv
+bGlzdC8/c2VyaWVzPTg4MjkwMSZzdGF0ZT0qJm9yZGVyPWRhdGUNCj4gDQo+IEZXSVcgSSBwcmVm
+ZXIgbm90IHRvIHBvaW50IG5vb2JzIHRvIHRoZSBwYXRjaHdvcmsgY2hlY2tzLCBsZXN0IHRoZXkN
+Cj4gdGhpbmsgaXQncyBhIHB1YmxpYyBDSSBhbmQgdGhleSBjYW4gZmxpbmcgYnJva2VuIGNvZGUg
+YXQgdGhlIGxpc3QgOigNCj4gQnV0IHllcywgaW4gY2FzZSAiY29kZSBkb2Vzbid0IGJ1aWxkIiBu
+ZWVkcyBhIGZ1cnRoZXIgZXhwbGFuYXRpb246DQo+IA0KPiBuZXQvY29yZS9wa3RnZW4uYzogSW4g
+ZnVuY3Rpb24g4oCYcGt0Z2VuX2ZpbmFsaXplX3NrYuKAmToNCj4gLi8uLi9pbmNsdWRlL2xpbnV4
+L2NvbXBpbGVyX3R5cGVzLmg6NTEwOjQ1OiBlcnJvcjogY2FsbCB0byDigJhfX2NvbXBpbGV0aW1l
+X2Fzc2VydF85MjjigJkgZGVjbGFyZWQgd2l0aA0KPiBhdHRyaWJ1dGUgZXJyb3I6IG1pbihkYXRh
+bGVuL2ZyYWdzLCAoKDFVTCkgPDwgMTIpKSBzaWduZWRuZXNzIGVycm9yDQouLi4NCj4gLi4vbmV0
+L2NvcmUvcGt0Z2VuLmM6Mjc5NjoyODogbm90ZTogaW4gZXhwYW5zaW9uIG9mIG1hY3JvIOKAmG1p
+buKAmQ0KPiAgMjc5NiB8ICAgICAgICAgICAgICAgICBmcmFnX2xlbiA9IG1pbihkYXRhbGVuL2Zy
+YWdzLCBQQUdFX1NJWkUpOw0KPiAgICAgICB8ICAgICAgICAgICAgICAgICAgICAgICAgICAgIF5+
+fg0KDQpJIGNhbid0IGhlbHAgZmVlbGluZyB0aGF0IGEgc2lnbmVkIGRpdmlkZSBpc24ndCBpbnRl
+bmRlZCBoZXJlLg0KV2hpY2ggcmF0aGVyIGltcGxpZXMgdGhhdCBib3RoIGRhdGFsZW4gYW5kIGZy
+YWdzIGFyZSBzaWduZWQgdHlwZXMuDQpXaGVyZWFzIG5laXRoZXIgY2FuIGJlIHNlbnNpYmx5IG5l
+Z2F0aXZlLg0KUGVyaGFwcyB0aGF0IGlzIHRoZSByZWFsIGJ1Zz8NCg0KCURhdmlkDQoNCi0NClJl
+Z2lzdGVyZWQgQWRkcmVzcyBMYWtlc2lkZSwgQnJhbWxleSBSb2FkLCBNb3VudCBGYXJtLCBNaWx0
+b24gS2V5bmVzLCBNSzEgMVBULCBVSw0KUmVnaXN0cmF0aW9uIE5vOiAxMzk3Mzg2IChXYWxlcykN
+Cg==
 
