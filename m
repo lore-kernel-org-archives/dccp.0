@@ -1,91 +1,82 @@
-Received: from eu-smtp-delivery-151.mimecast.com (eu-smtp-delivery-151.mimecast.com [185.58.86.151])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+Received: from mail-il1-f200.google.com (mail-il1-f200.google.com [209.85.166.200])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 6B5A41662EF
-	for <dccp@vger.kernel.org>; Fri, 30 Aug 2024 08:41:05 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=185.58.86.151
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id ED8C52CA6
+	for <dccp@vger.kernel.org>; Sun, 15 Sep 2024 14:39:22 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.166.200
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1725007269; cv=none; b=Q2Fp+obD5EYZHQPgTBO4hkfI+H34eJd0m85qsCQYzfpfzu7SN9LcdMtPi+gGl8pqyOHaKO6Kx5pIHMEPxYQUYCtiRuv/J81pKr6YEfnw4gqQ24ynxc6ZFzP52Zth/oazLm2GJWXq8k41IY2wBGSqgaFZ9mhhL0t0S1xf1IVAzVY=
+	t=1726411164; cv=none; b=eezhdNPfXQeYih2eQQK2F0XgvT/W+DbEVCdMuWxVNgkQDM4Ufw0mKkh7+15OFGQrZHdiSMNno5YBV4mJhDHyE2E1QRgHGoax4nDafe4IL+bGoqFxbUi5A2wlXGDpF2eltYLFlDnuksv9szEaiAZJAV+zcaw/wY/gjqJJVGUZJrc=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1725007269; c=relaxed/simple;
-	bh=HTOPegl0EeIquq29FJ7vT80LYTabFugNAxkzP+x/yLY=;
-	h=From:To:CC:Subject:Date:Message-ID:References:In-Reply-To:
-	 MIME-Version:Content-Type; b=qwRYs722P8U1dwgYJefYjiuwcBb3geQBaoG1bSaL7yZLbjlE/t1NNZ046aujJI/WoH7Jw64SvJ1lfrcuVvvv+WnzWuyZo8rOFhZ3XqKVeG0bAazNwvAdvUBbLh5lv0w2fDf0Av1rKVReNlpiZ/K7/yGXIeRjGrUxasCkusPcISI=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=ACULAB.COM; spf=pass smtp.mailfrom=aculab.com; arc=none smtp.client-ip=185.58.86.151
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=ACULAB.COM
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=aculab.com
-Received: from AcuMS.aculab.com (156.67.243.121 [156.67.243.121]) by
- relay.mimecast.com with ESMTP with both STARTTLS and AUTH (version=TLSv1.2,
- cipher=TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384) id
- uk-mta-41-mtZATFM0MOGVZZXXHVDNWw-1; Fri, 30 Aug 2024 09:41:02 +0100
-X-MC-Unique: mtZATFM0MOGVZZXXHVDNWw-1
-Received: from AcuMS.Aculab.com (10.202.163.6) by AcuMS.aculab.com
- (10.202.163.6) with Microsoft SMTP Server (TLS) id 15.0.1497.48; Fri, 30 Aug
- 2024 09:40:18 +0100
-Received: from AcuMS.Aculab.com ([::1]) by AcuMS.aculab.com ([::1]) with mapi
- id 15.00.1497.048; Fri, 30 Aug 2024 09:40:18 +0100
-From: David Laight <David.Laight@ACULAB.COM>
-To: 'Jakub Kicinski' <kuba@kernel.org>, Kalle Valo <kvalo@kernel.org>
-CC: Hongbo Li <lihongbo22@huawei.com>, "johannes@sipsolutions.net"
-	<johannes@sipsolutions.net>, "davem@davemloft.net" <davem@davemloft.net>,
-	"edumazet@google.com" <edumazet@google.com>, "pabeni@redhat.com"
-	<pabeni@redhat.com>, "allison.henderson@oracle.com"
-	<allison.henderson@oracle.com>, "dsahern@kernel.org" <dsahern@kernel.org>,
-	"pshelar@ovn.org" <pshelar@ovn.org>, "linux-wireless@vger.kernel.org"
-	<linux-wireless@vger.kernel.org>, "netdev@vger.kernel.org"
-	<netdev@vger.kernel.org>, "rds-devel@oss.oracle.com"
-	<rds-devel@oss.oracle.com>, "dccp@vger.kernel.org" <dccp@vger.kernel.org>,
-	"dev@openvswitch.org" <dev@openvswitch.org>, "linux-afs@lists.infradead.org"
-	<linux-afs@lists.infradead.org>
-Subject: RE: [PATCH net-next 0/8] Use max/min to simplify the code
-Thread-Topic: [PATCH net-next 0/8] Use max/min to simplify the code
-Thread-Index: AQHa+Ine9Uj88qKbsUSQ6aPvxEhV6bI/frIw
-Date: Fri, 30 Aug 2024 08:40:18 +0000
-Message-ID: <bfb315c60376419ea2ea90df7e7ae2dc@AcuMS.aculab.com>
-References: <20240824074033.2134514-1-lihongbo22@huawei.com>
-	<20240826144404.03fce39c@kernel.org>
-	<4a92bb68-7fe7-4bf2-885f-e07b06ea82aa@huawei.com>	<878qwifub5.fsf@kernel.org>
- <20240827070347.4bf3a284@kernel.org>
-In-Reply-To: <20240827070347.4bf3a284@kernel.org>
-Accept-Language: en-GB, en-US
-X-MS-Has-Attach: 
-X-MS-TNEF-Correlator: 
-x-ms-exchange-transport-fromentityheader: Hosted
+	s=arc-20240116; t=1726411164; c=relaxed/simple;
+	bh=sP4jgrmmfEBdugsBMtTm54HDqgh+RebnBva5M7bLO8k=;
+	h=MIME-Version:Date:Message-ID:Subject:From:To:Content-Type; b=PmmqAYncISh8QhfUEiSJf0pDoflG+wx1H9Aa0yaz+KlaYhjNo+bcpeE9oIViquKqa68+uCkbWGqpSq9fS1Fqg6UdafLD2l8ehmGuUThG8kNfKI768Rz1ygDkwYo24GOgnW7vX+tLVDTiDwtkwKhwfUCfe900uCUqK8KQO3jacd0=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com; arc=none smtp.client-ip=209.85.166.200
+Authentication-Results: smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com
+Received: by mail-il1-f200.google.com with SMTP id e9e14a558f8ab-3a04c2472f6so63255575ab.0
+        for <dccp@vger.kernel.org>; Sun, 15 Sep 2024 07:39:22 -0700 (PDT)
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1726411162; x=1727015962;
+        h=to:from:subject:message-id:date:mime-version:x-gm-message-state
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=pRoQrrO88SaCzlahLfAtzhw8yyIVL+w80a86nD+hlh4=;
+        b=UN8QTiJU9eFBlV+WHoiKHtXGSYCFQ6eMz24+56JP46XnGHbqYY/kT0Sid6xUoZEav2
+         2E2IfEzs9ayFQvf23MlGgfCte9iugp+km1dvcz3+3uJGsyNbgjiTkYSiuMU706iud3ZW
+         TZ9C0saMonS7my9hJMhPi5dYxv9YUEgn+ESeV5qqqShdcRDUoDAOBYat50s/OizSUjs/
+         maC+no8qNA8XcckXAzxb00lqhOC8q5Zt1jCR6XCvfOlGr4rxTfWV/FlzkZsP0Fgafwg4
+         ZKSikoxVBQdpA2b/JHa1gvhDqnJkgh3LMQvfIvZr52W6KT2o53ttNqpFP+lxP7dNdovw
+         4hgg==
+X-Gm-Message-State: AOJu0YxreT3pGl4fpG1TjPTvt0WtennU52vAYpiTE+i4ckdySvsV2+CS
+	mkZe4wrrLSvl58AKZ6JcCgIs3kiCQtz8FoziQgnl7cB44Y/zAONVwYJa3Njchu1T5cNmMJRHqXc
+	rhCaJNQLmhqE8KK9Pb+kcHRZDFcd5jUpPP2tc9Bw8khgG2k8qRYtkI9E=
+X-Google-Smtp-Source: AGHT+IGmQKXv+bq140njVGpBEWOL2SN219VKri4+PIWgXDGb33Z1C7b6Xke3DzLHhzJod9BEerJISpoK8t5gpvnkw8OmJ2ay6r5n
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-X-Mimecast-Spam-Score: 0
-X-Mimecast-Originator: aculab.com
-Content-Language: en-US
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: base64
+X-Received: by 2002:a05:6e02:1543:b0:3a0:4a91:224f with SMTP id
+ e9e14a558f8ab-3a08b6f87edmr83293015ab.1.1726411162152; Sun, 15 Sep 2024
+ 07:39:22 -0700 (PDT)
+Date: Sun, 15 Sep 2024 07:39:22 -0700
+X-Google-Appengine-App-Id: s~syzkaller
+X-Google-Appengine-App-Id-Alias: syzkaller
+Message-ID: <0000000000000e9a0e0622296c4c@google.com>
+Subject: [syzbot] Monthly dccp report (Sep 2024)
+From: syzbot <syzbot+list8e7646c17f00ffb612e5@syzkaller.appspotmail.com>
+To: dccp@vger.kernel.org, linux-kernel@vger.kernel.org, netdev@vger.kernel.org, 
+	syzkaller-bugs@googlegroups.com
+Content-Type: text/plain; charset="UTF-8"
 
-RnJvbTogSmFrdWIgS2ljaW5za2kNCj4gU2VudDogMjcgQXVndXN0IDIwMjQgMTU6MDQNCj4gDQo+
-IE9uIFR1ZSwgMjcgQXVnIDIwMjQgMDc6NDU6MDIgKzAzMDAgS2FsbGUgVmFsbyB3cm90ZToNCj4g
-PiA+IERvIHlvdSBtZWFuIHNvbWUgcGF0Y2hlcyB3aWxsIGdvIHRvIG90aGVyIGJyYW5jaGVzIChz
-dWNoIGFzIG1hYzgwMjExKT8NCj4gPg0KPiA+IEpha3ViIG1lYW5zIHRoYXQgeW91ciBwYXRjaHNl
-dCBoYWQgY29tcGlsYXRpb24gZXJyb3JzLCBzZWUgdGhlIHJlZCBvbg0KPiA+IHBhdGNod29yazoN
-Cj4gPg0KPiA+IGh0dHBzOi8vcGF0Y2h3b3JrLmtlcm5lbC5vcmcvcHJvamVjdC9uZXRkZXZicGYv
-bGlzdC8/c2VyaWVzPTg4MjkwMSZzdGF0ZT0qJm9yZGVyPWRhdGUNCj4gDQo+IEZXSVcgSSBwcmVm
-ZXIgbm90IHRvIHBvaW50IG5vb2JzIHRvIHRoZSBwYXRjaHdvcmsgY2hlY2tzLCBsZXN0IHRoZXkN
-Cj4gdGhpbmsgaXQncyBhIHB1YmxpYyBDSSBhbmQgdGhleSBjYW4gZmxpbmcgYnJva2VuIGNvZGUg
-YXQgdGhlIGxpc3QgOigNCj4gQnV0IHllcywgaW4gY2FzZSAiY29kZSBkb2Vzbid0IGJ1aWxkIiBu
-ZWVkcyBhIGZ1cnRoZXIgZXhwbGFuYXRpb246DQo+IA0KPiBuZXQvY29yZS9wa3RnZW4uYzogSW4g
-ZnVuY3Rpb24g4oCYcGt0Z2VuX2ZpbmFsaXplX3NrYuKAmToNCj4gLi8uLi9pbmNsdWRlL2xpbnV4
-L2NvbXBpbGVyX3R5cGVzLmg6NTEwOjQ1OiBlcnJvcjogY2FsbCB0byDigJhfX2NvbXBpbGV0aW1l
-X2Fzc2VydF85MjjigJkgZGVjbGFyZWQgd2l0aA0KPiBhdHRyaWJ1dGUgZXJyb3I6IG1pbihkYXRh
-bGVuL2ZyYWdzLCAoKDFVTCkgPDwgMTIpKSBzaWduZWRuZXNzIGVycm9yDQouLi4NCj4gLi4vbmV0
-L2NvcmUvcGt0Z2VuLmM6Mjc5NjoyODogbm90ZTogaW4gZXhwYW5zaW9uIG9mIG1hY3JvIOKAmG1p
-buKAmQ0KPiAgMjc5NiB8ICAgICAgICAgICAgICAgICBmcmFnX2xlbiA9IG1pbihkYXRhbGVuL2Zy
-YWdzLCBQQUdFX1NJWkUpOw0KPiAgICAgICB8ICAgICAgICAgICAgICAgICAgICAgICAgICAgIF5+
-fg0KDQpJIGNhbid0IGhlbHAgZmVlbGluZyB0aGF0IGEgc2lnbmVkIGRpdmlkZSBpc24ndCBpbnRl
-bmRlZCBoZXJlLg0KV2hpY2ggcmF0aGVyIGltcGxpZXMgdGhhdCBib3RoIGRhdGFsZW4gYW5kIGZy
-YWdzIGFyZSBzaWduZWQgdHlwZXMuDQpXaGVyZWFzIG5laXRoZXIgY2FuIGJlIHNlbnNpYmx5IG5l
-Z2F0aXZlLg0KUGVyaGFwcyB0aGF0IGlzIHRoZSByZWFsIGJ1Zz8NCg0KCURhdmlkDQoNCi0NClJl
-Z2lzdGVyZWQgQWRkcmVzcyBMYWtlc2lkZSwgQnJhbWxleSBSb2FkLCBNb3VudCBGYXJtLCBNaWx0
-b24gS2V5bmVzLCBNSzEgMVBULCBVSw0KUmVnaXN0cmF0aW9uIE5vOiAxMzk3Mzg2IChXYWxlcykN
-Cg==
+Hello dccp maintainers/developers,
 
+This is a 31-day syzbot report for the dccp subsystem.
+All related reports/information can be found at:
+https://syzkaller.appspot.com/upstream/s/dccp
+
+During the period, 0 new issues were detected and 0 were fixed.
+In total, 4 issues are still open and 7 have been fixed so far.
+
+Some of the still happening issues:
+
+Ref Crashes Repro Title
+<1> 107     Yes   KASAN: use-after-free Read in ccid2_hc_tx_packet_recv
+                  https://syzkaller.appspot.com/bug?extid=554ccde221001ab5479a
+<2> 57      Yes   BUG: "hc->tx_t_ipi == NUM" holds (exception!) at net/dccp/ccids/ccid3.c:LINE/ccid3_update_send_interval()
+                  https://syzkaller.appspot.com/bug?extid=94641ba6c1d768b1e35e
+<3> 17      Yes   BUG: stored value of X_recv is zero at net/dccp/ccids/ccid3.c:LINE/ccid3_first_li() (3)
+                  https://syzkaller.appspot.com/bug?extid=2ad8ef335371014d4dc7
+
+---
+This report is generated by a bot. It may contain errors.
+See https://goo.gl/tpsmEJ for more information about syzbot.
+syzbot engineers can be reached at syzkaller@googlegroups.com.
+
+To disable reminders for individual bugs, reply with the following command:
+#syz set <Ref> no-reminders
+
+To change bug's subsystems, reply with:
+#syz set <Ref> subsystems: new-subsystem
+
+You may send multiple commands in a single email message.
