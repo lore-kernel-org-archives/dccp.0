@@ -1,82 +1,216 @@
-Received: from mail-il1-f200.google.com (mail-il1-f200.google.com [209.85.166.200])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
+Received: from mail2-relais-roc.national.inria.fr (mail2-relais-roc.national.inria.fr [192.134.164.83])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id ED8C52CA6
-	for <dccp@vger.kernel.org>; Sun, 15 Sep 2024 14:39:22 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.166.200
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id BBDA318A926;
+	Mon, 30 Sep 2024 11:21:38 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=192.134.164.83
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1726411164; cv=none; b=eezhdNPfXQeYih2eQQK2F0XgvT/W+DbEVCdMuWxVNgkQDM4Ufw0mKkh7+15OFGQrZHdiSMNno5YBV4mJhDHyE2E1QRgHGoax4nDafe4IL+bGoqFxbUi5A2wlXGDpF2eltYLFlDnuksv9szEaiAZJAV+zcaw/wY/gjqJJVGUZJrc=
+	t=1727695303; cv=none; b=kSu9CAI+ScKlSUuIn1DvxRezgW6Y1TL9l4xF8GDjp9vu6aekQokRutr1paDy+SSwl0Zt1Ij1nvGrtl0GuDdlHUG2ufp2AEf2RT9+UeA40j1OliYcgIvZSIcpLVaId+iWTSaM1TDXZVniSJ9Xg9cS/8TRwyKQrx4rGkApmpc/E9A=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1726411164; c=relaxed/simple;
-	bh=sP4jgrmmfEBdugsBMtTm54HDqgh+RebnBva5M7bLO8k=;
-	h=MIME-Version:Date:Message-ID:Subject:From:To:Content-Type; b=PmmqAYncISh8QhfUEiSJf0pDoflG+wx1H9Aa0yaz+KlaYhjNo+bcpeE9oIViquKqa68+uCkbWGqpSq9fS1Fqg6UdafLD2l8ehmGuUThG8kNfKI768Rz1ygDkwYo24GOgnW7vX+tLVDTiDwtkwKhwfUCfe900uCUqK8KQO3jacd0=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com; arc=none smtp.client-ip=209.85.166.200
-Authentication-Results: smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=syzkaller.appspotmail.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=M3KW2WVRGUFZ5GODRSRYTGD7.apphosting.bounces.google.com
-Received: by mail-il1-f200.google.com with SMTP id e9e14a558f8ab-3a04c2472f6so63255575ab.0
-        for <dccp@vger.kernel.org>; Sun, 15 Sep 2024 07:39:22 -0700 (PDT)
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1726411162; x=1727015962;
-        h=to:from:subject:message-id:date:mime-version:x-gm-message-state
-         :from:to:cc:subject:date:message-id:reply-to;
-        bh=pRoQrrO88SaCzlahLfAtzhw8yyIVL+w80a86nD+hlh4=;
-        b=UN8QTiJU9eFBlV+WHoiKHtXGSYCFQ6eMz24+56JP46XnGHbqYY/kT0Sid6xUoZEav2
-         2E2IfEzs9ayFQvf23MlGgfCte9iugp+km1dvcz3+3uJGsyNbgjiTkYSiuMU706iud3ZW
-         TZ9C0saMonS7my9hJMhPi5dYxv9YUEgn+ESeV5qqqShdcRDUoDAOBYat50s/OizSUjs/
-         maC+no8qNA8XcckXAzxb00lqhOC8q5Zt1jCR6XCvfOlGr4rxTfWV/FlzkZsP0Fgafwg4
-         ZKSikoxVBQdpA2b/JHa1gvhDqnJkgh3LMQvfIvZr52W6KT2o53ttNqpFP+lxP7dNdovw
-         4hgg==
-X-Gm-Message-State: AOJu0YxreT3pGl4fpG1TjPTvt0WtennU52vAYpiTE+i4ckdySvsV2+CS
-	mkZe4wrrLSvl58AKZ6JcCgIs3kiCQtz8FoziQgnl7cB44Y/zAONVwYJa3Njchu1T5cNmMJRHqXc
-	rhCaJNQLmhqE8KK9Pb+kcHRZDFcd5jUpPP2tc9Bw8khgG2k8qRYtkI9E=
-X-Google-Smtp-Source: AGHT+IGmQKXv+bq140njVGpBEWOL2SN219VKri4+PIWgXDGb33Z1C7b6Xke3DzLHhzJod9BEerJISpoK8t5gpvnkw8OmJ2ay6r5n
+	s=arc-20240116; t=1727695303; c=relaxed/simple;
+	bh=rgAYbIHR+nhPtrrRBq3CzRqixIFEvPXFZ9pgtqmmkAg=;
+	h=From:To:Cc:Subject:Date:Message-Id:MIME-Version; b=ROhyPYffgSwvQDgDORnIJTC12zIIBI+gCs6Lda8MKoiXmcZCBwdVBaIBEgM5/FGpV/xs89ge33ssn193gCriXY0rnogV90f7RvCAsUd5JXLv+SKKjWkYfOEC868WRKD9RTHXo0qtfvTCc0mcwD0NjReJhZfv0PX7ezy8d7bJX6A=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=inria.fr; spf=pass smtp.mailfrom=inria.fr; dkim=pass (1024-bit key) header.d=inria.fr header.i=@inria.fr header.b=N5Crvn6K; arc=none smtp.client-ip=192.134.164.83
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=inria.fr
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=inria.fr
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (1024-bit key) header.d=inria.fr header.i=@inria.fr header.b="N5Crvn6K"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+  d=inria.fr; s=dc;
+  h=from:to:cc:subject:date:message-id:mime-version:
+   content-transfer-encoding;
+  bh=9JFHu5GN4m1ZIa7hFOr/S0cR7gAkAibwxtDh3yT9bKQ=;
+  b=N5Crvn6Kq6KpHSPNN73aCiDy+RvsqlM0pHtSseTwUaXi/R+AUcNhRU/s
+   cjlHPMFgIZOJllRTItDSSyRCzG1SoWucsK69kp3cC+hyWG6w77VR7U5lk
+   50vSZgwZFWWTGfQ7neSTgSg1frKowyQAjCduh7p7sY9rw2OBXSFMSw4B2
+   4=;
+Authentication-Results: mail2-relais-roc.national.inria.fr; dkim=none (message not signed) header.i=none; spf=SoftFail smtp.mailfrom=Julia.Lawall@inria.fr; dmarc=fail (p=none dis=none) d=inria.fr
+X-IronPort-AV: E=Sophos;i="6.11,165,1725314400"; 
+   d="scan'208";a="185956867"
+Received: from i80.paris.inria.fr (HELO i80.paris.inria.fr.) ([128.93.90.48])
+  by mail2-relais-roc.national.inria.fr with ESMTP/TLS/ECDHE-RSA-AES256-GCM-SHA384; 30 Sep 2024 13:21:25 +0200
+From: Julia Lawall <Julia.Lawall@inria.fr>
+To: linux-gpio@vger.kernel.org
+Cc: kernel-janitors@vger.kernel.org,
+	audit@vger.kernel.org,
+	linux-mtd@lists.infradead.org,
+	Zhihao Cheng <chengzhihao1@huawei.com>,
+	"Rafael J. Wysocki" <rafael@kernel.org>,
+	linux-arm-msm@vger.kernel.org,
+	linux-pci@vger.kernel.org,
+	dri-devel@lists.freedesktop.org,
+	linux-usb@vger.kernel.org,
+	linux-mm@kvack.org,
+	maple-tree@lists.infradead.org,
+	alsa-devel@alsa-project.org,
+	Sanyog Kale <sanyog.r.kale@intel.com>,
+	Pierre-Louis Bossart <pierre-louis.bossart@linux.dev>,
+	dccp@vger.kernel.org,
+	linux-fsdevel@vger.kernel.org,
+	Jan Kara <jack@suse.cz>,
+	drbd-dev@lists.linbit.com,
+	linux-sound@vger.kernel.org,
+	linux-kernel@vger.kernel.org,
+	linux-omap@vger.kernel.org,
+	linux-arm-kernel@lists.infradead.org,
+	netdev@vger.kernel.org,
+	nvdimm@lists.linux.dev,
+	linux-leds@vger.kernel.org,
+	Nicholas Piggin <npiggin@gmail.com>,
+	Christophe Leroy <christophe.leroy@csgroup.eu>,
+	Naveen N Rao <naveen@kernel.org>,
+	Madhavan Srinivasan <maddy@linux.ibm.com>,
+	linuxppc-dev@lists.ozlabs.org,
+	tipc-discussion@lists.sourceforge.net,
+	Robin Murphy <robin.murphy@arm.com>,
+	iommu@lists.linux.dev,
+	Mathieu Desnoyers <mathieu.desnoyers@efficios.com>,
+	linux-trace-kernel@vger.kernel.org,
+	Neil Brown <neilb@suse.de>,
+	Olga Kornievskaia <okorniev@redhat.com>,
+	Dai Ngo <Dai.Ngo@oracle.com>,
+	Tom Talpey <tom@talpey.com>,
+	linux-nfs@vger.kernel.org,
+	amd-gfx@lists.freedesktop.org,
+	linux-wireless@vger.kernel.org,
+	intel-wired-lan@lists.osuosl.org
+Subject: [PATCH 00/35] Reorganize kerneldoc parameter names
+Date: Mon, 30 Sep 2024 13:20:46 +0200
+Message-Id: <20240930112121.95324-1-Julia.Lawall@inria.fr>
+X-Mailer: git-send-email 2.20.1
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-X-Received: by 2002:a05:6e02:1543:b0:3a0:4a91:224f with SMTP id
- e9e14a558f8ab-3a08b6f87edmr83293015ab.1.1726411162152; Sun, 15 Sep 2024
- 07:39:22 -0700 (PDT)
-Date: Sun, 15 Sep 2024 07:39:22 -0700
-X-Google-Appengine-App-Id: s~syzkaller
-X-Google-Appengine-App-Id-Alias: syzkaller
-Message-ID: <0000000000000e9a0e0622296c4c@google.com>
-Subject: [syzbot] Monthly dccp report (Sep 2024)
-From: syzbot <syzbot+list8e7646c17f00ffb612e5@syzkaller.appspotmail.com>
-To: dccp@vger.kernel.org, linux-kernel@vger.kernel.org, netdev@vger.kernel.org, 
-	syzkaller-bugs@googlegroups.com
-Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
 
-Hello dccp maintainers/developers,
+Reorganize kerneldoc parameter names to match the parameter
+order in the function header.
 
-This is a 31-day syzbot report for the dccp subsystem.
-All related reports/information can be found at:
-https://syzkaller.appspot.com/upstream/s/dccp
+The misordered cases were identified using the following
+Coccinelle semantic patch:
 
-During the period, 0 new issues were detected and 0 were fixed.
-In total, 4 issues are still open and 7 have been fixed so far.
+// <smpl>
+@initialize:ocaml@
+@@
 
-Some of the still happening issues:
+let parse_doc l =
+  let pieces = List.map String.trim (String.split_on_char '*' l) in
+  let l = String.concat " " pieces in
+  match String.split_on_char ':' l with
+    x::xs -> x
+  | _ -> ""
 
-Ref Crashes Repro Title
-<1> 107     Yes   KASAN: use-after-free Read in ccid2_hc_tx_packet_recv
-                  https://syzkaller.appspot.com/bug?extid=554ccde221001ab5479a
-<2> 57      Yes   BUG: "hc->tx_t_ipi == NUM" holds (exception!) at net/dccp/ccids/ccid3.c:LINE/ccid3_update_send_interval()
-                  https://syzkaller.appspot.com/bug?extid=94641ba6c1d768b1e35e
-<3> 17      Yes   BUG: stored value of X_recv is zero at net/dccp/ccids/ccid3.c:LINE/ccid3_first_li() (3)
-                  https://syzkaller.appspot.com/bug?extid=2ad8ef335371014d4dc7
+let params ps =
+  List.rev
+    (List.fold_left
+       (fun prev (pm,_) ->
+	 let ty =
+	   String.trim(Pretty_print_c.string_of_fullType pm.Ast_c.p_type) in
+	 if ty = "void" && pm.Ast_c.p_namei = None
+	 then prev
+	 else
+	   let name =
+	     match pm.Ast_c.p_namei with
+	       Some name -> name
+	     | None -> failwith "function parameter has no name" in
+	   (String.trim (Pretty_print_c.string_of_name name),ty)::prev)
+       [] ps)
+
+@r@
+comments c;
+identifier fn;
+position p;
+parameter list ps;
+type T;
+@@
+
+T@c fn@p(ps) { ... }
+
+@script:ocaml@
+p << r.p;
+c << r.c;
+(_,ps) << r.ps;
+@@
+
+let isdoc c ps =
+  List.length ps > 1 &&
+  (let c = String.trim c in
+  String.length c > 3 && String.sub c 0 3 = "/**" && String.get c 3 != '*') in
+
+let subset l1 l2 =
+  List.for_all (fun x -> List.mem x l2) l1 in
+
+let (cb,cm,ca) = List.hd c in
+match List.rev cb with
+  c::_ when isdoc c ps ->
+    let pieces = String.split_on_char '@' c in
+    (match pieces with
+      _::tl ->
+	let d_names = List.map parse_doc tl in
+	(* check parameters *)
+	let p_names = List.map fst (params ps) in
+	if d_names <> [] && not(d_names = p_names)
+	then
+	  begin
+	    if List.sort compare d_names = List.sort compare p_names
+	    then Coccilib.print_main "out of order" p
+	    else if subset d_names p_names
+	    then Coccilib.print_main "doc is missing a parameter" p
+	    else if subset d_names p_names
+	    then Coccilib.print_main "doc has an extra parameter" p
+	  end
+    | _ -> ())
+| _ -> ()
+// </smpl>
 
 ---
-This report is generated by a bot. It may contain errors.
-See https://goo.gl/tpsmEJ for more information about syzbot.
-syzbot engineers can be reached at syzkaller@googlegroups.com.
 
-To disable reminders for individual bugs, reply with the following command:
-#syz set <Ref> no-reminders
-
-To change bug's subsystems, reply with:
-#syz set <Ref> subsystems: new-subsystem
-
-You may send multiple commands in a single email message.
+ arch/arm/mach-omap2/prm2xxx_3xxx.c              |    1 -
+ arch/powerpc/platforms/ps3/interrupt.c          |    2 +-
+ arch/powerpc/platforms/ps3/repository.c         |    2 +-
+ drivers/base/firmware_loader/main.c             |    2 +-
+ drivers/comedi/drivers/comedi_8254.c            |    2 +-
+ drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c          |    2 +-
+ drivers/gpu/drm/amd/display/dc/core/dc.c        |    2 +-
+ drivers/gpu/drm/drm_gem_framebuffer_helper.c    |    3 +--
+ drivers/gpu/drm/drm_gpuvm.c                     |    2 +-
+ drivers/gpu/drm/radeon/radeon_ib.c              |    2 +-
+ drivers/iommu/iommu.c                           |    2 +-
+ drivers/leds/leds-gpio-register.c               |    2 +-
+ drivers/mfd/atmel-smc.c                         |    4 ++--
+ drivers/misc/mei/bus.c                          |    2 +-
+ drivers/mtd/ubi/eba.c                           |    2 +-
+ drivers/net/ethernet/broadcom/bnxt/bnxt_hwrm.c  |    2 +-
+ drivers/net/ethernet/intel/e1000/e1000_hw.c     |    2 +-
+ drivers/net/ethernet/intel/i40e/i40e_common.c   |    7 +++----
+ drivers/net/ethernet/intel/ice/ice_common.c     |    2 +-
+ drivers/net/ethernet/intel/ixgbe/ixgbe_common.c |    2 +-
+ drivers/nvdimm/dimm_devs.c                      |    2 +-
+ drivers/pci/hotplug/pci_hotplug_core.c          |    2 +-
+ drivers/pinctrl/pinmux.c                        |    2 +-
+ drivers/slimbus/messaging.c                     |    2 +-
+ drivers/soc/qcom/qmi_interface.c                |    2 +-
+ drivers/soundwire/stream.c                      |    2 +-
+ drivers/usb/gadget/config.c                     |    4 ++--
+ fs/char_dev.c                                   |    2 +-
+ fs/dcache.c                                     |    4 ++--
+ fs/seq_file.c                                   |    2 +-
+ kernel/audit.c                                  |    2 +-
+ kernel/resource.c                               |    2 +-
+ kernel/sysctl.c                                 |    1 -
+ kernel/trace/ring_buffer.c                      |    2 +-
+ lib/lru_cache.c                                 |    2 +-
+ lib/maple_tree.c                                |    2 +-
+ mm/mmu_notifier.c                               |    2 +-
+ net/dccp/feat.c                                 |    2 +-
+ net/mac80211/mesh_hwmp.c                        |    6 +++---
+ net/mac80211/mesh_pathtbl.c                     |   10 +++++-----
+ net/socket.c                                    |    2 +-
+ net/sunrpc/xprt.c                               |    2 +-
+ net/tipc/link.c                                 |   14 +++++++-------
+ net/tipc/msg.c                                  |    2 +-
+ sound/pci/hda/hda_codec.c                       |    2 +-
+ 45 files changed, 60 insertions(+), 64 deletions(-)
