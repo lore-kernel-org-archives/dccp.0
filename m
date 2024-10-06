@@ -1,48 +1,81 @@
-Received: from mail2-relais-roc.national.inria.fr (mail2-relais-roc.national.inria.fr [192.134.164.83])
+Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id F3979190052;
-	Mon, 30 Sep 2024 11:21:45 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=192.134.164.83
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id DC6F879CD;
+	Sun,  6 Oct 2024 01:55:45 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1727695308; cv=none; b=tzlw2riSRuIda6JleYz5nGL2P/KFH8ITLVaD84n2yEE0hvXlOAG0/f+K8UkPtZ4Q9GO8XId9cOvMn6qNGIEscAoQ2n9SoQ/dHzHmB28PqrkUT8YtMRgWcrvDQli/q0NkKJgZx49j2C/t/G59TJ7uz9ajZoi8CUggtO/jsbuepNE=
+	t=1728179746; cv=none; b=LP318No42i0OaqiwKWZMISmKiFXkbwrQCUbJs1F8sfV9Mal+phTOyTebVl2hYn2rvyMB4tpP0RYJAM6NCMNKeuwZovG3k46+qD4Rz9eMVExPMSx1ONhvSx3lXcsDygfv4T7L2wxuQYM9in9YX63v960FPHoizN6I3ePzcuc4QuE=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1727695308; c=relaxed/simple;
-	bh=pLq3YOT6+rNHjYOPVLrgKEdscljtkQsbJ2htKr9ITqg=;
-	h=From:To:Cc:Subject:Date:Message-Id:In-Reply-To:References:
-	 MIME-Version; b=pcPT++bsgmBctQKn7htTdFsvoxJOR10oJcC9l6MMu0qzpyHaXAoDko4qumgby01hmiG4SDNn8xj5kOmN1As9oLekQT0dNeFXh+t0hpdxccx/zOyn1KjT9aOWYRJ777oz95isvW1JqBrJ2dttt8SFNGqxFLbSL4qUr/l1/WNcpJ0=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=inria.fr; spf=pass smtp.mailfrom=inria.fr; dkim=pass (1024-bit key) header.d=inria.fr header.i=@inria.fr header.b=lJFK0vOr; arc=none smtp.client-ip=192.134.164.83
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=inria.fr
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=inria.fr
+	s=arc-20240116; t=1728179746; c=relaxed/simple;
+	bh=/4L+Waftv30hJTd8pHAaY7MDs2ik61gNjRPrwI78SK4=;
+	h=From:To:Cc:Subject:Date:Message-ID:In-Reply-To:References:
+	 MIME-Version:Content-Type; b=rs7lWhEgKgtboQkS2yenDkRykYlGFQt5/01n7rhw//hm4PIJrYSZUlKwMb+vZeNZDTa3js21Fwb/g+uKo35QzwZLlbztusZr4Vraiqu8FlrJYeYh115nJjXRIkJ9wQXj6ANLcLYLRoU7HWqQHDlzJ0N7RuTLao5d6zNmxNH+oyA=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=bHJhnSlc; arc=none smtp.client-ip=10.30.226.201
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (1024-bit key) header.d=inria.fr header.i=@inria.fr header.b="lJFK0vOr"
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-  d=inria.fr; s=dc;
-  h=from:to:cc:subject:date:message-id:in-reply-to:
-   references:mime-version:content-transfer-encoding;
-  bh=nWSmtARBk2gEHkUFa2bT2tPofkcYuwxfvTcgtvxT/uU=;
-  b=lJFK0vOrS5fbWQcJGzSnI82bsXvhhboUYzhz+27wFj1HndtT1jdW/RKo
-   cudYKM4L4K4LzaoL4iGHMmEBrKkm7m9GkpYOrbZYVBk/H0o6DKRAtN8m2
-   3eOQfpu8wZljBWVMPZwGSGTbDJSQSEsJ3vDUlPEEGBErsEpZKryOfXUu4
-   I=;
-Authentication-Results: mail2-relais-roc.national.inria.fr; dkim=none (message not signed) header.i=none; spf=SoftFail smtp.mailfrom=Julia.Lawall@inria.fr; dmarc=fail (p=none dis=none) d=inria.fr
-X-IronPort-AV: E=Sophos;i="6.11,165,1725314400"; 
-   d="scan'208";a="185956881"
-Received: from i80.paris.inria.fr (HELO i80.paris.inria.fr.) ([128.93.90.48])
-  by mail2-relais-roc.national.inria.fr with ESMTP/TLS/ECDHE-RSA-AES256-GCM-SHA384; 30 Sep 2024 13:21:26 +0200
-From: Julia Lawall <Julia.Lawall@inria.fr>
-To: "David S. Miller" <davem@davemloft.net>
+	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="bHJhnSlc"
+Received: by smtp.kernel.org (Postfix) with ESMTPSA id 442DCC4CEC2;
+	Sun,  6 Oct 2024 01:55:42 +0000 (UTC)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
+	s=k20201202; t=1728179745;
+	bh=/4L+Waftv30hJTd8pHAaY7MDs2ik61gNjRPrwI78SK4=;
+	h=From:To:Cc:Subject:Date:In-Reply-To:References:From;
+	b=bHJhnSlcDypCxKXc9/0e8sSwcsPUcNs5OrzLmNK372VoYuGepvQT+MeJe7gZxz24S
+	 Td8OetlGIX6VQqxeo+oLpBwCwYCr2xh0kr7HWG2dWxJwS9C9I5+F0Ozm3XgnvgOi6R
+	 eyo7cMIiqgZ5im6lRwsEC9egd6IBXTkhxhVOAfSeJ6SqQ1OAUWk36taYJoiLw9dpJ9
+	 1TD2kMI24gaTyunNoaEycYfyV8WJ6EL2ZaaiP5SsbbYsVWCcKHV7TrlwKb7lUEYqTY
+	 l48kzmdHzTLb/dBfgaSN3gUHXAeR3ENezjiB4lZZ+5JAICFVxSM/ycZNnlcwg/pUoP
+	 0Njb/XOnUh7ew==
+From: Bjorn Andersson <andersson@kernel.org>
+To: linux-gpio@vger.kernel.org,
+	Julia Lawall <Julia.Lawall@inria.fr>
 Cc: kernel-janitors@vger.kernel.org,
-	Eric Dumazet <edumazet@google.com>,
-	Jakub Kicinski <kuba@kernel.org>,
-	Paolo Abeni <pabeni@redhat.com>,
+	audit@vger.kernel.org,
+	linux-mtd@lists.infradead.org,
+	Zhihao Cheng <chengzhihao1@huawei.com>,
+	"Rafael J. Wysocki" <rafael@kernel.org>,
+	linux-arm-msm@vger.kernel.org,
+	linux-pci@vger.kernel.org,
+	dri-devel@lists.freedesktop.org,
+	linux-usb@vger.kernel.org,
+	linux-mm@kvack.org,
+	maple-tree@lists.infradead.org,
+	alsa-devel@alsa-project.org,
+	Sanyog Kale <sanyog.r.kale@intel.com>,
+	Pierre-Louis Bossart <pierre-louis.bossart@linux.dev>,
 	dccp@vger.kernel.org,
+	linux-fsdevel@vger.kernel.org,
+	Jan Kara <jack@suse.cz>,
+	drbd-dev@lists.linbit.com,
+	linux-sound@vger.kernel.org,
+	linux-kernel@vger.kernel.org,
+	linux-omap@vger.kernel.org,
+	linux-arm-kernel@lists.infradead.org,
 	netdev@vger.kernel.org,
-	linux-kernel@vger.kernel.org
-Subject: [PATCH 10/35] dccp: Reorganize kerneldoc parameter names
-Date: Mon, 30 Sep 2024 13:20:56 +0200
-Message-Id: <20240930112121.95324-11-Julia.Lawall@inria.fr>
-X-Mailer: git-send-email 2.20.1
+	nvdimm@lists.linux.dev,
+	linux-leds@vger.kernel.org,
+	Nicholas Piggin <npiggin@gmail.com>,
+	Christophe Leroy <christophe.leroy@csgroup.eu>,
+	Naveen N Rao <naveen@kernel.org>,
+	Madhavan Srinivasan <maddy@linux.ibm.com>,
+	linuxppc-dev@lists.ozlabs.org,
+	tipc-discussion@lists.sourceforge.net,
+	Robin Murphy <robin.murphy@arm.com>,
+	iommu@lists.linux.dev,
+	Mathieu Desnoyers <mathieu.desnoyers@efficios.com>,
+	linux-trace-kernel@vger.kernel.org,
+	Neil Brown <neilb@suse.de>,
+	Olga Kornievskaia <okorniev@redhat.com>,
+	Dai Ngo <Dai.Ngo@oracle.com>,
+	Tom Talpey <tom@talpey.com>,
+	linux-nfs@vger.kernel.org,
+	amd-gfx@lists.freedesktop.org,
+	linux-wireless@vger.kernel.org,
+	intel-wired-lan@lists.osuosl.org
+Subject: Re: (subset) [PATCH 00/35] Reorganize kerneldoc parameter names
+Date: Sat,  5 Oct 2024 20:55:35 -0500
+Message-ID: <172817973322.398361.12931602917664759173.b4-ty@kernel.org>
+X-Mailer: git-send-email 2.45.2
 In-Reply-To: <20240930112121.95324-1-Julia.Lawall@inria.fr>
 References: <20240930112121.95324-1-Julia.Lawall@inria.fr>
 Precedence: bulk
@@ -51,32 +84,28 @@ List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: 8bit
 
-Reorganize kerneldoc parameter names to match the parameter
-order in the function header.
 
-Problems identified using Coccinelle.
+On Mon, 30 Sep 2024 13:20:46 +0200, Julia Lawall wrote:
+> Reorganize kerneldoc parameter names to match the parameter
+> order in the function header.
+> 
+> The misordered cases were identified using the following
+> Coccinelle semantic patch:
+> 
+> // <smpl>
+> @initialize:ocaml@
+> @@
+> 
+> [...]
 
-Signed-off-by: Julia Lawall <Julia.Lawall@inria.fr>
+Applied, thanks!
 
----
- net/dccp/feat.c |    2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+[24/35] soc: qcom: qmi: Reorganize kerneldoc parameter names
+        commit: eea73fa08e69fec9cdc915592022bec6a9ac8ad7
 
-diff --git a/net/dccp/feat.c b/net/dccp/feat.c
-index 54086bb05c42..90ac50556ee0 100644
---- a/net/dccp/feat.c
-+++ b/net/dccp/feat.c
-@@ -626,9 +626,9 @@ static u8 dccp_feat_sp_list_ok(u8 feat_num, u8 const *sp_list, u8 sp_len)
- 
- /**
-  * dccp_feat_insert_opts  -  Generate FN options from current list state
-- * @skb: next sk_buff to be sent to the peer
-  * @dp: for client during handshake and general negotiation
-  * @dreq: used by the server only (all Changes/Confirms in LISTEN/RESPOND)
-+ * @skb: next sk_buff to be sent to the peer
-  */
- int dccp_feat_insert_opts(struct dccp_sock *dp, struct dccp_request_sock *dreq,
- 			  struct sk_buff *skb)
-
+Best regards,
+-- 
+Bjorn Andersson <andersson@kernel.org>
