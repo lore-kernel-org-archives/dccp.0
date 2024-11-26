@@ -1,71 +1,118 @@
-Received: from mail.ozlabs.org (gandalf.ozlabs.org [150.107.74.76])
+Received: from forward100b.mail.yandex.net (forward100b.mail.yandex.net [178.154.239.147])
 	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id A672B183CCA;
-	Sun, 17 Nov 2024 12:25:26 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=150.107.74.76
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 9B5F8BE46;
+	Tue, 26 Nov 2024 14:40:00 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=178.154.239.147
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1731846328; cv=none; b=peEy5TPddAbekjb+CxxKwwcOyU5nRzmLXf29TFmo6qkglRFfq+JjRxQcHllvjgdX4uI2hVsNWwWlJSbkmRbRIyrdOlzPF1nEk5LDknuPAhKlflSX3kFizdFN8MCnyjYWLckaIPP/+ixYHi1Z39pd7jh+QUIU0Ko6KFeJe7stcaQ=
+	t=1732632006; cv=none; b=d6Fe5Jc6ayzPNgRhd2XdKJ44zYcHUBFj683+G7y0RjgCXffnPr1tPLvmLyD4fKZSVSUh72I7lgEwswiud63zreoF9UIP5o0gVnbKQuulf2vbdVkoXI0E3Xs9JhAQPe9jvwaH+gAMonzfojJousz5V/nnyfxlQf7PICNs9Z/gUhc=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1731846328; c=relaxed/simple;
-	bh=2Vzu3RlYgWlUg+kP8l3nTLXS8GOcuKbfykkwWU/BOFg=;
-	h=From:To:Cc:In-Reply-To:References:Subject:Message-Id:Date:
-	 MIME-Version:Content-Type; b=LNQ/gtUOCrqCVL+bkvrll8bT2wbdXPTXG/AQzCW4TNqBig9lun9ZzyhGtaoC8TmFCule8Yti7BWeCAriCC+bdZRkdQJNsC5ycPVA0+rOU5HuQ013kHkoKAw+9UV6Jvu0Txm96BfjvUC8xIX0YFwaUlYTEi5x8JaXgd1B/c5Wj/A=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=none (p=none dis=none) header.from=ellerman.id.au; spf=pass smtp.mailfrom=ellerman.id.au; dkim=fail (2048-bit key) header.d=ellerman.id.au header.i=@ellerman.id.au header.b=mTU1+u6c reason="signature verification failed"; arc=none smtp.client-ip=150.107.74.76
-Authentication-Results: smtp.subspace.kernel.org; dmarc=none (p=none dis=none) header.from=ellerman.id.au
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=ellerman.id.au
+	s=arc-20240116; t=1732632006; c=relaxed/simple;
+	bh=yikF7kDbrV5x7L7GHYppYPciTmDd9SbAXb12mkWlqdk=;
+	h=From:To:Cc:Subject:Date:Message-Id:MIME-Version; b=s9HMT0bDFblvv6kmDObfV0gcqPmhh+j7iFHq8Evz1hbn12+EfqTeYAQ9PpdNzwn/A1f7jbgMbe5VImLK61WwDuKMZgocpB+BIXeNKb1J9i5enKpH8egk6/jgj9SR4EnruoWyWbqBTs7pbIgZHLLuNKRBJ/gGLOBHCsgxDDEdyTQ=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=none (p=none dis=none) header.from=phystech.edu; spf=pass smtp.mailfrom=phystech.edu; dkim=pass (1024-bit key) header.d=phystech.edu header.i=@phystech.edu header.b=iAAEpzpu; arc=none smtp.client-ip=178.154.239.147
+Authentication-Results: smtp.subspace.kernel.org; dmarc=none (p=none dis=none) header.from=phystech.edu
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=phystech.edu
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=fail reason="signature verification failed" (2048-bit key) header.d=ellerman.id.au header.i=@ellerman.id.au header.b="mTU1+u6c"
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=ellerman.id.au;
-	s=201909; t=1731846322;
-	bh=tp2Q+8b3zGUBih3afpuzhAn88G4uKrpXKwQ9ivMWqHM=;
-	h=From:To:Cc:In-Reply-To:References:Subject:Date:From;
-	b=mTU1+u6copmZDAjfqnXWv+2ujIPjQ3JtoGu9so550WGMXDTKHgPRUtKWL5WTQKacA
-	 ukYIXyZnvXaIaM7phYyg2ffevuNcZwkVM+fGzA0yJe4hA6ivVJfsyMN2k5es56Dca2
-	 xnyEpYxwi2vRkSTSXt4SDnE54vHeCtrhpgtS0p+MhXC1a/iPqUZ6noNUE4xD/tX6x3
-	 9xyLmagErBzssEeKDZj2zkr4owFCFT2YctuTq6qJ9KGCJplX90TRwhVHol5EujIAFV
-	 JLHuHIFQhKPYuj26daIFU9Gqj0sP+YYyQFfmqJ5wJevMLVh4tXn5ub20TQGEUboHP9
-	 4WeeB6bi4EbDw==
-Received: from authenticated.ozlabs.org (localhost [127.0.0.1])
-	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
-	 key-exchange X25519 server-signature RSA-PSS (4096 bits) server-digest SHA256)
-	(Client did not present a certificate)
-	by mail.ozlabs.org (Postfix) with ESMTPSA id 4Xrqhp5Zp2z4xf5;
-	Sun, 17 Nov 2024 23:25:14 +1100 (AEDT)
-From: Michael Ellerman <patch-notifications@ellerman.id.au>
-To: linux-gpio@vger.kernel.org, Julia Lawall <Julia.Lawall@inria.fr>
-Cc: kernel-janitors@vger.kernel.org, audit@vger.kernel.org, linux-mtd@lists.infradead.org, Zhihao Cheng <chengzhihao1@huawei.com>, "Rafael J. Wysocki" <rafael@kernel.org>, linux-arm-msm@vger.kernel.org, linux-pci@vger.kernel.org, dri-devel@lists.freedesktop.org, linux-usb@vger.kernel.org, linux-mm@kvack.org, maple-tree@lists.infradead.org, alsa-devel@alsa-project.org, Sanyog Kale <sanyog.r.kale@intel.com>, Pierre-Louis Bossart <pierre-louis.bossart@linux.dev>, dccp@vger.kernel.org, linux-fsdevel@vger.kernel.org, Jan Kara <jack@suse.cz>, drbd-dev@lists.linbit.com, linux-sound@vger.kernel.org, linux-kernel@vger.kernel.org, linux-omap@vger.kernel.org, linux-arm-kernel@lists.infradead.org, netdev@vger.kernel.org, nvdimm@lists.linux.dev, linux-leds@vger.kernel.org, Nicholas Piggin <npiggin@gmail.com>, Christophe Leroy <christophe.leroy@csgroup.eu>, Naveen N Rao <naveen@kernel.org>, Madhavan Srinivasan <maddy@linux.ibm.com>, linuxppc-dev@lists.ozlabs.org, tipc-discussion@lists.sourceforge.
- net, Robin Murphy <robin.murphy@arm.com>, iommu@lists.linux.dev, Mathieu Desnoyers <mathieu.desnoyers@efficios.com>, linux-trace-kernel@vger.kernel.org, Neil Brown <neilb@suse.de>, Olga Kornievskaia <okorniev@redhat.com>, Dai Ngo <Dai.Ngo@oracle.com>, Tom Talpey <tom@talpey.com>, linux-nfs@vger.kernel.org, amd-gfx@lists.freedesktop.org, linux-wireless@vger.kernel.org, intel-wired-lan@lists.osuosl.org
-In-Reply-To: <20240930112121.95324-1-Julia.Lawall@inria.fr>
-References: <20240930112121.95324-1-Julia.Lawall@inria.fr>
-Subject: Re: (subset) [PATCH 00/35] Reorganize kerneldoc parameter names
-Message-Id: <173184539760.890800.14513086226459117952.b4-ty@ellerman.id.au>
-Date: Sun, 17 Nov 2024 23:09:57 +1100
+	dkim=pass (1024-bit key) header.d=phystech.edu header.i=@phystech.edu header.b="iAAEpzpu"
+Received: from mail-nwsmtp-smtp-production-main-60.sas.yp-c.yandex.net (mail-nwsmtp-smtp-production-main-60.sas.yp-c.yandex.net [IPv6:2a02:6b8:c11:1115:0:640:1385:0])
+	by forward100b.mail.yandex.net (Yandex) with ESMTPS id 1882060ACA;
+	Tue, 26 Nov 2024 17:39:53 +0300 (MSK)
+Received: by mail-nwsmtp-smtp-production-main-60.sas.yp-c.yandex.net (smtp/Yandex) with ESMTPSA id odZN6rrOoqM0-FYZpU16s;
+	Tue, 26 Nov 2024 17:39:52 +0300
+X-Yandex-Fwd: 1
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=phystech.edu;
+	s=mail; t=1732631992;
+	bh=sWbOWgPnngA9bg4tFHVDZp41fDMdXRzdyRs2pPUtJjo=;
+	h=Message-Id:Date:Cc:Subject:To:From;
+	b=iAAEpzpuu06SriXeW4OY+FJjsJBr0B5+J16iYVVCuz4ULeF80RPTkVp2SP1KRF6qW
+	 P8YJWZEyh+mkg9/NrKJ4PRGZC0Itf1ZCkkgg/NbeaNFd55JWkQqabEtH4QrEbHpqfx
+	 Sp3XAZpYudRLh+fimcerBQqlB1tjqw957y7klCZc=
+Authentication-Results: mail-nwsmtp-smtp-production-main-60.sas.yp-c.yandex.net; dkim=pass header.i=@phystech.edu
+From: Ivan Solodovnikov <solodovnikov.ia@phystech.edu>
+To: Gerrit Renker <gerrit@erg.abdn.ac.uk>
+Cc: Ivan Solodovnikov <solodovnikov.ia@phystech.edu>,
+	"David S. Miller" <davem@davemloft.net>,
+	Jakub Kicinski <kuba@kernel.org>,
+	dccp@vger.kernel.org,
+	netdev@vger.kernel.org,
+	linux-kernel@vger.kernel.org,
+	lvc-project@linuxtesting.org
+Subject: [PATCH net] dccp: Fix memory leak in dccp_feat_change_recv
+Date: Tue, 26 Nov 2024 17:39:02 +0300
+Message-Id: <20241126143902.190853-1-solodovnikov.ia@phystech.edu>
+X-Mailer: git-send-email 2.34.1
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-Content-Type: text/plain; charset="utf-8"
-Content-Transfer-Encoding: 7bit
+Content-Transfer-Encoding: 8bit
 
-On Mon, 30 Sep 2024 13:20:46 +0200, Julia Lawall wrote:
-> Reorganize kerneldoc parameter names to match the parameter
-> order in the function header.
-> 
-> The misordered cases were identified using the following
-> Coccinelle semantic patch:
-> 
-> // <smpl>
-> @initialize:ocaml@
-> @@
-> 
-> [...]
+If dccp_feat_push_confirm() fails after new value for SP feature was accepted
+without reconciliation ('entry == NULL' branch), memory allocated for that value
+with dccp_feat_clone_sp_val() is never freed.
 
-Applied to powerpc/next.
+Here is the kmemleak stack for this:
 
-[11/35] powerpc/ps3: Reorganize kerneldoc parameter names
-        https://git.kernel.org/powerpc/c/276e036e5844116e563fa90f676c625bb742cc57
+unreferenced object 0xffff88801d4ab488 (size 8):
+  comm "syz-executor310", pid 1127, jiffies 4295085598 (age 41.666s)
+  hex dump (first 8 bytes):
+    01 b4 4a 1d 80 88 ff ff                          ..J.....
+  backtrace:
+    [<00000000db7cabfe>] kmemdup+0x23/0x50 mm/util.c:128
+    [<0000000019b38405>] kmemdup include/linux/string.h:465 [inline]
+    [<0000000019b38405>] dccp_feat_clone_sp_val net/dccp/feat.c:371 [inline]
+    [<0000000019b38405>] dccp_feat_clone_sp_val net/dccp/feat.c:367 [inline]
+    [<0000000019b38405>] dccp_feat_change_recv net/dccp/feat.c:1145 [inline]
+    [<0000000019b38405>] dccp_feat_parse_options+0x1196/0x2180 net/dccp/feat.c:1416
+    [<00000000b1f6d94a>] dccp_parse_options+0xa2a/0x1260 net/dccp/options.c:125
+    [<0000000030d7b621>] dccp_rcv_state_process+0x197/0x13d0 net/dccp/input.c:650
+    [<000000001f74c72e>] dccp_v4_do_rcv+0xf9/0x1a0 net/dccp/ipv4.c:688
+    [<00000000a6c24128>] sk_backlog_rcv include/net/sock.h:1041 [inline]
+    [<00000000a6c24128>] __release_sock+0x139/0x3b0 net/core/sock.c:2570
+    [<00000000cf1f3a53>] release_sock+0x54/0x1b0 net/core/sock.c:3111
+    [<000000008422fa23>] inet_wait_for_connect net/ipv4/af_inet.c:603 [inline]
+    [<000000008422fa23>] __inet_stream_connect+0x5d0/0xf70 net/ipv4/af_inet.c:696
+    [<0000000015b6f64d>] inet_stream_connect+0x53/0xa0 net/ipv4/af_inet.c:735
+    [<0000000010122488>] __sys_connect_file+0x15c/0x1a0 net/socket.c:1865
+    [<00000000b4b70023>] __sys_connect+0x165/0x1a0 net/socket.c:1882
+    [<00000000f4cb3815>] __do_sys_connect net/socket.c:1892 [inline]
+    [<00000000f4cb3815>] __se_sys_connect net/socket.c:1889 [inline]
+    [<00000000f4cb3815>] __x64_sys_connect+0x6e/0xb0 net/socket.c:1889
+    [<00000000e7b1e839>] do_syscall_64+0x33/0x40 arch/x86/entry/common.c:46
+    [<0000000055e91434>] entry_SYSCALL_64_after_hwframe+0x67/0xd1
 
-cheers
+Clean up the allocated memory in case of dccp_feat_push_confirm() failure
+and bail out with an error reset code.
+
+Found by Linux Verification Center (linuxtesting.org) with Syzkaller.
+
+Fixes: e77b8363b2ea ("dccp: Process incoming Change feature-negotiation options")
+Signed-off-by: Ivan Solodovnikov <solodovnikov.ia@phystech.edu>
+---
+ net/dccp/feat.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/net/dccp/feat.c b/net/dccp/feat.c
+index 788dd629c420..e9cc7415ba48 100644
+--- a/net/dccp/feat.c
++++ b/net/dccp/feat.c
+@@ -1160,8 +1160,12 @@ static u8 dccp_feat_change_recv(struct list_head *fn, u8 is_mandatory, u8 opt,
+ 			goto not_valid_or_not_known;
+ 		}
+ 
+-		return dccp_feat_push_confirm(fn, feat, local, &fval);
++		if (dccp_feat_push_confirm(fn, feat, local, &fval)) {
++			kfree(fval.sp.vec);
++			return DCCP_RESET_CODE_TOO_BUSY;
++		}
+ 
++		return 0;
+ 	} else if (entry->state == FEAT_UNSTABLE) {	/* 6.6.2 */
+ 		return 0;
+ 	}
+-- 
+2.34.1
+
