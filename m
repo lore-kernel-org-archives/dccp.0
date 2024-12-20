@@ -1,103 +1,122 @@
-Received: from smtp.kernel.org (aws-us-west-2-korg-mail-1.web.codeaurora.org [10.30.226.201])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+Received: from mail-wr1-f45.google.com (mail-wr1-f45.google.com [209.85.221.45])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id AB4351DE4DF;
-	Tue,  3 Dec 2024 09:18:25 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=10.30.226.201
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id C362D21CA12
+	for <dccp@vger.kernel.org>; Fri, 20 Dec 2024 17:27:39 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.221.45
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1733217505; cv=none; b=Ymw6KtWgmcR6h/mU81Xk0mSdIxXXy13VCnwwcDvWrdEb0VhqqvgrCcBzfpBOLVdt0gLlOG5CzKTQe6o01Kt8MH7YvgKvoUGSwaGy75s2CSfAdBSfCD76jFr8dt/yt64T/fDP7KgrAjpp1cIFzGLKUtWPxzsHTwBSYjCCBkmpNiM=
+	t=1734715663; cv=none; b=c0uTTcj0O58qOX9DBG3W/7RpT+PAfcq0VQUBLRPA5SBoEeit7QiFM8luLju/ZAN73vbYS5JVr4zUjaCoIFtTJXnE5CCiCqtwqlU8uKCkH2X0kOyDE42765L0/ElZLGzgibD7wdbAPaJOoraWABqNyyK4hOA2poj2fjyFICYPOmA=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1733217505; c=relaxed/simple;
-	bh=9yXkUDZMfz4sHLAIVhrP4SvQobY74YVeNzCfgQ8/5Yk=;
-	h=Content-Type:MIME-Version:Subject:From:Message-Id:Date:References:
-	 In-Reply-To:To:Cc; b=Hmv+sXOpqa6VrDSO0Nq9WPgXgRHT1Txvc19NJHENfPt2VsdtzbWlQpnUCE3lFkdsDtJHx/qRLdpaDb6QSsvPst6b1al9zMsKQSZ8a7aPjuAMFaXygfgvA7AyYpEIhmN3sXPo1QjPJEv7LlykBZ0OG3nS6yzzdw3dj3ChiGnB868=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b=IuKU9OEi; arc=none smtp.client-ip=10.30.226.201
+	s=arc-20240116; t=1734715663; c=relaxed/simple;
+	bh=ftFlFL8Hf6gjCPdcRFrVx2YclVhyvU0X+h6fy2EfzIQ=;
+	h=From:To:Cc:In-Reply-To:References:Subject:Message-Id:Date:
+	 MIME-Version:Content-Type; b=cFO3PXzGsB6yixtV/5l0MAknzrfdpXUu4gXI6KNn9m3t3JXaOeDaBwkBabo9S53Yi5b5hTn0zg0PK2jgBiYr9aW3Dy4Ln7JPbMbua/zDGJWwKKNCPfgwfJ5cKid3cBo4D8hpMXMzCqCrGWNmHGcWXedVvFhsPzDkymmibR1m6c0=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=linaro.org; spf=pass smtp.mailfrom=linaro.org; dkim=pass (2048-bit key) header.d=linaro.org header.i=@linaro.org header.b=Sux4smDW; arc=none smtp.client-ip=209.85.221.45
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=linaro.org
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=linaro.org
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=kernel.org header.i=@kernel.org header.b="IuKU9OEi"
-Received: by smtp.kernel.org (Postfix) with ESMTPSA id 79E02C4CED6;
-	Tue,  3 Dec 2024 09:18:25 +0000 (UTC)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=kernel.org;
-	s=k20201202; t=1733217505;
-	bh=9yXkUDZMfz4sHLAIVhrP4SvQobY74YVeNzCfgQ8/5Yk=;
-	h=Subject:From:Date:References:In-Reply-To:To:Cc:From;
-	b=IuKU9OEi6YOyfP4tt28au5BelFnO2QY4JyZ4WnZy32qQQ0a9SkoD+MhXW2wrTJ8ZK
-	 SzMfLFjBaMr56rIbGZSj1kFtD86aHi2bLjW2V5WFKTMS35616rf3Qj/g9O7QmZPRRs
-	 c+qnVXiSjTpBM2C+Ufcagq49wVqAZwDyTUN8g2Nqj1upw9IgLaIRU4gXn6J/7sRiyy
-	 6o7dInSwV3jWdhC7mUbC/ryZYYcVDCg9qOw3wnMCVM+yeR33FpbScQFQmHx37n7Yvz
-	 TU59CldolnyyzDnmvsv++DGcuzyt3FUo7IXLxB7ROg4sA00daH1AT5IiI2S5ycvPGX
-	 EYz9tqWydiJlw==
-Received: from [10.30.226.235] (localhost [IPv6:::1])
-	by aws-us-west-2-korg-oddjob-rhel9-1.codeaurora.org (Postfix) with ESMTP id EB1A53806656;
-	Tue,  3 Dec 2024 09:18:40 +0000 (UTC)
-Content-Type: text/plain; charset="utf-8"
+	dkim=pass (2048-bit key) header.d=linaro.org header.i=@linaro.org header.b="Sux4smDW"
+Received: by mail-wr1-f45.google.com with SMTP id ffacd0b85a97d-3862d16b4f5so1519562f8f.0
+        for <dccp@vger.kernel.org>; Fri, 20 Dec 2024 09:27:39 -0800 (PST)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=linaro.org; s=google; t=1734715658; x=1735320458; darn=vger.kernel.org;
+        h=content-transfer-encoding:mime-version:date:message-id:subject
+         :references:in-reply-to:cc:to:from:from:to:cc:subject:date
+         :message-id:reply-to;
+        bh=rl2GUGW1SKIB73yuGvAyVPoBfBy5XbBiVj4hV5yN+VI=;
+        b=Sux4smDWvhRYVAocCLrB8sH5Gn4iglVnvLOtYXjw2SwmbrW98B6c98IdTir+VF+VQJ
+         W10BWI4R3GFC1zT/iJoBlxuzYK0hnggsfABamHJxaKShxH8tLAyw6SYs1kiT5Zpq5DY/
+         y8F5G+SxDNISHMSnfr/J8ZC+W2oNrTFwJ0KMsYltX1nRmRejzvK8hykx9rw4E4PSCPjK
+         hBR+wlIXLMxbiloh7lXnf5z8TBJg0j3ePqZ9LWqb7cYYzpaMr36BzlgWIDpW6dDQHpe5
+         znRcS8BpCe/go3BIeiuQzZZSpEoYEyOJCj8IeINw++6FJJgIOUIPFK+PvAzsigdqsUly
+         aZ0A==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1734715658; x=1735320458;
+        h=content-transfer-encoding:mime-version:date:message-id:subject
+         :references:in-reply-to:cc:to:from:x-gm-message-state:from:to:cc
+         :subject:date:message-id:reply-to;
+        bh=rl2GUGW1SKIB73yuGvAyVPoBfBy5XbBiVj4hV5yN+VI=;
+        b=PZ9rNN35nL57eq1MQiV8KfQ8hQyCC8wJe6lb8RhWpi5Siue4RXNbbnQbf8HIO2f63a
+         qSqARnZPUsxfBVju7enWYJ2qRZPVBJXAcsUAV5MzwVnuA2QfCWwQCyt4nZHdn5OUBEq2
+         jTA1HyF+GeLwz8JyV9XreckU3SlqQsDfe0oMYGXbgUDzlbWpoS5qnxJCdnlaWaER9dj7
+         cg0FGkPjU1ZNaqyjJvoFTEFEY3kCKOOg/ZW1ZfFy13rvi67X2mUPBw0eC9j2xm66JQj7
+         jiCpbVb8mMP/rYQKeMfy0Zkupi3anlrhRwgcChOYTRMIUYRNC8WqlwrapP8d2F/kkwvT
+         M0Ew==
+X-Forwarded-Encrypted: i=1; AJvYcCU4cOIaCJN8TlNZn1MH96VcEzurezwCkNfyHAgtHwe9KqnQyirP8S+5NczfJzs6IjvXnDWi@vger.kernel.org
+X-Gm-Message-State: AOJu0YyqLkexXncq5Sd6JkQsdXRfpbqOB1oElRNvkO2r3txx+1iFeJI+
+	UhGzVT0qnn3hS46gBFczmT/AbGKdwbYMihPgJ8fn9rSRLJNdg36gsSKlDMLmZTE=
+X-Gm-Gg: ASbGncskFtaKcibNJGK49VpCOYnzbUEL9B59xI4PIfmzuXQ5K07f0ghTD4vcRW/fmBD
+	wfMSuidxV9YWfttlU9dn7r0ZBOPxMSzNO+3/+RHTpmySflOa6Sb5pQyk9ylF8/se3q5KnVr4bL4
+	wmn+epxTMvYHR+hEnKmLZfKexe7oIce1QYTSceckCfRTskkkznl3UT8KGZq8PLlfJwqr2XSZZQx
+	TokGsdUWLFcjY/hhltPTqJk8BUnnaFaC0lQKmGBlBfEVMyCec0Czm6i0vRLUKLN2N0i5IobBUI=
+X-Google-Smtp-Source: AGHT+IHQofl14bIpVpiQqz6qAEwAjKsEmWVjRCOjis6wH9jKfvKMjWLHCbYlsDgmYPDOjR7ci+Y7xw==
+X-Received: by 2002:a5d:47c3:0:b0:388:cacf:24b0 with SMTP id ffacd0b85a97d-38a1a1f7253mr6745803f8f.2.1734715658179;
+        Fri, 20 Dec 2024 09:27:38 -0800 (PST)
+Received: from [192.168.68.114] ([5.133.47.210])
+        by smtp.gmail.com with ESMTPSA id ffacd0b85a97d-38a1c89e357sm4642915f8f.72.2024.12.20.09.27.36
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Fri, 20 Dec 2024 09:27:37 -0800 (PST)
+From: Srinivas Kandagatla <srinivas.kandagatla@linaro.org>
+To: linux-gpio@vger.kernel.org, Julia Lawall <Julia.Lawall@inria.fr>
+Cc: kernel-janitors@vger.kernel.org, audit@vger.kernel.org, 
+ linux-mtd@lists.infradead.org, Zhihao Cheng <chengzhihao1@huawei.com>, 
+ "Rafael J. Wysocki" <rafael@kernel.org>, linux-arm-msm@vger.kernel.org, 
+ linux-pci@vger.kernel.org, dri-devel@lists.freedesktop.org, 
+ linux-usb@vger.kernel.org, linux-mm@kvack.org, 
+ maple-tree@lists.infradead.org, alsa-devel@alsa-project.org, 
+ Sanyog Kale <sanyog.r.kale@intel.com>, 
+ Pierre-Louis Bossart <pierre-louis.bossart@linux.dev>, dccp@vger.kernel.org, 
+ linux-fsdevel@vger.kernel.org, Jan Kara <jack@suse.cz>, 
+ drbd-dev@lists.linbit.com, linux-sound@vger.kernel.org, 
+ linux-kernel@vger.kernel.org, linux-omap@vger.kernel.org, 
+ linux-arm-kernel@lists.infradead.org, netdev@vger.kernel.org, 
+ nvdimm@lists.linux.dev, linux-leds@vger.kernel.org, 
+ Nicholas Piggin <npiggin@gmail.com>, 
+ Christophe Leroy <christophe.leroy@csgroup.eu>, 
+ Naveen N Rao <naveen@kernel.org>, Madhavan Srinivasan <maddy@linux.ibm.com>, 
+ linuxppc-dev@lists.ozlabs.org, tipc-discussion@lists.sourceforge.net, 
+ Robin Murphy <robin.murphy@arm.com>, iommu@lists.linux.dev, 
+ Mathieu Desnoyers <mathieu.desnoyers@efficios.com>, 
+ linux-trace-kernel@vger.kernel.org, Neil Brown <neilb@suse.de>, 
+ Olga Kornievskaia <okorniev@redhat.com>, Dai Ngo <Dai.Ngo@oracle.com>, 
+ Tom Talpey <tom@talpey.com>, linux-nfs@vger.kernel.org, 
+ amd-gfx@lists.freedesktop.org, linux-wireless@vger.kernel.org, 
+ intel-wired-lan@lists.osuosl.org
+In-Reply-To: <20240930112121.95324-1-Julia.Lawall@inria.fr>
+References: <20240930112121.95324-1-Julia.Lawall@inria.fr>
+Subject: Re: (subset) [PATCH 00/35] Reorganize kerneldoc parameter names
+Message-Id: <173471565665.227782.7244101246430956449.b4-ty@linaro.org>
+Date: Fri, 20 Dec 2024 17:27:36 +0000
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
-Content-Transfer-Encoding: 8bit
-Subject: Re: [PATCH net] dccp: Fix memory leak in dccp_feat_change_recv
-From: patchwork-bot+netdevbpf@kernel.org
-Message-Id: 
- <173321751975.4083494.12180230037136307201.git-patchwork-notify@kernel.org>
-Date: Tue, 03 Dec 2024 09:18:39 +0000
-References: <20241126143902.190853-1-solodovnikov.ia@phystech.edu>
-In-Reply-To: <20241126143902.190853-1-solodovnikov.ia@phystech.edu>
-To: Ivan Solodovnikov <solodovnikov.ia@phystech.edu>
-Cc: gerrit@erg.abdn.ac.uk, davem@davemloft.net, kuba@kernel.org,
- dccp@vger.kernel.org, netdev@vger.kernel.org, linux-kernel@vger.kernel.org,
- lvc-project@linuxtesting.org
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+X-Mailer: b4 0.12.2
 
-Hello:
 
-This patch was applied to netdev/net.git (main)
-by Paolo Abeni <pabeni@redhat.com>:
-
-On Tue, 26 Nov 2024 17:39:02 +0300 you wrote:
-> If dccp_feat_push_confirm() fails after new value for SP feature was accepted
-> without reconciliation ('entry == NULL' branch), memory allocated for that value
-> with dccp_feat_clone_sp_val() is never freed.
+On Mon, 30 Sep 2024 13:20:46 +0200, Julia Lawall wrote:
+> Reorganize kerneldoc parameter names to match the parameter
+> order in the function header.
 > 
-> Here is the kmemleak stack for this:
+> The misordered cases were identified using the following
+> Coccinelle semantic patch:
 > 
-> unreferenced object 0xffff88801d4ab488 (size 8):
->   comm "syz-executor310", pid 1127, jiffies 4295085598 (age 41.666s)
->   hex dump (first 8 bytes):
->     01 b4 4a 1d 80 88 ff ff                          ..J.....
->   backtrace:
->     [<00000000db7cabfe>] kmemdup+0x23/0x50 mm/util.c:128
->     [<0000000019b38405>] kmemdup include/linux/string.h:465 [inline]
->     [<0000000019b38405>] dccp_feat_clone_sp_val net/dccp/feat.c:371 [inline]
->     [<0000000019b38405>] dccp_feat_clone_sp_val net/dccp/feat.c:367 [inline]
->     [<0000000019b38405>] dccp_feat_change_recv net/dccp/feat.c:1145 [inline]
->     [<0000000019b38405>] dccp_feat_parse_options+0x1196/0x2180 net/dccp/feat.c:1416
->     [<00000000b1f6d94a>] dccp_parse_options+0xa2a/0x1260 net/dccp/options.c:125
->     [<0000000030d7b621>] dccp_rcv_state_process+0x197/0x13d0 net/dccp/input.c:650
->     [<000000001f74c72e>] dccp_v4_do_rcv+0xf9/0x1a0 net/dccp/ipv4.c:688
->     [<00000000a6c24128>] sk_backlog_rcv include/net/sock.h:1041 [inline]
->     [<00000000a6c24128>] __release_sock+0x139/0x3b0 net/core/sock.c:2570
->     [<00000000cf1f3a53>] release_sock+0x54/0x1b0 net/core/sock.c:3111
->     [<000000008422fa23>] inet_wait_for_connect net/ipv4/af_inet.c:603 [inline]
->     [<000000008422fa23>] __inet_stream_connect+0x5d0/0xf70 net/ipv4/af_inet.c:696
->     [<0000000015b6f64d>] inet_stream_connect+0x53/0xa0 net/ipv4/af_inet.c:735
->     [<0000000010122488>] __sys_connect_file+0x15c/0x1a0 net/socket.c:1865
->     [<00000000b4b70023>] __sys_connect+0x165/0x1a0 net/socket.c:1882
->     [<00000000f4cb3815>] __do_sys_connect net/socket.c:1892 [inline]
->     [<00000000f4cb3815>] __se_sys_connect net/socket.c:1889 [inline]
->     [<00000000f4cb3815>] __x64_sys_connect+0x6e/0xb0 net/socket.c:1889
->     [<00000000e7b1e839>] do_syscall_64+0x33/0x40 arch/x86/entry/common.c:46
->     [<0000000055e91434>] entry_SYSCALL_64_after_hwframe+0x67/0xd1
+> // <smpl>
+> @initialize:ocaml@
+> @@
 > 
 > [...]
 
-Here is the summary with links:
-  - [net] dccp: Fix memory leak in dccp_feat_change_recv
-    https://git.kernel.org/netdev/net/c/22be4727a8f8
+Applied, thanks!
 
-You are awesome, thank you!
+[31/35] slimbus: messaging: Reorganize kerneldoc parameter names
+        commit: 52d3d7f7a77ee9afc6a846b415790e13e1434847
+
+Best regards,
 -- 
-Deet-doot-dot, I am a bot.
-https://korg.docs.kernel.org/patchwork/pwbot.html
-
+Srinivas Kandagatla <srinivas.kandagatla@linaro.org>
 
