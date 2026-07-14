@@ -1,89 +1,73 @@
-Received: from mail-wm1-f68.google.com (mail-wm1-f68.google.com [209.85.128.68])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
+Received: from ns1.suksangroup.com (ns1.suksangroup.com [103.13.31.55])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id B858D340A7D
-	for <dccp@vger.kernel.org>; Tue,  4 Nov 2025 18:12:19 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=209.85.128.68
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id A181A309EEB
+	for <dccp@vger.kernel.org>; Tue, 14 Jul 2026 05:17:48 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=103.13.31.55
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1762279941; cv=none; b=CL5aLtDvOrrpi5IrF0PoEIwuQNt5vH/hP+HOeaq9nMQpSimQTytxK3wNhKh0jcIxDX3FZudlVmB2TKy62Cg2ZniSOAJeeao5KGq+hKlPUE/TawTtWeWi7AR0iQYc4w9rCnXiuB6b7TbYFIFA2fgCMdqRU7eMSyMVomwjfJncSOQ=
+	t=1784006271; cv=none; b=memHaRXhsFhknpYVKM0BFPgnrv2bgdNI0B7AjVl+bEy9oAMXYNggw4wqkttZW/XqQ6jwxmRQZaMfArxai9Hl7pBFRbMLtxPNgpW6ihm0/e+Cib4YyqHsLnCCpJOif+9VfXWFcuVRS4Rdm9H8zVTSOpa8POmXUa9Ti88HKKnNOO4=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1762279941; c=relaxed/simple;
-	bh=pShB2wGmw9UVAjvo4Af9ENCGF7h74zxwzh2zJGAYYVY=;
-	h=Content-Type:From:To:Subject:Message-ID:Date:MIME-Version; b=JJ1nsK7ojpzuTYfFagySBeYD4n/ZGbq2MAWaHb4QVZlxqtLi6jKvd3qfLAu3KaO/6gUGOorNIAOAvw18slownufExDWBy8bwo1Edc+ZcdPKCp7B5A/OILlY5v2XMyH/8TCbhT14lodOoZ+aNbz28nBkaRlRdTH1TYcprC3YVyc8=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com; spf=pass smtp.mailfrom=gmail.com; dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b=TFnIQq5M; arc=none smtp.client-ip=209.85.128.68
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=gmail.com
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=gmail.com
+	s=arc-20240116; t=1784006271; c=relaxed/simple;
+	bh=xY0Tz+cu7Zzp6fSboCupRw0Y9/LzHL/NqtnwHzTNG60=;
+	h=From:To:Subject:Date:Message-ID:MIME-Version:Content-Type; b=VQ8p+J+ew1NAnfSKH7Ov/d15Wy6BdaljAdqekGJ8O80B4i/KPJcAdoitOoMkvS0T+Ba5LJ8OwIWs78iRR2/eHJtaWCoHKUgScQ4Ql5zCBxBE9gtpQ8zOwUKl96V4qU8Mr1LhjeWfr5u4JRRqlzkg8oHIBm89w0YyTiWBIFwNHU4=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=inbox.org; spf=fail smtp.mailfrom=inbox.org; dkim=pass (2048-bit key) header.d=suksangroup.co.th header.i=@suksangroup.co.th header.b=pfV3NCK5; arc=none smtp.client-ip=103.13.31.55
+Authentication-Results: smtp.subspace.kernel.org; dmarc=fail (p=none dis=none) header.from=inbox.org
+Authentication-Results: smtp.subspace.kernel.org; spf=fail smtp.mailfrom=inbox.org
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=gmail.com header.i=@gmail.com header.b="TFnIQq5M"
-Received: by mail-wm1-f68.google.com with SMTP id 5b1f17b1804b1-477563bcaacso7283985e9.1
-        for <dccp@vger.kernel.org>; Tue, 04 Nov 2025 10:12:19 -0800 (PST)
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=gmail.com; s=20230601; t=1762279938; x=1762884738; darn=vger.kernel.org;
-        h=mime-version:date:content-transfer-encoding:message-id:subject
-         :reply-to:to:from:from:to:cc:subject:date:message-id:reply-to;
-        bh=pShB2wGmw9UVAjvo4Af9ENCGF7h74zxwzh2zJGAYYVY=;
-        b=TFnIQq5MDU3ufslHq+yEcFttra9Lv+QP8a0q5tVBzIOd9G9C8IbJVOFjyoDralmiUd
-         5Qoaqz4FJpHACH2NevNIvQ/FuO2fU7tQ/Id5mYIxbgwjVUXynOddN0FgKsyr1j3tIMSG
-         BpJVs7umAkYt4agkZ6UQy58cOvhCTT+0F1mAOzGIJ/dNQ6fHsQMD3+3BeTcm2tI9tEii
-         BJJsbtB3Pyy9ZJGe3/HMZBya+jplfddPQrh9xshQRlX5pXyGjggY0sv1jLNgll/OTj0D
-         lAubqlkDoYEqy/jjBiVRpvaENu7W32m2xBL3Uc92S22RwBQz2qYOf8FwRd2PjNO9WH3v
-         9Ftw==
-X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
-        d=1e100.net; s=20230601; t=1762279938; x=1762884738;
-        h=mime-version:date:content-transfer-encoding:message-id:subject
-         :reply-to:to:from:x-gm-message-state:from:to:cc:subject:date
-         :message-id:reply-to;
-        bh=pShB2wGmw9UVAjvo4Af9ENCGF7h74zxwzh2zJGAYYVY=;
-        b=CPBRMHRImFLOxhLM6xxVpmC7nrW9x9CkauRtHcs0y7xSYfDxwNzllodGNYK0n5LWEI
-         yZdh1UkB7QIdMhEjkOM+lH5QL3IMosJ6Hken7omKZhEJrhAQNGjsFpFF1U1cIsYfY20g
-         Lf2/Uh6YzzGWOxCyLuLZ6urf4MDya75CW43NtOzUJV0UtmiH9qFpaK5k5xY7ERNoU10G
-         WksRmv2pcRU9+X+A3vfQQVmyMUeZVLJ2+wNODutRhvm1VOIzD/jYj/Ns20KXXehBtZ9Q
-         SaPaUz1jM0AdV5lfUrdvN3Cd8qtEeIYWsLlYEn/n3XxHDGPuAN87TciaKZUG2orWjL0l
-         HzRQ==
-X-Gm-Message-State: AOJu0YzOhDYdaV2oJy5+LGP2NTHnFdFJntqsPrnJ2gkjwjIiF7eJhXiz
-	CWbwnNjnZcGo7q5Afvg/AROo5S3fVKhRbCg9G3k69UcI7DfBTzvc+y1jS9Gj9sBn
-X-Gm-Gg: ASbGnctYF71gJ6YfRBAE5nn+34qxzRuvJpcYu70mpHRK+VvJ4MjVWQy7Rh4096Xeg68
-	l1KXL3NwkpcGna7XkpU5I/oLnUGWbpth518XVc85LVe2Fbgia4MEkC9migCT7vcx/0RXdZ3sexT
-	D+Yl50igl+Fg4fQRnre6BvCMNeWDaHt9tidRg3Zz5YcHiNIqGfz0F83T6EyBohG8WJg2e2y5rdU
-	UYyrGp2iJTl/ZRWvcFaSLYjyqGa70zORI3UDFCnfSVO9Ya5q2GNn1smvI2TayuywcKAk2HUjs5t
-	ljKKm2cFW2HgNgPWPg9Vj9Nrz+xPrMZBkA7P4Pv7BJ2i4ceyXMxRwHkZCV59ejNUyK9/n1WsvEU
-	mIwsi0Cgy3PESYs8N7CPbGfrt2g0hQYkUejpD0ob1ZhV+XdmtQ82KFXS5OlTuRrdUXxguK4u/C+
-	v90sCqVznY7h3TuX/Hu0nxeGqh
-X-Google-Smtp-Source: AGHT+IFLPSuOYw9ICfoBOSZVWUom/BY59G2TKqFdqznFiS1m9YaXAWrLZVVkefQbgxUGYF7gAolnGA==
-X-Received: by 2002:a05:600c:a00b:b0:477:5c35:39bf with SMTP id 5b1f17b1804b1-4775ce81932mr1980725e9.35.1762279937346;
-        Tue, 04 Nov 2025 10:12:17 -0800 (PST)
-Received: from [127.0.0.1] ([154.80.6.21])
-        by smtp.gmail.com with ESMTPSA id 5b1f17b1804b1-4775cdcc552sm2610835e9.6.2025.11.04.10.12.12
-        for <dccp@vger.kernel.org>
-        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
-        Tue, 04 Nov 2025 10:12:16 -0800 (PST)
-Content-Type: text/plain; charset=utf-8
-From: Carl Thomas <liam.intelservices80@gmail.com>
+	dkim=pass (2048-bit key) header.d=suksangroup.co.th header.i=@suksangroup.co.th header.b="pfV3NCK5"
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed;
+	d=suksangroup.co.th; s=default; h=Content-Transfer-Encoding:Content-Type:
+	MIME-Version:Message-ID:Date:Subject:To:From:Reply-To:Sender:Cc:Content-ID:
+	Content-Description:Resent-Date:Resent-From:Resent-Sender:Resent-To:Resent-Cc
+	:Resent-Message-ID:In-Reply-To:References:List-Id:List-Help:List-Unsubscribe:
+	List-Subscribe:List-Post:List-Owner:List-Archive;
+	bh=xY0Tz+cu7Zzp6fSboCupRw0Y9/LzHL/NqtnwHzTNG60=; b=pfV3NCK5cnA5MntUcg2t7fYLtl
+	LC19EfjNQv1KKW5Mr4ZIq2B13fh6Vr3+1xENh4Szhe2t23Ij69n0zseQq8RtCg3OfR6WumtlSqzc2
+	6MUzPBLIE+kMdydqjjG+ZJPA5X4iYnbIcN9i4odFynHxI+uP3Irk7TfaVtP+beuCSPsm4AVNottWm
+	2escY59biQkrobluTFC2jzdk0d8+B3crqAWTyTSbelY2CC/UxX3aYxqvfG97e+haOjdxkcz5ZZulF
+	hNKVINo0jLBgSAA0cEPz7sfZa8vTISYyuN2TySKGdh5aUT8QJ+YVMdYC+xYj+jt69YicxVOz0EnaC
+	LbA7ZelA==;
+Received: from [207.189.26.187] (port=61341)
+	by ns1.suksangroup.com with esmtpsa  (TLS1.3) tls TLS_AES_256_GCM_SHA384
+	(Exim 4.99.4)
+	(envelope-from <info@inbox.org>)
+	id 1wjVWd-0000000FsV8-0TE9
+	for dccp@vger.kernel.org;
+	Tue, 14 Jul 2026 12:17:46 +0700
+Reply-To: hanns.schofield@lexcapitalgrowth.com
+From: Harry Schofield ESQ <info@inbox.org>
 To: dccp@vger.kernel.org
-Reply-To: carlthomasces@gmail.com
-Subject: Estimating & Takeoff Services
-Message-ID: <673af14e-87ef-e694-8f70-5a23d8193884@gmail.com>
-Content-Transfer-Encoding: quoted-printable
-Date: Tue, 04 Nov 2025 18:12:11 +0000
+Subject: Dear dccp@vger.kernel.org, project stage
+Date: 14 Jul 2026 00:17:42 -0500
+Message-ID: <20260714001742.9210901AF90A2DB8@inbox.org>
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
 List-Subscribe: <mailto:dccp+subscribe@vger.kernel.org>
 List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
+Content-Type: text/plain;
+	charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+X-AntiAbuse: This header was added to track abuse, please include it with any abuse report
+X-AntiAbuse: Primary Hostname - ns1.suksangroup.com
+X-AntiAbuse: Original Domain - vger.kernel.org
+X-AntiAbuse: Originator/Caller UID/GID - [47 12] / [47 12]
+X-AntiAbuse: Sender Address Domain - inbox.org
+X-Get-Message-Sender-Via: ns1.suksangroup.com: authenticated_id: smtp@suksangroup.co.th
+X-Authenticated-Sender: ns1.suksangroup.com: smtp@suksangroup.co.th
+X-Source: 
+X-Source-Args: 
+X-Source-Dir: 
 
-Hi,
 
-Are you looking to estimate your projects?
+Re:Good day dccp,
 
-We offer construction =
-estimating services and quantity takeoffs to contractors, sub-contractors, =
-developers, architects, etc.
+Please let me know if this is best email to send you the project=20
+info.
 
-Get accurate takeoffs at competitive rates =
-with a quick turnaround and win more bids. Thanks.
+Kind regards,
 
-Regards,
-Carl Thomas
-Marketing Executive
-City Estimating, LLC
+Harry Schofield, ceMBA
+
+
