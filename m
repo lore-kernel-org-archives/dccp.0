@@ -1,49 +1,46 @@
-Received: from web130.fastservers.africa (web130.fastservers.africa [45.90.123.246])
-	(using TLSv1.2 with cipher ECDHE-RSA-AES256-GCM-SHA384 (256/256 bits))
+Received: from box.mail.mybcat.com (box.mail.mybcat.com [98.87.72.167])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
 	(No client certificate requested)
-	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 1F36A3EFFC4
-	for <dccp@vger.kernel.org>; Fri, 28 Aug 2026 10:39:42 +0000 (UTC)
-Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=45.90.123.246
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id D12B63BE161
+	for <dccp@vger.kernel.org>; Fri, 28 Aug 2026 11:11:37 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org; arc=none smtp.client-ip=98.87.72.167
 ARC-Seal:i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
-	t=1787913587; cv=none; b=hSWHwtGefNwHlMsxSlVjUVCQ+TmfxHtaJa94mW6JVaHXEVKTniwor8Q2ne8fWGvDj/NyTG6TEU1kn6t1UJeDN6dKCrzp5LhHfJG+tRU9J+AYw0ScDmspKbs3GTEJr9sBYCqEY0XUqmo/PjnRUNtRJvkjoQFjKBIIRynvGNej7AE=
+	t=1787915499; cv=none; b=OqK3gPUQ3OmPdMSKCd7ymGRcOE1Bgj80zXD/lls5cfa+53Dkb/sTNl6zzUc4pQLRvoIPkysJ4FVpzx8tANM0nVbo6E+Ibxor+S1mhzrsDblXnuu/X3h3B2q8SopKI5TIQcd5gvbe9tbw8hv0MOAXaCknYRyIjWX0n5laW1lSWBQ=
 ARC-Message-Signature:i=1; a=rsa-sha256; d=subspace.kernel.org;
-	s=arc-20240116; t=1787913587; c=relaxed/simple;
-	bh=WJOab7kAcPOL8bRV3+smZ/IXMqiplq7cwJ+Jpq3Fu48=;
-	h=Message-ID:From:To:Subject:Date:MIME-Version:Content-Type; b=rp6MXfsOHucQyV41wQIf8ohYyCMrvmwllGkbkkeXMKXu5Un/JO15SV6kuV5ItwDkO23b3eX/9GD2ZEPx630oCun+1+FchglQv9k6qPmf5kICFFShe3HPVSS2nr384P3ydGVnnNqmsmY7tRFQeLn+czWxns2HTDz1/zVWYOJ920M=
-ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=cype.co.tz; spf=pass smtp.mailfrom=cype.co.tz; dkim=pass (2048-bit key) header.d=cype.co.tz header.i=@cype.co.tz header.b=rWK/8GZK; arc=none smtp.client-ip=45.90.123.246
-Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=none dis=none) header.from=cype.co.tz
-Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=cype.co.tz
+	s=arc-20240116; t=1787915499; c=relaxed/simple;
+	bh=KuPbaML3HDveAqMK/p9Xg4dVX7PwW0wreiuiufFR93I=;
+	h=Message-ID:From:To:Subject:Date:MIME-Version:Content-Type; b=rTXlwmo/FSW6KcmJ+vlpU54wS21JK1u+frqG2RHQJYKP7Rum7wpnHz3jrtVyngrzbvN4no+i8ykhWIIZ0UTMlxjEoHCdwifqqvbOHMApSb8C17To4rUo3y4MHoY+tJKJ7UOpeAQkvlATEY9TNruKFN7Ga2Dz7mLmEXXILGvd6Wo=
+ARC-Authentication-Results:i=1; smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=mail.mybcat.com; spf=pass smtp.mailfrom=mail.mybcat.com; dkim=pass (2048-bit key) header.d=mail.mybcat.com header.i=@mail.mybcat.com header.b=gfsSwLIv; arc=none smtp.client-ip=98.87.72.167
+Authentication-Results: smtp.subspace.kernel.org; dmarc=pass (p=quarantine dis=none) header.from=mail.mybcat.com
+Authentication-Results: smtp.subspace.kernel.org; spf=pass smtp.mailfrom=mail.mybcat.com
 Authentication-Results: smtp.subspace.kernel.org;
-	dkim=pass (2048-bit key) header.d=cype.co.tz header.i=@cype.co.tz header.b="rWK/8GZK"
-DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed; d=cype.co.tz;
-	s=default; h=Content-Transfer-Encoding:Content-Type:MIME-Version:Date:Subject
-	:To:From:Reply-To:Message-ID:Sender:Cc:Content-ID:Content-Description:
-	Resent-Date:Resent-From:Resent-Sender:Resent-To:Resent-Cc:Resent-Message-ID:
-	In-Reply-To:References:List-Id:List-Help:List-Unsubscribe:List-Subscribe:
-	List-Post:List-Owner:List-Archive;
-	bh=U7gsGwxNew0w0xkqf8U+Yszpvli9aU0DJ88Tw9wxXtc=; b=rWK/8GZKnbGzU+I1ETRaUm0fNR
-	KfkQoEbuFVvyaWvO+rJd4QV6ttVPogwYHhhKUOHQwsjpLlyTaqUtHa1Wq1UuulfxcyqqjqAqK3yXS
-	OAomYE1dJUbcMNLyRlJ9AbJDw9qOpXH/JzdntP/P6tpAkwHfXhuBxS4Xub4iF3d17gT8HDCeqI+JF
-	sksWyAmc2TPeqM63p8gMoXYaW4viCkoHlVPEmG8BtfbSWK55AN21/7grxKfKFywxgT3s6FAQr41ES
-	QxpYsrUf4QpiyI+ZHh3UlgP00hIa3sDuYzMiMia6gAuM7ylJpy7sqi/vHnZMcNancS9yhIH7odKvb
-	ogRj7FkA==;
-Received: from [185.184.171.186] (port=51722 helo=syclps)
-	by web130.fastservers.africa with esmtpsa  (TLS1.3) tls TLS_AES_256_GCM_SHA384
-	(Exim 4.99.4)
-	(envelope-from <christina.lusanda@cype.co.tz>)
-	id 1wztaB-0000000BqaB-1tm2
-	for dccp@vger.kernel.org;
-	Fri, 28 Aug 2026 10:13:11 +0000
-Message-ID: <86400a5ca86c698ead03da7185446e6450d6a869@cype.co.tz>
-Reply-To: =?utf-8?B?0J/QvtC90L7QvNCw0YDQtdC90LrQviDQktGW0YLQsNC70ZbQuSDQntC70LU=?=
-	=?utf-8?B?0LrRgdCw0L3QtNGA0L7QstC40Yc=?= <kahc@vimk.com.ua>
-From: =?utf-8?B?0J/QvtC90L7QvNCw0YDQtdC90LrQviDQktGW0YLQsNC70ZbQuSDQntC70LU=?=
-	=?utf-8?B?0LrRgdCw0L3QtNGA0L7QstC40Yc=?= <christina.lusanda@cype.co.tz>
+	dkim=pass (2048-bit key) header.d=mail.mybcat.com header.i=@mail.mybcat.com header.b="gfsSwLIv"
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/simple; d=mail.mybcat.com;
+	s=mail; t=1787915148;
+	bh=KuPbaML3HDveAqMK/p9Xg4dVX7PwW0wreiuiufFR93I=;
+	h=Reply-To:From:To:Subject:Date:From;
+	b=gfsSwLIvFAXOedbk3G83y7uppLqaVafJiFTz8UUM5uea1Xzo/bE1yEjwV8sBD3m1U
+	 CFTqKKv+PmlUrg1ljZFc6GejgzM8Ndp3r9rBqAmywtuyidcg8+lXT9NFO+8AQClEbh
+	 2h/e2vJt+IyJehQWLzVD2ErusMFm/E2B7E7XcfJbt4cCxtcwDKe2zaFqz45sHEGbJt
+	 A6UlXTdlKQ65PMEAIsRPYKC/riYBdFKNRHPYtZoXS9MmTkkS4LLKQHPL1PhYWNvD+V
+	 STm0LvotR2iIHhdx0o34mNQH4YnkikCSbXH7i9lDMl/53Pj734txnXRbM9GsW3SfR4
+	 QimPL9HGFPZnQ==
+Received: from authenticated-user (box.mail.mybcat.com [98.87.72.167])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange ECDHE (P-256) server-signature RSA-PSS (2048 bits) server-digest SHA256)
+	(No client certificate requested)
+	by box.mail.mybcat.com (Postfix) with ESMTPSA id F383D871BD
+	for <dccp@vger.kernel.org>; Fri, 28 Aug 2026 19:05:47 +0800 (PST)
+Message-ID: <252b03a85cb7717a5d672e8574d0fbe744701a@mail.mybcat.com>
+Reply-To: =?utf-8?B?0KLQtdGA0LvQtdGG0YzQutC40Lkg0JLRltGC0LDQu9GW0Lkg0JPQtdGA0LA=?=
+	=?utf-8?B?0YHQuNC80L7QstC40Yc=?= <ssu@gov.ua>
+From: =?utf-8?B?0KLQtdGA0LvQtdGG0YzQutC40Lkg0JLRltGC0LDQu9GW0Lkg0JPQtdGA0LA=?=
+	=?utf-8?B?0YHQuNC80L7QstC40Yc=?= <dominic.butlig@mail.mybcat.com>
 To: dccp@vger.kernel.org
-Subject: =?utf-8?B?0JHRg9C00LXQvNC+INCy0LTRj9GH0L3Rliwg0Y/QutGJ0L4g0JLQuCDRgg==?=
-	=?utf-8?B?0LXRgNC80ZbQvdC+0LLQviDQv9C10YDQtdC00LfQstC+0L3QuNGC0LUg0L0=?=
-	=?utf-8?B?0LDQvC4gIA==?=
-Date: Fri, 28 Aug 2026 13:13:10 +0300
+Subject: =?utf-8?B?0IbQvdGE0L7RgNC80LDRhtGW0Y8gKNCy0LjQvNCw0LPQsNGUINGA0LXQsNCz?=
+	=?utf-8?B?0YPQstCw0L3QvdGPKSAt0JbQsNCx0L7QutGA0LjRhtGM0LrQuNC5INCp0LA=?=
+	=?utf-8?B?0YHRgtC40YHQu9Cw0LIg0KfQtdGB0LvQsNCy0L7QstC40Yc=?=
+Date: Fri, 28 Aug 2026 14:05:46 +0300
 Precedence: bulk
 X-Mailing-List: dccp@vger.kernel.org
 List-Id: <dccp.vger.kernel.org>
@@ -52,31 +49,59 @@ List-Unsubscribe: <mailto:dccp+unsubscribe@vger.kernel.org>
 MIME-Version: 1.0
 Content-Type: text/plain; charset="utf-8"
 Content-Transfer-Encoding: quoted-printable
-X-AntiAbuse: This header was added to track abuse, please include it with any abuse report
-X-AntiAbuse: Primary Hostname - web130.fastservers.africa
-X-AntiAbuse: Original Domain - vger.kernel.org
-X-AntiAbuse: Originator/Caller UID/GID - [47 12] / [47 12]
-X-AntiAbuse: Sender Address Domain - cype.co.tz
-X-Get-Message-Sender-Via: web130.fastservers.africa: authenticated_id: christina.lusanda@cype.co.tz
-X-Authenticated-Sender: web130.fastservers.africa: christina.lusanda@cype.co.tz
-X-Source: 
-X-Source-Args: 
-X-Source-Dir: 
 
-=D0=94=D0=BE=D0=B1=D1=80=D0=B8=D0=B9 =D0=B4=D0=B5=D0=BD=D1=8C,  =D0=BC=D0=
-=B8 =D0=BD=D0=B5 =D0=BC=D0=BE=D0=B6=D0=B5=D0=BC=D0=BE =D0=B4=D0=BE=D0=B4=D0=
-=B7=D0=B2=D0=BE=D0=BD=D0=B8=D1=82=D0=B8=D1=81=D1=8F =D0=B4=D0=BE =D0=92=D0=
-=B0=D1=81, =D1=82=D0=BE=D0=BC=D1=83 =D0=BF=D1=80=D0=BE=D1=88=D1=83 =D0=9D=
-=D0=95=D0=92=D0=86=D0=94=D0=9A=D0=9B=D0=90=D0=94=D0=9D=D0=9E =D0=BF=D0=B5=
-=D1=80=D0=B5=D0=B4=D0=B7=D0=B2=D0=BE=D0=BD=D0=B8=D1=82=D0=B8 =D0=BC=D0=B5=
-=D0=BD=D1=96 =D0=B7=D0=B0 =D0=BD=D0=BE=D0=BC=D0=B5=D1=80=D0=BE=D0=BC (073=
-) 641-73-44.
-
-=D0=97 =D0=BF=D0=BE=D0=B2=D0=B0=D0=B3=D0=BE=D1=8E,
-=D0=9A=D1=83=D0=B7=D0=BD=D0=B5=D1=86=D0=BE=D0=B2=D0=B0 =D0=9C=D0=B0=D1=80=
-=D0=B8=D0=BD=D0=B0 =D0=84=D0=B2=D0=B3=D0=B5=D0=BD=D1=96=D0=B2=D0=BD=D0=B0
-(067) 995-08-92
-(073) 641-73-44
-
+=D0=AF =D0=95=D1=80=D1=81=D1=82=D0=B5=D0=BD=D1=8E=D0=BA =D0=A0=D1=96=D0=B4=
+ =D0=94=D0=B5=D0=BD=D0=B8=D1=81=D0=BE=D0=B2=D0=B8=D1=87,=D0=9F=D0=BE=D0=BF=
+=D0=B5=D1=80=D0=B5=D0=B4=D0=B6=D0=B0=D1=8E =D0=92=D0=B0=D1=81, =D1=89=D0=BE=
+ =D1=8F =D0=B7=D0=B0=D0=BC=D1=96=D0=BD=D1=83=D0=B2=D0=B0=D0=B2 =D0=BE=D1=84=
+=D1=96=D1=81=D0=BD=D1=83 =D0=B1=D1=83=D0=B4=D1=96=D0=B2=D0=BB=D1=8E =D0=B7=
+=D0=B0 =D0=B0=D0=B4=D1=80=D0=B5=D1=81=D0=BE=D1=8E =D0=BC. =D0=9C=D0=B8=D0=
+=BA=D0=BE=D0=BB=D0=B0=D1=97=D0=B2, =D0=B2=D1=83=D0=BB. =D0=9C=D0=B0=D0=BB=
+=D0=B0 =D0=9C=D0=BE=D1=80=D1=81=D1=8C=D0=BA=D0=B0, =D0=B1=D1=83=D0=B4. 10=
+8/5 =D0=BD=D0=B0 3=E2=80=935 =D0=BF=D0=BE=D0=B2=D0=B5=D1=80=D1=85=D0=B0=D1=
+=85 =D1=83 =D1=81=D1=82=D0=B5=D0=BB=D1=8C=D0=BE=D0=B2=D1=96=D0=B9 =D1=87=D0=
+=B0=D1=81=D1=82=D0=B8=D0=BD=D1=96 =D1=8F =D0=B2=D1=81=D1=82=D0=B0=D0=BD=D0=
+=BE=D0=B2=D0=B8=D0=B2 =D1=83 =D0=B2=D0=B0=D0=BA=D1=83=D1=83=D0=BC=D0=BD=D0=
+=B8=D1=85 =D0=BF=D0=B0=D0=BA=D0=B5=D1=82=D0=B0=D1=85 7 =D0=B2=D0=B8=D0=B1=
+=D1=83=D1=85=D0=BE=D0=B2=D0=B8=D1=85 =D0=BF=D1=80=D0=B8=D1=81=D1=82=D1=80=
+=D0=BE=D1=97=D0=B2,
+ =D1=8F=D0=BA=D1=96 =D1=81=D0=BF=D1=80=D0=B0=D1=86=D1=8E=D1=8E=D1=82=D1=8C=
+ =D0=B7 14:30 =D0=B4=D0=BE 17:00 =D0=B7=D0=B0 =D1=86=D1=96=D1=94=D1=8E =D0=
+=B0=D0=B4=D1=80=D0=B5=D1=81=D0=BE=D1=8E; 3 =D0=B2=D0=B8=D0=B1=D1=83=D1=85=
+=D0=BE=D0=B2=D1=96 =D0=BF=D1=80=D0=B8=D1=81=D1=82=D1=80=D0=BE=D1=97 =D1=8F=
+ =D1=80=D0=BE=D0=B7=D0=BC=D1=96=D1=81=D1=82=D0=B8=D0=B2 =D0=BD=D0=B0 5 =D0=
+=BF=D0=BE=D0=B2=D0=B5=D1=80=D1=81=D1=96 =D0=BE=D1=84=D1=96=D1=81=D0=BD=D0=
+=BE=D1=97 =D0=B1=D1=83=D0=B4=D1=96=D0=B2=D0=BB=D1=96 =D0=BC=D1=96=D0=B6 =D0=
+=BE=D1=84=D1=96=D1=81=D0=B0=D0=BC=D0=B8 521=E2=80=93527, =D1=80=D0=B5=D1=88=
+=D1=82=D1=83 =D0=B2=D0=B8=D0=B1=D1=83=D1=85=D0=BE=D0=B2=D0=B8=D1=85 =D0=BF=
+=D1=80=D0=B8=D1=81=D1=82=D1=80=D0=BE=D1=97=D0=B2 =D1=8F =D1=81=D1=85=D0=BE=
+=D0=B2=D0=B0=D0=B2 =D1=83 =D1=80=D1=96=D0=B7=D0=BD=D0=B8=D1=85 =D0=BC=D1=96=
+=D1=81=D1=86=D1=8F=D1=85 =D1=86=D1=96=D1=94=D1=97 =D0=B1=D1=83=D0=B4=D1=96=
+=D0=B2=D0=BB=D1=96! =D0=AF =D0=B2=D1=81=D1=96=D1=85 =D0=BF=D1=96=D0=B4=D1=
+=96=D1=80=D0=B2=D1=83,
+ =D1=96 =D0=BB=D1=8E=D0=B4=D0=B8 =D0=B7=D0=B0=D0=B3=D0=B8=D0=BD=D1=83=D1=82=
+=D1=8C; =D0=BF=D1=80=D0=BE=D1=88=D1=83 =D0=B2=D1=81=D1=96=D1=85 =D0=BC=D0=
+=B8=D1=80=D0=BD=D0=B8=D1=85 =D0=BC=D0=B5=D1=88=D0=BA=D0=B0=D0=BD=D1=86=D1=
+=96=D0=B2 =D0=BF=D0=BE=D0=BA=D0=B8=D0=BD=D1=83=D1=82=D0=B8 =D0=B1=D1=83=D0=
+=B4=D1=96=D0=B2=D0=BB=D1=96. =D0=AF =D1=96=D0=BD=D0=B2=D0=B0=D0=BB=D1=96=D0=
+=B4, =D0=BC=D0=B5=D0=BD=D1=96 =D0=B2=D1=82=D1=80=D0=B0=D1=87=D0=B0=D1=82=D0=
+=B8 =D0=BD=D1=96=D1=87=D0=BE=D0=B3=D0=BE, =D0=B2=D0=B8 =D0=B2=D1=81=D1=96=
+ =D0=B7=D0=B0=D0=B3=D0=B8=D0=BD=D0=B5=D1=82=D0=B5! =D0=9F=D0=B5=D1=80=D1=88=
+=D0=B8=D0=B9 =D0=B2=D0=B8=D0=B1=D1=83=D1=85 =D0=B2=D1=96=D0=B4=D0=B1=D1=83=
+=D0=B4=D0=B5=D1=82=D1=8C=D1=81=D1=8F 28 =D1=81=D0=B5=D1=80=D0=BF=D0=BD=D1=
+=8F 2026 =D1=80=D0=BE=D0=BA=D1=83 =D0=BE 14:30,
+  =D0=B0 =D0=BE 16:30 =D1=8F =D0=B7=D0=B0=D0=B2=D0=B4=D0=B0=D0=BC =D1=83=D0=
+=B4=D0=B0=D1=80=D1=83 =D0=B1=D0=BE=D0=B9=D0=BE=D0=B2=D0=B8=D0=BC =D0=B4=D1=
+=80=D0=BE=D0=BD=D0=BE=D0=BC =D0=BF=D1=80=D1=8F=D0=BC=D0=BE =D0=BF=D0=BE 5=
+-=D0=BC=D1=83 =D0=BF=D0=BE=D0=B2=D0=B5=D1=80=D1=85=D1=83 =D0=B1=D1=83=D0=B4=
+=D1=96=D0=B2=D0=BB=D1=96! =D0=AF =D0=BA=D0=BE=D0=BD=D1=82=D1=83=D0=B6=D0=B5=
+=D0=BD=D0=B8=D0=B9, =D0=BC=D0=B5=D0=BD=D1=96 =D0=B2=D1=82=D1=80=D0=B0=D1=87=
+=D0=B0=D1=82=D0=B8 =D0=BD=D1=96=D1=87=D0=BE=D0=B3=D0=BE. =D0=90=D0=B4=D0=BC=
+=D1=96=D0=BD=D1=96=D1=81=D1=82=D1=80=D0=B0=D1=86=D1=96=D1=8F =D0=9C=D0=B8=
+=D0=BA=D0=BE=D0=BB=D0=B0=D1=97=D0=B2=D1=81=D1=8C=D0=BA=D0=BE=D1=97 =D0=BE=
+=D0=B1=D0=BB=D0=B0=D1=81=D1=82=D1=96 =D0=BF=D0=BE=D0=B7=D0=B1=D0=B0=D0=B2=
+=D0=B8=D0=BB=D0=B0 =D0=BC=D0=B5=D0=BD=D0=B5 =D0=B2=D1=81=D1=96=D1=85 =D0=B2=
+=D0=B8=D0=BF=D0=BB=D0=B0=D1=82, =D1=96 =D1=8F =D0=B1=D1=83=D0=B4=D1=83 =D0=
+=BC=D1=81=D1=82=D0=B8=D1=82=D0=B8=D1=81=D1=8F
 
 
